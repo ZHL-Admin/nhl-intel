@@ -22,14 +22,71 @@ The goal is to build a fully automated daily pipeline that ingests raw NHL data,
 
 | Tool | Role | Notes |
 |------|------|-------|
-| Apache Airflow | Orchestration | Self-hosted via Docker Compose locally, deployed to GCP |
+| Apache Airflow | Orchestration | Run locally via conda, deployed to GCP |
 | dbt Core | Data transformation | Open source, free |
 | BigQuery | Data warehouse | GCP free tier is sufficient for this data volume |
 | Python 3.11+ | Ingestion, metrics, reporting, LLM calls | Primary language throughout |
 | GCP Compute Engine | Airflow host in production | e2-micro is free tier eligible |
 | LLM API | Narrative report generation | Google Gemini (free tier) to start |
 | GitHub | Version control and public portfolio | Public repo |
-| Docker Compose | Local development environment | Mirrors production setup |
+| Conda | Local development environment | Python environment management |
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Conda or Miniconda
+- GCP service account with BigQuery access
+
+### Initial Setup
+
+1. **Create and activate conda environment:**
+```bash
+conda create -n nhl-intel python=3.11
+conda activate nhl-intel
+```
+
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+pip install apache-airflow==2.8.1 --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.1/constraints-3.11.txt"
+```
+
+3. **Configure environment variables:**
+```bash
+cp .env.example .env
+# Edit .env with your GCP project details
+```
+
+4. **Set up Airflow:**
+```bash
+export AIRFLOW_HOME=~/airflow
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+airflow db init
+airflow users create \
+    --username admin \
+    --firstname Admin \
+    --lastname User \
+    --role Admin \
+    --email admin@example.com \
+    --password admin
+```
+
+5. **Run Airflow:**
+```bash
+# Terminal 1: Start webserver
+airflow webserver --port 8080
+
+# Terminal 2: Start scheduler
+airflow scheduler
+```
+
+6. **Access Airflow UI:**
+- Navigate to http://localhost:8080
+- Login with admin/admin
 
 ---
 
@@ -428,7 +485,7 @@ Complete each phase fully before starting the next. Do not skip ahead.
 
 Tasks:
 - Initialize Git repo with the full directory structure
-- Set up Docker Compose with Airflow (use the official Airflow Docker image)
+- Set up local Airflow in conda environment
 - Write `nhl_api.py` with functions for schedule, boxscore, and play-by-play endpoints
 - Write a simple test script that fetches one day of data and prints game IDs
 - Set up GCP project, enable BigQuery API, create service account with BigQuery Data Editor role
@@ -436,7 +493,7 @@ Tasks:
 - Write `loaders.py` to load a raw game dict to BigQuery
 - Create a minimal Airflow DAG with a single task that runs the ingestion script
 
-**Exit criteria:** Running the DAG manually ingests yesterday's games into BigQuery raw tables without errors.
+**Exit criteria:** Running the DAG manually ingests recent games into BigQuery raw tables without errors.
 
 ---
 
