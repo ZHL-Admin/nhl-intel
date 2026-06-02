@@ -1,0 +1,79 @@
+version: '3.8'
+
+x-airflow-common: &airflow-common
+  build: .
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/secrets/nhl-intel-sa.json
+    - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+    - GCP_DATASET_RAW=${GCP_DATASET_RAW}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./ingestion:/opt/airflow/ingestion
+    - ./logs:/opt/airflow/logs
+    - ./secrets:/opt/airflow/secrets:ro
+  depends_on:
+    - postgres
+
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/ingestion
+        airflow db init
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin
+    restart: on-failure
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+volumes:
+  postgres-db-volume:

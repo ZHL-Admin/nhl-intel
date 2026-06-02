@@ -186,7 +186,7 @@ select * from final
 ## Environment and Secrets
 
 - All secrets in `.env` locally, loaded via `python-dotenv`
-- In production (GCP), secrets are stored in GCP Secret Manager and injected as environment variables
+- In production (GCP), manually create .env on the VM via SSH.
 - `.env.example` is committed with placeholder values, never real values
 - Required environment variables:
 
