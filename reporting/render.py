@@ -1,11 +1,11 @@
 """HTML report rendering using Jinja2 templates."""
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Dict, Optional, Tuple
 from jinja2 import Environment, FileSystemLoader
 
 
-def render_report(report_data: list[dict[str, Any]], summary: str, report_date: str) -> str:
+def render_report(report_data: List[Dict[str, Any]], summary: str, report_date: str) -> str:
     """Render HTML report from query data and LLM summary.
 
     Args:
@@ -34,7 +34,7 @@ def render_report(report_data: list[dict[str, Any]], summary: str, report_date: 
     return template.render(**context)
 
 
-def _structure_games(report_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _structure_games(report_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Structure game data for template rendering.
 
     Args:
@@ -76,7 +76,7 @@ def _structure_games(report_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(games_dict.values())
 
 
-def _structure_team_trends(report_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _structure_team_trends(report_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Structure team trend data with directional indicators.
 
     Args:
@@ -114,7 +114,7 @@ def _structure_team_trends(report_data: list[dict[str, Any]]) -> list[dict[str, 
     return trends
 
 
-def _calculate_trend(current: float | None, rolling: float | None) -> tuple[str, str]:
+def _calculate_trend(current: Optional[float], rolling: Optional[float]) -> Tuple[str, str]:
     """Calculate trend direction and symbol.
 
     Args:

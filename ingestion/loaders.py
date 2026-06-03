@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from io import BytesIO
+from typing import Union, List
 from google.cloud import bigquery
 
 
@@ -10,7 +11,7 @@ def load_json_to_bigquery(
     project_id: str,
     dataset_id: str,
     table_id: str,
-    data: dict | list[dict],
+    data: Union[dict, List[dict]],
 ) -> None:
     """Load raw JSON data to a BigQuery table.
 
