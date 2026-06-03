@@ -1,0 +1,163 @@
+version: 2
+
+models:
+  - name: mart_team_game_stats
+    description: Team-level game statistics with advanced analytics metrics
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: season
+        description: NHL season identifier
+      - name: team_id
+        description: NHL team identifier
+        tests:
+          - not_null
+      - name: team_abbrev
+        description: Team abbreviation
+      - name: home_away
+        description: Whether team was home or away
+        tests:
+          - accepted_values:
+              values: ['home', 'away']
+      - name: goals_for
+        description: Goals scored by team
+      - name: goals_against
+        description: Goals against team
+      - name: shot_attempts_for
+        description: Shot attempts for at 5v5
+      - name: shot_attempts_against
+        description: Shot attempts against at 5v5
+      - name: high_danger_for
+        description: High-danger chances for
+      - name: high_danger_against
+        description: High-danger chances against
+      - name: cf_pct
+        description: Corsi for percentage at 5v5
+      - name: hdcf_per60
+        description: High-danger chances for per 60 minutes at 5v5
+      - name: hdca_per60
+        description: High-danger chances against per 60 minutes at 5v5
+      - name: zone_entry_success_rate
+        description: Controlled zone entries divided by total entries
+      - name: toi_5v5_minutes
+        description: Estimated time on ice at 5v5 in minutes
+
+  - name: mart_player_game_stats
+    description: Player-level game statistics with advanced analytics metrics
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: player_id
+        description: Unique NHL player identifier
+        tests:
+          - not_null
+      - name: team_id
+        description: NHL team identifier
+        tests:
+          - not_null
+      - name: first_name
+        description: Player first name
+      - name: last_name
+        description: Player last name
+      - name: position_code
+        description: Player position code
+        tests:
+          - accepted_values:
+              values: ['C', 'L', 'R', 'D', 'G']
+      - name: toi_5v5
+        description: Estimated time on ice at 5v5 in minutes
+      - name: ixg_per60
+        description: Individual expected goals per 60 minutes (using high-danger attempts as proxy)
+      - name: primary_points_per60
+        description: Goals plus primary assists per 60 minutes
+      - name: hot_cold_flag
+        description: Whether player is performing above (hot) or below (cold) season average
+        tests:
+          - accepted_values:
+              values: ['hot', 'cold', 'neutral']
+
+  - name: mart_team_rolling
+    description: Rolling 5-game averages of team metrics
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: season
+        description: NHL season identifier
+      - name: team_id
+        description: NHL team identifier
+        tests:
+          - not_null
+      - name: team_abbrev
+        description: Team abbreviation
+      - name: current_cf_pct
+        description: Corsi for percentage for this game
+      - name: rolling_cf_pct_5gp
+        description: Rolling 5-game average of Corsi for percentage
+      - name: current_hdcf_per60
+        description: High-danger chances for per 60 for this game
+      - name: rolling_hdcf_per60_5gp
+        description: Rolling 5-game average of high-danger chances for per 60
+      - name: current_hdca_per60
+        description: High-danger chances against per 60 for this game
+      - name: rolling_hdca_per60_5gp
+        description: Rolling 5-game average of high-danger chances against per 60
+      - name: has_full_5game_sample
+        description: Whether team has played at least 5 games
+        tests:
+          - not_null
+
+  - name: mart_daily_report_feed
+    description: Denormalized view of all game data for daily report generation
+    columns:
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: team_id
+        description: NHL team identifier
+        tests:
+          - not_null
+      - name: team_abbrev
+        description: Team abbreviation
+      - name: home_away
+        description: Whether team was home or away
+      - name: goals_for
+        description: Goals scored by team
+      - name: goals_against
+        description: Goals against team
+      - name: cf_pct
+        description: Corsi for percentage at 5v5
+      - name: hdcf_per60
+        description: High-danger chances for per 60 minutes
+      - name: hdca_per60
+        description: High-danger chances against per 60 minutes
+      - name: rolling_cf_pct_5gp
+        description: Rolling 5-game average of Corsi for percentage
+      - name: top_player_name
+        description: Name of top-performing player in game
+      - name: top_player_points_per60
+        description: Points per 60 for top player
+      - name: top_player_hot_cold
+        description: Hot/cold flag for top player

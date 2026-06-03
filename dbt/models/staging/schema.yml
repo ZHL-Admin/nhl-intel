@@ -1,0 +1,290 @@
+version: 2
+
+models:
+  - name: stg_games
+    description: Cleaned and flattened game schedule data from raw NHL API responses
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+          - unique
+      - name: season
+        description: NHL season identifier (e.g. 20252026 for 2025-26 season)
+        tests:
+          - not_null
+      - name: game_type
+        description: Game type code (2=regular season, 3=playoffs)
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was scheduled
+        tests:
+          - not_null
+      - name: start_time_utc
+        description: Game start time in UTC
+      - name: venue_name
+        description: Name of the arena where game was played
+      - name: is_neutral_site
+        description: Whether game was played at a neutral site
+      - name: eastern_utc_offset
+        description: UTC offset for Eastern time zone
+      - name: venue_utc_offset
+        description: UTC offset for venue time zone
+      - name: game_state
+        description: Current state of the game
+      - name: game_schedule_state
+        description: Scheduling state of the game
+      - name: away_team_id
+        description: NHL team ID for away team
+        tests:
+          - not_null
+      - name: away_team_abbrev
+        description: Three-letter abbreviation for away team
+      - name: away_team_score
+        description: Final score for away team
+      - name: away_team_city
+        description: City name for away team
+      - name: home_team_id
+        description: NHL team ID for home team
+        tests:
+          - not_null
+      - name: home_team_abbrev
+        description: Three-letter abbreviation for home team
+      - name: home_team_score
+        description: Final score for home team
+      - name: home_team_city
+        description: City name for home team
+      - name: period_number
+        description: Current period number
+      - name: period_type
+        description: Type of current period
+      - name: last_period_type
+        description: Type of the last period played
+      - name: ingestion_date
+        description: Date when raw data was ingested
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when staging model was loaded
+        tests:
+          - not_null
+
+  - name: stg_boxscores
+    description: Cleaned boxscore data with team-level statistics for each game
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+          - unique
+      - name: id
+        description: Game ID from API response
+        tests:
+          - not_null
+      - name: season
+        description: NHL season identifier
+        tests:
+          - not_null
+      - name: game_type
+        description: Game type code (2=regular season, 3=playoffs)
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: start_time_utc
+        description: Game start time in UTC
+      - name: eastern_utc_offset
+        description: UTC offset for Eastern time zone
+      - name: venue_utc_offset
+        description: UTC offset for venue time zone
+      - name: game_state
+        description: Current state of the game
+      - name: game_schedule_state
+        description: Scheduling state of the game
+      - name: limited_scoring
+        description: Whether game had limited scoring
+      - name: reg_periods
+        description: Number of regulation periods
+      - name: venue_name
+        description: Name of the arena
+      - name: venue_location
+        description: City and state/province of venue
+      - name: current_period
+        description: Current period number
+      - name: current_period_type
+        description: Type of current period
+      - name: time_remaining
+        description: Time remaining in current period
+      - name: seconds_remaining
+        description: Seconds remaining in current period
+      - name: clock_running
+        description: Whether game clock is running
+      - name: in_intermission
+        description: Whether game is in intermission
+      - name: home_team_id
+        description: NHL team ID for home team
+        tests:
+          - not_null
+      - name: home_team_name
+        description: Full name of home team
+      - name: home_team_abbrev
+        description: Three-letter abbreviation for home team
+      - name: home_team_score
+        description: Final score for home team
+      - name: home_team_sog
+        description: Shots on goal for home team
+      - name: away_team_id
+        description: NHL team ID for away team
+        tests:
+          - not_null
+      - name: away_team_name
+        description: Full name of away team
+      - name: away_team_abbrev
+        description: Three-letter abbreviation for away team
+      - name: away_team_score
+        description: Final score for away team
+      - name: away_team_sog
+        description: Shots on goal for away team
+      - name: last_period_type
+        description: Type of the last period played
+      - name: ingestion_date
+        description: Date when raw data was ingested
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when staging model was loaded
+        tests:
+          - not_null
+
+  - name: stg_play_by_play
+    description: Play-by-play event data with one row per event, unnested from raw API responses
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: api_game_id
+        description: Game ID from API response
+        tests:
+          - not_null
+      - name: event_id
+        description: Unique event identifier within the game
+        tests:
+          - not_null
+      - name: season
+        description: NHL season identifier
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: period_number
+        description: Period number when event occurred
+      - name: period_type
+        description: Period type (REG, OT, SO)
+      - name: time_in_period
+        description: Time elapsed in period (MM:SS format)
+      - name: time_remaining
+        description: Time remaining in period (MM:SS format)
+      - name: situation_code
+        description: Game situation code (strength state)
+      - name: type_code
+        description: Numeric event type code
+      - name: type_desc_key
+        description: Event type description (shot-on-goal, goal, faceoff, etc)
+        tests:
+          - not_null
+      - name: sort_order
+        description: Sort order for events with same timestamp
+      - name: home_team_defending_side
+        description: Which side home team is defending (left/right)
+      - name: x_coord
+        description: X coordinate on ice surface (-100 to 100)
+      - name: y_coord
+        description: Y coordinate on ice surface (-42.5 to 42.5)
+      - name: zone_code
+        description: Zone where event occurred (O=offensive, D=defensive, N=neutral)
+      - name: shot_type
+        description: Type of shot (wrist, slap, snap, backhand, etc)
+      - name: reason
+        description: Additional event context (wide-left, high, etc)
+      - name: shooting_player_id
+        description: Player ID who took the shot
+      - name: scoring_player_id
+        description: Player ID who scored the goal
+      - name: goalie_in_net_id
+        description: Goalie player ID
+      - name: assist1_player_id
+        description: Primary assist player ID
+      - name: assist2_player_id
+        description: Secondary assist player ID
+      - name: blocking_player_id
+        description: Player ID who blocked the shot
+      - name: hitting_player_id
+        description: Player ID who delivered the hit
+      - name: committed_by_player_id
+        description: Player ID who committed the penalty
+      - name: event_owner_team_id
+        description: Team ID that owns the event
+      - name: home_score
+        description: Home team score after this event
+      - name: away_score
+        description: Away team score after this event
+      - name: ingestion_date
+        description: Date when raw data was ingested
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when staging model was loaded
+        tests:
+          - not_null
+
+  - name: stg_rosters
+    description: Player roster information with one row per player per game
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: api_game_id
+        description: Game ID from API response
+        tests:
+          - not_null
+      - name: player_id
+        description: Unique NHL player identifier
+        tests:
+          - not_null
+      - name: team_id
+        description: NHL team identifier
+        tests:
+          - not_null
+      - name: season
+        description: NHL season identifier
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: first_name
+        description: Player first name
+      - name: last_name
+        description: Player last name
+      - name: sweater_number
+        description: Player jersey number
+      - name: position_code
+        description: Player position code (C, L, R, D, G)
+      - name: headshot_url
+        description: URL to player headshot image
+      - name: ingestion_date
+        description: Date when raw data was ingested
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when staging model was loaded
+        tests:
+          - not_null

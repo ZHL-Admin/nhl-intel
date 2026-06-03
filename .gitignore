@@ -3,6 +3,9 @@
 *.env
 !.env.example
 secrets/
+NHL_INTEL_PROJECT.md
+NHL_DASHBOARD_SPEC.md
+NHL_DASHBOARD_DESIGN.md
 
 # Python
 *.pyc

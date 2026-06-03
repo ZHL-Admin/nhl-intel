@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: int_shot_attempts
+    description: Shot attempts at 5v5 strength with high-danger classification
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: event_id
+        description: Unique event identifier
+        tests:
+          - not_null
+      - name: period_number
+        description: Period when shot occurred
+      - name: type_desc_key
+        description: Type of shot attempt (shot-on-goal, goal, missed-shot, blocked-shot)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['shot-on-goal', 'goal', 'missed-shot', 'blocked-shot']
+      - name: x_coord
+        description: X coordinate on ice surface
+      - name: y_coord
+        description: Y coordinate on ice surface
+      - name: shot_type
+        description: Type of shot (wrist, slap, snap, etc)
+      - name: shooting_player_id
+        description: Player who took the shot
+      - name: event_owner_team_id
+        description: Team that took the shot
+        tests:
+          - not_null
+      - name: is_goal
+        description: Whether the shot resulted in a goal
+        tests:
+          - not_null
+      - name: is_high_danger
+        description: Whether shot was from high-danger area (|x| > 55, |y| < 22)
+        tests:
+          - not_null
+      - name: is_on_net
+        description: Whether shot was on net (goal or shot-on-goal)
+        tests:
+          - not_null
+
+  - name: int_zone_entries
+    description: Zone entry events at 5v5 with controlled/uncontrolled classification
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: event_id
+        description: Unique event identifier
+        tests:
+          - not_null
+      - name: period_number
+        description: Period when zone entry occurred
+      - name: team_id
+        description: Team that entered the zone
+        tests:
+          - not_null
+      - name: is_zone_entry
+        description: Whether event represents a zone entry (always true by design)
+        tests:
+          - not_null
+      - name: is_controlled_entry
+        description: Whether entry was controlled (true) or dump-in (false)

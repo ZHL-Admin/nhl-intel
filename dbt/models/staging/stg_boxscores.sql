@@ -1,0 +1,80 @@
+with source as (
+    select * from {{ source('nhl', 'raw_boxscores') }}
+),
+
+renamed as (
+    select
+        cast(game_id as int64) as game_id,
+        cast(id as int64) as id,
+        cast(season as int64) as season,
+        cast(gameType as int64) as game_type,
+        cast(gameDate as date) as game_date,
+        cast(startTimeUTC as timestamp) as start_time_utc,
+        cast(easternUTCOffset as string) as eastern_utc_offset,
+        cast(venueUTCOffset as string) as venue_utc_offset,
+        cast(gameState as string) as game_state,
+        cast(gameScheduleState as string) as game_schedule_state,
+        cast(limitedScoring as bool) as limited_scoring,
+        cast(regPeriods as int64) as reg_periods,
+        venue.default as venue_name,
+        venueLocation.default as venue_location,
+        periodDescriptor.number as current_period,
+        periodDescriptor.periodType as current_period_type,
+        clock.timeRemaining as time_remaining,
+        clock.secondsRemaining as seconds_remaining,
+        clock.running as clock_running,
+        clock.inIntermission as in_intermission,
+        homeTeam.id as home_team_id,
+        homeTeam.commonName.default as home_team_name,
+        homeTeam.abbrev as home_team_abbrev,
+        homeTeam.score as home_team_score,
+        homeTeam.sog as home_team_sog,
+        awayTeam.id as away_team_id,
+        awayTeam.commonName.default as away_team_name,
+        awayTeam.abbrev as away_team_abbrev,
+        awayTeam.score as away_team_score,
+        awayTeam.sog as away_team_sog,
+        gameOutcome.lastPeriodType as last_period_type,
+        cast(ingestion_date as date) as ingestion_date
+    from source
+),
+
+final as (
+    select
+        game_id,
+        id,
+        season,
+        game_type,
+        game_date,
+        start_time_utc,
+        eastern_utc_offset,
+        venue_utc_offset,
+        game_state,
+        game_schedule_state,
+        limited_scoring,
+        reg_periods,
+        cast(venue_name as string) as venue_name,
+        cast(venue_location as string) as venue_location,
+        cast(current_period as int64) as current_period,
+        cast(current_period_type as string) as current_period_type,
+        cast(time_remaining as string) as time_remaining,
+        cast(seconds_remaining as int64) as seconds_remaining,
+        cast(clock_running as bool) as clock_running,
+        cast(in_intermission as bool) as in_intermission,
+        cast(home_team_id as int64) as home_team_id,
+        cast(home_team_name as string) as home_team_name,
+        cast(home_team_abbrev as string) as home_team_abbrev,
+        cast(home_team_score as int64) as home_team_score,
+        cast(home_team_sog as int64) as home_team_sog,
+        cast(away_team_id as int64) as away_team_id,
+        cast(away_team_name as string) as away_team_name,
+        cast(away_team_abbrev as string) as away_team_abbrev,
+        cast(away_team_score as int64) as away_team_score,
+        cast(away_team_sog as int64) as away_team_sog,
+        cast(last_period_type as string) as last_period_type,
+        ingestion_date,
+        current_timestamp() as _loaded_at
+    from renamed
+)
+
+select * from final

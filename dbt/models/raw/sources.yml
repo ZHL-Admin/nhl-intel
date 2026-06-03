@@ -1,0 +1,48 @@
+version: 2
+
+sources:
+  - name: nhl
+    database: nhl-intel-498216
+    schema: nhl_raw
+    tables:
+      - name: raw_games
+        description: Raw schedule data from NHL API, one row per schedule fetch
+        columns:
+          - name: ingestion_date
+            description: Date when data was ingested into BigQuery
+          - name: gameWeek
+            description: Nested array of game data for the week
+
+      - name: raw_boxscores
+        description: Raw boxscore data from NHL API, one row per game
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier
+          - name: ingestion_date
+            description: Date when data was ingested into BigQuery
+          - name: id
+            description: Game ID from API response
+          - name: season
+            description: NHL season identifier
+          - name: gameType
+            description: Game type code (2=regular season, 3=playoffs)
+          - name: gameDate
+            description: Date the game was played
+          - name: homeTeam
+            description: Nested home team data including stats
+          - name: awayTeam
+            description: Nested away team data including stats
+
+      - name: raw_play_by_play
+        description: Raw play-by-play event data from NHL API, one row per game
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier
+          - name: ingestion_date
+            description: Date when data was ingested into BigQuery
+          - name: id
+            description: Game ID from API response
+          - name: plays
+            description: Array of all events in the game
+          - name: rosterSpots
+            description: Array of all players who dressed for the game

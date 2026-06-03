@@ -1,27 +1,44 @@
 version: '3.8'
 
 x-airflow-common: &airflow-common
-  build: .
+  image: apache/airflow:2.8.1
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
     - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+    - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
     - AIRFLOW__CORE__LOAD_EXAMPLES=False
     - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    - AIRFLOW__SMTP__SMTP_HOST=smtp.gmail.com
+    - AIRFLOW__SMTP__SMTP_STARTTLS=True
+    - AIRFLOW__SMTP__SMTP_SSL=False
+    - AIRFLOW__SMTP__SMTP_PORT=587
+    - AIRFLOW__SMTP__SMTP_MAIL_FROM=${AIRFLOW_SMTP_EMAIL}
+    - AIRFLOW__SMTP__SMTP_USER=${AIRFLOW_SMTP_EMAIL}
+    - AIRFLOW__SMTP__SMTP_PASSWORD=${AIRFLOW_SMTP_PASSWORD}
     - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/secrets/nhl-intel-sa.json
     - GCP_PROJECT_ID=${GCP_PROJECT_ID}
     - GCP_DATASET_RAW=${GCP_DATASET_RAW}
+    - GCP_DATASET_STAGING=${GCP_DATASET_STAGING}
+    - GCP_DATASET_MART=${GCP_DATASET_MART}
+    - LLM_API_KEY=${LLM_API_KEY}
+    - LLM_PROVIDER=${LLM_PROVIDER}
+    - REPORT_OUTPUT_BUCKET=${REPORT_OUTPUT_BUCKET}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./ingestion:/opt/airflow/ingestion
+    - ./reporting:/opt/airflow/reporting
+    - ./dbt:/opt/airflow/dbt
     - ./logs:/opt/airflow/logs
     - ./secrets:/opt/airflow/secrets:ro
   depends_on:
-    - postgres
+    postgres:
+      condition: service_healthy
 
 services:
   postgres:
     image: postgres:14
+    container_name: nhl-postgres
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
@@ -33,27 +50,18 @@ services:
       interval: 10s
       retries: 5
       start_period: 5s
-
-  airflow-init:
-    <<: *airflow-common
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/ingestion
-        airflow db init
-        airflow users create \
-          --username admin \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email admin@example.com \
-          --password admin
-    restart: on-failure
+    restart: unless-stopped
 
   airflow-webserver:
     <<: *airflow-common
-    command: webserver
+    container_name: nhl-airflow-webserver
+    command: >
+      bash -c "
+      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-generativeai dbt-bigquery Jinja2 &&
+      airflow db init &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin || true &&
+      airflow webserver
+      "
     ports:
       - "8080:8080"
     healthcheck:
@@ -61,19 +69,24 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
-    restart: always
+      start_period: 60s
+    restart: unless-stopped
 
   airflow-scheduler:
     <<: *airflow-common
-    command: scheduler
+    container_name: nhl-airflow-scheduler
+    command: >
+      bash -c "
+      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-generativeai dbt-bigquery Jinja2 &&
+      airflow scheduler
+      "
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
-    restart: always
+      start_period: 60s
+    restart: unless-stopped
 
 volumes:
   postgres-db-volume:

@@ -1,1 +1,24 @@
-# Example dbt profile configuration - never commit real credentials
+nhl_intel:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: YOUR_GCP_PROJECT_ID
+      dataset: nhl_staging
+      keyfile: /path/to/service-account.json
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
+
+    prod:
+      type: bigquery
+      method: service-account
+      project: YOUR_GCP_PROJECT_ID
+      dataset: nhl_staging
+      keyfile: /path/to/service-account.json
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
