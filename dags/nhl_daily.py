@@ -7,19 +7,9 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv(Path(__file__).parent.parent / ".env")
-
+# Add project root to path for imports (done at DAG parse time only)
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play
-from ingestion.loaders import load_json_to_bigquery
-from reporting.query import get_daily_report_data
-from reporting.llm_summary import generate_summary
-from reporting.render import render_report
-from google.cloud import storage
 
 
 def ingest_nhl_data(**context):
@@ -28,6 +18,10 @@ def ingest_nhl_data(**context):
     Looks back up to 30 days from execution date to find games and loads
     schedule, boxscore, and play-by-play data into the nhl_raw dataset.
     """
+    # Import heavy packages inside task function to avoid DAG parse timeout
+    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play
+    from ingestion.loaders import load_json_to_bigquery
+
     execution_date = context["execution_date"]
     project_id = os.getenv("GCP_PROJECT_ID")
     dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
@@ -129,6 +123,11 @@ def generate_daily_report(**context):
     Queries mart_daily_report_feed, generates AI summary, renders HTML template,
     and writes the report to the local output directory.
     """
+    # Import heavy packages inside task function to avoid DAG parse timeout
+    from reporting.query import get_daily_report_data
+    from reporting.llm_summary import generate_summary
+    from reporting.render import render_report
+
     execution_date = context["execution_date"]
     report_date = (execution_date - timedelta(days=1)).date().isoformat()
 
@@ -166,6 +165,9 @@ def publish_report_to_gcs(**context):
     Reads the report from the local output directory and uploads it to
     the configured GCS bucket for public access.
     """
+    # Import heavy packages inside task function to avoid DAG parse timeout
+    from google.cloud import storage
+
     ti = context["ti"]
     report_path_str = ti.xcom_pull(task_ids="generate_report")
 
@@ -221,10 +223,12 @@ with DAG(
 
     run_dbt_models = BashOperator(
         task_id="run_dbt_models",
-        bash_command="cd /Users/codytownsend/Desktop/nhl/NIR/dbt && /Library/Frameworks/Python.framework/Versions/3.10/bin/dbt run && /Library/Frameworks/Python.framework/Versions/3.10/bin/dbt test",
+        bash_command="cd /opt/airflow/dbt && dbt run && dbt test",
         env={
             "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID"),
             "GCP_DATASET_RAW": os.getenv("GCP_DATASET_RAW", "nhl_raw"),
+            "GCP_DATASET_STAGING": os.getenv("GCP_DATASET_STAGING", "nhl_staging"),
+            "GCP_DATASET_MART": os.getenv("GCP_DATASET_MART", "nhl_mart"),
         },
     )
 
