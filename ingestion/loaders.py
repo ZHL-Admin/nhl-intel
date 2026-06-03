@@ -3,8 +3,22 @@
 import json
 from datetime import datetime
 from io import BytesIO
-from typing import Union, List
+from typing import Union, List, Any
 from google.cloud import bigquery
+
+
+def _clean_empty_structs(obj: Any) -> Any:
+    """Recursively convert empty dicts to None for BigQuery compatibility.
+
+    BigQuery's autodetect cannot handle empty structs, so we convert them to null.
+    """
+    if isinstance(obj, dict):
+        if not obj:  # Empty dict
+            return None
+        return {k: _clean_empty_structs(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_empty_structs(item) for item in obj]
+    return obj
 
 
 def load_json_to_bigquery(
@@ -27,10 +41,14 @@ def load_json_to_bigquery(
     if isinstance(data, dict):
         data = [data]
 
-    # Add ingestion timestamp to each row
+    # Clean empty structs and add ingestion timestamp to each row
     ingestion_date = datetime.utcnow().date().isoformat()
+    cleaned_data = []
     for row in data:
-        row["ingestion_date"] = ingestion_date
+        cleaned_row = _clean_empty_structs(row)
+        if cleaned_row is not None:
+            cleaned_row["ingestion_date"] = ingestion_date
+            cleaned_data.append(cleaned_row)
 
     job_config = bigquery.LoadJobConfig(
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
@@ -42,7 +60,7 @@ def load_json_to_bigquery(
     )
 
     # Convert to newline-delimited JSON bytes
-    ndjson = "\n".join(json.dumps(row) for row in data)
+    ndjson = "\n".join(json.dumps(row) for row in cleaned_data)
     file_obj = BytesIO(ndjson.encode("utf-8"))
 
     load_job = client.load_table_from_file(
