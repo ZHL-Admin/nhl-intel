@@ -6,3 +6,5 @@ respx
 jinja2
 tenacity
 google-cloud-bigquery
+google-genai
+google-cloud-storage
