@@ -1,10 +1,10 @@
 """Query module for pulling report data from BigQuery mart tables."""
 import os
-from typing import Any
+from typing import Any, List, Dict
 from google.cloud import bigquery
 
 
-def get_daily_report_data(date: str) -> list[dict[str, Any]]:
+def get_daily_report_data(date: str) -> List[Dict[str, Any]]:
     """Fetch all data from mart_daily_report_feed for a given date.
 
     Args:

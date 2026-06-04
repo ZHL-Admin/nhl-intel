@@ -1,7 +1,7 @@
 """LLM-based narrative summary generation for daily reports."""
 import json
 import os
-from typing import Any
+from typing import Any, List, Dict
 from google import genai
 
 
@@ -13,7 +13,7 @@ Do not speculate beyond what the data shows.
 """
 
 
-def build_user_prompt(metrics: dict[str, Any]) -> str:
+def build_user_prompt(metrics: Dict[str, Any]) -> str:
     """Build the user prompt from structured metric data.
 
     Args:
@@ -31,7 +31,7 @@ Write the daily intelligence summary based on the above data.
 """
 
 
-def generate_summary(report_data: list[dict[str, Any]]) -> str:
+def generate_summary(report_data: List[Dict[str, Any]]) -> str:
     """Generate narrative summary using Gemini API.
 
     Args:
@@ -101,7 +101,7 @@ def generate_summary(report_data: list[dict[str, Any]]) -> str:
         return _generate_fallback_summary(report_data)
 
 
-def _generate_fallback_summary(report_data: list[dict[str, Any]]) -> str:
+def _generate_fallback_summary(report_data: List[Dict[str, Any]]) -> str:
     """Generate a basic summary when LLM is unavailable.
 
     Args:
