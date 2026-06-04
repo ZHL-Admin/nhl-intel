@@ -210,7 +210,7 @@ with DAG(
     dag_id="nhl_daily",
     default_args=default_args,
     description="Daily NHL data ingestion and transformation pipeline",
-    schedule_interval=None,  # Manual trigger for Phase 1
+    schedule_interval="0 13 * * *",  # Daily at 08:00 ET / 13:00 UTC
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=["nhl", "ingestion", "dbt"],
