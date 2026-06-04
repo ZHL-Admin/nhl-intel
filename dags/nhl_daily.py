@@ -138,14 +138,15 @@ def generate_daily_report(**context):
     print(f"Found {len(report_data)} data points for {report_date}")
 
     if not report_data:
-        print(f"No data available for {report_date}, skipping report generation")
-        return None
+        print(f"No data available for {report_date}, generating no-games report")
+        summary = f"No NHL games were played on {report_date}."
+        report_data = []
+    else:
+        # Generate LLM summary only if we have data
+        summary = generate_summary(report_data)
+        print(f"Generated summary: {summary[:100]}...")
 
-    # Generate LLM summary
-    summary = generate_summary(report_data)
-    print(f"Generated summary: {summary[:100]}...")
-
-    # Render HTML
+    # Render HTML (works with empty data)
     html = render_report(report_data, summary, report_date)
     print(f"Rendered {len(html)} characters of HTML")
 

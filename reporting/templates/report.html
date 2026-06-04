@@ -171,6 +171,7 @@
 
     <div class="section">
         <h2>Game Results</h2>
+        {% if games %}
         <div style="background-color: #f9f9f9; padding: 10px; margin-bottom: 20px; border-left: 3px solid #0066cc; font-size: 13px; color: #666;">
             <strong>Note:</strong> Player hot/cold flags are based on <em>shot quality</em> (high-danger attempts), not actual points scored. A "cold" flag indicates below-average shot generation, even if the player scored. This measures sustainable process rather than results.
         </div>
@@ -203,10 +204,14 @@
             {% endfor %}
         </div>
         {% endfor %}
+        {% else %}
+        <p style="color: #666; font-style: italic;">No games were played on this date.</p>
+        {% endif %}
     </div>
 
     <div class="section">
         <h2>Team Trends (5-Game Rolling)</h2>
+        {% if team_trends %}
         {% for team in team_trends %}
         <div class="team-row">
             <div class="team-name">{{ team.abbrev }}</div>
@@ -223,6 +228,9 @@
             </div>
         </div>
         {% endfor %}
+        {% else %}
+        <p style="color: #666; font-style: italic;">No trend data available for this date.</p>
+        {% endif %}
     </div>
 
     <div class="footer">
