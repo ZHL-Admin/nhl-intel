@@ -60,7 +60,7 @@ services:
     container_name: nhl-airflow-webserver
     command: >
       bash -c "
-      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-genai dbt-bigquery Jinja2 &&
+      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-generativeai dbt-bigquery Jinja2 &&
       airflow db init &&
       airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin || true &&
       airflow webserver
@@ -80,7 +80,7 @@ services:
     container_name: nhl-airflow-scheduler
     command: >
       bash -c "
-      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-genai dbt-bigquery Jinja2 &&
+      pip install google-cloud-bigquery google-cloud-storage python-dotenv google-generativeai dbt-bigquery Jinja2 &&
       airflow scheduler
       "
     healthcheck:

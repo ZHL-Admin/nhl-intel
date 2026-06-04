@@ -2,7 +2,7 @@
 import json
 import os
 from typing import Any, List, Dict
-from google import genai
+import google.generativeai as genai
 
 
 SYSTEM_PROMPT = """
@@ -45,7 +45,8 @@ def generate_summary(report_data: List[Dict[str, Any]]) -> str:
         return _generate_fallback_summary(report_data)
 
     try:
-        client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
     except Exception as e:
         print(f"LLM client creation error: {type(e).__name__}: {str(e)}")
         return _generate_fallback_summary(report_data)
@@ -87,13 +88,12 @@ def generate_summary(report_data: List[Dict[str, Any]]) -> str:
     user_prompt = build_user_prompt(metrics)
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-            config=genai.types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=1000,
-            )
+        response = model.generate_content(
+            f"{SYSTEM_PROMPT}\n\n{user_prompt}",
+            generation_config={
+                'temperature': 0.7,
+                'max_output_tokens': 1000,
+            }
         )
         return response.text.strip()
     except Exception as e:
