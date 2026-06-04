@@ -223,7 +223,7 @@ with DAG(
 
     run_dbt_models = BashOperator(
         task_id="run_dbt_models",
-        bash_command="cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run --profiles-dir /opt/airflow/dbt && /home/airflow/.local/bin/dbt test --profiles-dir /opt/airflow/dbt",
+        bash_command="cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run --profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs --target-path /tmp/dbt_target && /home/airflow/.local/bin/dbt test --profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs --target-path /tmp/dbt_target",
         env={
             **os.environ,
             "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID"),
