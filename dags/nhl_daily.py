@@ -225,6 +225,7 @@ with DAG(
         task_id="run_dbt_models",
         bash_command="cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run --profiles-dir /opt/airflow/dbt && /home/airflow/.local/bin/dbt test --profiles-dir /opt/airflow/dbt",
         env={
+            **os.environ,
             "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID"),
             "GCP_DATASET_RAW": os.getenv("GCP_DATASET_RAW", "nhl_raw"),
             "GCP_DATASET_STAGING": os.getenv("GCP_DATASET_STAGING", "nhl_staging"),
