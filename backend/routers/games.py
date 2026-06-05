@@ -166,7 +166,9 @@ async def get_game_detail(game_id: int) -> GameDetail:
             hdcf_per60,
             hdca_per60,
             xgf,
-            xga
+            xga,
+            zone_entry_success_rate,
+            shot_attempts_for
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE game_id = {game_id}
         """
@@ -185,7 +187,9 @@ async def get_game_detail(game_id: int) -> GameDetail:
                 hdcf_per60=row['hdcf_per60'],
                 hdca_per60=row['hdca_per60'],
                 xgf=row.get('xgf'),
-                xga=row.get('xga')
+                xga=row.get('xga'),
+                zone_entry_success_rate=row.get('zone_entry_success_rate'),
+                shot_attempts=row.get('shot_attempts_for')
             )
             if row['home_away'] == 'home':
                 home_stats = team_stats
@@ -299,7 +303,9 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             points=row['points'],
             shots=row['shots'],
             cf=row['cf'],
-            hdcf=row['hdcf']
+            hdcf=row['hdcf'],
+            ixg=row.get('ixg'),
+            ixg_per60=row.get('ixg_per60')
         )
 
         if row['team_id'] == game_row['home_team_id']:

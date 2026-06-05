@@ -35,6 +35,8 @@ class TeamGameStats(BaseModel):
     hdca_per60: Optional[float] = Field(None, description="High-danger chances against per 60")
     xgf: Optional[float] = Field(None, description="Expected goals for")
     xga: Optional[float] = Field(None, description="Expected goals against")
+    zone_entry_success_rate: Optional[float] = Field(None, description="Controlled zone entry success rate")
+    shot_attempts: Optional[int] = Field(None, description="Total shot attempts")
 
 
 class GameDetail(BaseModel):
@@ -60,6 +62,8 @@ class PlayerGameStats(BaseModel):
     shots: Optional[int] = None
     cf: Optional[int] = Field(None, description="Corsi For")
     hdcf: Optional[int] = Field(None, description="High-danger chances for")
+    ixg: Optional[float] = Field(None, description="Individual expected goals")
+    ixg_per60: Optional[float] = Field(None, description="Individual expected goals per 60 minutes")
 
 
 class GamePlayerStats(BaseModel):

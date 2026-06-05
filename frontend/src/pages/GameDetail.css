@@ -1,0 +1,467 @@
+.game-detail {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+
+/* Back Navigation */
+.game-detail__back-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  margin-bottom: var(--space-6);
+  transition: color 150ms ease;
+}
+
+.game-detail__back-nav:hover {
+  color: var(--color-accent);
+}
+
+/* Header */
+.game-detail__header {
+  position: relative;
+  text-align: center;
+  margin-bottom: var(--space-12);
+}
+
+.game-detail__preview-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.game-detail__matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-10);
+  margin-bottom: var(--space-4);
+}
+
+.game-detail__team {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.game-detail__team--away {
+  flex-direction: row;
+}
+
+.game-detail__team--home {
+  flex-direction: row-reverse;
+}
+
+.game-detail__team-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.game-detail__team-abbrev {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.game-detail__score {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.game-detail__score-value {
+  font-size: var(--text-3xl);
+  font-weight: bold;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.game-detail__score-separator {
+  font-size: var(--text-2xl);
+  color: var(--color-text-muted);
+}
+
+.game-detail__vs {
+  font-size: var(--text-xl);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.game-detail__meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.game-detail__meta-separator {
+  color: var(--color-text-muted);
+}
+
+/* Comparison Panel */
+.game-detail__comparison-panel {
+  margin-bottom: var(--space-12);
+}
+
+.comparison-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.comparison-panel__column {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-5);
+}
+
+.comparison-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.comparison-panel__logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.comparison-panel__abbrev {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.comparison-panel__metrics {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Comparison Metrics */
+.comparison-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.comparison-metric__label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.comparison-metric__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.comparison-metric__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 60px;
+}
+
+.comparison-metric__value--away {
+  text-align: right;
+}
+
+.comparison-metric__value--home {
+  text-align: left;
+}
+
+.comparison-metric__side-by-side {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+}
+
+.comparison-metric__side-by-side .comparison-metric__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Shot Map Placeholder */
+.game-detail__shot-map-placeholder {
+  margin-bottom: var(--space-12);
+}
+
+.shot-map-placeholder {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shot-map-placeholder__label {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+}
+
+/* Section Titles */
+.game-detail__section-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-6);
+}
+
+/* Preview Notice */
+.game-detail__preview-notice {
+  background: var(--color-accent-subtle);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  padding: var(--space-5);
+  text-align: center;
+  margin-bottom: var(--space-12);
+}
+
+.game-detail__preview-notice p {
+  font-size: var(--text-base);
+  color: var(--color-accent);
+  margin: 0;
+}
+
+/* Roster Section */
+.game-detail__roster-section {
+  margin-bottom: var(--space-12);
+}
+
+.roster-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+.roster-section__column {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-5);
+}
+
+.roster-section__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-bottom: var(--space-4);
+}
+
+.roster-section__logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.roster-section__header span {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.roster-section__players {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Player Row */
+.player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.player-row:hover {
+  background: var(--color-bg-elevated);
+}
+
+.player-row__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.player-row__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.player-row__details {
+  flex: 1;
+}
+
+.player-row__name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.player-row__position {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.player-row__stats {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.player-row__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 40px;
+}
+
+.player-row__stat-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.player-row__stat-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Error State */
+.game-detail__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.game-detail__error-message {
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.game-detail__retry-button,
+.game-detail__back-button {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+  border: none;
+  border-radius: 4px;
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease;
+  margin: var(--space-2);
+}
+
+.game-detail__retry-button:hover,
+.game-detail__back-button:hover {
+  background: var(--color-accent-hover);
+}
+
+.game-detail__back-button {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+}
+
+.game-detail__back-button:hover {
+  background: var(--color-bg-overlay);
+}
+
+/* Responsive Design */
+@media (max-width: 960px) {
+  .comparison-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .roster-section {
+    grid-template-columns: 1fr;
+  }
+
+  .game-detail__matchup {
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .game-detail__team {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .player-row__stats {
+    gap: var(--space-3);
+  }
+
+  .player-row__stat {
+    min-width: 35px;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-detail {
+    padding: var(--space-4);
+  }
+
+  .game-detail__team-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .game-detail__score-value {
+    font-size: var(--text-2xl);
+  }
+
+  .comparison-metric__bar {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .comparison-metric__value {
+    text-align: center !important;
+  }
+}

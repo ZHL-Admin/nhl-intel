@@ -40,6 +40,8 @@ export interface TeamGameStats {
   hdca_per60: number | null
   xgf: number | null
   xga: number | null
+  zone_entry_success_rate: number | null
+  shot_attempts: number | null
 }
 
 export interface GameDetail {
@@ -63,6 +65,8 @@ export interface PlayerGameStats {
   shots: number | null
   cf: number | null
   hdcf: number | null
+  ixg: number | null
+  ixg_per60: number | null
 }
 
 export interface GamePlayerStats {
