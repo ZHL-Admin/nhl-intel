@@ -160,6 +160,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.comparison-metric:last-child {
+  border-bottom: none;
 }
 
 .comparison-metric__label {
@@ -337,6 +343,9 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .player-row__position {

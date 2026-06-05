@@ -67,6 +67,7 @@ export interface PlayerGameStats {
   hdcf: number | null
   ixg: number | null
   ixg_per60: number | null
+  hot_cold_flag: string | null
 }
 
 export interface GamePlayerStats {

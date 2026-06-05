@@ -280,7 +280,8 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         p.individual_shot_attempts as cf,
         p.individual_high_danger_attempts as hdcf,
         p.ixg,
-        p.ixg_per60
+        p.ixg_per60,
+        p.hot_cold_flag
     FROM {bq_service.get_full_table_id('mart_player_game_stats')} p
     WHERE p.game_id = {game_id}
     ORDER BY (p.individual_goals + p.primary_assists) DESC, p.ixg_per60 DESC
@@ -305,7 +306,8 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             cf=row['cf'],
             hdcf=row['hdcf'],
             ixg=row.get('ixg'),
-            ixg_per60=row.get('ixg_per60')
+            ixg_per60=row.get('ixg_per60'),
+            hot_cold_flag=row.get('hot_cold_flag')
         )
 
         if row['team_id'] == game_row['home_team_id']:

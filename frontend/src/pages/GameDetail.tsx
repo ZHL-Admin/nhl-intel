@@ -200,7 +200,7 @@ function CompletedGameContent({
           <div
             className="comparison-panel__column"
             style={{
-              background: `linear-gradient(to bottom, ${getTeamColor(away_team.team_abbrev)}10, transparent)`
+              background: `linear-gradient(to bottom, ${getTeamColor(away_team.team_abbrev)}1A, transparent)`
             }}
           >
             <div className="comparison-panel__header">
@@ -219,7 +219,7 @@ function CompletedGameContent({
           <div
             className="comparison-panel__column"
             style={{
-              background: `linear-gradient(to bottom, ${getTeamColor(home_team.team_abbrev)}10, transparent)`
+              background: `linear-gradient(to bottom, ${getTeamColor(home_team.team_abbrev)}1A, transparent)`
             }}
           >
             <div className="comparison-panel__header">
@@ -247,14 +247,14 @@ function CompletedGameContent({
               </div>
               <div className="comparison-metric__bar">
                 <span className="comparison-metric__value comparison-metric__value--away">
-                  {away_team.cf_pct.toFixed(1)}%
+                  {(away_team.cf_pct * 100).toFixed(1)}%
                 </span>
                 <PossessionBar
-                  homeValue={home_team.cf_pct}
-                  awayValue={away_team.cf_pct}
+                  homeValue={home_team.cf_pct * 100}
+                  awayValue={away_team.cf_pct * 100}
                 />
                 <span className="comparison-metric__value comparison-metric__value--home">
-                  {home_team.cf_pct.toFixed(1)}%
+                  {(home_team.cf_pct * 100).toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -465,7 +465,12 @@ function PlayerRow({ player }: { player: any }) {
           {player.player_name.split(' ').map((n: string) => n[0]).join('')}
         </div>
         <div className="player-row__details">
-          <div className="player-row__name">{player.player_name}</div>
+          <div className="player-row__name">
+            {player.player_name}
+            {player.hot_cold_flag && player.hot_cold_flag !== 'neutral' && (
+              <Badge variant={player.hot_cold_flag as 'hot' | 'cold'} />
+            )}
+          </div>
           <div className="player-row__position">{player.position}</div>
         </div>
       </div>

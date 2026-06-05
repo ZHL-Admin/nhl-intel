@@ -64,6 +64,7 @@ class PlayerGameStats(BaseModel):
     hdcf: Optional[int] = Field(None, description="High-danger chances for")
     ixg: Optional[float] = Field(None, description="Individual expected goals")
     ixg_per60: Optional[float] = Field(None, description="Individual expected goals per 60 minutes")
+    hot_cold_flag: Optional[str] = Field(None, description="Hot, cold, or neutral performance indicator")
 
 
 class GamePlayerStats(BaseModel):
