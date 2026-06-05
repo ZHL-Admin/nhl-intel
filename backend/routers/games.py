@@ -16,6 +16,7 @@ router = APIRouter()
 @router.get("/", response_model=List[Game])
 @cache(ttl=300)
 async def get_games(
+    date: Optional[date] = Query(None, description="Filter games for specific date"),
     start_date: Optional[date] = Query(None, description="Filter games from this date"),
     end_date: Optional[date] = Query(None, description="Filter games until this date"),
     team_id: Optional[int] = Query(None, description="Filter games for specific team"),
@@ -24,6 +25,7 @@ async def get_games(
     """Get list of games with optional filters.
 
     Args:
+        date: Optional specific date filter.
         start_date: Optional start date filter.
         end_date: Optional end date filter.
         team_id: Optional team ID filter.
@@ -34,7 +36,9 @@ async def get_games(
     """
     # Build query with optional filters
     where_clauses = []
-    if start_date:
+    if date:
+        where_clauses.append(f"game_date = '{date}'")
+    elif start_date:
         where_clauses.append(f"game_date >= '{start_date}'")
     if end_date:
         where_clauses.append(f"game_date <= '{end_date}'")
