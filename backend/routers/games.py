@@ -141,7 +141,8 @@ async def get_game_detail(game_id: int) -> GameDetail:
         away_team_abbrev,
         home_team_score,
         away_team_score,
-        game_state
+        game_state,
+        venue_name
     FROM {bq_service.get_full_table_id('stg_boxscores')}
     WHERE game_id = {game_id}
     """
@@ -225,7 +226,8 @@ async def get_game_detail(game_id: int) -> GameDetail:
         season=game_row['season'],
         home_team=home_stats,
         away_team=away_stats,
-        is_preview=is_preview
+        is_preview=is_preview,
+        venue_name=game_row.get('venue_name')
     )
 
 

@@ -47,6 +47,7 @@ class GameDetail(BaseModel):
     home_team: TeamGameStats
     away_team: TeamGameStats
     is_preview: bool
+    venue_name: Optional[str] = Field(None, description="Venue/arena name")
 
 
 class PlayerGameStats(BaseModel):

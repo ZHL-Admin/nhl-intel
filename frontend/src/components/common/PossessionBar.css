@@ -14,19 +14,6 @@
   position: relative;
 }
 
-.possession-bar__center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: var(--text-xs);
-  line-height: var(--text-xs-height);
-  color: var(--color-text-muted);
-  background-color: var(--color-bg-base);
-  padding: 0 var(--space-1);
-  z-index: 1;
-}
-
 .possession-bar__value {
   font-size: var(--text-sm);
   line-height: var(--text-sm-height);

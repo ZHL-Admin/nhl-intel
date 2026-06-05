@@ -51,6 +51,7 @@ export interface GameDetail {
   home_team: TeamGameStats
   away_team: TeamGameStats
   is_preview: boolean
+  venue_name: string | null
 }
 
 export interface PlayerGameStats {

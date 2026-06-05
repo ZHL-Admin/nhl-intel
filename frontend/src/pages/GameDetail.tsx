@@ -4,7 +4,7 @@ import { PageLayout, SkeletonLoader, Badge, PossessionBar, Tooltip } from '../co
 import GameHeader from '../components/games/GameHeader'
 import { getGameDetail, getGamePlayerStats } from '../api/games'
 import { GameDetail as GameDetailType, GamePlayerStats } from '../api/types'
-import { getTeamLogoUrl, getTeamColor, formatGameDate } from '../utils/teams'
+import { getTeamLogoUrl, getTeamColor } from '../utils/teams'
 import './GameDetail.css'
 
 function GameDetail() {
@@ -105,7 +105,7 @@ function GameDetail() {
     )
   }
 
-  const { home_team, away_team, is_preview, game_date } = gameDetail
+  const { is_preview } = gameDetail
 
   return (
     <PageLayout>
@@ -145,45 +145,6 @@ function CompletedGameContent({
     <>
       {/* Team Comparison Panel */}
       <section className="game-detail__comparison-panel">
-        <div className="comparison-panel">
-          {/* Away Team Column */}
-          <div
-            className="comparison-panel__column"
-            style={{
-              background: `linear-gradient(to bottom, ${getTeamColor(away_team.team_abbrev)}1A, transparent)`
-            }}
-          >
-            <div className="comparison-panel__header">
-              <img
-                src={getTeamLogoUrl(away_team.team_abbrev)}
-                alt={away_team.team_abbrev}
-                className="comparison-panel__logo"
-              />
-              <div>
-                <div className="comparison-panel__abbrev">{away_team.team_abbrev}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Home Team Column */}
-          <div
-            className="comparison-panel__column"
-            style={{
-              background: `linear-gradient(to bottom, ${getTeamColor(home_team.team_abbrev)}1A, transparent)`
-            }}
-          >
-            <div className="comparison-panel__header">
-              <div>
-                <div className="comparison-panel__abbrev">{home_team.team_abbrev}</div>
-              </div>
-              <img
-                src={getTeamLogoUrl(home_team.team_abbrev)}
-                alt={home_team.team_abbrev}
-                className="comparison-panel__logo"
-              />
-            </div>
-          </div>
-        </div>
 
         {/* Metrics */}
         <div className="comparison-panel__metrics">
@@ -202,6 +163,8 @@ function CompletedGameContent({
                 <PossessionBar
                   homeValue={home_team.cf_pct * 100}
                   awayValue={away_team.cf_pct * 100}
+                  homeColor={getTeamColor(home_team.team_abbrev)}
+                  awayColor={getTeamColor(away_team.team_abbrev)}
                 />
                 <span className="comparison-metric__value comparison-metric__value--home">
                   {(home_team.cf_pct * 100).toFixed(1)}%
@@ -225,6 +188,8 @@ function CompletedGameContent({
                 <PossessionBar
                   homeValue={xgf_pct_home}
                   awayValue={xgf_pct_away}
+                  homeColor={getTeamColor(home_team.team_abbrev)}
+                  awayColor={getTeamColor(away_team.team_abbrev)}
                 />
                 <span className="comparison-metric__value comparison-metric__value--home">
                   {xgf_pct_home.toFixed(1)}%

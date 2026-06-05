@@ -11,7 +11,7 @@ interface GameHeaderProps {
 
 function GameHeader({ gameDetail }: GameHeaderProps) {
   const navigate = useNavigate()
-  const { home_team, away_team, is_preview, game_date } = gameDetail
+  const { home_team, away_team, is_preview, game_date, venue_name } = gameDetail
 
   const handleBack = () => {
     navigate('/games')
@@ -69,8 +69,12 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
 
           <div className="game-header__meta">
             <span>{formatGameDate(game_date)}</span>
-            <span className="game-header__meta-separator">•</span>
-            <span>Arena</span>
+            {venue_name && (
+              <>
+                <span className="game-header__meta-separator">•</span>
+                <span>{venue_name}</span>
+              </>
+            )}
           </div>
         </div>
 

@@ -34,7 +34,6 @@ function PossessionBar({
           {awayValue.toFixed(1)}%
         </span>
       </div>
-      <div className="possession-bar__center">50%</div>
       <div
         className="possession-bar__home"
         style={{
