@@ -50,7 +50,32 @@ async def get_games(
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     sql = f"""
-    SELECT DISTINCT
+    WITH deduplicated AS (
+        SELECT
+            game_id,
+            game_date,
+            season,
+            home_team_id,
+            home_team_abbrev,
+            away_team_id,
+            away_team_abbrev,
+            home_team_score,
+            away_team_score,
+            game_state,
+            ROW_NUMBER() OVER (
+                PARTITION BY game_id
+                ORDER BY
+                    CASE
+                        WHEN game_state IN ('OFF', 'FINAL') THEN 1
+                        WHEN game_state = 'LIVE' THEN 2
+                        ELSE 3
+                    END,
+                    ingestion_date DESC
+            ) as rn
+        FROM {bq_service.get_full_table_id('stg_boxscores')}
+        {where_sql}
+    )
+    SELECT
         game_id,
         game_date,
         season,
@@ -61,8 +86,8 @@ async def get_games(
         home_team_score,
         away_team_score,
         game_state
-    FROM {bq_service.get_full_table_id('stg_boxscores')}
-    {where_sql}
+    FROM deduplicated
+    WHERE rn = 1
     ORDER BY game_date DESC, game_id DESC
     LIMIT 100
     """
