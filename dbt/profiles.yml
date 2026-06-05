@@ -1,6 +1,16 @@
 nhl_intel:
   target: prod
   outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: nhl-intel-498216
+      dataset: nhl_staging
+      keyfile: /Users/codytownsend/Desktop/nhl/NIR/secrets/nhl-intel-sa.json
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
     prod:
       type: bigquery
       method: service-account

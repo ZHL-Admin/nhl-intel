@@ -1,0 +1,19 @@
+.skeleton-loader {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-elevated) 0%,
+    color-mix(in srgb, var(--color-bg-elevated) 90%, white) 50%,
+    var(--color-bg-elevated) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

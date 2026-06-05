@@ -110,8 +110,56 @@ renamed as (
     from unnested
 ),
 
+deduplicated as (
+    select
+        *,
+        row_number() over (partition by game_id, event_id order by ingestion_date desc) as rn
+    from renamed
+),
+
 final as (
-    select * from renamed
+    select
+        game_id,
+        api_game_id,
+        season,
+        game_date,
+        ingestion_date,
+        event_id,
+        period_number,
+        period_type,
+        time_in_period,
+        time_remaining,
+        situation_code,
+        type_code,
+        type_desc_key,
+        sort_order,
+        home_team_defending_side,
+        x_coord,
+        y_coord,
+        zone_code,
+        shot_type,
+        reason,
+        secondary_reason,
+        shooting_player_id,
+        scoring_player_id,
+        goalie_in_net_id,
+        assist1_player_id,
+        assist2_player_id,
+        blocking_player_id,
+        hitting_player_id,
+        hittee_player_id,
+        committed_by_player_id,
+        drawn_by_player_id,
+        player_id,
+        home_score,
+        away_score,
+        home_sog,
+        away_sog,
+        event_owner_team_id,
+        duration,
+        _loaded_at
+    from deduplicated
+    where rn = 1
 )
 
 select * from final

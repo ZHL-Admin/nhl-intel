@@ -44,8 +44,42 @@ renamed as (
     from unnested
 ),
 
+deduplicated as (
+    select
+        game_id,
+        api_game_id,
+        season,
+        game_date,
+        ingestion_date,
+        player_id,
+        team_id,
+        first_name,
+        last_name,
+        sweater_number,
+        position_code,
+        headshot_url,
+        _loaded_at,
+        row_number() over (partition by game_id, player_id order by ingestion_date desc) as rn
+    from renamed
+),
+
 final as (
-    select * from renamed
+    select
+        game_id,
+        api_game_id,
+        season,
+        game_date,
+        ingestion_date,
+        player_id,
+        team_id,
+        first_name,
+        last_name,
+        sweater_number,
+        position_code,
+        headshot_url,
+        _loaded_at
+    from deduplicated
+    where rn = 1
 )
 
 select * from final

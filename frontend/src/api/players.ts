@@ -1,0 +1,56 @@
+/**
+ * Player API endpoints.
+ */
+import { apiClient } from './client'
+import {
+  PlayerDetail,
+  PlayerTrends,
+  PlayerGamelog,
+  PlayerShots,
+  PlayerVsOpponent,
+} from './types'
+
+/**
+ * Fetch detailed information for a specific player.
+ */
+export async function getPlayerDetail(playerId: number): Promise<PlayerDetail> {
+  const response = await apiClient.get<PlayerDetail>(`/players/${playerId}`)
+  return response.data
+}
+
+/**
+ * Fetch rolling trends for a specific player.
+ */
+export async function getPlayerTrends(playerId: number): Promise<PlayerTrends> {
+  const response = await apiClient.get<PlayerTrends>(`/players/${playerId}/trends`)
+  return response.data
+}
+
+/**
+ * Fetch game-by-game log for a specific player.
+ */
+export async function getPlayerGamelog(playerId: number): Promise<PlayerGamelog> {
+  const response = await apiClient.get<PlayerGamelog>(`/players/${playerId}/gamelog`)
+  return response.data
+}
+
+/**
+ * Fetch shot location data for a specific player.
+ */
+export async function getPlayerShots(playerId: number): Promise<PlayerShots> {
+  const response = await apiClient.get<PlayerShots>(`/players/${playerId}/shots`)
+  return response.data
+}
+
+/**
+ * Fetch player stats vs specific opponent.
+ */
+export async function getPlayerVsOpponent(
+  playerId: number,
+  opponentId: number
+): Promise<PlayerVsOpponent> {
+  const response = await apiClient.get<PlayerVsOpponent>(
+    `/players/${playerId}/vs/${opponentId}`
+  )
+  return response.data
+}

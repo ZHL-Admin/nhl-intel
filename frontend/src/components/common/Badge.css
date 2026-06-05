@@ -1,0 +1,52 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-height);
+  font-weight: 500;
+}
+
+.badge--hot {
+  background-color: color-mix(in srgb, var(--color-data-positive) 15%, transparent);
+  color: var(--color-data-positive);
+}
+
+.badge--cold {
+  background-color: color-mix(in srgb, var(--color-data-negative) 15%, transparent);
+  color: var(--color-data-negative);
+}
+
+.badge--preview {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent);
+}
+
+.badge--live {
+  background-color: #e85d6a;
+  color: white;
+}
+
+.badge--small-sample {
+  background-color: color-mix(in srgb, var(--color-data-highlight) 15%, transparent);
+  color: var(--color-data-highlight);
+}
+
+.badge__pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: white;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

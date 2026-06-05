@@ -1,0 +1,128 @@
+.game-card {
+  position: relative;
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  cursor: pointer;
+  transition: all 150ms ease;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.game-card:hover {
+  background-color: var(--color-bg-elevated);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+.game-card--preview {
+  position: relative;
+}
+
+.game-card--live {
+  position: relative;
+}
+
+.game-card > .badge {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.game-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.game-card__team {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.game-card__team-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.game-card__team-logo-fallback {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.game-card__team-abbrev {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+}
+
+.game-card__score {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl-height);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.game-card__score-separator {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.game-card__vs {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.game-card__live-status {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.game-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.game-card__time {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.game-card__ranks {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.game-card__possession {
+  margin: var(--space-2) 0;
+}
+
+.game-card__note {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-height);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}

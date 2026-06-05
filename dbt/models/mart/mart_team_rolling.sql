@@ -6,6 +6,7 @@ with team_stats as (
         team_id,
         team_abbrev,
         cf_pct,
+        xgf_pct,
         hdcf_per60,
         hdca_per60
     from {{ ref('mart_team_game_stats') }}
@@ -27,6 +28,7 @@ rolling_calcs as (
         team_abbrev,
         game_number,
         cf_pct,
+        xgf_pct,
         hdcf_per60,
         hdca_per60,
 
@@ -35,6 +37,12 @@ rolling_calcs as (
             order by game_date
             rows between 4 preceding and current row
         ) as rolling_cf_pct_5gp,
+
+        avg(xgf_pct) over (
+            partition by team_id
+            order by game_date
+            rows between 4 preceding and current row
+        ) as rolling_xgf_pct_5gp,
 
         avg(hdcf_per60) over (
             partition by team_id
@@ -60,6 +68,8 @@ final as (
         team_abbrev,
         cf_pct as current_cf_pct,
         rolling_cf_pct_5gp,
+        xgf_pct as current_xgf_pct,
+        rolling_xgf_pct_5gp,
         hdcf_per60 as current_hdcf_per60,
         rolling_hdcf_per60_5gp,
         hdca_per60 as current_hdca_per60,

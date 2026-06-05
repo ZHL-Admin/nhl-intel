@@ -48,15 +48,43 @@ tagged as (
         case
             when type_desc_key = 'blocked-shot' then true
             else false
-        end as is_blocked
+        end as is_blocked,
+
+        -- Zone classification (same as in int_xg_rates)
+        case
+            when abs(x_coord) > 70 and abs(y_coord) < 15 then 'slot'
+            when abs(x_coord) between 55 and 70 and abs(y_coord) between 15 and 30 then 'circle'
+            when abs(x_coord) between 40 and 70 and abs(y_coord) > 30 then 'perimeter'
+            when abs(x_coord) between 25 and 55 then 'perimeter'
+            when abs(x_coord) < 40 then 'point'
+            else 'other'
+        end as zone,
+
+        -- Situation classification
+        case
+            when situation_code = '1551' then '5v5'
+            when situation_code like '15%' and situation_code != '1551' then 'other'
+            else 'special'
+        end as situation
 
     from shot_attempts_5v5
     where x_coord is not null
       and y_coord is not null
 ),
 
+with_xg as (
+    select
+        t.*,
+        coalesce(xg.xg_value, 0.02) as xg_value
+    from tagged t
+    left join {{ ref('int_xg_rates') }} xg
+        on t.zone = xg.zone
+        and t.is_high_danger = xg.is_high_danger
+        and t.situation = xg.situation
+),
+
 final as (
-    select * from tagged
+    select * from with_xg
 )
 
 select * from final

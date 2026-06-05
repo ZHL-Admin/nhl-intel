@@ -53,3 +53,8 @@ unittests.cfg
 # GCP
 *.json
 !dbt/profiles.yml.example
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/

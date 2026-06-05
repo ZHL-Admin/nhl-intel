@@ -39,7 +39,7 @@ renamed as (
     from source
 ),
 
-final as (
+deduplicated as (
     select
         game_id,
         id,
@@ -73,8 +73,47 @@ final as (
         cast(away_team_sog as int64) as away_team_sog,
         cast(last_period_type as string) as last_period_type,
         ingestion_date,
-        current_timestamp() as _loaded_at
+        row_number() over (partition by game_id order by ingestion_date desc) as rn
     from renamed
+),
+
+final as (
+    select
+        game_id,
+        id,
+        season,
+        game_type,
+        game_date,
+        start_time_utc,
+        eastern_utc_offset,
+        venue_utc_offset,
+        game_state,
+        game_schedule_state,
+        limited_scoring,
+        reg_periods,
+        venue_name,
+        venue_location,
+        current_period,
+        current_period_type,
+        time_remaining,
+        seconds_remaining,
+        clock_running,
+        in_intermission,
+        home_team_id,
+        home_team_name,
+        home_team_abbrev,
+        home_team_score,
+        home_team_sog,
+        away_team_id,
+        away_team_name,
+        away_team_abbrev,
+        away_team_score,
+        away_team_sog,
+        last_period_type,
+        ingestion_date,
+        current_timestamp() as _loaded_at
+    from deduplicated
+    where rn = 1
 )
 
 select * from final

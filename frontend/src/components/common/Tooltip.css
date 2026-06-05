@@ -1,0 +1,27 @@
+.tooltip-trigger {
+  display: inline-block;
+  cursor: help;
+}
+
+.tooltip {
+  background-color: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-height);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 280px;
+  animation: tooltipFadeIn 200ms ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
