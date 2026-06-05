@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import { PageLayout, SkeletonLoader, Badge, PossessionBar, Tooltip } from '../components/common'
+import GameHeader from '../components/games/GameHeader'
 import { getGameDetail, getGamePlayerStats } from '../api/games'
 import { GameDetail as GameDetailType, GamePlayerStats } from '../api/types'
 import { getTeamLogoUrl, getTeamColor, formatGameDate } from '../utils/teams'
@@ -110,58 +110,8 @@ function GameDetail() {
   return (
     <PageLayout>
       <div className="game-detail">
-        {/* Back Navigation */}
-        <button className="game-detail__back-nav" onClick={handleBack}>
-          <ArrowLeft size={16} />
-          <span>Back to Games</span>
-        </button>
-
-        {/* Page Header */}
-        <header className="game-detail__header">
-          {is_preview && (
-            <div className="game-detail__preview-badge">
-              <Badge variant="preview" />
-            </div>
-          )}
-
-          <div className="game-detail__matchup">
-            <div className="game-detail__team game-detail__team--away">
-              <img
-                src={getTeamLogoUrl(away_team.team_abbrev)}
-                alt={away_team.team_abbrev}
-                className="game-detail__team-logo"
-              />
-              <span className="game-detail__team-abbrev">{away_team.team_abbrev}</span>
-            </div>
-
-            <div className="game-detail__score">
-              {is_preview ? (
-                <span className="game-detail__vs">vs</span>
-              ) : (
-                <>
-                  <span className="game-detail__score-value">{away_team.score ?? 0}</span>
-                  <span className="game-detail__score-separator">-</span>
-                  <span className="game-detail__score-value">{home_team.score ?? 0}</span>
-                </>
-              )}
-            </div>
-
-            <div className="game-detail__team game-detail__team--home">
-              <span className="game-detail__team-abbrev">{home_team.team_abbrev}</span>
-              <img
-                src={getTeamLogoUrl(home_team.team_abbrev)}
-                alt={home_team.team_abbrev}
-                className="game-detail__team-logo"
-              />
-            </div>
-          </div>
-
-          <div className="game-detail__meta">
-            <span>{formatGameDate(game_date)}</span>
-            <span className="game-detail__meta-separator">•</span>
-            <span>Regular Season</span>
-          </div>
-        </header>
+        {/* New Game Header */}
+        <GameHeader gameDetail={gameDetail} />
 
         {/* Team Comparison Panel or Season Matchup Panel */}
         {is_preview ? (
