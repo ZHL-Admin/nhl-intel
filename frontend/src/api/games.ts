@@ -9,7 +9,10 @@ import { Game, GameDetail, GamePlayerStats } from './types'
  */
 export async function getGamesByDate(date: string): Promise<Game[]> {
   const response = await apiClient.get<Game[]>(`/games/`, {
-    params: { date },
+    params: {
+      start_date: date,
+      end_date: date
+    },
   })
   return response.data
 }

@@ -50,7 +50,7 @@ async def get_games(
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     sql = f"""
-    SELECT
+    SELECT DISTINCT
         game_id,
         game_date,
         season,
