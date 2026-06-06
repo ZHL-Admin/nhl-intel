@@ -124,6 +124,9 @@ class TeamDetail(BaseModel):
     hdca_per60: float
     xgf_per60: float
     xga_per60: float
+    total_goals_for: int
+    total_goals_against: int
+    zone_entry_success_rate: Optional[float] = None
 
 
 class TeamTrendPoint(BaseModel):

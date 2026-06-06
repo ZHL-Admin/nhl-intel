@@ -5,7 +5,7 @@ import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent } from '
 import { getTeamGames } from '../api/games'
 import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent } from '../api/types'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI } from '../utils/teams'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
 
 function TeamProfile() {
@@ -297,12 +297,12 @@ function TeamProfile() {
             />
             <StatCard
               label="GF/GP"
-              value={(teamDetail.wins / teamDetail.games_played * 3).toFixed(2)}
+              value={(teamDetail.total_goals_for / teamDetail.games_played).toFixed(2)}
               rank={5}
             />
             <StatCard
               label="GA/GP"
-              value={(teamDetail.losses / teamDetail.games_played * 2.5).toFixed(2)}
+              value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)}
               rank={12}
             />
             <StatCard
@@ -313,7 +313,7 @@ function TeamProfile() {
             />
             <StatCard
               label="Zone Entry Success"
-              value="N/A"
+              value={teamDetail.zone_entry_success_rate ? `${(teamDetail.zone_entry_success_rate * 100).toFixed(1)}%` : 'N/A'}
               rank={undefined}
             />
           </div>
@@ -331,11 +331,14 @@ function TeamProfile() {
             </div>
           ) : teamTrends && teamTrends.cf_pct_5gp.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={teamTrends.cf_pct_5gp.map((point, i) => ({
-                date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                cf_pct: point.value * 100,
-                xgf_pct: teamTrends.xgf_pct_5gp[i]?.value * 100 || 50
-              }))}>
+              <LineChart
+                data={teamTrends.cf_pct_5gp.map((point, i) => ({
+                  date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  cf_pct: point.value * 100,
+                  xgf_pct: teamTrends.xgf_pct_5gp[i]?.value * 100 || 50
+                }))}
+                margin={{ right: 60 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis
                   dataKey="date"
@@ -348,13 +351,13 @@ function TeamProfile() {
                   domain={[40, 60]}
                 />
                 <RechartsTooltip
+                  formatter={(value: number) => `${value.toFixed(1)}%`}
                   contentStyle={{
                     backgroundColor: 'var(--color-bg-surface)',
                     border: '1px solid var(--color-border)',
                     borderRadius: 'var(--radius-md)'
                   }}
                 />
-                <Legend />
                 <ReferenceLine y={50} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
                 <Line
                   type="monotone"
@@ -363,7 +366,14 @@ function TeamProfile() {
                   strokeWidth={2}
                   dot={false}
                   name="CF%"
-                />
+                >
+                  <Label
+                    value="CF%"
+                    position="right"
+                    fill={teamColor}
+                    style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
+                  />
+                </Line>
                 <Line
                   type="monotone"
                   dataKey="xgf_pct"
@@ -371,7 +381,14 @@ function TeamProfile() {
                   strokeWidth={2}
                   dot={false}
                   name="xGF%"
-                />
+                >
+                  <Label
+                    value="xGF%"
+                    position="right"
+                    fill="var(--color-accent)"
+                    style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
+                  />
+                </Line>
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -391,11 +408,14 @@ function TeamProfile() {
             </div>
           ) : teamTrends && teamTrends.hdcf_per60_5gp.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={teamTrends.hdcf_per60_5gp.map((point) => ({
-                date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                hdcf: point.value,
-                hdca: point.value * 0.9 // Placeholder - backend doesn't have hdca rolling yet
-              }))}>
+              <LineChart
+                data={teamTrends.hdcf_per60_5gp.map((point) => ({
+                  date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  hdcf: point.value,
+                  hdca: point.value * 0.9 // Placeholder - backend doesn't have hdca rolling yet
+                }))}
+                margin={{ right: 80 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis
                   dataKey="date"
@@ -407,13 +427,13 @@ function TeamProfile() {
                   style={{ fontSize: 'var(--text-xs)' }}
                 />
                 <RechartsTooltip
+                  formatter={(value: number) => value.toFixed(2)}
                   contentStyle={{
                     backgroundColor: 'var(--color-bg-surface)',
                     border: '1px solid var(--color-border)',
                     borderRadius: 'var(--radius-md)'
                   }}
                 />
-                <Legend />
                 <Line
                   type="monotone"
                   dataKey="hdcf"
@@ -421,7 +441,14 @@ function TeamProfile() {
                   strokeWidth={2}
                   dot={false}
                   name="HDCF/60"
-                />
+                >
+                  <Label
+                    value="HDCF/60"
+                    position="right"
+                    fill="var(--color-data-positive)"
+                    style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
+                  />
+                </Line>
                 <Line
                   type="monotone"
                   dataKey="hdca"
@@ -429,7 +456,14 @@ function TeamProfile() {
                   strokeWidth={2}
                   dot={false}
                   name="HDCA/60"
-                />
+                >
+                  <Label
+                    value="HDCA/60"
+                    position="right"
+                    fill="var(--color-data-negative)"
+                    style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
+                  />
+                </Line>
               </LineChart>
             </ResponsiveContainer>
           ) : (

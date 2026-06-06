@@ -53,7 +53,10 @@ async def get_team_detail(
         AVG(hdcf_per60) as hdcf_per60,
         AVG(hdca_per60) as hdca_per60,
         AVG(xgf / (toi_5v5_minutes / 60.0)) as xgf_per60,
-        AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60
+        AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60,
+        SUM(goals_for) as total_goals_for,
+        SUM(goals_against) as total_goals_against,
+        AVG(zone_entry_success_rate) as zone_entry_success_rate
     FROM {bq_service.get_full_table_id('mart_team_game_stats')}
     WHERE team_id = {team_id} AND season = {season}
     GROUP BY team_id, team_abbrev
@@ -78,7 +81,10 @@ async def get_team_detail(
         hdcf_per60=row['hdcf_per60'],
         hdca_per60=row['hdca_per60'],
         xgf_per60=row['xgf_per60'],
-        xga_per60=row['xga_per60']
+        xga_per60=row['xga_per60'],
+        total_goals_for=row['total_goals_for'],
+        total_goals_against=row['total_goals_against'],
+        zone_entry_success_rate=row.get('zone_entry_success_rate')
     )
 
 

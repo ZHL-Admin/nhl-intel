@@ -123,6 +123,9 @@ export interface TeamDetail {
   hdca_per60: number
   xgf_per60: number
   xga_per60: number
+  total_goals_for: number
+  total_goals_against: number
+  zone_entry_success_rate: number | null
 }
 
 export interface TeamTrendPoint {
