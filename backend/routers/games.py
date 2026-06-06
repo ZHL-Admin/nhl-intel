@@ -358,9 +358,10 @@ async def get_game_shots(game_id: int) -> GameShots:
             away_shots=[]
         )
 
-    # Get shot attempts from play-by-play
+    # Get shot attempts from play-by-play with deduplication
     shots_sql = f"""
-    SELECT
+    SELECT DISTINCT
+        event_id,
         x_coord,
         y_coord,
         type_desc_key,
@@ -371,7 +372,8 @@ async def get_game_shots(game_id: int) -> GameShots:
         AND type_desc_key IN ('goal', 'shot-on-goal', 'missed-shot', 'blocked-shot')
         AND x_coord IS NOT NULL
         AND y_coord IS NOT NULL
-    ORDER BY sort_order
+    GROUP BY event_id, x_coord, y_coord, type_desc_key, situation_code, event_owner_team_id
+    ORDER BY event_id
     """
 
     shot_results = bq_service.query(shots_sql)

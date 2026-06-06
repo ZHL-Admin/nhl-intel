@@ -10,6 +10,8 @@ export interface ShotAttempt {
   situation: string
 }
 
+type SituationFilter = 'all' | '5v5' | 'pp' | 'pk'
+
 interface ShotMapProps {
   homeShots: ShotAttempt[]
   awayShots: ShotAttempt[]
@@ -17,7 +19,7 @@ interface ShotMapProps {
   awayTeamColor: string
   homeTeamAbbrev: string
   awayTeamAbbrev: string
-  situation?: 'all' | '5v5'
+  situation?: SituationFilter
   title?: string
 }
 
@@ -32,20 +34,54 @@ function ShotMap({
   title
 }: ShotMapProps) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [selectedSituation, setSelectedSituation] = useState<'all' | '5v5'>(situation)
+  const [selectedSituation, setSelectedSituation] = useState<SituationFilter>(situation)
 
   // Filter shots by situation
   const filteredHomeShots = useMemo(() => {
+    if (selectedSituation === 'all') return homeShots
+
     if (selectedSituation === '5v5') {
       return homeShots.filter(shot => shot.situation === '5v5')
     }
+
+    if (selectedSituation === 'pp') {
+      // Powerplay: 5v4, 5v3, 4v3
+      return homeShots.filter(shot =>
+        shot.situation && ['5v4', '5v3', '4v3'].includes(shot.situation)
+      )
+    }
+
+    if (selectedSituation === 'pk') {
+      // Penalty kill: 4v5, 3v5, 3v4
+      return homeShots.filter(shot =>
+        shot.situation && ['4v5', '3v5', '3v4'].includes(shot.situation)
+      )
+    }
+
     return homeShots
   }, [homeShots, selectedSituation])
 
   const filteredAwayShots = useMemo(() => {
+    if (selectedSituation === 'all') return awayShots
+
     if (selectedSituation === '5v5') {
       return awayShots.filter(shot => shot.situation === '5v5')
     }
+
+    if (selectedSituation === 'pp') {
+      // Powerplay: 5v4, 5v3, 4v3
+      return awayShots.filter(shot =>
+        shot.situation && ['5v4', '5v3', '4v3'].includes(shot.situation)
+      )
+    }
+
+    if (selectedSituation === 'pk') {
+      // Penalty kill: 4v5, 3v5, 3v4
+      return awayShots.filter(shot =>
+        shot.situation && ['4v5', '3v5', '3v4'].includes(shot.situation)
+      )
+    }
+
     return awayShots
   }, [awayShots, selectedSituation])
 
@@ -358,13 +394,25 @@ function ShotMap({
             className={`shot-map__toggle-option ${selectedSituation === 'all' ? 'shot-map__toggle-option--active' : ''}`}
             onClick={() => setSelectedSituation('all')}
           >
-            All Situations
+            All
           </button>
           <button
             className={`shot-map__toggle-option ${selectedSituation === '5v5' ? 'shot-map__toggle-option--active' : ''}`}
             onClick={() => setSelectedSituation('5v5')}
           >
-            5v5 Only
+            5v5
+          </button>
+          <button
+            className={`shot-map__toggle-option ${selectedSituation === 'pp' ? 'shot-map__toggle-option--active' : ''}`}
+            onClick={() => setSelectedSituation('pp')}
+          >
+            PP
+          </button>
+          <button
+            className={`shot-map__toggle-option ${selectedSituation === 'pk' ? 'shot-map__toggle-option--active' : ''}`}
+            onClick={() => setSelectedSituation('pk')}
+          >
+            PK
           </button>
         </div>
       </div>
