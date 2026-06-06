@@ -56,7 +56,7 @@ async def get_games(
 
     # Query
     sql = f"""
-    SELECT
+    SELECT DISTINCT
         g.game_id,
         g.game_date,
         g.season,
