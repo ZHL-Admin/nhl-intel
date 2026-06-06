@@ -36,63 +36,64 @@ function ShotMap({
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedSituation, setSelectedSituation] = useState<SituationFilter>(situation)
 
-  // Filter shots by situation
-  const filteredHomeShots = useMemo(() => {
-    if (selectedSituation === 'all') return homeShots
+  // Helper: Parse NHL numeric situation codes to text
+  const parseSituation = (code: string): string => {
+    // NHL situation codes: format is typically XXYY where XX=away skaters, YY=home skaters
+    // Common codes: 1551 = 5v5, 1451 = 4v5, 1541 = 5v4, 1360 = 3v6 (EN), etc.
+    if (code === '1551') return '5v5'
+    if (code === '1541') return '5v4'
+    if (code === '1451') return '4v5'
+    if (code === '1531') return '5v3'
+    if (code === '1351') return '3v5'
+    if (code === '1441') return '4v4'
+    if (code === '1331') return '3v3'
+    if (code === '1560' || code === '651') return '5v6' // Goalie pulled
+    if (code === '1650' || code === '561') return '6v5' // Goalie pulled
 
-    if (selectedSituation === '5v5') {
-      return homeShots.filter(shot => shot.situation === '5v5')
-    }
+    // If code doesn't match, try to parse manually
+    // Codes are typically 4 digits, but treat as string
+    return code
+  }
 
-    if (selectedSituation === 'pp') {
-      // Powerplay: 5v4, 5v3, 4v3
-      return homeShots.filter(shot =>
-        shot.situation && ['5v4', '5v3', '4v3'].includes(shot.situation)
-      )
-    }
+  // Normalize shots to offensive zone and filter by situation
+  const processShots = (shots: ShotAttempt[]) => {
+    return shots
+      .map(shot => ({
+        ...shot,
+        // Normalize x to offensive zone (always positive)
+        normalizedX: Math.abs(shot.x),
+        normalizedY: shot.y,
+        parsedSituation: parseSituation(shot.situation)
+      }))
+      .filter(shot => {
+        // Filter by situation
+        if (selectedSituation === 'all') return true
 
-    if (selectedSituation === 'pk') {
-      // Penalty kill: 4v5, 3v5, 3v4
-      return homeShots.filter(shot =>
-        shot.situation && ['4v5', '3v5', '3v4'].includes(shot.situation)
-      )
-    }
+        if (selectedSituation === '5v5') {
+          return shot.parsedSituation === '5v5'
+        }
 
-    return homeShots
-  }, [homeShots, selectedSituation])
+        if (selectedSituation === 'pp') {
+          return ['5v4', '5v3', '4v3', '6v5'].includes(shot.parsedSituation)
+        }
 
-  const filteredAwayShots = useMemo(() => {
-    if (selectedSituation === 'all') return awayShots
+        if (selectedSituation === 'pk') {
+          return ['4v5', '3v5', '3v4', '5v6'].includes(shot.parsedSituation)
+        }
 
-    if (selectedSituation === '5v5') {
-      return awayShots.filter(shot => shot.situation === '5v5')
-    }
+        return true
+      })
+      .filter(shot => shot.normalizedX > 25) // Only offensive zone
+  }
 
-    if (selectedSituation === 'pp') {
-      // Powerplay: 5v4, 5v3, 4v3
-      return awayShots.filter(shot =>
-        shot.situation && ['5v4', '5v3', '4v3'].includes(shot.situation)
-      )
-    }
-
-    if (selectedSituation === 'pk') {
-      // Penalty kill: 4v5, 3v5, 3v4
-      return awayShots.filter(shot =>
-        shot.situation && ['4v5', '3v5', '3v4'].includes(shot.situation)
-      )
-    }
-
-    return awayShots
-  }, [awayShots, selectedSituation])
-
-  // Filter for attacking zone shots only
   const awayAttackingShots = useMemo(() =>
-    filteredAwayShots.filter(shot => shot.x > 25),
-    [filteredAwayShots]
+    processShots(awayShots),
+    [awayShots, selectedSituation]
   )
+
   const homeAttackingShots = useMemo(() =>
-    filteredHomeShots.filter(shot => shot.x < -25),
-    [filteredHomeShots]
+    processShots(homeShots),
+    [homeShots, selectedSituation]
   )
 
   // Generate dynamic title based on shot distribution
@@ -254,11 +255,12 @@ function ShotMap({
     if (awayAttackingShots.length > 0) {
       const awayHexbin = hexbin()
         .x(d => {
-          // Mirror: x from 0-100 maps to centerX-0
-          const shot = d as ShotAttempt
-          return xScale(100 - shot.x)
+          // Map offensive zone [25, 100] to left half [centerX, 0]
+          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near 0
+          const shot = d as any
+          return xScale(100 - shot.normalizedX)
         })
-        .y(d => yScale((d as ShotAttempt).y))
+        .y(d => yScale((d as any).normalizedY))
         .radius(14)
 
       const awayBins = awayHexbin(awayAttackingShots as any)
@@ -285,11 +287,12 @@ function ShotMap({
     if (homeAttackingShots.length > 0) {
       const homeHexbin = hexbin()
         .x(d => {
-          // x from -100-0 maps to centerX-width
-          const shot = d as ShotAttempt
-          return xScale(shot.x)
+          // Map offensive zone [25, 100] to right half [centerX, width]
+          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near width
+          const shot = d as any
+          return xScale(-100 + shot.normalizedX)
         })
-        .y(d => yScale((d as ShotAttempt).y))
+        .y(d => yScale((d as any).normalizedY))
         .radius(14)
 
       const homeBins = homeHexbin(homeAttackingShots as any)
@@ -318,8 +321,8 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(100 - shot.x))
-          .attr('cy', yScale(shot.y))
+          .attr('cx', xScale(100 - shot.normalizedX))
+          .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
           .attr('stroke', awayTeamColor)
@@ -331,8 +334,8 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(shot.x))
-          .attr('cy', yScale(shot.y))
+          .attr('cx', xScale(-100 + shot.normalizedX))
+          .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
           .attr('stroke', homeTeamColor)
