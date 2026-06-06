@@ -56,13 +56,15 @@ function ShotMap({
   }
 
   // Normalize shots to offensive zone and filter by situation
-  const processShots = (shots: ShotAttempt[]) => {
+  const processShots = (shots: ShotAttempt[], isHomeTeam: boolean) => {
     return shots
+      .filter(shot => shot.outcome !== 'blocked_shot') // Only SOG + missed shots
       .map(shot => ({
         ...shot,
         // Normalize x to offensive zone (always positive)
         normalizedX: Math.abs(shot.x),
-        normalizedY: shot.y,
+        // Home team needs Y-axis flip to match attacking perspective
+        normalizedY: isHomeTeam ? -shot.y : shot.y,
         parsedSituation: parseSituation(shot.situation)
       }))
       .filter(shot => {
@@ -87,12 +89,12 @@ function ShotMap({
   }
 
   const awayAttackingShots = useMemo(() =>
-    processShots(awayShots),
+    processShots(awayShots, false),
     [awayShots, selectedSituation]
   )
 
   const homeAttackingShots = useMemo(() =>
-    processShots(homeShots),
+    processShots(homeShots, true),
     [homeShots, selectedSituation]
   )
 
@@ -250,15 +252,15 @@ function ShotMap({
       .attr('stroke-width', 2)
 
     // ========================================
-    // AWAY TEAM HEXBINS (left half, attacking right)
+    // AWAY TEAM HEXBINS (left half)
     // ========================================
     if (awayAttackingShots.length > 0) {
       const awayHexbin = hexbin()
         .x(d => {
-          // Map offensive zone [25, 100] to left half [centerX, 0]
-          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near 0
+          // Map offensive zone [25, 100] to left half
+          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near left edge
           const shot = d as any
-          return xScale(100 - shot.normalizedX)
+          return xScale(-100 + shot.normalizedX)
         })
         .y(d => yScale((d as any).normalizedY))
         .radius(14)
@@ -282,15 +284,15 @@ function ShotMap({
     }
 
     // ========================================
-    // HOME TEAM HEXBINS (right half, attacking left)
+    // HOME TEAM HEXBINS (right half)
     // ========================================
     if (homeAttackingShots.length > 0) {
       const homeHexbin = hexbin()
         .x(d => {
-          // Map offensive zone [25, 100] to right half [centerX, width]
-          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near width
+          // Map offensive zone [25, 100] to right half
+          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near right edge
           const shot = d as any
-          return xScale(-100 + shot.normalizedX)
+          return xScale(100 - shot.normalizedX)
         })
         .y(d => yScale((d as any).normalizedY))
         .radius(14)
@@ -321,7 +323,7 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(100 - shot.normalizedX))
+          .attr('cx', xScale(-100 + shot.normalizedX))
           .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
@@ -334,7 +336,7 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(-100 + shot.normalizedX))
+          .attr('cx', xScale(100 - shot.normalizedX))
           .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
@@ -345,9 +347,9 @@ function ShotMap({
     // ========================================
     // TEAM LABELS
     // ========================================
-    // Away team label (left zone)
+    // Away team label (left half)
     svg.append('text')
-      .attr('x', xScale(62.5))
+      .attr('x', xScale(-62.5))
       .attr('y', yScale(35))
       .attr('text-anchor', 'middle')
       .attr('font-size', 'var(--text-sm)')
@@ -357,16 +359,16 @@ function ShotMap({
       .text(awayTeamAbbrev)
 
     svg.append('text')
-      .attr('x', xScale(62.5))
+      .attr('x', xScale(-62.5))
       .attr('y', yScale(35) + 14)
       .attr('text-anchor', 'middle')
       .attr('font-size', 'var(--text-xs)')
       .attr('fill', 'var(--color-text-muted)')
       .text(`${awayAttackingShots.length} attempts`)
 
-    // Home team label (right zone)
+    // Home team label (right half)
     svg.append('text')
-      .attr('x', xScale(-62.5))
+      .attr('x', xScale(62.5))
       .attr('y', yScale(35))
       .attr('text-anchor', 'middle')
       .attr('font-size', 'var(--text-sm)')
@@ -376,7 +378,7 @@ function ShotMap({
       .text(homeTeamAbbrev)
 
     svg.append('text')
-      .attr('x', xScale(-62.5))
+      .attr('x', xScale(62.5))
       .attr('y', yScale(35) + 14)
       .attr('text-anchor', 'middle')
       .attr('font-size', 'var(--text-xs)')
