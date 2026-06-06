@@ -83,6 +83,19 @@ export interface ShotAttempt {
   outcome: 'goal' | 'shot_on_goal' | 'missed_shot' | 'blocked_shot'
   situation: string
   team_id: number
+
+  // Goal-specific details (only present for goals)
+  scorer_id?: number
+  scorer_name?: string
+  shot_type?: string
+  period?: number
+  time_in_period?: string
+  assist1_id?: number
+  assist1_name?: string
+  assist2_id?: number
+  assist2_name?: string
+  goalie_id?: number
+  goalie_name?: string
 }
 
 export interface GameShots {

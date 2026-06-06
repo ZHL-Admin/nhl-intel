@@ -366,17 +366,39 @@ async def get_game_shots(game_id: int) -> GameShots:
         y_coord,
         type_desc_key,
         situation_code,
-        event_owner_team_id
+        event_owner_team_id,
+        scoring_player_id,
+        shot_type,
+        period_number,
+        time_in_period,
+        assist1_player_id,
+        assist2_player_id,
+        goalie_in_net_id
     FROM {bq_service.get_full_table_id('stg_play_by_play')}
     WHERE game_id = {game_id}
         AND type_desc_key IN ('goal', 'shot-on-goal', 'missed-shot', 'blocked-shot')
         AND x_coord IS NOT NULL
         AND y_coord IS NOT NULL
-    GROUP BY event_id, x_coord, y_coord, type_desc_key, situation_code, event_owner_team_id
+    GROUP BY event_id, x_coord, y_coord, type_desc_key, situation_code, event_owner_team_id,
+             scoring_player_id, shot_type, period_number, time_in_period,
+             assist1_player_id, assist2_player_id, goalie_in_net_id
     ORDER BY event_id
     """
 
+    # Get player names for this game (only once, not in the main query)
+    players_sql = f"""
+    SELECT DISTINCT
+        player_id,
+        first_name || ' ' || last_name as player_name
+    FROM {bq_service.get_full_table_id('stg_rosters')}
+    WHERE game_id = {game_id}
+    """
+
     shot_results = bq_service.query(shots_sql)
+    player_results = bq_service.query(players_sql)
+
+    # Build player lookup dict
+    player_names = {row['player_id']: row['player_name'] for row in player_results}
 
     home_shots = []
     away_shots = []
@@ -391,13 +413,37 @@ async def get_game_shots(game_id: int) -> GameShots:
         }
         outcome = outcome_map.get(row['type_desc_key'], row['type_desc_key'])
 
-        shot = ShotAttempt(
-            x=float(row['x_coord']),
-            y=float(row['y_coord']),
-            outcome=outcome,
-            situation=row['situation_code'] or '5v5',
-            team_id=row['event_owner_team_id']
-        )
+        # Base shot data
+        shot_data = {
+            'x': float(row['x_coord']),
+            'y': float(row['y_coord']),
+            'outcome': outcome,
+            'situation': row['situation_code'] or '5v5',
+            'team_id': row['event_owner_team_id']
+        }
+
+        # Add goal-specific details if this is a goal
+        if outcome == 'goal':
+            scorer_id = row.get('scoring_player_id')
+            assist1_id = row.get('assist1_player_id')
+            assist2_id = row.get('assist2_player_id')
+            goalie_id = row.get('goalie_in_net_id')
+
+            shot_data.update({
+                'scorer_id': scorer_id,
+                'scorer_name': player_names.get(scorer_id) if scorer_id else None,
+                'shot_type': row.get('shot_type'),
+                'period': row.get('period_number'),
+                'time_in_period': row.get('time_in_period'),
+                'assist1_id': assist1_id,
+                'assist1_name': player_names.get(assist1_id) if assist1_id else None,
+                'assist2_id': assist2_id,
+                'assist2_name': player_names.get(assist2_id) if assist2_id else None,
+                'goalie_id': goalie_id,
+                'goalie_name': player_names.get(goalie_id) if goalie_id else None
+            })
+
+        shot = ShotAttempt(**shot_data)
 
         if row['event_owner_team_id'] == game_row['home_team_id']:
             home_shots.append(shot)

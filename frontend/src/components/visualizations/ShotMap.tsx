@@ -34,6 +34,7 @@ function ShotMap({
   title
 }: ShotMapProps) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
   const [selectedSituation, setSelectedSituation] = useState<SituationFilter>(situation)
 
   // Helper: Parse NHL numeric situation codes to text
@@ -61,10 +62,14 @@ function ShotMap({
       .filter(shot => shot.outcome !== 'blocked_shot') // Only SOG + missed shots
       .map(shot => ({
         ...shot,
-        // Normalize x to offensive zone (always positive)
+        // Normalize x to offensive zone (always positive after abs)
         normalizedX: Math.abs(shot.x),
-        // Home team needs Y-axis flip to match attacking perspective
-        normalizedY: isHomeTeam ? -shot.y : shot.y,
+        // Flip Y coordinate when teams switch ends each period
+        // Away team: flip Y when x < 0
+        // Home team: flip Y when x > 0 (opposite of away team)
+        normalizedY: isHomeTeam
+          ? (shot.x > 0 ? -shot.y : shot.y)
+          : (shot.x < 0 ? -shot.y : shot.y),
         parsedSituation: parseSituation(shot.situation)
       }))
       .filter(shot => {
@@ -114,6 +119,38 @@ function ShotMap({
 
     return `Shot attempt map — ${awayTeamAbbrev} vs ${homeTeamAbbrev}`
   }, [awayAttackingShots, homeAttackingShots, awayTeamAbbrev, homeTeamAbbrev, title])
+
+  // Helper to show tooltip
+  const showTooltip = (event: MouseEvent, shot: any) => {
+    if (!tooltipRef.current || !shot.scorer_name) return
+
+    const tooltip = d3.select(tooltipRef.current)
+    const assists = [shot.assist1_name, shot.assist2_name].filter(Boolean).join(', ')
+
+    tooltip
+      .style('opacity', 1)
+      .style('left', `${event.pageX + 10}px`)
+      .style('top', `${event.pageY - 10}px`)
+      .html(`
+        <div class="shot-tooltip">
+          <div class="shot-tooltip__header">
+            <strong>${shot.scorer_name}</strong>
+          </div>
+          <div class="shot-tooltip__details">
+            <div>Period ${shot.period} - ${shot.time_in_period}</div>
+            ${shot.shot_type ? `<div>Shot: ${shot.shot_type}</div>` : ''}
+            ${assists ? `<div>Assists: ${assists}</div>` : '<div>Unassisted</div>'}
+            ${shot.goalie_name ? `<div>Goalie: ${shot.goalie_name}</div>` : ''}
+          </div>
+        </div>
+      `)
+  }
+
+  // Helper to hide tooltip
+  const hideTooltip = () => {
+    if (!tooltipRef.current) return
+    d3.select(tooltipRef.current).style('opacity', 0)
+  }
 
   useEffect(() => {
     if (!svgRef.current) return
@@ -327,6 +364,14 @@ function ShotMap({
           .attr('fill', 'white')
           .attr('stroke', awayTeamColor)
           .attr('stroke-width', 2)
+          .style('cursor', shot.scorer_name ? 'pointer' : 'default')
+          .on('mouseenter', (event) => showTooltip(event, shot))
+          .on('mouseleave', hideTooltip)
+          .on('touchstart', (event) => {
+            event.preventDefault()
+            showTooltip(event.touches[0] as any, shot)
+          })
+          .on('touchend', hideTooltip)
       })
 
     // Home goals (right half)
@@ -340,6 +385,14 @@ function ShotMap({
           .attr('fill', 'white')
           .attr('stroke', homeTeamColor)
           .attr('stroke-width', 2)
+          .style('cursor', shot.scorer_name ? 'pointer' : 'default')
+          .on('mouseenter', (event) => showTooltip(event, shot))
+          .on('mouseleave', hideTooltip)
+          .on('touchstart', (event) => {
+            event.preventDefault()
+            showTooltip(event.touches[0] as any, shot)
+          })
+          .on('touchend', hideTooltip)
       })
 
     // ========================================
@@ -376,7 +429,7 @@ function ShotMap({
       .attr('x', xScale(-62.5))
       .attr('y', yScale(35) + 26)
       .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-xs)')
+      .attr('font-size', '10px')
       .attr('fill', 'var(--color-text-muted)')
       .attr('opacity', 0.8)
       .text(`${awaySogCount} SOG`)
@@ -404,7 +457,7 @@ function ShotMap({
       .attr('x', xScale(62.5))
       .attr('y', yScale(35) + 26)
       .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-xs)')
+      .attr('font-size', '10px')
       .attr('fill', 'var(--color-text-muted)')
       .attr('opacity', 0.8)
       .text(`${homeSogCount} SOG`)
@@ -480,6 +533,9 @@ function ShotMap({
           <span className="shot-map__legend-label">Goals</span>
         </div>
       </div>
+
+      {/* Tooltip */}
+      <div ref={tooltipRef} className="shot-map__tooltip" style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }} />
     </div>
   )
 }

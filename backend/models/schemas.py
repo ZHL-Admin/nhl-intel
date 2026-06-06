@@ -83,6 +83,19 @@ class ShotAttempt(BaseModel):
     situation: str = Field(..., description="Situation code (e.g., 5v5, 5v4, etc.)")
     team_id: int = Field(..., description="Team ID that took the shot")
 
+    # Goal-specific details (only present for goals)
+    scorer_id: Optional[int] = Field(None, description="Player ID of goal scorer")
+    scorer_name: Optional[str] = Field(None, description="Full name of goal scorer")
+    shot_type: Optional[str] = Field(None, description="Type of shot (e.g., Wrist, Slap, Snap)")
+    period: Optional[int] = Field(None, description="Period number when goal was scored")
+    time_in_period: Optional[str] = Field(None, description="Time in period (MM:SS)")
+    assist1_id: Optional[int] = Field(None, description="Primary assist player ID")
+    assist1_name: Optional[str] = Field(None, description="Primary assist player name")
+    assist2_id: Optional[int] = Field(None, description="Secondary assist player ID")
+    assist2_name: Optional[str] = Field(None, description="Secondary assist player name")
+    goalie_id: Optional[int] = Field(None, description="Goalie who was scored on")
+    goalie_name: Optional[str] = Field(None, description="Goalie name")
+
 
 class GameShots(BaseModel):
     """Shot attempts for both teams in a game."""
