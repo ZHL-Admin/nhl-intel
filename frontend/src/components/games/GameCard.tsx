@@ -18,6 +18,11 @@ function GameCard({ game }: GameCardProps) {
     navigate(`/games/${game.game_id}`)
   }
 
+  const handleTeamClick = (e: React.MouseEvent, teamId: number) => {
+    e.stopPropagation()
+    navigate(`/teams/${teamId}`)
+  }
+
   const renderTeamLogo = (abbrev: string, hasError: boolean, onError: () => void) => {
     if (hasError) {
       return <div className="game-card__team-logo-fallback">{abbrev}</div>
@@ -70,11 +75,21 @@ function GameCard({ game }: GameCardProps) {
         <div className="game-card__header">
           <div className="game-card__team">
             {renderTeamLogo(game.away_team_abbrev, awayLogoError, () => setAwayLogoError(true))}
-            <span className="game-card__team-abbrev">{game.away_team_abbrev}</span>
+            <span
+              className="game-card__team-abbrev game-card__team-abbrev--clickable"
+              onClick={(e) => handleTeamClick(e, game.away_team_id)}
+            >
+              {game.away_team_abbrev}
+            </span>
           </div>
           <div className="game-card__vs">vs</div>
           <div className="game-card__team">
-            <span className="game-card__team-abbrev">{game.home_team_abbrev}</span>
+            <span
+              className="game-card__team-abbrev game-card__team-abbrev--clickable"
+              onClick={(e) => handleTeamClick(e, game.home_team_id)}
+            >
+              {game.home_team_abbrev}
+            </span>
             {renderTeamLogo(game.home_team_abbrev, homeLogoError, () => setHomeLogoError(true))}
           </div>
         </div>
@@ -100,7 +115,12 @@ function GameCard({ game }: GameCardProps) {
       <div className="game-card__header">
         <div className="game-card__team">
           {renderTeamLogo(game.away_team_abbrev, awayLogoError, () => setAwayLogoError(true))}
-          <span className="game-card__team-abbrev">{game.away_team_abbrev}</span>
+          <span
+            className="game-card__team-abbrev game-card__team-abbrev--clickable"
+            onClick={(e) => handleTeamClick(e, game.away_team_id)}
+          >
+            {game.away_team_abbrev}
+          </span>
         </div>
         <div className="game-card__score mono">
           <span>{game.away_score ?? 0}</span>
@@ -108,7 +128,12 @@ function GameCard({ game }: GameCardProps) {
           <span>{game.home_score ?? 0}</span>
         </div>
         <div className="game-card__team">
-          <span className="game-card__team-abbrev">{game.home_team_abbrev}</span>
+          <span
+            className="game-card__team-abbrev game-card__team-abbrev--clickable"
+            onClick={(e) => handleTeamClick(e, game.home_team_id)}
+          >
+            {game.home_team_abbrev}
+          </span>
           {renderTeamLogo(game.home_team_abbrev, homeLogoError, () => setHomeLogoError(true))}
         </div>
       </div>
