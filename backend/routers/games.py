@@ -38,19 +38,19 @@ async def get_games(
     filters = []
 
     if date:
-        filters.append(f"game_date = '{date}'")
+        filters.append(f"g.game_date = '{date}'")
     elif start_date and end_date:
-        filters.append(f"game_date BETWEEN '{start_date}' AND '{end_date}'")
+        filters.append(f"g.game_date BETWEEN '{start_date}' AND '{end_date}'")
     elif start_date:
-        filters.append(f"game_date >= '{start_date}'")
+        filters.append(f"g.game_date >= '{start_date}'")
     elif end_date:
-        filters.append(f"game_date <= '{end_date}'")
+        filters.append(f"g.game_date <= '{end_date}'")
 
     if team_id:
-        filters.append(f"(home_team_id = {team_id} OR away_team_id = {team_id})")
+        filters.append(f"(g.home_team_id = {team_id} OR g.away_team_id = {team_id})")
 
     if season:
-        filters.append(f"season = {season}")
+        filters.append(f"g.season = {season}")
 
     where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
 
@@ -70,20 +70,10 @@ async def get_games(
         CASE
             WHEN b.game_state NOT IN ('OFF', 'FINAL') THEN TRUE
             ELSE FALSE
-        END as is_preview,
-        mt_home.cf_pct as home_cf_pct,
-        mt_away.cf_pct as away_cf_pct,
-        mt_home.cf_pct_rank as home_cf_rank,
-        mt_away.cf_pct_rank as away_cf_rank
+        END as is_preview
     FROM {bq_service.get_full_table_id('stg_games')} g
     LEFT JOIN {bq_service.get_full_table_id('stg_boxscores')} b
         ON g.game_id = b.game_id
-    LEFT JOIN {bq_service.get_full_table_id('mart_team_rolling')} mt_home
-        ON g.home_team_id = mt_home.team_id
-        AND g.game_date = mt_home.game_date
-    LEFT JOIN {bq_service.get_full_table_id('mart_team_rolling')} mt_away
-        ON g.away_team_id = mt_away.team_id
-        AND g.game_date = mt_away.game_date
     {where_clause}
     ORDER BY g.game_date DESC, g.game_id DESC
     """
@@ -102,11 +92,7 @@ async def get_games(
             away_team_abbrev=row['away_team_abbrev'],
             home_score=row.get('home_team_score'),
             away_score=row.get('away_team_score'),
-            is_preview=row.get('is_preview', True),
-            home_cf_pct=row.get('home_cf_pct'),
-            away_cf_pct=row.get('away_cf_pct'),
-            home_cf_rank=row.get('home_cf_rank'),
-            away_cf_rank=row.get('away_cf_rank')
+            is_preview=row.get('is_preview', True)
         )
         games.append(game)
 
