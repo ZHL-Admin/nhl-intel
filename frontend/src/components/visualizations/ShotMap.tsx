@@ -257,10 +257,9 @@ function ShotMap({
     if (awayAttackingShots.length > 0) {
       const awayHexbin = hexbin()
         .x(d => {
-          // Map offensive zone [25, 100] to left half
-          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near left edge
+          // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near left edge
           const shot = d as any
-          return xScale(-100 + shot.normalizedX)
+          return xScale(-shot.normalizedX)
         })
         .y(d => yScale((d as any).normalizedY))
         .radius(14)
@@ -289,10 +288,9 @@ function ShotMap({
     if (homeAttackingShots.length > 0) {
       const homeHexbin = hexbin()
         .x(d => {
-          // Map offensive zone [25, 100] to right half
-          // x=89 (near goal) -> near centerX, x=25 (blue line) -> near right edge
+          // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near right edge
           const shot = d as any
-          return xScale(100 - shot.normalizedX)
+          return xScale(shot.normalizedX)
         })
         .y(d => yScale((d as any).normalizedY))
         .radius(14)
@@ -323,7 +321,7 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(-100 + shot.normalizedX))
+          .attr('cx', xScale(-shot.normalizedX))
           .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
@@ -336,7 +334,7 @@ function ShotMap({
       .filter(shot => shot.outcome === 'goal')
       .forEach(shot => {
         svg.append('circle')
-          .attr('cx', xScale(100 - shot.normalizedX))
+          .attr('cx', xScale(shot.normalizedX))
           .attr('cy', yScale(shot.normalizedY))
           .attr('r', 5)
           .attr('fill', 'white')
@@ -347,6 +345,14 @@ function ShotMap({
     // ========================================
     // TEAM LABELS
     // ========================================
+    // Calculate SOG counts (shots on goal + goals)
+    const awaySogCount = awayAttackingShots.filter(shot =>
+      shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
+    ).length
+    const homeSogCount = homeAttackingShots.filter(shot =>
+      shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
+    ).length
+
     // Away team label (left half)
     svg.append('text')
       .attr('x', xScale(-62.5))
@@ -366,6 +372,15 @@ function ShotMap({
       .attr('fill', 'var(--color-text-muted)')
       .text(`${awayAttackingShots.length} attempts`)
 
+    svg.append('text')
+      .attr('x', xScale(-62.5))
+      .attr('y', yScale(35) + 26)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', 'var(--text-xs)')
+      .attr('fill', 'var(--color-text-muted)')
+      .attr('opacity', 0.8)
+      .text(`${awaySogCount} SOG`)
+
     // Home team label (right half)
     svg.append('text')
       .attr('x', xScale(62.5))
@@ -384,6 +399,15 @@ function ShotMap({
       .attr('font-size', 'var(--text-xs)')
       .attr('fill', 'var(--color-text-muted)')
       .text(`${homeAttackingShots.length} attempts`)
+
+    svg.append('text')
+      .attr('x', xScale(62.5))
+      .attr('y', yScale(35) + 26)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', 'var(--text-xs)')
+      .attr('fill', 'var(--color-text-muted)')
+      .attr('opacity', 0.8)
+      .text(`${homeSogCount} SOG`)
 
   }, [awayAttackingShots, homeAttackingShots, awayTeamColor, homeTeamColor, awayTeamAbbrev, homeTeamAbbrev])
 
