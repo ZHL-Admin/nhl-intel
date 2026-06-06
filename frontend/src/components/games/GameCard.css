@@ -70,6 +70,16 @@
   text-transform: uppercase;
 }
 
+.game-card__team-abbrev--clickable {
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.game-card__team-abbrev--clickable:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
 .game-card__score {
   font-size: var(--text-2xl);
   line-height: var(--text-2xl-height);
