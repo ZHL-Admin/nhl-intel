@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import date
 
-from models.schemas import Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats
+from models.schemas import Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats, GameShots, ShotAttempt
 from services.bigquery import bq_service
 from services.cache import cache
 
@@ -35,71 +35,64 @@ async def get_games(
         List of games matching the filters.
     """
     # Build query with optional filters
-    where_clauses = []
+    filters = []
+
     if date:
-        where_clauses.append(f"game_date = '{date}'")
+        filters.append(f"game_date = '{date}'")
+    elif start_date and end_date:
+        filters.append(f"game_date BETWEEN '{start_date}' AND '{end_date}'")
     elif start_date:
-        where_clauses.append(f"game_date >= '{start_date}'")
-    if end_date:
-        where_clauses.append(f"game_date <= '{end_date}'")
+        filters.append(f"game_date >= '{start_date}'")
+    elif end_date:
+        filters.append(f"game_date <= '{end_date}'")
+
     if team_id:
-        where_clauses.append(f"(home_team_id = {team_id} OR away_team_id = {team_id})")
+        filters.append(f"(home_team_id = {team_id} OR away_team_id = {team_id})")
+
     if season:
-        where_clauses.append(f"season = {season}")
+        filters.append(f"season = {season}")
 
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
 
+    # Query
     sql = f"""
-    WITH deduplicated AS (
-        SELECT
-            game_id,
-            game_date,
-            season,
-            home_team_id,
-            home_team_abbrev,
-            away_team_id,
-            away_team_abbrev,
-            home_team_score,
-            away_team_score,
-            game_state,
-            ROW_NUMBER() OVER (
-                PARTITION BY game_id
-                ORDER BY
-                    CASE
-                        WHEN game_state IN ('OFF', 'FINAL') THEN 1
-                        WHEN game_state = 'LIVE' THEN 2
-                        ELSE 3
-                    END,
-                    ingestion_date DESC
-            ) as rn
-        FROM {bq_service.get_full_table_id('stg_boxscores')}
-        {where_sql}
-    )
     SELECT
-        game_id,
-        game_date,
-        season,
-        home_team_id,
-        home_team_abbrev,
-        away_team_id,
-        away_team_abbrev,
-        home_team_score,
-        away_team_score,
-        game_state
-    FROM deduplicated
-    WHERE rn = 1
-    ORDER BY game_date DESC, game_id DESC
-    LIMIT 100
+        g.game_id,
+        g.game_date,
+        g.season,
+        g.home_team_id,
+        g.home_team_abbrev,
+        g.away_team_id,
+        g.away_team_abbrev,
+        b.home_team_score,
+        b.away_team_score,
+        b.game_state,
+        CASE
+            WHEN b.game_state NOT IN ('OFF', 'FINAL') THEN TRUE
+            ELSE FALSE
+        END as is_preview,
+        mt_home.cf_pct as home_cf_pct,
+        mt_away.cf_pct as away_cf_pct,
+        mt_home.cf_pct_rank as home_cf_rank,
+        mt_away.cf_pct_rank as away_cf_rank
+    FROM {bq_service.get_full_table_id('stg_games')} g
+    LEFT JOIN {bq_service.get_full_table_id('stg_boxscores')} b
+        ON g.game_id = b.game_id
+    LEFT JOIN {bq_service.get_full_table_id('mart_team_rolling')} mt_home
+        ON g.home_team_id = mt_home.team_id
+        AND g.game_date = mt_home.game_date
+    LEFT JOIN {bq_service.get_full_table_id('mart_team_rolling')} mt_away
+        ON g.away_team_id = mt_away.team_id
+        AND g.game_date = mt_away.game_date
+    {where_clause}
+    ORDER BY g.game_date DESC, g.game_id DESC
     """
 
     results = bq_service.query(sql)
 
     games = []
     for row in results:
-        # Determine if game is preview (not finished)
-        is_preview = row['game_state'] not in ['OFF', 'FINAL']
-
-        games.append(Game(
+        game = Game(
             game_id=row['game_id'],
             game_date=row['game_date'],
             season=row['season'],
@@ -107,10 +100,15 @@ async def get_games(
             home_team_abbrev=row['home_team_abbrev'],
             away_team_id=row['away_team_id'],
             away_team_abbrev=row['away_team_abbrev'],
-            home_score=row['home_team_score'] if not is_preview else None,
-            away_score=row['away_team_score'] if not is_preview else None,
-            is_preview=is_preview
-        ))
+            home_score=row.get('home_team_score'),
+            away_score=row.get('away_team_score'),
+            is_preview=row.get('is_preview', True),
+            home_cf_pct=row.get('home_cf_pct'),
+            away_cf_pct=row.get('away_cf_pct'),
+            home_cf_rank=row.get('home_cf_rank'),
+            away_cf_rank=row.get('away_cf_rank')
+        )
+        games.append(game)
 
     return games
 
@@ -124,12 +122,12 @@ async def get_game_detail(game_id: int) -> GameDetail:
         game_id: NHL game ID.
 
     Returns:
-        Detailed game information including team stats.
+        Game detail including team statistics.
 
     Raises:
         HTTPException: If game not found.
     """
-    # Get basic game info
+    # Check if game exists
     game_sql = f"""
     SELECT
         game_id,
@@ -300,13 +298,13 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             player_name=row['player_name'],
             position=row['position'],
             team_id=row['team_id'],
-            toi=row['toi'],
-            goals=row['goals'],
-            assists=row['assists'],
-            points=row['points'],
-            shots=row['shots'],
-            cf=row['cf'],
-            hdcf=row['hdcf'],
+            toi=row.get('toi'),
+            goals=row.get('goals'),
+            assists=row.get('assists'),
+            points=row.get('points'),
+            shots=row.get('shots'),
+            cf=row.get('cf'),
+            hdcf=row.get('hdcf'),
             ixg=row.get('ixg'),
             ixg_per60=row.get('ixg_per60'),
             hot_cold_flag=row.get('hot_cold_flag')
@@ -321,4 +319,91 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         game_id=game_id,
         home_players=home_players,
         away_players=away_players
+    )
+
+
+@router.get("/{game_id}/shots", response_model=GameShots)
+@cache(ttl=300)
+async def get_game_shots(game_id: int) -> GameShots:
+    """Get shot attempt coordinates for a specific game.
+
+    Args:
+        game_id: NHL game ID.
+
+    Returns:
+        Shot attempts for both teams with coordinates and outcomes.
+
+    Raises:
+        HTTPException: If game not found.
+    """
+    # Check if game exists
+    game_sql = f"""
+    SELECT game_id, game_state, home_team_id, away_team_id
+    FROM {bq_service.get_full_table_id('stg_boxscores')}
+    WHERE game_id = {game_id}
+    """
+
+    game_results = bq_service.query(game_sql)
+    if not game_results:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game_row = game_results[0]
+    is_preview = game_row['game_state'] not in ['OFF', 'FINAL']
+
+    if is_preview:
+        # Return empty shot lists for preview games
+        return GameShots(
+            game_id=game_id,
+            home_shots=[],
+            away_shots=[]
+        )
+
+    # Get shot attempts from play-by-play
+    shots_sql = f"""
+    SELECT
+        x_coord,
+        y_coord,
+        type_desc_key,
+        situation_code,
+        event_owner_team_id
+    FROM {bq_service.get_full_table_id('stg_play_by_play')}
+    WHERE game_id = {game_id}
+        AND type_desc_key IN ('goal', 'shot-on-goal', 'missed-shot', 'blocked-shot')
+        AND x_coord IS NOT NULL
+        AND y_coord IS NOT NULL
+    ORDER BY sort_order
+    """
+
+    shot_results = bq_service.query(shots_sql)
+
+    home_shots = []
+    away_shots = []
+
+    for row in shot_results:
+        # Map type_desc_key to our outcome format
+        outcome_map = {
+            'goal': 'goal',
+            'shot-on-goal': 'shot_on_goal',
+            'missed-shot': 'missed_shot',
+            'blocked-shot': 'blocked_shot'
+        }
+        outcome = outcome_map.get(row['type_desc_key'], row['type_desc_key'])
+
+        shot = ShotAttempt(
+            x=float(row['x_coord']),
+            y=float(row['y_coord']),
+            outcome=outcome,
+            situation=row['situation_code'] or '5v5',
+            team_id=row['event_owner_team_id']
+        )
+
+        if row['event_owner_team_id'] == game_row['home_team_id']:
+            home_shots.append(shot)
+        else:
+            away_shots.append(shot)
+
+    return GameShots(
+        game_id=game_id,
+        home_shots=home_shots,
+        away_shots=away_shots
     )

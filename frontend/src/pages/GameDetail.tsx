@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, Badge, PossessionBar, Tooltip } from '../components/common'
 import GameHeader from '../components/games/GameHeader'
-import { getGameDetail, getGamePlayerStats } from '../api/games'
-import { GameDetail as GameDetailType, GamePlayerStats } from '../api/types'
+import ShotMap from '../components/visualizations/ShotMap'
+import { getGameDetail, getGamePlayerStats, getGameShots } from '../api/games'
+import { GameDetail as GameDetailType, GamePlayerStats, GameShots } from '../api/types'
 import { getTeamLogoUrl, getTeamColor } from '../utils/teams'
 import './GameDetail.css'
 
@@ -13,6 +14,7 @@ function GameDetail() {
 
   const [gameDetail, setGameDetail] = useState<GameDetailType | null>(null)
   const [playerStats, setPlayerStats] = useState<GamePlayerStats | null>(null)
+  const [shotData, setShotData] = useState<GameShots | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,13 +30,15 @@ function GameDetail() {
       setError(null)
 
       try {
-        const [detail, players] = await Promise.all([
+        const [detail, players, shots] = await Promise.all([
           getGameDetail(parseInt(gameId)),
-          getGamePlayerStats(parseInt(gameId))
+          getGamePlayerStats(parseInt(gameId)),
+          getGameShots(parseInt(gameId))
         ])
 
         setGameDetail(detail)
         setPlayerStats(players)
+        setShotData(shots)
       } catch (err) {
         console.error('Error fetching game data:', err)
         setError('Failed to load game data. Please try again.')
@@ -117,7 +121,7 @@ function GameDetail() {
         {is_preview ? (
           <PreviewModeContent gameDetail={gameDetail} playerStats={playerStats} />
         ) : (
-          <CompletedGameContent gameDetail={gameDetail} playerStats={playerStats} />
+          <CompletedGameContent gameDetail={gameDetail} playerStats={playerStats} shotData={shotData} />
         )}
       </div>
     </PageLayout>
@@ -126,10 +130,12 @@ function GameDetail() {
 
 function CompletedGameContent({
   gameDetail,
-  playerStats
+  playerStats,
+  shotData
 }: {
   gameDetail: GameDetailType
   playerStats: GamePlayerStats | null
+  shotData: GameShots | null
 }) {
   const { home_team, away_team } = gameDetail
 
@@ -257,13 +263,26 @@ function CompletedGameContent({
         </div>
       </section>
 
-      {/* Shot Map Placeholder */}
-      <section className="game-detail__shot-map-placeholder">
-        <h2 className="game-detail__section-title">Shot Map</h2>
-        <div className="shot-map-placeholder">
-          <p className="shot-map-placeholder__label">Shot map coming in next phase</p>
-        </div>
-      </section>
+      {/* Shot Map */}
+      {shotData && shotData.home_shots.length > 0 && shotData.away_shots.length > 0 ? (
+        <section className="game-detail__shot-map">
+          <ShotMap
+            homeShots={shotData.home_shots}
+            awayShots={shotData.away_shots}
+            homeTeamColor={getTeamColor(home_team.team_abbrev)}
+            awayTeamColor={getTeamColor(away_team.team_abbrev)}
+            homeTeamAbbrev={home_team.team_abbrev}
+            awayTeamAbbrev={away_team.team_abbrev}
+          />
+        </section>
+      ) : (
+        <section className="game-detail__shot-map-placeholder">
+          <h2 className="game-detail__section-title">Shot Map</h2>
+          <div className="shot-map-placeholder">
+            <p className="shot-map-placeholder__label">Shot data unavailable</p>
+          </div>
+        </section>
+      )}
 
       {/* Roster Section */}
       {playerStats && (

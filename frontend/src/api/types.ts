@@ -77,6 +77,20 @@ export interface GamePlayerStats {
   away_players: PlayerGameStats[]
 }
 
+export interface ShotAttempt {
+  x: number
+  y: number
+  outcome: 'goal' | 'shot_on_goal' | 'missed_shot' | 'blocked_shot'
+  situation: string
+  team_id: number
+}
+
+export interface GameShots {
+  game_id: number
+  home_shots: ShotAttempt[]
+  away_shots: ShotAttempt[]
+}
+
 // ============================================================================
 // Team Types
 // ============================================================================

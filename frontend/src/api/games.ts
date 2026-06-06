@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { Game, GameDetail, GamePlayerStats } from './types'
+import { Game, GameDetail, GamePlayerStats, GameShots } from './types'
 
 /**
  * Fetch all games for a specific date.
@@ -30,5 +30,13 @@ export async function getGameDetail(gameId: number): Promise<GameDetail> {
  */
 export async function getGamePlayerStats(gameId: number): Promise<GamePlayerStats> {
   const response = await apiClient.get<GamePlayerStats>(`/games/${gameId}/players`)
+  return response.data
+}
+
+/**
+ * Fetch shot attempt coordinates for a specific game.
+ */
+export async function getGameShots(gameId: number): Promise<GameShots> {
+  const response = await apiClient.get<GameShots>(`/games/${gameId}/shots`)
   return response.data
 }

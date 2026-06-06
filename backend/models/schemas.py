@@ -75,6 +75,22 @@ class GamePlayerStats(BaseModel):
     away_players: List[PlayerGameStats]
 
 
+class ShotAttempt(BaseModel):
+    """Individual shot attempt with coordinates."""
+    x: float = Field(..., description="NHL x-coordinate (-100 to 100)")
+    y: float = Field(..., description="NHL y-coordinate (-42.5 to 42.5)")
+    outcome: str = Field(..., description="Shot outcome: goal, shot_on_goal, missed_shot, or blocked_shot")
+    situation: str = Field(..., description="Situation code (e.g., 5v5, 5v4, etc.)")
+    team_id: int = Field(..., description="Team ID that took the shot")
+
+
+class GameShots(BaseModel):
+    """Shot attempts for both teams in a game."""
+    game_id: int
+    home_shots: List[ShotAttempt]
+    away_shots: List[ShotAttempt]
+
+
 # ============================================================================
 # Team Models
 # ============================================================================

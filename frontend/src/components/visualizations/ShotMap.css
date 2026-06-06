@@ -1,0 +1,125 @@
+.shot-map {
+  width: 100%;
+  margin-bottom: var(--space-8);
+}
+
+/* Title */
+.shot-map__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+/* Controls */
+.shot-map__controls {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+.shot-map__toggle {
+  display: inline-flex;
+  gap: var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+
+.shot-map__toggle-option {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.shot-map__toggle-option:hover {
+  background: var(--color-bg-overlay);
+}
+
+.shot-map__toggle-option--active {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+/* Rink Container */
+.shot-map__rink {
+  width: 100%;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.shot-map__rink svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Legend */
+.shot-map__legend {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.shot-map__legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.shot-map__legend-hex-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shot-map__legend-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .shot-map__rink {
+    padding: var(--space-4);
+  }
+
+  .shot-map__legend {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-4);
+  }
+}
+
+@media (max-width: 640px) {
+  .shot-map__title {
+    font-size: var(--text-base);
+  }
+
+  .shot-map__toggle {
+    width: 100%;
+  }
+
+  .shot-map__toggle-option {
+    flex: 1;
+    text-align: center;
+  }
+
+  .shot-map__rink {
+    padding: var(--space-3);
+  }
+}
