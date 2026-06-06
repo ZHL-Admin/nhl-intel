@@ -1,0 +1,364 @@
+/* Team Profile Page Styles */
+
+.team-profile {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Team Header */
+.team-profile__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-8);
+  border: 1px solid var(--color-border);
+}
+
+.team-profile__header-skeleton {
+  margin-bottom: var(--space-8);
+}
+
+.team-profile__logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.team-profile__header-info {
+  flex: 1;
+}
+
+.team-profile__team-name {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.team-profile__record {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+}
+
+.team-profile__points {
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+}
+
+/* Upcoming Game Strip */
+.team-profile__upcoming-game {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.team-profile__upcoming-game:hover {
+  background: var(--color-bg-overlay);
+  border-color: var(--color-accent);
+}
+
+.team-profile__upcoming-game-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 80px;
+}
+
+.team-profile__upcoming-game-info {
+  flex: 1;
+  margin: 0 var(--space-4);
+}
+
+.team-profile__upcoming-game-opponent {
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.team-profile__upcoming-game-opponent-name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.team-profile__upcoming-game-date {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.team-profile__upcoming-game-arrow {
+  font-size: var(--text-xl);
+  color: var(--color-accent);
+}
+
+/* Sections */
+.team-profile__section {
+  margin-bottom: var(--space-8);
+}
+
+.team-profile__section-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-6);
+}
+
+/* Stat Grid */
+.team-profile__stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+/* Section Errors */
+.team-profile__section-error {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.team-profile__section-error p {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+.team-profile__no-data {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Retry Button */
+.team-profile__retry-button {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.team-profile__retry-button:hover {
+  opacity: 0.8;
+}
+
+/* Roster */
+.team-profile__roster {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.team-profile__roster-section {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+}
+
+.team-profile__roster-heading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+.team-profile__roster-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.team-profile__roster-table thead {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.team-profile__roster-table th {
+  text-align: left;
+  padding: var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.team-profile__roster-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 150ms ease;
+}
+
+.team-profile__roster-sortable:hover {
+  color: var(--color-text-secondary);
+}
+
+.team-profile__roster-table-number {
+  text-align: right;
+}
+
+.team-profile__roster-row {
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.team-profile__roster-row:hover {
+  background-color: var(--color-bg-overlay);
+}
+
+.team-profile__roster-row:last-child {
+  border-bottom: none;
+}
+
+.team-profile__roster-row td {
+  padding: var(--space-4) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.team-profile__roster-row td:first-child {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* vs Opponent Section */
+.team-profile__vs-opponent-prompt {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.team-profile__vs-opponent-prompt p {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+.team-profile__vs-opponent-select {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  min-width: 250px;
+  cursor: pointer;
+}
+
+.team-profile__vs-opponent-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.team-profile__vs-opponent-stats {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+}
+
+.team-profile__small-sample-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.team-profile__small-sample-text {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.team-profile__vs-opponent-change {
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: var(--space-4);
+  transition: all 150ms ease;
+}
+
+.team-profile__vs-opponent-change:hover {
+  border-color: var(--color-accent);
+  background: var(--color-bg-overlay);
+}
+
+/* Error Page */
+.team-profile__error {
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+}
+
+.team-profile__error-message {
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .team-profile__stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .team-profile__header {
+    flex-direction: column;
+    text-align: center;
+    padding: var(--space-6);
+  }
+
+  .team-profile__team-name {
+    font-size: var(--text-xl);
+  }
+
+  .team-profile__record {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .team-profile__stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-profile__roster-table .hide-mobile {
+    display: none;
+  }
+
+  .team-profile__roster-table th,
+  .team-profile__roster-table td {
+    padding: var(--space-3) var(--space-2);
+    font-size: var(--text-xs);
+  }
+}

@@ -40,3 +40,21 @@ export async function getGameShots(gameId: number): Promise<GameShots> {
   const response = await apiClient.get<GameShots>(`/games/${gameId}/shots`)
   return response.data
 }
+
+/**
+ * Fetch games for a specific team in a date range.
+ */
+export async function getTeamGames(
+  teamId: number,
+  startDate?: string,
+  endDate?: string
+): Promise<Game[]> {
+  const response = await apiClient.get<Game[]>(`/games/`, {
+    params: {
+      team_id: teamId,
+      start_date: startDate,
+      end_date: endDate
+    },
+  })
+  return response.data
+}
