@@ -1,6 +1,16 @@
+{{ config(
+    partition_by={
+      "field": "game_date",
+      "data_type": "date",
+      "granularity": "day"
+    },
+    cluster_by=["season", "team_id"]
+) }}
+
 with games_on_date as (
     select distinct
         game_date,
+        season,
         game_id
     from {{ ref('mart_team_game_stats') }}
 ),
@@ -8,6 +18,7 @@ with games_on_date as (
 team_stats as (
     select
         game_date,
+        season,
         game_id,
         team_id,
         team_abbrev,
@@ -26,6 +37,7 @@ team_stats as (
 team_rolling as (
     select
         game_date,
+        season,
         game_id,
         team_id,
         rolling_cf_pct_5gp,
@@ -38,6 +50,7 @@ team_rolling as (
 top_players as (
     select
         game_date,
+        season,
         game_id,
         player_id,
         team_id,
@@ -55,6 +68,7 @@ top_players as (
 combined as (
     select
         g.game_date,
+        g.season,
         g.game_id,
         ts.team_id,
         ts.team_abbrev,
@@ -80,13 +94,16 @@ combined as (
     from games_on_date g
     inner join team_stats ts
         on g.game_date = ts.game_date
+        and g.season = ts.season
         and g.game_id = ts.game_id
     left join team_rolling tr
         on ts.game_date = tr.game_date
+        and ts.season = tr.season
         and ts.game_id = tr.game_id
         and ts.team_id = tr.team_id
     left join top_players tp
         on ts.game_date = tp.game_date
+        and ts.season = tp.season
         and ts.game_id = tp.game_id
         and ts.team_id = tp.team_id
         and tp.player_rank = 1

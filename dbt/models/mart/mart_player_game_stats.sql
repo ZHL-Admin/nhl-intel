@@ -1,7 +1,17 @@
+{{ config(
+    partition_by={
+      "field": "game_date",
+      "data_type": "date",
+      "granularity": "day"
+    },
+    cluster_by=["season", "player_id"]
+) }}
+
 with rosters as (
     select
         game_id,
         game_date,
+        season,
         player_id,
         team_id,
         first_name,
@@ -47,6 +57,7 @@ player_stats_combined as (
     select
         r.game_id,
         r.game_date,
+        r.season,
         r.player_id,
         r.team_id,
         r.first_name,
@@ -78,6 +89,7 @@ metrics_calculated as (
     select
         game_id,
         game_date,
+        season,
         player_id,
         team_id,
         first_name,
@@ -105,9 +117,10 @@ metrics_calculated as (
 season_averages as (
     select
         player_id,
+        season,
         avg(ixg_per60) as season_avg_ixg_per60
     from metrics_calculated
-    group by player_id
+    group by player_id, season
 ),
 
 with_flags as (
@@ -125,12 +138,14 @@ with_flags as (
     from metrics_calculated m
     left join season_averages sa
         on m.player_id = sa.player_id
+        and m.season = sa.season
 ),
 
 final as (
     select
         game_id,
         game_date,
+        season,
         player_id,
         team_id,
         first_name,

@@ -1,3 +1,12 @@
+{{ config(
+    partition_by={
+      "field": "game_date",
+      "data_type": "date",
+      "granularity": "day"
+    },
+    cluster_by=["season", "team_id"]
+) }}
+
 with team_stats as (
     select
         game_id,
@@ -15,7 +24,7 @@ with team_stats as (
 with_row_numbers as (
     select
         *,
-        row_number() over (partition by team_id order by game_date) as game_number
+        row_number() over (partition by team_id, season order by game_date) as game_number
     from team_stats
 ),
 
@@ -33,25 +42,25 @@ rolling_calcs as (
         hdca_per60,
 
         avg(cf_pct) over (
-            partition by team_id
+            partition by team_id, season
             order by game_date
             rows between 4 preceding and current row
         ) as rolling_cf_pct_5gp,
 
         avg(xgf_pct) over (
-            partition by team_id
+            partition by team_id, season
             order by game_date
             rows between 4 preceding and current row
         ) as rolling_xgf_pct_5gp,
 
         avg(hdcf_per60) over (
-            partition by team_id
+            partition by team_id, season
             order by game_date
             rows between 4 preceding and current row
         ) as rolling_hdcf_per60_5gp,
 
         avg(hdca_per60) over (
-            partition by team_id
+            partition by team_id, season
             order by game_date
             rows between 4 preceding and current row
         ) as rolling_hdca_per60_5gp

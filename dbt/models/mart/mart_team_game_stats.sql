@@ -1,3 +1,12 @@
+{{ config(
+    partition_by={
+      "field": "game_date",
+      "data_type": "date",
+      "granularity": "day"
+    },
+    cluster_by=["season", "team_id"]
+) }}
+
 with games as (
     select
         game_id,
