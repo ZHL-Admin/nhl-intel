@@ -70,7 +70,8 @@ async def get_team_detail(
             RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
             RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
             RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
-            RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank
+            RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank,
+            RANK() OVER (ORDER BY zone_entry_success_rate DESC NULLS LAST) as zone_entry_success_rate_rank
         FROM team_stats
     )
     SELECT * FROM team_ranks
@@ -105,7 +106,8 @@ async def get_team_detail(
         hdcf_per60_rank=row['hdcf_per60_rank'],
         hdca_per60_rank=row['hdca_per60_rank'],
         gf_per_gp_rank=row['gf_per_gp_rank'],
-        ga_per_gp_rank=row['ga_per_gp_rank']
+        ga_per_gp_rank=row['ga_per_gp_rank'],
+        zone_entry_success_rate_rank=row.get('zone_entry_success_rate_rank')
     )
 
 

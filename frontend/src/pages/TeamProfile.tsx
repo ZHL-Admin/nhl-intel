@@ -314,7 +314,7 @@ function TeamProfile() {
             <StatCard
               label="Zone Entry Success"
               value={teamDetail.zone_entry_success_rate ? `${(teamDetail.zone_entry_success_rate * 100).toFixed(1)}%` : 'N/A'}
-              rank={undefined}
+              rank={teamDetail.zone_entry_success_rate_rank || undefined}
             />
           </div>
         </div>

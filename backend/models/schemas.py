@@ -133,6 +133,7 @@ class TeamDetail(BaseModel):
     hdca_per60_rank: int
     gf_per_gp_rank: int
     ga_per_gp_rank: int
+    zone_entry_success_rate_rank: Optional[int] = None
 
 
 class TeamTrendPoint(BaseModel):

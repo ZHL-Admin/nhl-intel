@@ -132,6 +132,7 @@ export interface TeamDetail {
   hdca_per60_rank: number
   gf_per_gp_rank: number
   ga_per_gp_rank: number
+  zone_entry_success_rate_rank: number | null
 }
 
 export interface TeamTrendPoint {
