@@ -349,6 +349,7 @@ function TeamProfile() {
                   stroke="var(--color-text-muted)"
                   style={{ fontSize: 'var(--text-xs)' }}
                   domain={[40, 60]}
+                  label=""
                 />
                 <RechartsTooltip
                   formatter={(value: number) => `${value.toFixed(1)}%`}
@@ -369,7 +370,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="CF%"
-                    position="right"
+                    position="insideRight"
+                    offset={10}
                     fill={teamColor}
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
@@ -384,7 +386,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="xGF%"
-                    position="right"
+                    position="insideRight"
+                    offset={-10}
                     fill="var(--color-accent)"
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
@@ -425,6 +428,7 @@ function TeamProfile() {
                 <YAxis
                   stroke="var(--color-text-muted)"
                   style={{ fontSize: 'var(--text-xs)' }}
+                  label=""
                 />
                 <RechartsTooltip
                   formatter={(value: number) => value.toFixed(2)}
@@ -444,7 +448,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="HDCF/60"
-                    position="right"
+                    position="insideRight"
+                    offset={10}
                     fill="var(--color-data-positive)"
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
@@ -459,7 +464,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="HDCA/60"
-                    position="right"
+                    position="insideRight"
+                    offset={-10}
                     fill="var(--color-data-negative)"
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
