@@ -313,6 +313,7 @@ function ShotMap(props: ShotMapProps) {
     // GAME MODE: AWAY TEAM HEXBINS (left half)
     // ========================================
     if (isGameMode && awayAttackingShots.length > 0) {
+      const gameProps = props as ShotMapPropsGame
       const awayHexbin = hexbin()
         .x(d => {
           // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near left edge
@@ -327,7 +328,7 @@ function ShotMap(props: ShotMapProps) {
 
       const awayColorScale = d3.scaleLinear<string>()
         .domain([1, awayMaxDensity])
-        .range([`${awayTeamColor}33`, awayTeamColor])
+        .range([`${gameProps.awayTeamColor}33`, gameProps.awayTeamColor])
 
       svg.append('g')
         .selectAll('path')
@@ -344,6 +345,7 @@ function ShotMap(props: ShotMapProps) {
     // GAME MODE: HOME TEAM HEXBINS (right half)
     // ========================================
     if (isGameMode && homeAttackingShots.length > 0) {
+      const gameProps = props as ShotMapPropsGame
       const homeHexbin = hexbin()
         .x(d => {
           // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near right edge
@@ -358,7 +360,7 @@ function ShotMap(props: ShotMapProps) {
 
       const homeColorScale = d3.scaleLinear<string>()
         .domain([1, homeMaxDensity])
-        .range([`${homeTeamColor}33`, homeTeamColor])
+        .range([`${gameProps.homeTeamColor}33`, gameProps.homeTeamColor])
 
       svg.append('g')
         .selectAll('path')
