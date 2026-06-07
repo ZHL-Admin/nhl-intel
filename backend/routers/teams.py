@@ -61,16 +61,19 @@ async def get_team_detail(
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE season = {season}
         GROUP BY team_id, team_abbrev
+    ),
+    team_ranks AS (
+        SELECT
+            *,
+            RANK() OVER (ORDER BY cf_pct DESC) as cf_pct_rank,
+            RANK() OVER (ORDER BY xgf_per60 / (xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
+            RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
+            RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
+            RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
+            RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank
+        FROM team_stats
     )
-    SELECT
-        *,
-        RANK() OVER (ORDER BY cf_pct DESC) as cf_pct_rank,
-        RANK() OVER (ORDER BY xgf_per60 / (xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
-        RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
-        RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
-        RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
-        RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank
-    FROM team_stats
+    SELECT * FROM team_ranks
     WHERE team_id = {team_id}
     """
 
