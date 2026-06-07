@@ -100,20 +100,23 @@ function ShotMap(props: ShotMapProps) {
   }
 
   // Process shots differently based on mode
-  const awayAttackingShots = useMemo(() =>
-    isGameMode ? processShots(props.awayShots, false) : [],
-    [isGameMode, isGameMode && (props as ShotMapPropsGame).awayShots, selectedSituation]
-  )
+  const awayAttackingShots = useMemo(() => {
+    if (!isGameMode) return []
+    const gameProps = props as ShotMapPropsGame
+    return processShots(gameProps.awayShots, false)
+  }, [isGameMode, isGameMode ? (props as ShotMapPropsGame).awayShots : null, selectedSituation])
 
-  const homeAttackingShots = useMemo(() =>
-    isGameMode ? processShots(props.homeShots, true) : [],
-    [isGameMode, isGameMode && (props as ShotMapPropsGame).homeShots, selectedSituation]
-  )
+  const homeAttackingShots = useMemo(() => {
+    if (!isGameMode) return []
+    const gameProps = props as ShotMapPropsGame
+    return processShots(gameProps.homeShots, true)
+  }, [isGameMode, isGameMode ? (props as ShotMapPropsGame).homeShots : null, selectedSituation])
 
-  const playerAttackingShots = useMemo(() =>
-    !isGameMode ? processShots((props as ShotMapPropsPlayer).playerShots, true) : [],
-    [isGameMode, !isGameMode && (props as ShotMapPropsPlayer).playerShots, selectedSituation]
-  )
+  const playerAttackingShots = useMemo(() => {
+    if (isGameMode) return []
+    const playerProps = props as ShotMapPropsPlayer
+    return processShots(playerProps.playerShots, true)
+  }, [isGameMode, !isGameMode ? (props as ShotMapPropsPlayer).playerShots : null, selectedSituation])
 
   // Generate dynamic title based on mode and shot distribution
   const dynamicTitle = useMemo(() => {
