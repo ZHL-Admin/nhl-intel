@@ -267,6 +267,7 @@ function CompletedGameContent({
       {shotData && shotData.home_shots.length > 0 && shotData.away_shots.length > 0 ? (
         <section className="game-detail__shot-map">
           <ShotMap
+            mode="game"
             homeShots={shotData.home_shots}
             awayShots={shotData.away_shots}
             homeTeamColor={getTeamColor(home_team.team_abbrev)}
