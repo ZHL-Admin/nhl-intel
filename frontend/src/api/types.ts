@@ -126,6 +126,12 @@ export interface TeamDetail {
   total_goals_for: number
   total_goals_against: number
   zone_entry_success_rate: number | null
+  cf_pct_rank: number
+  xgf_pct_rank: number
+  hdcf_per60_rank: number
+  hdca_per60_rank: number
+  gf_per_gp_rank: number
+  ga_per_gp_rank: number
 }
 
 export interface TeamTrendPoint {

@@ -278,32 +278,32 @@ function TeamProfile() {
             <StatCard
               label="CF%"
               value={(teamDetail.cf_pct * 100).toFixed(1) + '%'}
-              rank={1}
+              rank={teamDetail.cf_pct_rank}
             />
             <StatCard
               label="xGF%"
-              value="50.0%"
-              rank={15}
+              value={((teamDetail.xgf_per60 / (teamDetail.xgf_per60 + teamDetail.xga_per60)) * 100).toFixed(1) + '%'}
+              rank={teamDetail.xgf_pct_rank}
             />
             <StatCard
               label="HDCF/60"
               value={teamDetail.hdcf_per60.toFixed(2)}
-              rank={8}
+              rank={teamDetail.hdcf_per60_rank}
             />
             <StatCard
               label="HDCA/60"
               value={teamDetail.hdca_per60.toFixed(2)}
-              rank={20}
+              rank={teamDetail.hdca_per60_rank}
             />
             <StatCard
               label="GF/GP"
               value={(teamDetail.total_goals_for / teamDetail.games_played).toFixed(2)}
-              rank={5}
+              rank={teamDetail.gf_per_gp_rank}
             />
             <StatCard
               label="GA/GP"
               value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)}
-              rank={12}
+              rank={teamDetail.ga_per_gp_rank}
             />
             <StatCard
               label="PDO"

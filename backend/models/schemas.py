@@ -127,6 +127,12 @@ class TeamDetail(BaseModel):
     total_goals_for: int
     total_goals_against: int
     zone_entry_success_rate: Optional[float] = None
+    cf_pct_rank: int
+    xgf_pct_rank: int
+    hdcf_per60_rank: int
+    hdca_per60_rank: int
+    gf_per_gp_rank: int
+    ga_per_gp_rank: int
 
 
 class TeamTrendPoint(BaseModel):

@@ -39,27 +39,39 @@ async def get_team_detail(
         season_result = bq_service.query(season_sql)
         season = season_result[0]['current_season'] if season_result else 20232024
 
-    # Aggregate team stats for the season
+    # Aggregate team stats for the season with rankings
     sql = f"""
+    WITH team_stats AS (
+        SELECT
+            team_id,
+            team_abbrev,
+            COUNT(DISTINCT game_id) as games_played,
+            SUM(CASE WHEN goals_for > goals_against THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN goals_for < goals_against THEN 1 ELSE 0 END) as losses,
+            0 as otl,
+            SUM(CASE WHEN goals_for > goals_against THEN 2 ELSE 0 END) as points,
+            AVG(cf_pct) as cf_pct,
+            AVG(hdcf_per60) as hdcf_per60,
+            AVG(hdca_per60) as hdca_per60,
+            AVG(xgf / (toi_5v5_minutes / 60.0)) as xgf_per60,
+            AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60,
+            SUM(goals_for) as total_goals_for,
+            SUM(goals_against) as total_goals_against,
+            AVG(zone_entry_success_rate) as zone_entry_success_rate
+        FROM {bq_service.get_full_table_id('mart_team_game_stats')}
+        WHERE season = {season}
+        GROUP BY team_id, team_abbrev
+    )
     SELECT
-        team_id,
-        team_abbrev,
-        COUNT(DISTINCT game_id) as games_played,
-        SUM(CASE WHEN goals_for > goals_against THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN goals_for < goals_against THEN 1 ELSE 0 END) as losses,
-        0 as otl,
-        SUM(CASE WHEN goals_for > goals_against THEN 2 ELSE 0 END) as points,
-        AVG(cf_pct) as cf_pct,
-        AVG(hdcf_per60) as hdcf_per60,
-        AVG(hdca_per60) as hdca_per60,
-        AVG(xgf / (toi_5v5_minutes / 60.0)) as xgf_per60,
-        AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60,
-        SUM(goals_for) as total_goals_for,
-        SUM(goals_against) as total_goals_against,
-        AVG(zone_entry_success_rate) as zone_entry_success_rate
-    FROM {bq_service.get_full_table_id('mart_team_game_stats')}
-    WHERE team_id = {team_id} AND season = {season}
-    GROUP BY team_id, team_abbrev
+        *,
+        RANK() OVER (ORDER BY cf_pct DESC) as cf_pct_rank,
+        RANK() OVER (ORDER BY xgf_per60 / (xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
+        RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
+        RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
+        RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
+        RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank
+    FROM team_stats
+    WHERE team_id = {team_id}
     """
 
     results = bq_service.query(sql)
@@ -84,7 +96,13 @@ async def get_team_detail(
         xga_per60=row['xga_per60'],
         total_goals_for=row['total_goals_for'],
         total_goals_against=row['total_goals_against'],
-        zone_entry_success_rate=row.get('zone_entry_success_rate')
+        zone_entry_success_rate=row.get('zone_entry_success_rate'),
+        cf_pct_rank=row['cf_pct_rank'],
+        xgf_pct_rank=row['xgf_pct_rank'],
+        hdcf_per60_rank=row['hdcf_per60_rank'],
+        hdca_per60_rank=row['hdca_per60_rank'],
+        gf_per_gp_rank=row['gf_per_gp_rank'],
+        ga_per_gp_rank=row['ga_per_gp_rank']
     )
 
 
