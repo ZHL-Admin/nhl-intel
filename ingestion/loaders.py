@@ -63,6 +63,9 @@ def load_json_to_bigquery(
         if cleaned_row is not None:
             cleaned_row["ingestion_date"] = ingestion_date
             cleaned_row["season"] = season
+            # Add game_id from id field if it exists (for boxscores and play-by-play)
+            if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play"]:
+                cleaned_row["game_id"] = cleaned_row["id"]
             cleaned_data.append(cleaned_row)
 
     job_config = bigquery.LoadJobConfig(
