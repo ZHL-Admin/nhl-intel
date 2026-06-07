@@ -11,8 +11,10 @@ export interface ShotAttempt {
 }
 
 type SituationFilter = 'all' | '5v5' | 'pp' | 'pk'
+type ShotMapMode = 'game' | 'player'
 
-interface ShotMapProps {
+interface ShotMapPropsGame {
+  mode: 'game'
   homeShots: ShotAttempt[]
   awayShots: ShotAttempt[]
   homeTeamColor: string
@@ -23,19 +25,23 @@ interface ShotMapProps {
   title?: string
 }
 
-function ShotMap({
-  homeShots,
-  awayShots,
-  homeTeamColor,
-  awayTeamColor,
-  homeTeamAbbrev,
-  awayTeamAbbrev,
-  situation = 'all',
-  title
-}: ShotMapProps) {
+interface ShotMapPropsPlayer {
+  mode: 'player'
+  playerShots: ShotAttempt[]
+  playerTeamColor: string
+  playerName: string
+  situation?: SituationFilter
+  title?: string
+}
+
+type ShotMapProps = ShotMapPropsGame | ShotMapPropsPlayer
+
+function ShotMap(props: ShotMapProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
-  const [selectedSituation, setSelectedSituation] = useState<SituationFilter>(situation)
+  const [selectedSituation, setSelectedSituation] = useState<SituationFilter>(props.situation || 'all')
+
+  const isGameMode = props.mode === 'game'
 
   // Helper: Parse NHL numeric situation codes to text
   const parseSituation = (code: string): string => {
@@ -93,32 +99,44 @@ function ShotMap({
       .filter(shot => shot.normalizedX > 25) // Only offensive zone
   }
 
+  // Process shots differently based on mode
   const awayAttackingShots = useMemo(() =>
-    processShots(awayShots, false),
-    [awayShots, selectedSituation]
+    isGameMode ? processShots(props.awayShots, false) : [],
+    [isGameMode, isGameMode && (props as ShotMapPropsGame).awayShots, selectedSituation]
   )
 
   const homeAttackingShots = useMemo(() =>
-    processShots(homeShots, true),
-    [homeShots, selectedSituation]
+    isGameMode ? processShots(props.homeShots, true) : [],
+    [isGameMode, isGameMode && (props as ShotMapPropsGame).homeShots, selectedSituation]
   )
 
-  // Generate dynamic title based on shot distribution
+  const playerAttackingShots = useMemo(() =>
+    !isGameMode ? processShots((props as ShotMapPropsPlayer).playerShots, true) : [],
+    [isGameMode, !isGameMode && (props as ShotMapPropsPlayer).playerShots, selectedSituation]
+  )
+
+  // Generate dynamic title based on mode and shot distribution
   const dynamicTitle = useMemo(() => {
-    if (title) return title
+    if (props.title) return props.title
 
-    const awayCount = awayAttackingShots.length
-    const homeCount = homeAttackingShots.length
-    const diff = Math.abs(awayCount - homeCount)
-    const pctDiff = Math.max(awayCount, homeCount) / Math.min(awayCount, homeCount) - 1
+    if (isGameMode) {
+      const gameProps = props as ShotMapPropsGame
+      const awayCount = awayAttackingShots.length
+      const homeCount = homeAttackingShots.length
+      const diff = Math.abs(awayCount - homeCount)
+      const pctDiff = Math.max(awayCount, homeCount) / Math.min(awayCount, homeCount) - 1
 
-    if (pctDiff > 0.25 && diff > 5) {
-      const leader = awayCount > homeCount ? awayTeamAbbrev : homeTeamAbbrev
-      return `${leader} dominated the shot attempt map`
+      if (pctDiff > 0.25 && diff > 5) {
+        const leader = awayCount > homeCount ? gameProps.awayTeamAbbrev : gameProps.homeTeamAbbrev
+        return `${leader} dominated the shot attempt map`
+      }
+
+      return `Shot attempt map — ${gameProps.awayTeamAbbrev} vs ${gameProps.homeTeamAbbrev}`
+    } else {
+      const playerProps = props as ShotMapPropsPlayer
+      return `Shot locations — ${playerProps.playerName}`
     }
-
-    return `Shot attempt map — ${awayTeamAbbrev} vs ${homeTeamAbbrev}`
-  }, [awayAttackingShots, homeAttackingShots, awayTeamAbbrev, homeTeamAbbrev, title])
+  }, [props, awayAttackingShots, homeAttackingShots, isGameMode])
 
   // Helper to show tooltip
   const showTooltip = (event: MouseEvent, shot: any) => {
@@ -158,14 +176,17 @@ function ShotMap({
     // Clear previous render
     d3.select(svgRef.current).selectAll('*').remove()
 
-    // SVG dimensions
-    const width = 800
+    // SVG dimensions - different for game vs player mode
+    const width = isGameMode ? 800 : 500
     const height = 340
     const centerX = width / 2
 
-    // NHL rink dimensions: 200ft x 85ft
-    // Map to SVG: x from -100 to 100, y from -42.5 to 42.5
-    const xScale = d3.scaleLinear().domain([-100, 100]).range([0, width])
+    // NHL rink dimensions
+    // Game mode: x from -100 to 100, y from -42.5 to 42.5 (full rink)
+    // Player mode: x from 25 to 100, y from -42.5 to 42.5 (attacking zone only)
+    const xScale = isGameMode
+      ? d3.scaleLinear().domain([-100, 100]).range([0, width])
+      : d3.scaleLinear().domain([25, 100]).range([0, width])
     const yScale = d3.scaleLinear().domain([-42.5, 42.5]).range([0, height])
 
     const svg = d3.select(svgRef.current)
@@ -289,9 +310,9 @@ function ShotMap({
       .attr('stroke-width', 2)
 
     // ========================================
-    // AWAY TEAM HEXBINS (left half)
+    // GAME MODE: AWAY TEAM HEXBINS (left half)
     // ========================================
-    if (awayAttackingShots.length > 0) {
+    if (isGameMode && awayAttackingShots.length > 0) {
       const awayHexbin = hexbin()
         .x(d => {
           // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near left edge
@@ -320,9 +341,9 @@ function ShotMap({
     }
 
     // ========================================
-    // HOME TEAM HEXBINS (right half)
+    // GAME MODE: HOME TEAM HEXBINS (right half)
     // ========================================
-    if (homeAttackingShots.length > 0) {
+    if (isGameMode && homeAttackingShots.length > 0) {
       const homeHexbin = hexbin()
         .x(d => {
           // Invert: x=25 (blue line) -> near centerX, x=89 (goal) -> near right edge
@@ -351,118 +372,170 @@ function ShotMap({
     }
 
     // ========================================
-    // GOAL MARKERS (on top)
+    // PLAYER MODE: SHOT DOTS
+    // ========================================
+    if (!isGameMode && playerAttackingShots.length > 0) {
+      const playerProps = props as ShotMapPropsPlayer
+
+      // Non-goal shots (regular dots)
+      playerAttackingShots
+        .filter(shot => shot.outcome !== 'goal')
+        .forEach(shot => {
+          svg.append('circle')
+            .attr('cx', xScale(shot.normalizedX))
+            .attr('cy', yScale(shot.normalizedY))
+            .attr('r', shot.outcome === 'shot_on_goal' ? 4 : 3)
+            .attr('fill', shot.outcome === 'shot_on_goal'
+              ? playerProps.playerTeamColor
+              : `${playerProps.playerTeamColor}66`)
+            .attr('stroke', 'none')
+            .attr('opacity', shot.outcome === 'shot_on_goal' ? 0.8 : 0.5)
+        })
+
+      // Goals (larger, distinct markers)
+      playerAttackingShots
+        .filter(shot => shot.outcome === 'goal')
+        .forEach(shot => {
+          svg.append('circle')
+            .attr('cx', xScale(shot.normalizedX))
+            .attr('cy', yScale(shot.normalizedY))
+            .attr('r', 6)
+            .attr('fill', 'white')
+            .attr('stroke', playerProps.playerTeamColor)
+            .attr('stroke-width', 2.5)
+            .style('cursor', shot.scorer_name ? 'pointer' : 'default')
+            .on('mouseenter', (event) => showTooltip(event, shot))
+            .on('mouseleave', hideTooltip)
+            .on('touchstart', (event) => {
+              event.preventDefault()
+              showTooltip(event.touches[0] as any, shot)
+            })
+            .on('touchend', hideTooltip)
+        })
+    }
+
+    // ========================================
+    // GAME MODE: GOAL MARKERS (on top)
     // ========================================
     // Away goals (left half)
-    awayAttackingShots
-      .filter(shot => shot.outcome === 'goal')
-      .forEach(shot => {
-        svg.append('circle')
-          .attr('cx', xScale(-shot.normalizedX))
-          .attr('cy', yScale(shot.normalizedY))
-          .attr('r', 5)
-          .attr('fill', 'white')
-          .attr('stroke', awayTeamColor)
-          .attr('stroke-width', 2)
-          .style('cursor', shot.scorer_name ? 'pointer' : 'default')
-          .on('mouseenter', (event) => showTooltip(event, shot))
-          .on('mouseleave', hideTooltip)
-          .on('touchstart', (event) => {
-            event.preventDefault()
-            showTooltip(event.touches[0] as any, shot)
-          })
-          .on('touchend', hideTooltip)
-      })
+    if (isGameMode) {
+      const gameProps = props as ShotMapPropsGame
+      awayAttackingShots
+        .filter(shot => shot.outcome === 'goal')
+        .forEach(shot => {
+          svg.append('circle')
+            .attr('cx', xScale(-shot.normalizedX))
+            .attr('cy', yScale(shot.normalizedY))
+            .attr('r', 5)
+            .attr('fill', 'white')
+            .attr('stroke', gameProps.awayTeamColor)
+            .attr('stroke-width', 2)
+            .style('cursor', shot.scorer_name ? 'pointer' : 'default')
+            .on('mouseenter', (event) => showTooltip(event, shot))
+            .on('mouseleave', hideTooltip)
+            .on('touchstart', (event) => {
+              event.preventDefault()
+              showTooltip(event.touches[0] as any, shot)
+            })
+            .on('touchend', hideTooltip)
+        })
+    }
 
     // Home goals (right half)
-    homeAttackingShots
-      .filter(shot => shot.outcome === 'goal')
-      .forEach(shot => {
-        svg.append('circle')
-          .attr('cx', xScale(shot.normalizedX))
-          .attr('cy', yScale(shot.normalizedY))
-          .attr('r', 5)
-          .attr('fill', 'white')
-          .attr('stroke', homeTeamColor)
-          .attr('stroke-width', 2)
-          .style('cursor', shot.scorer_name ? 'pointer' : 'default')
-          .on('mouseenter', (event) => showTooltip(event, shot))
-          .on('mouseleave', hideTooltip)
-          .on('touchstart', (event) => {
-            event.preventDefault()
-            showTooltip(event.touches[0] as any, shot)
-          })
-          .on('touchend', hideTooltip)
-      })
+    if (isGameMode) {
+      const gameProps = props as ShotMapPropsGame
+      homeAttackingShots
+        .filter(shot => shot.outcome === 'goal')
+        .forEach(shot => {
+          svg.append('circle')
+            .attr('cx', xScale(shot.normalizedX))
+            .attr('cy', yScale(shot.normalizedY))
+            .attr('r', 5)
+            .attr('fill', 'white')
+            .attr('stroke', gameProps.homeTeamColor)
+            .attr('stroke-width', 2)
+            .style('cursor', shot.scorer_name ? 'pointer' : 'default')
+            .on('mouseenter', (event) => showTooltip(event, shot))
+            .on('mouseleave', hideTooltip)
+            .on('touchstart', (event) => {
+              event.preventDefault()
+              showTooltip(event.touches[0] as any, shot)
+            })
+            .on('touchend', hideTooltip)
+        })
+    }
 
     // ========================================
-    // TEAM LABELS
+    // GAME MODE: TEAM LABELS
     // ========================================
-    // Calculate SOG counts (shots on goal + goals)
-    const awaySogCount = awayAttackingShots.filter(shot =>
-      shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
-    ).length
-    const homeSogCount = homeAttackingShots.filter(shot =>
-      shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
-    ).length
+    if (isGameMode) {
+      const gameProps = props as ShotMapPropsGame
+      // Calculate SOG counts (shots on goal + goals)
+      const awaySogCount = awayAttackingShots.filter(shot =>
+        shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
+      ).length
+      const homeSogCount = homeAttackingShots.filter(shot =>
+        shot.outcome === 'shot_on_goal' || shot.outcome === 'goal'
+      ).length
 
-    // Away team label (left half)
-    svg.append('text')
-      .attr('x', xScale(-62.5))
-      .attr('y', yScale(35))
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-sm)')
-      .attr('font-family', 'var(--font-sans)')
-      .attr('font-weight', 500)
-      .attr('fill', 'var(--color-text-secondary)')
-      .text(awayTeamAbbrev)
+      // Away team label (left half)
+      svg.append('text')
+        .attr('x', xScale(-62.5))
+        .attr('y', yScale(35))
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 'var(--text-sm)')
+        .attr('font-family', 'var(--font-sans)')
+        .attr('font-weight', 500)
+        .attr('fill', 'var(--color-text-secondary)')
+        .text(gameProps.awayTeamAbbrev)
 
-    svg.append('text')
-      .attr('x', xScale(-62.5))
-      .attr('y', yScale(35) + 14)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-xs)')
-      .attr('fill', 'var(--color-text-muted)')
-      .text(`${awayAttackingShots.length} attempts`)
+      svg.append('text')
+        .attr('x', xScale(-62.5))
+        .attr('y', yScale(35) + 14)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 'var(--text-xs)')
+        .attr('fill', 'var(--color-text-muted)')
+        .text(`${awayAttackingShots.length} attempts`)
 
-    svg.append('text')
-      .attr('x', xScale(-62.5))
-      .attr('y', yScale(35) + 26)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '10px')
-      .attr('fill', 'var(--color-text-muted)')
-      .attr('opacity', 0.8)
-      .text(`${awaySogCount} SOG`)
+      svg.append('text')
+        .attr('x', xScale(-62.5))
+        .attr('y', yScale(35) + 26)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10px')
+        .attr('fill', 'var(--color-text-muted)')
+        .attr('opacity', 0.8)
+        .text(`${awaySogCount} SOG`)
 
-    // Home team label (right half)
-    svg.append('text')
-      .attr('x', xScale(62.5))
-      .attr('y', yScale(35))
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-sm)')
-      .attr('font-family', 'var(--font-sans)')
-      .attr('font-weight', 500)
-      .attr('fill', 'var(--color-text-secondary)')
-      .text(homeTeamAbbrev)
+      // Home team label (right half)
+      svg.append('text')
+        .attr('x', xScale(62.5))
+        .attr('y', yScale(35))
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 'var(--text-sm)')
+        .attr('font-family', 'var(--font-sans)')
+        .attr('font-weight', 500)
+        .attr('fill', 'var(--color-text-secondary)')
+        .text(gameProps.homeTeamAbbrev)
 
-    svg.append('text')
-      .attr('x', xScale(62.5))
-      .attr('y', yScale(35) + 14)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 'var(--text-xs)')
-      .attr('fill', 'var(--color-text-muted)')
-      .text(`${homeAttackingShots.length} attempts`)
+      svg.append('text')
+        .attr('x', xScale(62.5))
+        .attr('y', yScale(35) + 14)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 'var(--text-xs)')
+        .attr('fill', 'var(--color-text-muted)')
+        .text(`${homeAttackingShots.length} attempts`)
 
-    svg.append('text')
-      .attr('x', xScale(62.5))
-      .attr('y', yScale(35) + 26)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '10px')
-      .attr('fill', 'var(--color-text-muted)')
-      .attr('opacity', 0.8)
-      .text(`${homeSogCount} SOG`)
+      svg.append('text')
+        .attr('x', xScale(62.5))
+        .attr('y', yScale(35) + 26)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10px')
+        .attr('fill', 'var(--color-text-muted)')
+        .attr('opacity', 0.8)
+        .text(`${homeSogCount} SOG`)
+    }
 
-  }, [awayAttackingShots, homeAttackingShots, awayTeamColor, homeTeamColor, awayTeamAbbrev, homeTeamAbbrev])
+  }, [props, awayAttackingShots, homeAttackingShots, playerAttackingShots, isGameMode, selectedSituation])
 
   return (
     <div className="shot-map">
@@ -506,32 +579,57 @@ function ShotMap({
 
       {/* Legend */}
       <div className="shot-map__legend">
-        <div className="shot-map__legend-item">
-          <div className="shot-map__legend-hex-group">
-            <svg width="24" height="24">
-              <path
-                d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
-                fill={`${awayTeamColor}33`}
-              />
-            </svg>
-            <span className="shot-map__legend-label">Low</span>
-          </div>
-          <div className="shot-map__legend-hex-group">
-            <svg width="24" height="24">
-              <path
-                d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
-                fill={awayTeamColor}
-              />
-            </svg>
-            <span className="shot-map__legend-label">High</span>
-          </div>
-        </div>
-        <div className="shot-map__legend-item">
-          <svg width="24" height="24">
-            <circle cx="12" cy="12" r="5" fill="white" stroke={awayTeamColor} strokeWidth="2" />
-          </svg>
-          <span className="shot-map__legend-label">Goals</span>
-        </div>
+        {isGameMode ? (
+          <>
+            <div className="shot-map__legend-item">
+              <div className="shot-map__legend-hex-group">
+                <svg width="24" height="24">
+                  <path
+                    d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
+                    fill={`${(props as ShotMapPropsGame).awayTeamColor}33`}
+                  />
+                </svg>
+                <span className="shot-map__legend-label">Low</span>
+              </div>
+              <div className="shot-map__legend-hex-group">
+                <svg width="24" height="24">
+                  <path
+                    d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
+                    fill={(props as ShotMapPropsGame).awayTeamColor}
+                  />
+                </svg>
+                <span className="shot-map__legend-label">High</span>
+              </div>
+            </div>
+            <div className="shot-map__legend-item">
+              <svg width="24" height="24">
+                <circle cx="12" cy="12" r="5" fill="white" stroke={(props as ShotMapPropsGame).awayTeamColor} strokeWidth="2" />
+              </svg>
+              <span className="shot-map__legend-label">Goals</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="shot-map__legend-item">
+              <svg width="24" height="24">
+                <circle cx="12" cy="12" r="3" fill={(props as ShotMapPropsPlayer).playerTeamColor} opacity="0.5" />
+              </svg>
+              <span className="shot-map__legend-label">Missed/Blocked</span>
+            </div>
+            <div className="shot-map__legend-item">
+              <svg width="24" height="24">
+                <circle cx="12" cy="12" r="4" fill={(props as ShotMapPropsPlayer).playerTeamColor} opacity="0.8" />
+              </svg>
+              <span className="shot-map__legend-label">Shots on goal</span>
+            </div>
+            <div className="shot-map__legend-item">
+              <svg width="24" height="24">
+                <circle cx="12" cy="12" r="6" fill="white" stroke={(props as ShotMapPropsPlayer).playerTeamColor} strokeWidth="2.5" />
+              </svg>
+              <span className="shot-map__legend-label">Goals</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Tooltip */}
