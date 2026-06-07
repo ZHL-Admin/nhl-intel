@@ -377,37 +377,47 @@ function ShotMap(props: ShotMapProps) {
     }
 
     // ========================================
-    // PLAYER MODE: SHOT DOTS
+    // PLAYER MODE: HEXBINS
     // ========================================
     if (!isGameMode && playerAttackingShots.length > 0) {
       const playerProps = props as ShotMapPropsPlayer
 
-      // Non-goal shots (regular dots)
-      playerAttackingShots
-        .filter(shot => shot.outcome !== 'goal')
-        .forEach(shot => {
-          svg.append('circle')
-            .attr('cx', xScale(shot.normalizedX))
-            .attr('cy', yScale(shot.normalizedY))
-            .attr('r', shot.outcome === 'shot_on_goal' ? 4 : 3)
-            .attr('fill', shot.outcome === 'shot_on_goal'
-              ? playerProps.playerTeamColor
-              : `${playerProps.playerTeamColor}66`)
-            .attr('stroke', 'none')
-            .attr('opacity', shot.outcome === 'shot_on_goal' ? 0.8 : 0.5)
+      const playerHexbin = hexbin()
+        .x(d => {
+          const shot = d as any
+          return xScale(shot.normalizedX)
         })
+        .y(d => yScale((d as any).normalizedY))
+        .radius(14)
 
-      // Goals (larger, distinct markers)
+      const playerBins = playerHexbin(playerAttackingShots as any)
+      const playerMaxDensity = d3.max(playerBins, d => d.length) || 1
+
+      const playerColorScale = d3.scaleLinear<string>()
+        .domain([1, playerMaxDensity])
+        .range([`${playerProps.playerTeamColor}33`, playerProps.playerTeamColor])
+
+      svg.append('g')
+        .selectAll('path')
+        .data(playerBins)
+        .enter()
+        .append('path')
+        .attr('d', playerHexbin.hexagon())
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+        .attr('fill', d => playerColorScale(d.length))
+        .attr('stroke', 'none')
+
+      // Goals (on top)
       playerAttackingShots
         .filter(shot => shot.outcome === 'goal')
         .forEach(shot => {
           svg.append('circle')
             .attr('cx', xScale(shot.normalizedX))
             .attr('cy', yScale(shot.normalizedY))
-            .attr('r', 6)
+            .attr('r', 5)
             .attr('fill', 'white')
             .attr('stroke', playerProps.playerTeamColor)
-            .attr('stroke-width', 2.5)
+            .attr('stroke-width', 2)
             .style('cursor', shot.scorer_name ? 'pointer' : 'default')
             .on('mouseenter', (event) => showTooltip(event, shot))
             .on('mouseleave', hideTooltip)
@@ -616,20 +626,28 @@ function ShotMap(props: ShotMapProps) {
         ) : (
           <>
             <div className="shot-map__legend-item">
-              <svg width="24" height="24">
-                <circle cx="12" cy="12" r="3" fill={(props as ShotMapPropsPlayer).playerTeamColor} opacity="0.5" />
-              </svg>
-              <span className="shot-map__legend-label">Missed/Blocked</span>
+              <div className="shot-map__legend-hex-group">
+                <svg width="24" height="24">
+                  <path
+                    d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
+                    fill={`${(props as ShotMapPropsPlayer).playerTeamColor}33`}
+                  />
+                </svg>
+                <span className="shot-map__legend-label">Low</span>
+              </div>
+              <div className="shot-map__legend-hex-group">
+                <svg width="24" height="24">
+                  <path
+                    d="M12,2 L20,7 L20,17 L12,22 L4,17 L4,7 Z"
+                    fill={(props as ShotMapPropsPlayer).playerTeamColor}
+                  />
+                </svg>
+                <span className="shot-map__legend-label">High</span>
+              </div>
             </div>
             <div className="shot-map__legend-item">
               <svg width="24" height="24">
-                <circle cx="12" cy="12" r="4" fill={(props as ShotMapPropsPlayer).playerTeamColor} opacity="0.8" />
-              </svg>
-              <span className="shot-map__legend-label">Shots on goal</span>
-            </div>
-            <div className="shot-map__legend-item">
-              <svg width="24" height="24">
-                <circle cx="12" cy="12" r="6" fill="white" stroke={(props as ShotMapPropsPlayer).playerTeamColor} strokeWidth="2.5" />
+                <circle cx="12" cy="12" r="5" fill="white" stroke={(props as ShotMapPropsPlayer).playerTeamColor} strokeWidth="2" />
               </svg>
               <span className="shot-map__legend-label">Goals</span>
             </div>
