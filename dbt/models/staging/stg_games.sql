@@ -1,11 +1,15 @@
 with source as (
-    select * from {{ source('nhl', 'raw_games') }}
+    select
+        season,
+        ingestion_date,
+        gameWeek
+    from {{ source('nhl', 'raw_games') }}
 ),
 
 flattened as (
     select
-        ingestion_date,
-        season as season_str,
+        source.ingestion_date,
+        source.season as season_str,
         week.date as game_date,
         game.id as game_id,
         game.season as api_season_id,
