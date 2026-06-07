@@ -63,7 +63,7 @@ renamed as (
     select
         cast(game_id as int64) as game_id,
         cast(api_game_id as int64) as api_game_id,
-        cast(season as int64) as season,
+        cast(season as string) as season,
         cast(game_date as date) as game_date,
         cast(ingestion_date as date) as ingestion_date,
 

@@ -5,9 +5,10 @@ with source as (
 flattened as (
     select
         ingestion_date,
+        season as season_str,
         week.date as game_date,
         game.id as game_id,
-        game.season as season,
+        game.season as api_season_id,
         game.gameType as game_type,
         game.venue.default as venue_name,
         game.neutralSite as is_neutral_site,
@@ -35,7 +36,8 @@ flattened as (
 renamed as (
     select
         cast(game_id as int64) as game_id,
-        cast(season as int64) as season,
+        cast(season_str as string) as season,
+        cast(api_season_id as int64) as api_season_id,
         cast(game_type as int64) as game_type,
         cast(game_date as date) as game_date,
         cast(start_time_utc as timestamp) as start_time_utc,

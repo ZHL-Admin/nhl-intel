@@ -8,6 +8,7 @@
 
 with shot_attempts as (
     select
+        season,
         type_desc_key,
         x_coord,
         y_coord,
@@ -64,6 +65,7 @@ shots_with_features as (
 
 conversion_rates as (
     select
+        season,
         zone,
         is_high_danger,
         situation,
@@ -77,12 +79,13 @@ conversion_rates as (
     from shots_with_features
     where shot_category = 'shot'
       and zone != 'other'
-    group by zone, is_high_danger, situation
+    group by season, zone, is_high_danger, situation
     having count(*) >= 10
 ),
 
 final as (
     select
+        season,
         zone,
         is_high_danger,
         situation,

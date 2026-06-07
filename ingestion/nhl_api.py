@@ -6,6 +6,26 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 BASE_URL = "https://api-web.nhle.com"
 
 
+def derive_season_from_game_id(game_id: int) -> str:
+    """Derive season string from NHL game ID.
+
+    NHL game IDs follow the format: SSSSTTNNNN where:
+    - SSSS is the season start year (e.g., 2024 for 2024-25)
+    - TT is the game type (02 = regular season, 03 = playoffs)
+    - NNNN is the game number
+
+    Args:
+        game_id: NHL game ID as an integer.
+
+    Returns:
+        Season string in format "YYYY-YY" (e.g., "2024-25").
+    """
+    game_id_str = str(game_id)
+    start_year = int(game_id_str[:4])
+    end_year = start_year + 1
+    return f"{start_year}-{str(end_year)[2:]}"
+
+
 # Retry on 429 to handle NHL API rate limiting
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_schedule(date: str) -> dict:

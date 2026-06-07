@@ -19,7 +19,7 @@ def ingest_nhl_data(**context):
     schedule, boxscore, and play-by-play data into the nhl_raw dataset.
     """
     # Import heavy packages inside task function to avoid DAG parse timeout
-    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play
+    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play, derive_season_from_game_id
     from ingestion.loaders import load_json_to_bigquery
 
     execution_date = context["execution_date"]
@@ -62,6 +62,10 @@ def ingest_nhl_data(**context):
         print("No games found in the last 30 days")
         return
 
+    # Derive season from first game ID (all games in daily pipeline will be same season)
+    season = derive_season_from_game_id(all_game_ids[0])
+    print(f"Derived season: {season}")
+
     # Load all schedule data
     for schedule_data in all_schedules:
         load_json_to_bigquery(
@@ -69,6 +73,7 @@ def ingest_nhl_data(**context):
             dataset_id=dataset_raw,
             table_id="raw_games",
             data=schedule_data,
+            season=season,
         )
     print(f"Loaded {len(all_schedules)} schedule records to {dataset_raw}.raw_games")
 
@@ -90,6 +95,7 @@ def ingest_nhl_data(**context):
             dataset_id=dataset_raw,
             table_id="raw_boxscores",
             data=boxscores,
+            season=season,
         )
         print(f"Loaded {len(boxscores)} boxscores to {dataset_raw}.raw_boxscores")
 
@@ -111,6 +117,7 @@ def ingest_nhl_data(**context):
             dataset_id=dataset_raw,
             table_id="raw_play_by_play",
             data=play_by_plays,
+            season=season,
         )
         print(f"Loaded {len(play_by_plays)} play-by-play records to {dataset_raw}.raw_play_by_play")
 

@@ -5,6 +5,7 @@ with source as (
 shot_attempts_5v5 as (
     select
         game_id,
+        season,
         event_id,
         period_number,
         period_type,
@@ -78,7 +79,8 @@ with_xg as (
         coalesce(xg.xg_value, 0.02) as xg_value
     from tagged t
     left join {{ ref('int_xg_rates') }} xg
-        on t.zone = xg.zone
+        on t.season = xg.season
+        and t.zone = xg.zone
         and t.is_high_danger = xg.is_high_danger
         and t.situation = xg.situation
 ),

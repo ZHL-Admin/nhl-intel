@@ -5,6 +5,7 @@ with source as (
 events_with_lag as (
     select
         game_id,
+        season,
         event_id,
         period_number,
         sort_order,
@@ -22,6 +23,7 @@ events_with_lag as (
 zone_entries as (
     select
         game_id,
+        season,
         event_id,
         period_number,
         event_owner_team_id as team_id,
@@ -48,6 +50,7 @@ zone_entries as (
 final as (
     select
         game_id,
+        season,
         event_id,
         period_number,
         team_id,

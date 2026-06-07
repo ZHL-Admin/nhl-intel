@@ -26,6 +26,7 @@ def load_json_to_bigquery(
     dataset_id: str,
     table_id: str,
     data: Union[dict, List[dict]],
+    season: str = None,
 ) -> None:
     """Load raw JSON data to a BigQuery table.
 
@@ -34,6 +35,8 @@ def load_json_to_bigquery(
         dataset_id: BigQuery dataset name.
         table_id: BigQuery table name.
         data: Raw data dict or list of dicts to load.
+        season: Season string in format "YYYY-YY" (e.g., "2024-25").
+                If not provided, defaults to current season derived from ingestion date.
     """
     client = bigquery.Client(project=project_id)
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
@@ -41,13 +44,25 @@ def load_json_to_bigquery(
     if isinstance(data, dict):
         data = [data]
 
-    # Clean empty structs and add ingestion timestamp to each row
+    # Clean empty structs and add ingestion timestamp and season to each row
     ingestion_date = datetime.utcnow().date().isoformat()
+
+    # Derive season from ingestion date if not provided
+    if season is None:
+        current_year = datetime.utcnow().year
+        current_month = datetime.utcnow().month
+        # NHL season runs from October to June, so if month >= 10, it's the start of the season
+        if current_month >= 10:
+            season = f"{current_year}-{str(current_year + 1)[2:]}"
+        else:
+            season = f"{current_year - 1}-{str(current_year)[2:]}"
+
     cleaned_data = []
     for row in data:
         cleaned_row = _clean_empty_structs(row)
         if cleaned_row is not None:
             cleaned_row["ingestion_date"] = ingestion_date
+            cleaned_row["season"] = season
             cleaned_data.append(cleaned_row)
 
     job_config = bigquery.LoadJobConfig(
