@@ -1,34 +1,13 @@
 """Utilities for loading raw data into BigQuery."""
 
 import json
+import logging
 from datetime import datetime
 from io import BytesIO
 from typing import Union, List, Any
 from google.cloud import bigquery
 
-
-def _get_base_schema(table_id: str) -> List[bigquery.SchemaField]:
-    """Get the base schema for a raw table.
-
-    Args:
-        table_id: The table name (e.g., 'raw_games', 'raw_boxscores').
-
-    Returns:
-        List of SchemaField objects defining the base schema.
-    """
-    # Base fields common to all raw tables
-    base_fields = [
-        bigquery.SchemaField("ingestion_date", "DATE", mode="REQUIRED"),
-        bigquery.SchemaField("season", "STRING", mode="REQUIRED"),
-    ]
-
-    # Add game_id for boxscores and play-by-play
-    if table_id in ["raw_boxscores", "raw_play_by_play"]:
-        base_fields.append(
-            bigquery.SchemaField("game_id", "INTEGER", mode="NULLABLE")
-        )
-
-    return base_fields
+logger = logging.getLogger(__name__)
 
 
 def _clean_empty_structs(obj: Any) -> Any:
@@ -92,13 +71,11 @@ def load_json_to_bigquery(
                 cleaned_row["game_id"] = cleaned_row["id"]
             cleaned_data.append(cleaned_row)
 
-    # Get explicit schema for this table
-    base_schema = _get_base_schema(table_id)
-
     job_config = bigquery.LoadJobConfig(
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        schema=base_schema,
+        autodetect=True,
+        ignore_unknown_values=True,
         schema_update_options=[
             bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
         ],
@@ -114,4 +91,11 @@ def load_json_to_bigquery(
         job_config=job_config,
     )
 
-    load_job.result()
+    result = load_job.result()
+
+    # Log warnings if any rows had unknown values
+    if result.output_rows != len(cleaned_data):
+        logger.warning(
+            f"Loaded {result.output_rows} rows to {table_id}, but {len(cleaned_data)} rows were provided. "
+            f"Some rows may have had unknown values that were ignored."
+        )
