@@ -349,7 +349,7 @@ function TeamProfile() {
                   stroke="var(--color-text-muted)"
                   style={{ fontSize: 'var(--text-xs)' }}
                   domain={[40, 60]}
-                  hide={false}
+                  tickFormatter={(value) => Math.round(value).toString()}
                 />
                 <RechartsTooltip
                   formatter={(value: number) => `${value.toFixed(1)}%`}
@@ -370,7 +370,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="CF%"
-                    position="insideTopRight"
+                    position="insideBottomRight"
+                    offset={15}
                     fill={teamColor}
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
@@ -426,7 +427,7 @@ function TeamProfile() {
                 <YAxis
                   stroke="var(--color-text-muted)"
                   style={{ fontSize: 'var(--text-xs)' }}
-                  hide={false}
+                  tickFormatter={(value) => Math.round(value).toString()}
                 />
                 <RechartsTooltip
                   formatter={(value: number) => value.toFixed(2)}
@@ -446,7 +447,8 @@ function TeamProfile() {
                 >
                   <Label
                     value="HDCF/60"
-                    position="insideTopRight"
+                    position="insideBottomRight"
+                    offset={15}
                     fill="var(--color-data-positive)"
                     style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                   />
