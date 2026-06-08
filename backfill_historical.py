@@ -9,19 +9,19 @@ It's significantly faster than the DAG-based approach due to:
 
 Usage:
     # Single season
-    python backfill_historical.py --season 2023-24
+    python backfill_historical.py --season 2025-26
 
     # Multiple seasons
-    python backfill_historical.py --seasons 2015-16 2016-17 2017-18
+    python backfill_historical.py --seasons 2024-25 2025-26
 
-    # All seasons (2015-16 through 2023-24)
+    # All seasons (2015-16 through 2025-26)
     python backfill_historical.py --all
 
-    # Resume from failures
-    python backfill_historical.py --season 2023-24 --retry-failures
+    # Drop tables and start fresh
+    python backfill_historical.py --all --drop-tables
 
     # Dry run (enumerate games only)
-    python backfill_historical.py --season 2023-24 --dry-run
+    python backfill_historical.py --season 2025-26 --dry-run
 """
 
 import asyncio
@@ -427,7 +427,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Backfill historical NHL data")
     parser.add_argument("--season", help="Single season to backfill (e.g., 2023-24)")
     parser.add_argument("--seasons", nargs="+", help="Multiple seasons to backfill")
-    parser.add_argument("--all", action="store_true", help="Backfill all seasons (2015-16 through 2023-24)")
+    parser.add_argument("--all", action="store_true", help="Backfill all seasons (2015-16 through 2025-26)")
     parser.add_argument("--dry-run", action="store_true", help="Enumerate games only, don't fetch")
     parser.add_argument("--concurrent", type=int, default=10, help="Max concurrent requests (default: 10)")
     parser.add_argument("--drop-tables", action="store_true", help="Drop and recreate raw tables before backfill")
@@ -436,7 +436,7 @@ async def main():
 
     # Determine which seasons to process
     if args.all:
-        seasons = [f"{year}-{str(year+1)[2:]}" for year in range(2015, 2024)]
+        seasons = [f"{year}-{str(year+1)[2:]}" for year in range(2015, 2026)]
     elif args.seasons:
         seasons = args.seasons
     elif args.season:
