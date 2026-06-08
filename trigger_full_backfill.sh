@@ -70,66 +70,120 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Trigger backfill for each season SEQUENTIALLY
+# Trigger backfill for seasons in batches of 2
 SEASONS=("2015-16" "2016-17" "2017-18" "2018-19" "2019-20" "2020-21" "2021-22" "2022-23" "2023-24")
+BATCH_SIZE=2
 
-echo -e "\n${GREEN}Starting sequential backfill...${NC}"
-echo -e "${YELLOW}Note: Each season will complete before the next starts${NC}"
+echo -e "\n${GREEN}Starting backfill with ${BATCH_SIZE} concurrent seasons...${NC}"
+echo -e "${YELLOW}Note: Processing ${#SEASONS[@]} seasons in batches of ${BATCH_SIZE}${NC}"
 echo ""
 
-for SEASON in "${SEASONS[@]}"; do
-    echo -e "${YELLOW}Triggering backfill for season ${SEASON}...${NC}"
+# Process seasons in batches
+for ((i=0; i<${#SEASONS[@]}; i+=BATCH_SIZE)); do
+    # Get current batch of seasons
+    BATCH_SEASONS=("${SEASONS[@]:i:BATCH_SIZE}")
+    BATCH_NUM=$((i/BATCH_SIZE + 1))
+    TOTAL_BATCHES=$(((${#SEASONS[@]} + BATCH_SIZE - 1) / BATCH_SIZE))
 
-    # Trigger the DAG run
-    RUN_OUTPUT=$(docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
-        --conf "{\"season\": \"${SEASON}\"}" 2>&1)
+    echo -e "${GREEN}======================================${NC}"
+    echo -e "${GREEN}Batch ${BATCH_NUM}/${TOTAL_BATCHES}: ${BATCH_SEASONS[*]}${NC}"
+    echo -e "${GREEN}======================================${NC}"
 
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}ERROR: Failed to trigger ${SEASON}${NC}"
-        echo "$RUN_OUTPUT"
-        continue
-    fi
+    # Arrays to track run IDs and seasons
+    declare -a RUN_IDS
+    declare -a BATCH_SEASON_NAMES
 
-    # Extract the run_id from the output
-    RUN_ID=$(echo "$RUN_OUTPUT" | grep "manual__" | awk '{print $3}' | head -1)
+    # Trigger all seasons in this batch
+    for SEASON in "${BATCH_SEASONS[@]}"; do
+        echo -e "${YELLOW}Triggering backfill for season ${SEASON}...${NC}"
 
-    if [ -z "$RUN_ID" ]; then
-        echo -e "${RED}ERROR: Could not determine run ID for ${SEASON}${NC}"
-        continue
-    fi
+        # Trigger the DAG run
+        RUN_OUTPUT=$(docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
+            --conf "{\"season\": \"${SEASON}\"}" 2>&1)
 
-    echo -e "${GREEN}✓ ${SEASON} triggered (run: ${RUN_ID})${NC}"
-    echo -e "${YELLOW}Waiting for ${SEASON} to complete...${NC}"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}ERROR: Failed to trigger ${SEASON}${NC}"
+            echo "$RUN_OUTPUT"
+            continue
+        fi
 
-    # Poll until the run completes (success or failed)
+        # Extract the run_id from the output
+        RUN_ID=$(echo "$RUN_OUTPUT" | grep "manual__" | awk '{print $3}' | head -1)
+
+        if [ -z "$RUN_ID" ]; then
+            echo -e "${RED}ERROR: Could not determine run ID for ${SEASON}${NC}"
+            continue
+        fi
+
+        RUN_IDS+=("$RUN_ID")
+        BATCH_SEASON_NAMES+=("$SEASON")
+
+        echo -e "${GREEN}✓ ${SEASON} triggered (run: ${RUN_ID})${NC}"
+
+        # Small delay between triggers
+        sleep 2
+    done
+
+    echo ""
+    echo -e "${YELLOW}Waiting for batch to complete (${#RUN_IDS[@]} seasons)...${NC}"
+
+    # Poll until all runs in this batch complete
     while true; do
-        STATE=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
-            --state running 2>/dev/null | grep "$RUN_ID" | wc -l)
+        ALL_DONE=true
 
-        QUEUED=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
-            --state queued 2>/dev/null | grep "$RUN_ID" | wc -l)
+        for idx in "${!RUN_IDS[@]}"; do
+            RUN_ID="${RUN_IDS[$idx]}"
+            SEASON="${BATCH_SEASON_NAMES[$idx]}"
 
-        # If not running and not queued, it's done
-        if [ "$STATE" -eq 0 ] && [ "$QUEUED" -eq 0 ]; then
+            # Check if this run is still active
+            RUNNING=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+                --state running 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+            QUEUED=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+                --state queued 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+            if [ "$RUNNING" -gt 0 ] || [ "$QUEUED" -gt 0 ]; then
+                ALL_DONE=false
+            fi
+        done
+
+        if [ "$ALL_DONE" = true ]; then
             break
         fi
 
-        echo -e "${YELLOW}  ${SEASON} still processing... (checking again in 60s)${NC}"
+        echo -e "${YELLOW}  Batch still processing... (checking again in 60s)${NC}"
         sleep 60
     done
 
-    # Check final state
-    SUCCESS=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
-        --state success 2>/dev/null | grep "$RUN_ID" | wc -l)
+    echo ""
+    echo -e "${GREEN}Batch ${BATCH_NUM} complete! Checking results...${NC}"
 
-    if [ "$SUCCESS" -eq 1 ]; then
-        echo -e "${GREEN}✓ ${SEASON} completed successfully!${NC}\n"
-    else
-        echo -e "${RED}✗ ${SEASON} failed or was stopped${NC}\n"
+    # Check final state for each run in batch
+    for idx in "${!RUN_IDS[@]}"; do
+        RUN_ID="${RUN_IDS[$idx]}"
+        SEASON="${BATCH_SEASON_NAMES[$idx]}"
+
+        SUCCESS=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+            --state success 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+        if [ "$SUCCESS" -eq 1 ]; then
+            echo -e "${GREEN}  ✓ ${SEASON} completed successfully${NC}"
+        else
+            echo -e "${RED}  ✗ ${SEASON} failed or was stopped${NC}"
+        fi
+    done
+
+    echo ""
+
+    # Clear arrays for next batch
+    unset RUN_IDS
+    unset BATCH_SEASON_NAMES
+
+    # Small delay before next batch
+    if [ $((i + BATCH_SIZE)) -lt ${#SEASONS[@]} ]; then
+        echo -e "${YELLOW}Starting next batch in 10 seconds...${NC}\n"
+        sleep 10
     fi
-
-    # Small delay before next season
-    sleep 5
 done
 
 echo -e "\n${GREEN}======================================${NC}"
