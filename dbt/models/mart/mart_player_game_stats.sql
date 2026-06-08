@@ -33,16 +33,35 @@ player_shots as (
     group by game_id, shooting_player_id
 ),
 
-player_assists as (
+player_first_assists as (
     select
         game_id,
-        assist1_player_id as player_id,
-        count(*) as primary_assists
+        player_id,
+        count(*) as first_assists
+    from {{ ref('int_assists') }}
+    where assist_order = 1
+    group by game_id, player_id
+),
+
+player_second_assists as (
+    select
+        game_id,
+        player_id,
+        count(*) as second_assists
+    from {{ ref('int_assists') }}
+    where assist_order = 2
+    group by game_id, player_id
+),
+
+player_penalties as (
+    select
+        game_id,
+        committed_by_player_id as player_id,
+        sum(coalesce(duration, 0)) as pim
     from {{ ref('stg_play_by_play') }}
-    where assist1_player_id is not null
-      and type_desc_key = 'goal'
-      and situation_code = '1551'
-    group by game_id, assist1_player_id
+    where type_desc_key = 'penalty'
+      and committed_by_player_id is not null
+    group by game_id, committed_by_player_id
 ),
 
 team_xg as (
@@ -65,9 +84,14 @@ player_stats_combined as (
         r.position_code,
         coalesce(ps.individual_shot_attempts, 0) as individual_shot_attempts,
         coalesce(ps.individual_goals, 0) as individual_goals,
-        coalesce(ps.individual_high_danger_attempts, 0) as individual_high_danger_attempts,
+        coalesce(ps.individual_high_danger_attempts, 0) as ihdcf,
         coalesce(ps.ixg, 0.0) as ixg,
-        coalesce(pa.primary_assists, 0) as primary_assists,
+        coalesce(pfa.first_assists, 0) as first_assists,
+        coalesce(psa.second_assists, 0) as second_assists,
+        coalesce(pp.pim, 0) as pim,
+        -- rush_attempts set to 0: accurate rush classification requires event sequencing
+        -- and time-since-zone-entry data not available in current play-by-play events
+        0 as rush_attempts,
         coalesce(tx.xgf_pct, 0.5) as team_xgf_pct,
 
         15.0 as estimated_toi_5v5_minutes
@@ -76,9 +100,15 @@ player_stats_combined as (
     left join player_shots ps
         on r.game_id = ps.game_id
         and r.player_id = ps.player_id
-    left join player_assists pa
-        on r.game_id = pa.game_id
-        and r.player_id = pa.player_id
+    left join player_first_assists pfa
+        on r.game_id = pfa.game_id
+        and r.player_id = pfa.player_id
+    left join player_second_assists psa
+        on r.game_id = psa.game_id
+        and r.player_id = psa.player_id
+    left join player_penalties pp
+        on r.game_id = pp.game_id
+        and r.player_id = pp.player_id
     left join team_xg tx
         on r.game_id = tx.game_id
         and r.team_id = tx.team_id
@@ -97,8 +127,11 @@ metrics_calculated as (
         position_code,
         individual_shot_attempts,
         individual_goals,
-        individual_high_danger_attempts,
-        primary_assists,
+        ihdcf,
+        first_assists,
+        second_assists,
+        pim,
+        rush_attempts,
         ixg,
         team_xgf_pct,
         estimated_toi_5v5_minutes as toi_5v5,
@@ -109,7 +142,7 @@ metrics_calculated as (
             else 0.0
         end as ixg_per60,
 
-        ((individual_goals + primary_assists) / estimated_toi_5v5_minutes) * 60.0 as primary_points_per60
+        ((individual_goals + first_assists) / estimated_toi_5v5_minutes) * 60.0 as primary_points_per60
 
     from player_stats_combined
 ),
@@ -154,8 +187,11 @@ final as (
         toi_5v5,
         individual_shot_attempts,
         individual_goals,
-        primary_assists,
-        individual_high_danger_attempts,
+        first_assists,
+        second_assists,
+        ihdcf,
+        rush_attempts,
+        pim,
         ixg,
         ixg_per60,
         on_ice_xgf_pct,

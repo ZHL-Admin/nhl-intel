@@ -44,6 +44,36 @@ zone_entries as (
     group by game_id, team_id
 ),
 
+period_stats as (
+    select
+        game_id,
+        event_owner_team_id as team_id,
+        period_number,
+        count(*) as cf,
+        sum(xg_value) as xgf,
+        sum(case when is_goal then 1 else 0 end) as gf
+    from {{ ref('int_shot_attempts') }}
+    where period_number in (1, 2, 3, 4)
+    group by game_id, event_owner_team_id, period_number
+),
+
+period_pivoted as (
+    select
+        game_id,
+        team_id,
+        sum(case when period_number = 1 then cf else 0 end) as cf_p1,
+        sum(case when period_number = 2 then cf else 0 end) as cf_p2,
+        sum(case when period_number = 3 then cf else 0 end) as cf_p3,
+        sum(case when period_number = 1 then xgf else 0 end) as xgf_p1,
+        sum(case when period_number = 2 then xgf else 0 end) as xgf_p2,
+        sum(case when period_number = 3 then xgf else 0 end) as xgf_p3,
+        sum(case when period_number = 1 then gf else 0 end) as gf_p1,
+        sum(case when period_number = 2 then gf else 0 end) as gf_p2,
+        sum(case when period_number = 3 then gf else 0 end) as gf_p3
+    from period_stats
+    group by game_id, team_id
+),
+
 home_teams as (
     select
         g.game_id,
@@ -63,7 +93,25 @@ home_teams as (
         coalesce(sa_for.xgf, 0.0) as xgf,
         coalesce(sa_against.xgf, 0.0) as xga,
         coalesce(ze.total_entries, 0) as zone_entries,
-        coalesce(ze.controlled_entries, 0) as controlled_zone_entries
+        coalesce(ze.controlled_entries, 0) as controlled_zone_entries,
+        coalesce(pp_for.cf_p1, 0) as cf_p1,
+        coalesce(pp_for.cf_p2, 0) as cf_p2,
+        coalesce(pp_for.cf_p3, 0) as cf_p3,
+        coalesce(pp_against.cf_p1, 0) as ca_p1,
+        coalesce(pp_against.cf_p2, 0) as ca_p2,
+        coalesce(pp_against.cf_p3, 0) as ca_p3,
+        coalesce(pp_for.xgf_p1, 0.0) as xgf_p1,
+        coalesce(pp_for.xgf_p2, 0.0) as xgf_p2,
+        coalesce(pp_for.xgf_p3, 0.0) as xgf_p3,
+        coalesce(pp_against.xgf_p1, 0.0) as xga_p1,
+        coalesce(pp_against.xgf_p2, 0.0) as xga_p2,
+        coalesce(pp_against.xgf_p3, 0.0) as xga_p3,
+        coalesce(pp_for.gf_p1, 0) as gf_p1,
+        coalesce(pp_for.gf_p2, 0) as gf_p2,
+        coalesce(pp_for.gf_p3, 0) as gf_p3,
+        coalesce(pp_against.gf_p1, 0) as ga_p1,
+        coalesce(pp_against.gf_p2, 0) as ga_p2,
+        coalesce(pp_against.gf_p3, 0) as ga_p3
     from games g
     left join shot_attempts sa_for
         on g.game_id = sa_for.game_id
@@ -74,6 +122,12 @@ home_teams as (
     left join zone_entries ze
         on g.game_id = ze.game_id
         and g.home_team_id = ze.team_id
+    left join period_pivoted pp_for
+        on g.game_id = pp_for.game_id
+        and g.home_team_id = pp_for.team_id
+    left join period_pivoted pp_against
+        on g.game_id = pp_against.game_id
+        and g.away_team_id = pp_against.team_id
 ),
 
 away_teams as (
@@ -95,7 +149,25 @@ away_teams as (
         coalesce(sa_for.xgf, 0.0) as xgf,
         coalesce(sa_against.xgf, 0.0) as xga,
         coalesce(ze.total_entries, 0) as zone_entries,
-        coalesce(ze.controlled_entries, 0) as controlled_zone_entries
+        coalesce(ze.controlled_entries, 0) as controlled_zone_entries,
+        coalesce(pp_for.cf_p1, 0) as cf_p1,
+        coalesce(pp_for.cf_p2, 0) as cf_p2,
+        coalesce(pp_for.cf_p3, 0) as cf_p3,
+        coalesce(pp_against.cf_p1, 0) as ca_p1,
+        coalesce(pp_against.cf_p2, 0) as ca_p2,
+        coalesce(pp_against.cf_p3, 0) as ca_p3,
+        coalesce(pp_for.xgf_p1, 0.0) as xgf_p1,
+        coalesce(pp_for.xgf_p2, 0.0) as xgf_p2,
+        coalesce(pp_for.xgf_p3, 0.0) as xgf_p3,
+        coalesce(pp_against.xgf_p1, 0.0) as xga_p1,
+        coalesce(pp_against.xgf_p2, 0.0) as xga_p2,
+        coalesce(pp_against.xgf_p3, 0.0) as xga_p3,
+        coalesce(pp_for.gf_p1, 0) as gf_p1,
+        coalesce(pp_for.gf_p2, 0) as gf_p2,
+        coalesce(pp_for.gf_p3, 0) as gf_p3,
+        coalesce(pp_against.gf_p1, 0) as ga_p1,
+        coalesce(pp_against.gf_p2, 0) as ga_p2,
+        coalesce(pp_against.gf_p3, 0) as ga_p3
     from games g
     left join shot_attempts sa_for
         on g.game_id = sa_for.game_id
@@ -106,6 +178,12 @@ away_teams as (
     left join zone_entries ze
         on g.game_id = ze.game_id
         and g.away_team_id = ze.team_id
+    left join period_pivoted pp_for
+        on g.game_id = pp_for.game_id
+        and g.away_team_id = pp_for.team_id
+    left join period_pivoted pp_against
+        on g.game_id = pp_against.game_id
+        and g.home_team_id = pp_against.team_id
 ),
 
 all_teams as (
@@ -134,12 +212,48 @@ metrics_calculated as (
         xga,
         zone_entries,
         controlled_zone_entries,
+        cf_p1,
+        cf_p2,
+        cf_p3,
+        ca_p1,
+        ca_p2,
+        ca_p3,
+        xgf_p1,
+        xgf_p2,
+        xgf_p3,
+        xga_p1,
+        xga_p2,
+        xga_p3,
+        gf_p1,
+        gf_p2,
+        gf_p3,
+        ga_p1,
+        ga_p2,
+        ga_p3,
 
         case
             when (shot_attempts_for + shot_attempts_against) > 0
             then cast(shot_attempts_for as float64) / (shot_attempts_for + shot_attempts_against)
             else null
         end as cf_pct,
+
+        case
+            when (cf_p1 + ca_p1) > 0
+            then cast(cf_p1 as float64) / (cf_p1 + ca_p1)
+            else null
+        end as cf_pct_p1,
+
+        case
+            when (cf_p2 + ca_p2) > 0
+            then cast(cf_p2 as float64) / (cf_p2 + ca_p2)
+            else null
+        end as cf_pct_p2,
+
+        case
+            when (cf_p3 + ca_p3) > 0
+            then cast(cf_p3 as float64) / (cf_p3 + ca_p3)
+            else null
+        end as cf_pct_p3,
 
         case
             when (xgf + xga) > 0
@@ -191,7 +305,28 @@ final as (
         hdcf_per60,
         hdca_per60,
         zone_entry_success_rate,
-        estimated_toi_5v5_minutes as toi_5v5_minutes
+        estimated_toi_5v5_minutes as toi_5v5_minutes,
+        cf_p1,
+        cf_p2,
+        cf_p3,
+        ca_p1,
+        ca_p2,
+        ca_p3,
+        cf_pct_p1,
+        cf_pct_p2,
+        cf_pct_p3,
+        xgf_p1,
+        xgf_p2,
+        xgf_p3,
+        xga_p1,
+        xga_p2,
+        xga_p3,
+        gf_p1,
+        gf_p2,
+        gf_p3,
+        ga_p1,
+        ga_p2,
+        ga_p3
     from metrics_calculated
 )
 
