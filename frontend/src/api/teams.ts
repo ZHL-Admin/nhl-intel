@@ -2,7 +2,7 @@
  * Team API endpoints.
  */
 import { apiClient } from './client'
-import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent } from './types'
+import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational } from './types'
 
 /**
  * Fetch detailed information for a specific team.
@@ -37,6 +37,42 @@ export async function getTeamVsOpponent(
 ): Promise<TeamVsOpponent> {
   const response = await apiClient.get<TeamVsOpponent>(
     `/teams/${teamId}/vs/${opponentId}`
+  )
+  return response.data
+}
+
+/**
+ * Fetch zone deployment statistics for all players on a team.
+ */
+export async function getTeamDeployment(
+  teamId: number,
+  season?: string
+): Promise<PlayerZoneDeployment[]> {
+  const response = await apiClient.get<PlayerZoneDeployment[]>(
+    `/teams/${teamId}/deployment`,
+    {
+      params: {
+        season: season || 'current'
+      },
+    }
+  )
+  return response.data
+}
+
+/**
+ * Fetch situational statistics for a team in a specific game.
+ */
+export async function getTeamSituational(
+  teamId: number,
+  gameId: number
+): Promise<TeamSituational[]> {
+  const response = await apiClient.get<TeamSituational[]>(
+    `/teams/${teamId}/situational`,
+    {
+      params: {
+        game_id: gameId
+      },
+    }
   )
   return response.data
 }

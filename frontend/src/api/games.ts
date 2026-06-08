@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { Game, GameDetail, GamePlayerStats, GameShots } from './types'
+import { Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint } from './types'
 
 /**
  * Fetch all games for a specific date.
@@ -36,8 +36,24 @@ export async function getGamePlayerStats(gameId: number): Promise<GamePlayerStat
 /**
  * Fetch shot attempt coordinates for a specific game.
  */
-export async function getGameShots(gameId: number): Promise<GameShots> {
-  const response = await apiClient.get<GameShots>(`/games/${gameId}/shots`)
+export async function getGameShots(gameId: number, situation?: string): Promise<GameShots> {
+  const response = await apiClient.get<GameShots>(`/games/${gameId}/shots`, {
+    params: {
+      situation: situation || 'all'
+    },
+  })
+  return response.data
+}
+
+/**
+ * Fetch expected goals worm chart data for a specific game.
+ */
+export async function getGameXGWorm(gameId: number, situation?: string): Promise<XGWormPoint[]> {
+  const response = await apiClient.get<XGWormPoint[]>(`/games/${gameId}/xgworm`, {
+    params: {
+      situation: situation || 'all'
+    },
+  })
   return response.data
 }
 

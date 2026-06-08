@@ -42,6 +42,28 @@ export interface TeamGameStats {
   xga: number | null
   zone_entry_success_rate: number | null
   shot_attempts: number | null
+  // Period-by-period breakdowns
+  cf_p1?: number | null
+  cf_p2?: number | null
+  cf_p3?: number | null
+  ca_p1?: number | null
+  ca_p2?: number | null
+  ca_p3?: number | null
+  cf_pct_p1?: number | null
+  cf_pct_p2?: number | null
+  cf_pct_p3?: number | null
+  xgf_p1?: number | null
+  xgf_p2?: number | null
+  xgf_p3?: number | null
+  xga_p1?: number | null
+  xga_p2?: number | null
+  xga_p3?: number | null
+  gf_p1?: number | null
+  gf_p2?: number | null
+  gf_p3?: number | null
+  ga_p1?: number | null
+  ga_p2?: number | null
+  ga_p3?: number | null
 }
 
 export interface GameDetail {
@@ -69,6 +91,11 @@ export interface PlayerGameStats {
   ixg: number | null
   ixg_per60: number | null
   hot_cold_flag: string | null
+  first_assists?: number | null
+  second_assists?: number | null
+  ihdcf?: number | null
+  pim?: number | null
+  rush_attempts?: number | null
 }
 
 export interface GamePlayerStats {
@@ -133,6 +160,15 @@ export interface TeamDetail {
   gf_per_gp_rank: number
   ga_per_gp_rank: number
   zone_entry_success_rate_rank: number | null
+  // Zone time percentages
+  oz_pct?: number | null
+  nz_pct?: number | null
+  dz_pct?: number | null
+  // Faceoff statistics
+  faceoff_win_pct?: number | null
+  oz_faceoff_win_pct?: number | null
+  nz_faceoff_win_pct?: number | null
+  dz_faceoff_win_pct?: number | null
 }
 
 export interface TeamTrendPoint {
@@ -201,6 +237,18 @@ export interface PlayerDetail {
   assists_per60: number
   cf_pct: number
   hdcf_per60: number
+  // New fields
+  first_assists?: number | null
+  second_assists?: number | null
+  ihdcf_per60?: number | null
+  ozs_pct?: number | null
+  dzs_pct?: number | null
+  nzs_pct?: number | null
+  relative_cf_pct?: number | null
+  relative_xgf_pct?: number | null
+  actual_shooting_pct?: number | null
+  expected_shooting_pct?: number | null
+  shooting_luck_delta?: number | null
 }
 
 export interface PlayerTrendPoint {
@@ -263,4 +311,57 @@ export interface PlayerVsOpponent {
   toi_per_gp: number | null
   points_per60: number | null
   cf_pct: number | null
+}
+
+// ============================================================================
+// Advanced Analytics Types
+// ============================================================================
+
+export interface XGWormPoint {
+  game_time_seconds: number
+  cumulative_xg_diff: number
+  home_xg: number
+  away_xg: number
+  event_type?: string | null
+  team_id?: number | null
+  label?: string | null
+}
+
+export interface PlayerZoneDeployment {
+  player_id: number
+  season: string
+  team_id: number
+  oz_starts: number
+  nz_starts: number
+  dz_starts: number
+  total_starts: number
+  ozs_pct: number
+  nzs_pct: number
+  dzs_pct: number
+}
+
+export interface PlayerSituational {
+  player_id: number
+  season: string
+  situation: string
+  toi_per_gp?: number | null
+  points_per60?: number | null
+  goals_per60?: number | null
+  ixg_per60?: number | null
+  cf_pct?: number | null
+  hdcf_per60?: number | null
+}
+
+export interface TeamSituational {
+  team_id: number
+  game_id: number
+  situation: string
+  toi_seconds?: number | null
+  cf_pct?: number | null
+  xgf_pct?: number | null
+  hdcf_pct?: number | null
+  gf?: number | null
+  ga?: number | null
+  shots_for?: number | null
+  shots_against?: number | null
 }

@@ -8,6 +8,7 @@ import {
   PlayerGamelog,
   PlayerShots,
   PlayerVsOpponent,
+  PlayerSituational,
 } from './types'
 
 /**
@@ -51,6 +52,24 @@ export async function getPlayerVsOpponent(
 ): Promise<PlayerVsOpponent> {
   const response = await apiClient.get<PlayerVsOpponent>(
     `/players/${playerId}/vs/${opponentId}`
+  )
+  return response.data
+}
+
+/**
+ * Fetch situational statistics for a player.
+ */
+export async function getPlayerSituational(
+  playerId: number,
+  season?: string
+): Promise<PlayerSituational[]> {
+  const response = await apiClient.get<PlayerSituational[]>(
+    `/players/${playerId}/situational`,
+    {
+      params: {
+        season: season || 'current'
+      },
+    }
   )
   return response.data
 }
