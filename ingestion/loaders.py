@@ -24,6 +24,26 @@ def _clean_empty_structs(obj: Any) -> Any:
     return obj
 
 
+def _serialize_nested_fields(row: dict, fields_to_serialize: List[str]) -> dict:
+    """Serialize specified nested fields to JSON strings.
+
+    This makes the schema resilient to API type changes in nested fields that are not
+    used in dbt models. These fields are stored as raw JSON strings rather than typed
+    RECORD structures.
+
+    Args:
+        row: Data row dict to process.
+        fields_to_serialize: List of top-level field names to serialize to JSON.
+
+    Returns:
+        Modified row with specified fields serialized to JSON strings.
+    """
+    for field in fields_to_serialize:
+        if field in row and row[field] is not None:
+            row[field] = json.dumps(row[field])
+    return row
+
+
 def load_json_to_bigquery(
     project_id: str,
     dataset_id: str,
@@ -60,6 +80,14 @@ def load_json_to_bigquery(
         else:
             season = f"{current_year - 1}-{str(current_year)[2:]}"
 
+    # Define nested fields to serialize as JSON strings to avoid schema conflicts
+    # These are fields not used in dbt models that could have API type changes
+    fields_to_serialize_by_table = {
+        "raw_boxscores": ["tvBroadcasts", "gameVideo"],
+        "raw_play_by_play": ["tvBroadcasts"],
+        "raw_schedule": ["tvBroadcasts", "ticketsLink"],
+    }
+
     cleaned_data = []
     for row in data:
         cleaned_row = _clean_empty_structs(row)
@@ -69,6 +97,13 @@ def load_json_to_bigquery(
             # Add game_id from id field if it exists (for boxscores and play-by-play)
             if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play"]:
                 cleaned_row["game_id"] = cleaned_row["id"]
+
+            # Serialize vulnerable nested fields to JSON strings
+            if table_id in fields_to_serialize_by_table:
+                cleaned_row = _serialize_nested_fields(
+                    cleaned_row, fields_to_serialize_by_table[table_id]
+                )
+
             cleaned_data.append(cleaned_row)
 
     job_config = bigquery.LoadJobConfig(
