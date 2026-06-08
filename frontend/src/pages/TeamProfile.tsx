@@ -352,7 +352,7 @@ function TeamProfile() {
                   tickFormatter={(value) => Math.round(value).toString()}
                 />
                 <RechartsTooltip
-                  formatter={(value: number) => `${value.toFixed(1)}%`}
+                  formatter={(value) => typeof value === 'number' ? `${value.toFixed(1)}%` : ''}
                   contentStyle={{
                     backgroundColor: 'var(--color-bg-surface)',
                     border: '1px solid var(--color-border)',
@@ -430,7 +430,7 @@ function TeamProfile() {
                   tickFormatter={(value) => Math.round(value).toString()}
                 />
                 <RechartsTooltip
-                  formatter={(value: number) => value.toFixed(2)}
+                  formatter={(value) => typeof value === 'number' ? value.toFixed(2) : ''}
                   contentStyle={{
                     backgroundColor: 'var(--color-bg-surface)',
                     border: '1px solid var(--color-border)',

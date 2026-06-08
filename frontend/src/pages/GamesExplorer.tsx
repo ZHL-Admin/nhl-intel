@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { PageLayout } from '../components/common'
 import GameCard from '../components/games/GameCard'
 import GameCardSkeleton from '../components/games/GameCardSkeleton'

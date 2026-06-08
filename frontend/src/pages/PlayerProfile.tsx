@@ -16,8 +16,7 @@ import {
   PlayerTrends,
   PlayerShots,
   PlayerVsOpponent,
-  PlayerGamelog,
-  GamelogEntry
+  PlayerGamelog
 } from '../api/types'
 import './PlayerProfile.css'
 
@@ -295,7 +294,9 @@ function PlayerProfile() {
             <SkeletonLoader width={80} height={80} borderRadius="50%" />
             <div style={{ flex: 1 }}>
               <SkeletonLoader width={200} height={32} />
-              <SkeletonLoader width={150} height={20} style={{ marginTop: 8 }} />
+              <div style={{ marginTop: 8 }}>
+                <SkeletonLoader width={150} height={20} />
+              </div>
             </div>
           </div>
         ) : errorDetail ? (
@@ -451,7 +452,8 @@ function PlayerProfile() {
                   x: shot.x,
                   y: shot.y,
                   outcome: shot.is_goal ? 'goal' : 'shot_on_goal',
-                  situation: '1551' // Default to 5v5, TODO: add actual situation data
+                  situation: '1551', // Default to 5v5, TODO: add actual situation data
+                  team_id: playerDetail?.team_id || 0
                 }))}
                 playerTeamColor={teamColor}
                 playerName={playerDetail?.player_name || ''}

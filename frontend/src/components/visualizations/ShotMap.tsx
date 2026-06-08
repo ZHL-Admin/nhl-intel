@@ -2,16 +2,9 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import * as d3 from 'd3'
 import { hexbin } from 'd3-hexbin'
 import './ShotMap.css'
-
-export interface ShotAttempt {
-  x: number
-  y: number
-  outcome: 'goal' | 'shot_on_goal' | 'missed_shot' | 'blocked_shot'
-  situation: string
-}
+import { ShotAttempt } from '../../api/types'
 
 type SituationFilter = 'all' | '5v5' | 'pp' | 'pk'
-type ShotMapMode = 'game' | 'player'
 
 interface ShotMapPropsGame {
   mode: 'game'
@@ -182,7 +175,6 @@ function ShotMap(props: ShotMapProps) {
     // SVG dimensions - different for game vs player mode
     const width = isGameMode ? 800 : 500
     const height = 340
-    const centerX = width / 2
 
     // NHL rink dimensions
     // Game mode: x from -100 to 100, y from -42.5 to 42.5 (full rink)
