@@ -70,12 +70,12 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Trigger backfill for seasons in batches of 2
+# Trigger backfill for seasons in batches of 1 to avoid VM resource exhaustion
 SEASONS=("2015-16" "2016-17" "2017-18" "2018-19" "2019-20" "2020-21" "2021-22" "2022-23" "2023-24")
-BATCH_SIZE=2
+BATCH_SIZE=1
 
-echo -e "\n${GREEN}Starting backfill with ${BATCH_SIZE} concurrent seasons...${NC}"
-echo -e "${YELLOW}Note: Processing ${#SEASONS[@]} seasons in batches of ${BATCH_SIZE}${NC}"
+echo -e "\n${GREEN}Starting backfill with ${BATCH_SIZE} concurrent season(s)...${NC}"
+echo -e "${YELLOW}Note: Processing ${#SEASONS[@]} seasons sequentially to avoid VM resource exhaustion${NC}"
 echo ""
 
 # Process seasons in batches
