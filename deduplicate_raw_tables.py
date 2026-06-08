@@ -35,7 +35,7 @@ def deduplicate_table(client: bigquery.Client, project_id: str, dataset: str, ta
             *,
             ROW_NUMBER() OVER (
                 PARTITION BY game_id, season
-                ORDER BY ingestion_date DESC, _PARTITIONTIME DESC
+                ORDER BY ingestion_date DESC
             ) as row_num
         FROM `{full_table_ref}`
     )
@@ -43,15 +43,20 @@ def deduplicate_table(client: bigquery.Client, project_id: str, dataset: str, ta
     """
 
     print(f"  Creating deduplicated temp table...")
-    client.query(dedup_query).result()
+    job = client.query(dedup_query)
+    job.result()  # Wait for completion
     print(f"  ✓ Created {temp_table}")
 
     # Get counts
     original_count_query = f"SELECT COUNT(*) as cnt FROM `{full_table_ref}`"
     deduped_count_query = f"SELECT COUNT(*) as cnt FROM `{temp_table_ref}`"
 
-    original_count = list(client.query(original_count_query).result())[0].cnt
-    deduped_count = list(client.query(deduped_count_query).result())[0].cnt
+    original_job = client.query(original_count_query)
+    original_count = list(original_job.result())[0].cnt
+
+    deduped_job = client.query(deduped_count_query)
+    deduped_count = list(deduped_job.result())[0].cnt
+
     duplicates_removed = original_count - deduped_count
 
     print(f"  Original rows: {original_count:,}")
@@ -64,7 +69,8 @@ def deduplicate_table(client: bigquery.Client, project_id: str, dataset: str, ta
 
     # Use ALTER TABLE RENAME (more efficient than CREATE TABLE AS SELECT)
     rename_query = f"ALTER TABLE `{temp_table_ref}` RENAME TO {table}"
-    client.query(rename_query).result()
+    rename_job = client.query(rename_query)
+    rename_job.result()  # Wait for completion
 
     print(f"  ✓ Replaced {table} with deduplicated version")
 
