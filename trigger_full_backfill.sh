@@ -79,14 +79,14 @@ echo ""
 for SEASON in "${SEASONS[@]}"; do
     echo -e "${YELLOW}Triggering backfill for season ${SEASON}...${NC}"
 
-    docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
+    if docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
         --conf "{\"season\": \"${SEASON}\"}" \
-        2>&1 | grep -i "created\|triggered" || {
-            echo -e "${RED}WARNING: Failed to trigger ${SEASON}${NC}"
-            continue
-        }
-
-    echo -e "${GREEN}✓ ${SEASON} triggered${NC}"
+        > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ ${SEASON} triggered${NC}"
+    else
+        echo -e "${RED}WARNING: Failed to trigger ${SEASON}${NC}"
+        continue
+    fi
 
     # Small delay to avoid overwhelming the scheduler
     sleep 2
