@@ -141,6 +141,14 @@ async def get_game_detail(game_id: int) -> GameDetail:
     game_row = game_results[0]
     is_preview = game_row['game_state'] not in ['OFF', 'FINAL']
 
+    # Convert season from string format ("YYYY-YY") to integer format (YYYYYYYY)
+    season_str = game_row['season']
+    if isinstance(season_str, str) and '-' in season_str:
+        start_year, end_year = season_str.split('-')
+        season_int = int(start_year) * 10000 + int(f"20{end_year}")
+    else:
+        season_int = int(season_str) if season_str else 20232024
+
     # If not preview, get team stats from mart
     if not is_preview:
         stats_sql = f"""
@@ -252,7 +260,7 @@ async def get_game_detail(game_id: int) -> GameDetail:
     return GameDetail(
         game_id=game_row['game_id'],
         game_date=game_row['game_date'],
-        season=game_row['season'],
+        season=season_int,
         home_team=home_stats,
         away_team=away_stats,
         is_preview=is_preview,
