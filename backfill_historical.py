@@ -394,6 +394,34 @@ async def backfill_season(season: str, dry_run: bool = False, max_concurrent: in
     return stats
 
 
+def drop_raw_tables():
+    """Drop and recreate raw BigQuery tables to avoid schema conflicts.
+
+    This is useful when running a fresh backfill, as the NHL API schema
+    has evolved over time and field types have changed.
+    """
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+
+    client = bigquery.Client(project=project_id)
+
+    tables_to_drop = ["raw_boxscores", "raw_play_by_play", "raw_rosters"]
+
+    print(f"\n{'='*60}")
+    print(f"Dropping raw tables in {dataset_raw}")
+    print(f"{'='*60}")
+
+    for table_name in tables_to_drop:
+        table_ref = f"{project_id}.{dataset_raw}.{table_name}"
+        try:
+            client.delete_table(table_ref)
+            print(f"✓ Dropped {table_name}")
+        except Exception as e:
+            print(f"  Could not drop {table_name}: {e}")
+
+    print(f"{'='*60}\n")
+
+
 async def main():
     """Main entry point for backfill script."""
     parser = argparse.ArgumentParser(description="Backfill historical NHL data")
@@ -402,6 +430,7 @@ async def main():
     parser.add_argument("--all", action="store_true", help="Backfill all seasons (2015-16 through 2023-24)")
     parser.add_argument("--dry-run", action="store_true", help="Enumerate games only, don't fetch")
     parser.add_argument("--concurrent", type=int, default=10, help="Max concurrent requests (default: 10)")
+    parser.add_argument("--drop-tables", action="store_true", help="Drop and recreate raw tables before backfill")
 
     args = parser.parse_args()
 
@@ -421,7 +450,12 @@ async def main():
     print(f"Seasons: {', '.join(seasons)}")
     print(f"Max concurrent requests: {args.concurrent}")
     print(f"Dry run: {args.dry_run}")
+    print(f"Drop tables: {args.drop_tables}")
     print(f"{'='*60}\n")
+
+    # Drop tables if requested
+    if args.drop_tables and not args.dry_run:
+        drop_raw_tables()
 
     # Process each season
     all_stats = []
