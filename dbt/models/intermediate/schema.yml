@@ -45,6 +45,78 @@ models:
         tests:
           - not_null
 
+  - name: int_shot_types
+    description: Shot attempts at 5v5 with normalized shot type classification for shot map encoding
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: season
+        description: Season in format YYYY-YY
+        tests:
+          - not_null
+      - name: event_id
+        description: Unique event identifier
+        tests:
+          - not_null
+      - name: shot_type
+        description: Normalized shot type (snap, slapshot, tip-deflection, backhand, wraparound, other)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['snap', 'slapshot', 'tip-deflection', 'backhand', 'wraparound', 'other']
+      - name: shooting_player_id
+        description: Player who took the shot
+      - name: event_owner_team_id
+        description: Team that took the shot
+        tests:
+          - not_null
+      - name: is_goal
+        description: Whether the shot resulted in a goal
+        tests:
+          - not_null
+      - name: is_high_danger
+        description: Whether shot was from high-danger area
+        tests:
+          - not_null
+      - name: xg_value
+        description: Expected goals value for this shot attempt
+        tests:
+          - not_null
+
+  - name: int_assists
+    description: Individual assists per goal with first and second assist distinction
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: season
+        description: Season in format YYYY-YY
+        tests:
+          - not_null
+      - name: goal_event_id
+        description: Event ID of the goal this assist belongs to
+        tests:
+          - not_null
+      - name: player_id
+        description: Player who recorded the assist
+        tests:
+          - not_null
+      - name: assist_order
+        description: Assist order (1 for primary assist, 2 for secondary assist)
+        tests:
+          - not_null
+      - name: game_date
+        description: Date the game was played
+        tests:
+          - not_null
+      - name: team_id
+        description: Team of the player recording the assist
+        tests:
+          - not_null
+
   - name: int_zone_entries
     description: Zone entry events at 5v5 with controlled/uncontrolled classification
     columns:
