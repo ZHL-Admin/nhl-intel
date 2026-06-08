@@ -35,6 +35,10 @@ from typing import List, Dict, Set
 import httpx
 from google.cloud import bigquery
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
