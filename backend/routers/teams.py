@@ -3,13 +3,30 @@
 Provides endpoints for team details, trends, roster, and vs-opponent stats.
 """
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 
-from models.schemas import TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer, TeamVsOpponent
+from models.schemas import (
+    TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
+    TeamVsOpponent, PlayerZoneDeployment, TeamSituational
+)
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+def _season_int_to_str(season_int: int) -> str:
+    """Convert integer season format to string format.
+
+    Args:
+        season_int: Season as integer (e.g., 20232024)
+
+    Returns:
+        Season as string (e.g., "2023-24")
+    """
+    start_year = season_int // 10000
+    end_year = season_int % 10000
+    return f"{start_year}-{end_year % 100:02d}"
 
 
 @router.get("/{team_id}", response_model=TeamDetail)
@@ -83,6 +100,53 @@ async def get_team_detail(
         raise HTTPException(status_code=404, detail="Team not found")
 
     row = results[0]
+
+    # Get zone time stats (aggregate across all games)
+    season_str = _season_int_to_str(season)
+    zone_time_data = bq_service.get_team_zone_time(team_id, season_str)
+    oz_pct = None
+    nz_pct = None
+    dz_pct = None
+    if zone_time_data:
+        # Calculate average percentages across all games
+        total_oz = sum(g['oz_pct'] for g in zone_time_data if g.get('oz_pct'))
+        total_nz = sum(g['nz_pct'] for g in zone_time_data if g.get('nz_pct'))
+        total_dz = sum(g['dz_pct'] for g in zone_time_data if g.get('dz_pct'))
+        count = len(zone_time_data)
+        if count > 0:
+            oz_pct = total_oz / count
+            nz_pct = total_nz / count
+            dz_pct = total_dz / count
+
+    # Get faceoff stats (aggregate across all games)
+    faceoff_data = bq_service.get_team_faceoffs(team_id, season_str)
+    faceoff_win_pct = None
+    oz_faceoff_win_pct = None
+    nz_faceoff_win_pct = None
+    dz_faceoff_win_pct = None
+    if faceoff_data:
+        # Calculate overall percentages from totals
+        total_faceoffs = sum(g['total_faceoffs'] for g in faceoff_data if g.get('total_faceoffs'))
+        total_won = sum(g['faceoffs_won'] for g in faceoff_data if g.get('faceoffs_won'))
+        if total_faceoffs > 0:
+            faceoff_win_pct = (total_won / total_faceoffs) * 100
+
+        # Zone-specific faceoffs
+        oz_total = sum(g['oz_faceoffs'] for g in faceoff_data if g.get('oz_faceoffs'))
+        oz_won = sum(g['oz_faceoffs_won'] for g in faceoff_data if g.get('oz_faceoffs_won'))
+        if oz_total > 0:
+            oz_faceoff_win_pct = (oz_won / oz_total) * 100
+
+        nz_total = sum(g['nz_faceoffs'] for g in faceoff_data if g.get('nz_faceoffs'))
+        nz_won = sum(g['nz_faceoffs_won'] for g in faceoff_data if g.get('nz_faceoffs_won'))
+        if nz_total > 0:
+            nz_faceoff_win_pct = (nz_won / nz_total) * 100
+
+        dz_total = sum(g['dz_faceoffs'] for g in faceoff_data if g.get('dz_faceoffs'))
+        dz_won = sum(g['dz_faceoffs_won'] for g in faceoff_data if g.get('dz_faceoffs_won'))
+        if dz_total > 0:
+            dz_faceoff_win_pct = (dz_won / dz_total) * 100
+
     return TeamDetail(
         team_id=row['team_id'],
         team_name=row['team_abbrev'],  # TODO: Get full team name
@@ -107,7 +171,14 @@ async def get_team_detail(
         hdca_per60_rank=row['hdca_per60_rank'],
         gf_per_gp_rank=row['gf_per_gp_rank'],
         ga_per_gp_rank=row['ga_per_gp_rank'],
-        zone_entry_success_rate_rank=row.get('zone_entry_success_rate_rank')
+        zone_entry_success_rate_rank=row.get('zone_entry_success_rate_rank'),
+        oz_pct=oz_pct,
+        nz_pct=nz_pct,
+        dz_pct=dz_pct,
+        faceoff_win_pct=faceoff_win_pct,
+        oz_faceoff_win_pct=oz_faceoff_win_pct,
+        nz_faceoff_win_pct=nz_faceoff_win_pct,
+        dz_faceoff_win_pct=dz_faceoff_win_pct
     )
 
 
@@ -348,3 +419,118 @@ async def get_team_vs_opponent(
         hdcf_per60=row['hdcf_per60'] if not small_sample else None,
         xgf_per60=row['xgf_per60'] if not small_sample else None
     )
+
+
+@router.get("/{team_id}/deployment", response_model=List[PlayerZoneDeployment])
+@cache(ttl=21600)  # 6 hours
+async def get_team_deployment(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (e.g., '2024-25')"),
+) -> List[PlayerZoneDeployment]:
+    """Get zone deployment stats for all players on a team.
+
+    Args:
+        team_id: NHL team ID.
+        season: Optional season filter in format "YYYY-YY".
+
+    Returns:
+        List of player zone deployment stats for the team.
+
+    Raises:
+        HTTPException: If team not found.
+    """
+    # Get current season if not provided
+    if not season:
+        season_sql = f"""
+        SELECT MAX(season) as current_season
+        FROM {bq_service.get_full_table_id('mart_player_zone_deployment')}
+        """
+        season_result = bq_service.query(season_sql)
+        season = season_result[0]['current_season'] if season_result else "2024-25"
+
+    # Get zone deployment for all players on the team
+    sql = f"""
+    SELECT
+        player_id,
+        season,
+        team_id,
+        offensive_zone_starts,
+        neutral_zone_starts,
+        defensive_zone_starts,
+        total_zone_starts,
+        ozs_pct,
+        nzs_pct,
+        dzs_pct
+    FROM {bq_service.get_full_table_id('mart_player_zone_deployment')}
+    WHERE team_id = {team_id}
+        AND season = '{season}'
+    ORDER BY total_zone_starts DESC
+    """
+
+    results = bq_service.query(sql)
+    if not results:
+        raise HTTPException(status_code=404, detail="Team not found or no deployment data")
+
+    deployments = []
+    for row in results:
+        deployment = PlayerZoneDeployment(
+            player_id=row['player_id'],
+            season=row['season'],
+            team_id=row['team_id'],
+            oz_starts=row['offensive_zone_starts'],
+            nz_starts=row['neutral_zone_starts'],
+            dz_starts=row['defensive_zone_starts'],
+            total_starts=row['total_zone_starts'],
+            ozs_pct=row['ozs_pct'],
+            nzs_pct=row['nzs_pct'],
+            dzs_pct=row['dzs_pct']
+        )
+        deployments.append(deployment)
+
+    return deployments
+
+
+@router.get("/{team_id}/situational", response_model=List[TeamSituational])
+@cache(ttl=21600)  # 6 hours
+async def get_team_situational(
+    team_id: int,
+    game_id: int = Query(..., description="Game ID to get situational stats for"),
+    situation: str = Query("all", description="Filter by situation: all, 5v5, pp, pk")
+) -> List[TeamSituational]:
+    """Get situational stats for a team in a specific game.
+
+    Args:
+        team_id: NHL team ID.
+        game_id: NHL game ID.
+        situation: Optional situation filter (all, 5v5, pp, pk).
+
+    Returns:
+        List of situational stat records (1-4 records depending on filter).
+
+    Raises:
+        HTTPException: If team or game not found.
+    """
+    # Get situational data using the service layer
+    results = bq_service.get_team_situational(team_id, game_id, situation)
+
+    if not results:
+        raise HTTPException(status_code=404, detail="Team or game not found")
+
+    situational_stats = []
+    for row in results:
+        stat = TeamSituational(
+            team_id=row['team_id'],
+            game_id=row['game_id'],
+            situation=row['situation'],
+            toi_seconds=row.get('toi_seconds'),
+            cf_pct=row.get('cf_pct'),
+            xgf_pct=row.get('xgf_pct'),
+            hdcf_pct=row.get('hdcf_pct'),
+            gf=row.get('goals_for'),
+            ga=row.get('goals_against'),
+            shots_for=row.get('shot_attempts_for'),
+            shots_against=row.get('shot_attempts_against')
+        )
+        situational_stats.append(stat)
+
+    return situational_stats

@@ -7,12 +7,26 @@ from typing import Optional, List
 
 from models.schemas import (
     PlayerDetail, PlayerTrends, PlayerTrendPoint, PlayerGamelog, GamelogEntry,
-    PlayerShots, ShotLocation, PlayerVsOpponent
+    PlayerShots, ShotLocation, PlayerVsOpponent, PlayerSituational
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+def _season_int_to_str(season_int: int) -> str:
+    """Convert integer season format to string format.
+
+    Args:
+        season_int: Season as integer (e.g., 20232024)
+
+    Returns:
+        Season as string (e.g., "2023-24")
+    """
+    start_year = season_int // 10000
+    end_year = season_int % 10000
+    return f"{start_year}-{end_year % 100:02d}"
 
 
 @router.get("/{player_id}", response_model=PlayerDetail)
@@ -77,6 +91,40 @@ async def get_player_detail(
     team_result = bq_service.query(team_sql)
     team_abbrev = team_result[0]['team_abbrev'] if team_result else "UNK"
 
+    # Get additional stats from new mart tables
+    season_str = _season_int_to_str(season)
+
+    # Zone deployment
+    zone_deployment = bq_service.get_player_zone_deployment(row['player_id'], season_str)
+    ozs_pct = zone_deployment[0]['ozs_pct'] if zone_deployment else None
+    dzs_pct = zone_deployment[0]['dzs_pct'] if zone_deployment else None
+    nzs_pct = zone_deployment[0]['nzs_pct'] if zone_deployment else None
+
+    # Shooting luck
+    shooting_luck = bq_service.get_player_shooting_luck(row['player_id'], season_str)
+    actual_shooting_pct = shooting_luck[0]['actual_shooting_pct'] if shooting_luck else None
+    expected_shooting_pct = shooting_luck[0]['expected_shooting_pct'] if shooting_luck else None
+    shooting_luck_delta = shooting_luck[0]['shooting_luck_delta'] if shooting_luck else None
+
+    # Relative performance
+    relative_stats = bq_service.get_player_relative(row['player_id'], season_str)
+    relative_cf_pct = relative_stats[0]['relative_cf_pct'] if relative_stats else None
+    relative_xgf_pct = relative_stats[0]['relative_xgf_pct'] if relative_stats else None
+
+    # Get assists breakdown (first_assists and second_assists) from mart_player_game_stats
+    assists_sql = f"""
+    SELECT
+        SUM(first_assists) as total_first_assists,
+        SUM(second_assists) as total_second_assists,
+        AVG(ihdcf_per60) as avg_ihdcf_per60
+    FROM {bq_service.get_full_table_id('mart_player_game_stats')}
+    WHERE player_id = {row['player_id']}
+    """
+    assists_result = bq_service.query(assists_sql)
+    first_assists = assists_result[0]['total_first_assists'] if assists_result else None
+    second_assists = assists_result[0]['total_second_assists'] if assists_result else None
+    ihdcf_per60 = assists_result[0]['avg_ihdcf_per60'] if assists_result else None
+
     return PlayerDetail(
         player_id=row['player_id'],
         player_name=row['player_name'],
@@ -90,7 +138,18 @@ async def get_player_detail(
         goals_per60=row['goals_per60'],
         assists_per60=row['assists_per60'],
         cf_pct=row['cf_pct'],
-        hdcf_per60=row['hdcf_per60']
+        hdcf_per60=row['hdcf_per60'],
+        first_assists=first_assists,
+        second_assists=second_assists,
+        ihdcf_per60=ihdcf_per60,
+        ozs_pct=ozs_pct,
+        dzs_pct=dzs_pct,
+        nzs_pct=nzs_pct,
+        relative_cf_pct=relative_cf_pct,
+        relative_xgf_pct=relative_xgf_pct,
+        actual_shooting_pct=actual_shooting_pct,
+        expected_shooting_pct=expected_shooting_pct,
+        shooting_luck_delta=shooting_luck_delta
     )
 
 
@@ -302,18 +361,20 @@ async def get_player_shots(
         season_result = bq_service.query(season_sql)
         season = season_result[0]['current_season'] if season_result else 20232024
 
-    # Get shot location data from int_shot_attempts
+    # Get shot location data from int_shot_types
     sql = f"""
     SELECT
         x_coord,
         y_coord,
         is_goal,
+        is_high_danger,
         CASE
             WHEN is_high_danger THEN 'high'
-            ELSE 'medium'  -- TODO: Distinguish between low and medium danger
+            WHEN ABS(x_coord) > 50 OR ABS(y_coord) > 20 THEN 'low'
+            ELSE 'medium'
         END as danger_level
-    FROM {bq_service.get_full_table_id('int_shot_attempts')}
-    WHERE shooting_player_id = {player_id}
+    FROM {bq_service.get_full_table_id('int_shot_types')}
+    WHERE shooter_player_id = {player_id}
     LIMIT 500
     """
 
@@ -426,3 +487,54 @@ async def get_player_vs_opponent(
         points_per60=row['points_per60'] if not small_sample else None,
         cf_pct=row['cf_pct'] if not small_sample else None
     )
+
+
+@router.get("/{player_id}/situational", response_model=List[PlayerSituational])
+@cache(ttl=21600)  # 6 hours
+async def get_player_situational(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (e.g., '2024-25')"),
+) -> List[PlayerSituational]:
+    """Get situational stats for a player.
+
+    Args:
+        player_id: NHL player ID.
+        season: Optional season filter in format "YYYY-YY".
+
+    Returns:
+        List of situational stat records (usually 4: all, 5v5, pp, pk).
+
+    Raises:
+        HTTPException: If player not found.
+    """
+    # Get current season if not provided
+    if not season:
+        season_sql = f"""
+        SELECT MAX(season) as current_season
+        FROM {bq_service.get_full_table_id('mart_player_situational')}
+        """
+        season_result = bq_service.query(season_sql)
+        season = season_result[0]['current_season'] if season_result else "2024-25"
+
+    # Get situational data using the service layer
+    results = bq_service.get_player_situational(player_id, season)
+
+    if not results:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    situational_stats = []
+    for row in results:
+        stat = PlayerSituational(
+            player_id=row['player_id'],
+            season=row['season'],
+            situation=row['situation'],
+            toi_per_gp=row.get('toi_per_gp'),
+            points_per60=row.get('points_per60'),
+            goals_per60=row.get('goals_per60'),
+            ixg_per60=row.get('ixg_per60'),
+            cf_pct=row.get('cf_pct'),
+            hdcf_per60=row.get('hdcf_per60')
+        )
+        situational_stats.append(stat)
+
+    return situational_stats

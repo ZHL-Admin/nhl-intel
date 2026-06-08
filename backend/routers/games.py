@@ -6,7 +6,10 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import date
 
-from models.schemas import Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats, GameShots, ShotAttempt
+from models.schemas import (
+    Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
+    GameShots, ShotAttempt, XGWormPoint
+)
 from services.bigquery import bq_service
 from services.cache import cache
 
@@ -153,7 +156,28 @@ async def get_game_detail(game_id: int) -> GameDetail:
             xgf,
             xga,
             zone_entry_success_rate,
-            shot_attempts_for
+            shot_attempts_for,
+            cf_p1,
+            cf_p2,
+            cf_p3,
+            ca_p1,
+            ca_p2,
+            ca_p3,
+            cf_pct_p1,
+            cf_pct_p2,
+            cf_pct_p3,
+            xgf_p1,
+            xgf_p2,
+            xgf_p3,
+            xga_p1,
+            xga_p2,
+            xga_p3,
+            gf_p1,
+            gf_p2,
+            gf_p3,
+            ga_p1,
+            ga_p2,
+            ga_p3
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE game_id = {game_id}
         """
@@ -174,7 +198,28 @@ async def get_game_detail(game_id: int) -> GameDetail:
                 xgf=row.get('xgf'),
                 xga=row.get('xga'),
                 zone_entry_success_rate=row.get('zone_entry_success_rate'),
-                shot_attempts=row.get('shot_attempts_for')
+                shot_attempts=row.get('shot_attempts_for'),
+                cf_p1=row.get('cf_p1'),
+                cf_p2=row.get('cf_p2'),
+                cf_p3=row.get('cf_p3'),
+                ca_p1=row.get('ca_p1'),
+                ca_p2=row.get('ca_p2'),
+                ca_p3=row.get('ca_p3'),
+                cf_pct_p1=row.get('cf_pct_p1'),
+                cf_pct_p2=row.get('cf_pct_p2'),
+                cf_pct_p3=row.get('cf_pct_p3'),
+                xgf_p1=row.get('xgf_p1'),
+                xgf_p2=row.get('xgf_p2'),
+                xgf_p3=row.get('xgf_p3'),
+                xga_p1=row.get('xga_p1'),
+                xga_p2=row.get('xga_p2'),
+                xga_p3=row.get('xga_p3'),
+                gf_p1=row.get('gf_p1'),
+                gf_p2=row.get('gf_p2'),
+                gf_p3=row.get('gf_p3'),
+                ga_p1=row.get('ga_p1'),
+                ga_p2=row.get('ga_p2'),
+                ga_p3=row.get('ga_p3')
             )
             if row['home_away'] == 'home':
                 home_stats = team_stats
@@ -260,17 +305,22 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         p.team_id,
         p.toi_5v5 as toi,
         p.individual_goals as goals,
-        p.primary_assists as assists,
-        (p.individual_goals + p.primary_assists) as points,
+        (p.first_assists + p.second_assists) as assists,
+        (p.individual_goals + p.first_assists + p.second_assists) as points,
         p.individual_shot_attempts as shots,
         p.individual_shot_attempts as cf,
         p.individual_high_danger_attempts as hdcf,
         p.ixg,
         p.ixg_per60,
-        p.hot_cold_flag
+        p.hot_cold_flag,
+        p.first_assists,
+        p.second_assists,
+        p.ihdcf,
+        p.pim,
+        p.rush_attempts
     FROM {bq_service.get_full_table_id('mart_player_game_stats')} p
     WHERE p.game_id = {game_id}
-    ORDER BY (p.individual_goals + p.primary_assists) DESC, p.ixg_per60 DESC
+    ORDER BY (p.individual_goals + p.first_assists + p.second_assists) DESC, p.ixg_per60 DESC
     """
 
     player_results = bq_service.query(player_sql)
@@ -293,7 +343,12 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             hdcf=row.get('hdcf'),
             ixg=row.get('ixg'),
             ixg_per60=row.get('ixg_per60'),
-            hot_cold_flag=row.get('hot_cold_flag')
+            hot_cold_flag=row.get('hot_cold_flag'),
+            first_assists=row.get('first_assists'),
+            second_assists=row.get('second_assists'),
+            ihdcf=row.get('ihdcf'),
+            pim=row.get('pim'),
+            rush_attempts=row.get('rush_attempts')
         )
 
         if row['team_id'] == game_row['home_team_id']:
@@ -309,15 +364,19 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
 
 
 @router.get("/{game_id}/shots", response_model=GameShots)
-@cache(ttl=300)
-async def get_game_shots(game_id: int) -> GameShots:
-    """Get shot attempt coordinates for a specific game.
+@cache(ttl=86400)  # 24 hours
+async def get_game_shots_endpoint(
+    game_id: int,
+    situation: str = Query("all", description="Filter by situation: all, 5v5, pp, pk")
+) -> GameShots:
+    """Get shot attempt coordinates for a specific game from int_shot_types.
 
     Args:
         game_id: NHL game ID.
+        situation: Filter by situation (all, 5v5, pp, pk).
 
     Returns:
-        Shot attempts for both teams with coordinates and outcomes.
+        Shot attempts for both teams with coordinates, outcomes, and shot types.
 
     Raises:
         HTTPException: If game not found.
@@ -344,34 +403,10 @@ async def get_game_shots(game_id: int) -> GameShots:
             away_shots=[]
         )
 
-    # Get shot attempts from play-by-play with deduplication
-    shots_sql = f"""
-    SELECT DISTINCT
-        event_id,
-        x_coord,
-        y_coord,
-        type_desc_key,
-        situation_code,
-        event_owner_team_id,
-        scoring_player_id,
-        shot_type,
-        period_number,
-        time_in_period,
-        assist1_player_id,
-        assist2_player_id,
-        goalie_in_net_id
-    FROM {bq_service.get_full_table_id('stg_play_by_play')}
-    WHERE game_id = {game_id}
-        AND type_desc_key IN ('goal', 'shot-on-goal', 'missed-shot', 'blocked-shot')
-        AND x_coord IS NOT NULL
-        AND y_coord IS NOT NULL
-    GROUP BY event_id, x_coord, y_coord, type_desc_key, situation_code, event_owner_team_id,
-             scoring_player_id, shot_type, period_number, time_in_period,
-             assist1_player_id, assist2_player_id, goalie_in_net_id
-    ORDER BY event_id
-    """
+    # Get shot data using the service layer
+    shot_results = bq_service.get_game_shots(game_id, situation)
 
-    # Get player names for this game (only once, not in the main query)
+    # Get player names for this game
     players_sql = f"""
     SELECT DISTINCT
         player_id,
@@ -379,48 +414,52 @@ async def get_game_shots(game_id: int) -> GameShots:
     FROM {bq_service.get_full_table_id('stg_rosters')}
     WHERE game_id = {game_id}
     """
-
-    shot_results = bq_service.query(shots_sql)
     player_results = bq_service.query(players_sql)
-
-    # Build player lookup dict
     player_names = {row['player_id']: row['player_name'] for row in player_results}
 
     home_shots = []
     away_shots = []
 
     for row in shot_results:
-        # Map type_desc_key to our outcome format
+        # Map event_type to outcome format
         outcome_map = {
-            'goal': 'goal',
-            'shot-on-goal': 'shot_on_goal',
-            'missed-shot': 'missed_shot',
-            'blocked-shot': 'blocked_shot'
+            'GOAL': 'goal',
+            'SHOT': 'shot_on_goal',
+            'MISS': 'missed_shot',
+            'BLOCK': 'blocked_shot'
         }
-        outcome = outcome_map.get(row['type_desc_key'], row['type_desc_key'])
+        outcome = outcome_map.get(row['event_type'], 'shot_on_goal')
 
-        # Base shot data
+        # Base shot data - shot_type is now always present from int_shot_types
         shot_data = {
             'x': float(row['x_coord']),
             'y': float(row['y_coord']),
             'outcome': outcome,
-            'situation': row['situation_code'] or '5v5',
-            'team_id': row['event_owner_team_id']
+            'situation': row['situation_code'] or '1551',
+            'team_id': row['event_team_id'],
+            'shot_type': row.get('shot_type')  # Always present from int_shot_types
         }
 
         # Add goal-specific details if this is a goal
-        if outcome == 'goal':
-            scorer_id = row.get('scoring_player_id')
+        if row.get('is_goal'):
+            scorer_id = row.get('shooter_player_id')
             assist1_id = row.get('assist1_player_id')
             assist2_id = row.get('assist2_player_id')
-            goalie_id = row.get('goalie_in_net_id')
+            goalie_id = row.get('goalie_player_id')
+
+            # Calculate period and time from game_seconds
+            game_seconds = row.get('game_seconds', 0)
+            period = row.get('period', (game_seconds // 1200) + 1)
+            seconds_in_period = game_seconds % 1200
+            minutes = seconds_in_period // 60
+            seconds = seconds_in_period % 60
+            time_in_period = f"{minutes:02d}:{seconds:02d}"
 
             shot_data.update({
                 'scorer_id': scorer_id,
                 'scorer_name': player_names.get(scorer_id) if scorer_id else None,
-                'shot_type': row.get('shot_type'),
-                'period': row.get('period_number'),
-                'time_in_period': row.get('time_in_period'),
+                'period': period,
+                'time_in_period': time_in_period,
                 'assist1_id': assist1_id,
                 'assist1_name': player_names.get(assist1_id) if assist1_id else None,
                 'assist2_id': assist2_id,
@@ -431,7 +470,7 @@ async def get_game_shots(game_id: int) -> GameShots:
 
         shot = ShotAttempt(**shot_data)
 
-        if row['event_owner_team_id'] == game_row['home_team_id']:
+        if row['event_team_id'] == game_row['home_team_id']:
             home_shots.append(shot)
         else:
             away_shots.append(shot)
@@ -441,3 +480,58 @@ async def get_game_shots(game_id: int) -> GameShots:
         home_shots=home_shots,
         away_shots=away_shots
     )
+
+
+@router.get("/{game_id}/xgworm", response_model=List[XGWormPoint])
+@cache(ttl=86400)  # 24 hours
+async def get_xg_worm(
+    game_id: int,
+    situation: str = Query("all", description="Filter by situation: all, 5v5, pp, pk")
+) -> List[XGWormPoint]:
+    """Get cumulative xG differential data for xG Worm chart.
+
+    Args:
+        game_id: NHL game ID.
+        situation: Filter by situation (all, 5v5, pp, pk).
+
+    Returns:
+        Time-series data points with cumulative xG differential and goal markers.
+
+    Raises:
+        HTTPException: If game not found.
+    """
+    # Check if game exists
+    game_sql = f"""
+    SELECT game_id, game_state
+    FROM {bq_service.get_full_table_id('stg_boxscores')}
+    WHERE game_id = {game_id}
+    """
+
+    game_results = bq_service.query(game_sql)
+    if not game_results:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game_row = game_results[0]
+    is_preview = game_row['game_state'] not in ['OFF', 'FINAL']
+
+    if is_preview:
+        # Return empty list for preview games
+        return []
+
+    # Get xG worm data using the service layer
+    worm_data = bq_service.get_xg_worm(game_id, situation)
+
+    worm_points = []
+    for row in worm_data:
+        point = XGWormPoint(
+            game_time_seconds=row['game_time_seconds'],
+            cumulative_xg_diff=row['cumulative_xg_diff'],
+            home_xg=row['home_xg'],
+            away_xg=row['away_xg'],
+            event_type=row.get('event_type'),
+            team_id=row.get('team_id'),
+            label=row.get('label')
+        )
+        worm_points.append(point)
+
+    return worm_points
