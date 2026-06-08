@@ -70,26 +70,66 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Trigger backfill for each season
+# Trigger backfill for each season SEQUENTIALLY
 SEASONS=("2015-16" "2016-17" "2017-18" "2018-19" "2019-20" "2020-21" "2021-22" "2022-23" "2023-24")
 
-echo -e "\n${GREEN}Starting backfill triggers...${NC}"
+echo -e "\n${GREEN}Starting sequential backfill...${NC}"
+echo -e "${YELLOW}Note: Each season will complete before the next starts${NC}"
 echo ""
 
 for SEASON in "${SEASONS[@]}"; do
     echo -e "${YELLOW}Triggering backfill for season ${SEASON}...${NC}"
 
-    if docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
-        --conf "{\"season\": \"${SEASON}\"}" \
-        > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ ${SEASON} triggered${NC}"
-    else
-        echo -e "${RED}WARNING: Failed to trigger ${SEASON}${NC}"
+    # Trigger the DAG run
+    RUN_OUTPUT=$(docker compose exec -T airflow-scheduler airflow dags trigger nhl_historical_backfill \
+        --conf "{\"season\": \"${SEASON}\"}" 2>&1)
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}ERROR: Failed to trigger ${SEASON}${NC}"
+        echo "$RUN_OUTPUT"
         continue
     fi
 
-    # Small delay to avoid overwhelming the scheduler
-    sleep 2
+    # Extract the run_id from the output
+    RUN_ID=$(echo "$RUN_OUTPUT" | grep "manual__" | awk '{print $3}' | head -1)
+
+    if [ -z "$RUN_ID" ]; then
+        echo -e "${RED}ERROR: Could not determine run ID for ${SEASON}${NC}"
+        continue
+    fi
+
+    echo -e "${GREEN}✓ ${SEASON} triggered (run: ${RUN_ID})${NC}"
+    echo -e "${YELLOW}Waiting for ${SEASON} to complete...${NC}"
+
+    # Poll until the run completes (success or failed)
+    while true; do
+        STATE=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+            --state running 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+        QUEUED=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+            --state queued 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+        # If not running and not queued, it's done
+        if [ "$STATE" -eq 0 ] && [ "$QUEUED" -eq 0 ]; then
+            break
+        fi
+
+        echo -e "${YELLOW}  ${SEASON} still processing... (checking again in 60s)${NC}"
+        sleep 60
+    done
+
+    # Check final state
+    SUCCESS=$(docker compose exec -T airflow-scheduler airflow dags list-runs -d nhl_historical_backfill \
+        --state success 2>/dev/null | grep "$RUN_ID" | wc -l)
+
+    if [ "$SUCCESS" -eq 1 ]; then
+        echo -e "${GREEN}✓ ${SEASON} completed successfully!${NC}\n"
+    else
+        echo -e "${RED}✗ ${SEASON} failed or was stopped${NC}\n"
+    fi
+
+    # Small delay before next season
+    sleep 5
 done
 
 echo -e "\n${GREEN}======================================${NC}"
