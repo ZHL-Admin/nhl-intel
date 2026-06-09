@@ -23,7 +23,7 @@ async def get_games(
     start_date: Optional[date] = Query(None, description="Filter games from this date"),
     end_date: Optional[date] = Query(None, description="Filter games until this date"),
     team_id: Optional[int] = Query(None, description="Filter games for specific team"),
-    season: Optional[int] = Query(None, description="Filter by season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Filter by season (e.g., 2023-24)"),
 ) -> List[Game]:
     """Get list of games with optional filters.
 

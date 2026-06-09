@@ -15,25 +15,11 @@ from services.cache import cache
 router = APIRouter()
 
 
-def _season_int_to_str(season_int: int) -> str:
-    """Convert integer season format to string format.
-
-    Args:
-        season_int: Season as integer (e.g., 20232024)
-
-    Returns:
-        Season as string (e.g., "2023-24")
-    """
-    start_year = season_int // 10000
-    end_year = season_int % 10000
-    return f"{start_year}-{end_year % 100:02d}"
-
-
 @router.get("/{team_id}", response_model=TeamDetail)
 @cache(ttl=600)
 async def get_team_detail(
     team_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> TeamDetail:
     """Get detailed information for a specific team.
 
@@ -102,8 +88,7 @@ async def get_team_detail(
     row = results[0]
 
     # Get zone time stats (aggregate across all games)
-    season_str = _season_int_to_str(season)
-    zone_time_data = bq_service.get_team_zone_time(team_id, season_str)
+    zone_time_data = bq_service.get_team_zone_time(team_id, season)
     oz_pct = None
     nz_pct = None
     dz_pct = None
@@ -119,7 +104,7 @@ async def get_team_detail(
             dz_pct = total_dz / count
 
     # Get faceoff stats (aggregate across all games)
-    faceoff_data = bq_service.get_team_faceoffs(team_id, season_str)
+    faceoff_data = bq_service.get_team_faceoffs(team_id, season)
     faceoff_win_pct = None
     oz_faceoff_win_pct = None
     nz_faceoff_win_pct = None
@@ -186,7 +171,7 @@ async def get_team_detail(
 @cache(ttl=600)
 async def get_team_trends(
     team_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> TeamTrends:
     """Get rolling trends for a specific team.
 
@@ -266,7 +251,7 @@ async def get_team_trends(
 @cache(ttl=600)
 async def get_team_roster(
     team_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> TeamRoster:
     """Get roster for a specific team.
 
@@ -346,7 +331,7 @@ async def get_team_roster(
 async def get_team_vs_opponent(
     team_id: int,
     opponent_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> TeamVsOpponent:
     """Get head-to-head stats for team vs specific opponent.
 

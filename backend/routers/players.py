@@ -15,25 +15,11 @@ from services.cache import cache
 router = APIRouter()
 
 
-def _season_int_to_str(season_int: int) -> str:
-    """Convert integer season format to string format.
-
-    Args:
-        season_int: Season as integer (e.g., 20232024)
-
-    Returns:
-        Season as string (e.g., "2023-24")
-    """
-    start_year = season_int // 10000
-    end_year = season_int % 10000
-    return f"{start_year}-{end_year % 100:02d}"
-
-
 @router.get("/{player_id}", response_model=PlayerDetail)
 @cache(ttl=600)
 async def get_player_detail(
     player_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> PlayerDetail:
     """Get detailed information for a specific player.
 
@@ -92,22 +78,20 @@ async def get_player_detail(
     team_abbrev = team_result[0]['team_abbrev'] if team_result else "UNK"
 
     # Get additional stats from new mart tables
-    season_str = _season_int_to_str(season)
-
     # Zone deployment
-    zone_deployment = bq_service.get_player_zone_deployment(row['player_id'], season_str)
+    zone_deployment = bq_service.get_player_zone_deployment(row['player_id'], season)
     ozs_pct = zone_deployment[0]['ozs_pct'] if zone_deployment else None
     dzs_pct = zone_deployment[0]['dzs_pct'] if zone_deployment else None
     nzs_pct = zone_deployment[0]['nzs_pct'] if zone_deployment else None
 
     # Shooting luck
-    shooting_luck = bq_service.get_player_shooting_luck(row['player_id'], season_str)
+    shooting_luck = bq_service.get_player_shooting_luck(row['player_id'], season)
     actual_shooting_pct = shooting_luck[0]['actual_shooting_pct'] if shooting_luck else None
     expected_shooting_pct = shooting_luck[0]['expected_shooting_pct'] if shooting_luck else None
     shooting_luck_delta = shooting_luck[0]['shooting_luck_delta'] if shooting_luck else None
 
     # Relative performance
-    relative_stats = bq_service.get_player_relative(row['player_id'], season_str)
+    relative_stats = bq_service.get_player_relative(row['player_id'], season)
     relative_cf_pct = relative_stats[0]['relative_cf_pct'] if relative_stats else None
     relative_xgf_pct = relative_stats[0]['relative_xgf_pct'] if relative_stats else None
 
@@ -157,7 +141,7 @@ async def get_player_detail(
 @cache(ttl=600)
 async def get_player_trends(
     player_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> PlayerTrends:
     """Get rolling trends for a specific player.
 
@@ -241,7 +225,7 @@ async def get_player_trends(
 @cache(ttl=600)
 async def get_player_gamelog(
     player_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
     limit: int = Query(20, description="Number of games to return", ge=1, le=100),
 ) -> PlayerGamelog:
     """Get game-by-game log for a specific player.
@@ -338,7 +322,7 @@ async def get_player_gamelog(
 @cache(ttl=600)
 async def get_player_shots(
     player_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> PlayerShots:
     """Get shot data for a specific player.
 
@@ -419,7 +403,7 @@ async def get_player_shots(
 async def get_player_vs_opponent(
     player_id: int,
     opponent_id: int,
-    season: Optional[int] = Query(None, description="Season (e.g., 20232024)"),
+    season: Optional[str] = Query(None, description="Season (e.g., 2023-24)"),
 ) -> PlayerVsOpponent:
     """Get player stats vs specific opponent.
 
