@@ -120,21 +120,20 @@ class BigQueryService:
         SELECT
             x_coord,
             y_coord,
-            shot_type_normalized as shot_type,
-            event_type,
+            type_desc_key as shot_type,
+            type_desc_key as event_type,
             situation_code,
-            event_team_id,
-            period,
-            game_seconds,
-            shooter_player_id,
-            goalie_player_id,
-            is_goal,
-            assist1_player_id,
-            assist2_player_id
+            event_owner_team_id as team_id,
+            period_number as period,
+            time_in_period,
+            shooting_player_id as shooter_id,
+            scoring_player_id,
+            goalie_in_net_id as goalie_id,
+            is_goal
         FROM {self.get_full_table_id('int_shot_types')}
         WHERE game_id = {game_id}
             {situation_filter}
-        ORDER BY game_seconds
+        ORDER BY period_number, time_in_period
         """
 
         return self.query(sql)

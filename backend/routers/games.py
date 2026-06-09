@@ -309,7 +309,7 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         (p.individual_goals + p.first_assists + p.second_assists) as points,
         p.individual_shot_attempts as shots,
         p.individual_shot_attempts as cf,
-        p.individual_high_danger_attempts as hdcf,
+        p.ihdcf as hdcf,
         p.ixg,
         p.ixg_per60,
         p.hot_cold_flag,
@@ -436,41 +436,27 @@ async def get_game_shots_endpoint(
             'y': float(row['y_coord']),
             'outcome': outcome,
             'situation': row['situation_code'] or '1551',
-            'team_id': row['event_team_id'],
+            'team_id': row['team_id'],
             'shot_type': row.get('shot_type')  # Always present from int_shot_types
         }
 
         # Add goal-specific details if this is a goal
         if row.get('is_goal'):
-            scorer_id = row.get('shooter_player_id')
-            assist1_id = row.get('assist1_player_id')
-            assist2_id = row.get('assist2_player_id')
-            goalie_id = row.get('goalie_player_id')
-
-            # Calculate period and time from game_seconds
-            game_seconds = row.get('game_seconds', 0)
-            period = row.get('period', (game_seconds // 1200) + 1)
-            seconds_in_period = game_seconds % 1200
-            minutes = seconds_in_period // 60
-            seconds = seconds_in_period % 60
-            time_in_period = f"{minutes:02d}:{seconds:02d}"
+            scorer_id = row.get('scoring_player_id') or row.get('shooter_id')
+            goalie_id = row.get('goalie_id')
 
             shot_data.update({
                 'scorer_id': scorer_id,
                 'scorer_name': player_names.get(scorer_id) if scorer_id else None,
-                'period': period,
-                'time_in_period': time_in_period,
-                'assist1_id': assist1_id,
-                'assist1_name': player_names.get(assist1_id) if assist1_id else None,
-                'assist2_id': assist2_id,
-                'assist2_name': player_names.get(assist2_id) if assist2_id else None,
+                'period': row.get('period'),
+                'time_in_period': row.get('time_in_period'),
                 'goalie_id': goalie_id,
                 'goalie_name': player_names.get(goalie_id) if goalie_id else None
             })
 
         shot = ShotAttempt(**shot_data)
 
-        if row['event_team_id'] == game_row['home_team_id']:
+        if row['team_id'] == game_row['home_team_id']:
             home_shots.append(shot)
         else:
             away_shots.append(shot)
