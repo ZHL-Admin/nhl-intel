@@ -15,7 +15,7 @@ class Game(BaseModel):
     """Basic game information for game list."""
     game_id: int
     game_date: date
-    season: int
+    season: str
     home_team_id: int
     home_team_abbrev: str
     away_team_id: int
@@ -66,7 +66,7 @@ class GameDetail(BaseModel):
     """Detailed game information."""
     game_id: int
     game_date: date
-    season: int
+    season: str
     home_team: TeamGameStats
     away_team: TeamGameStats
     is_preview: bool
@@ -143,7 +143,7 @@ class TeamDetail(BaseModel):
     team_id: int
     team_name: str
     team_abbrev: str
-    season: int
+    season: str
     games_played: int
     wins: int
     losses: int
@@ -186,7 +186,7 @@ class TeamTrendPoint(BaseModel):
 class TeamTrends(BaseModel):
     """Rolling trends for a team."""
     team_id: int
-    season: int
+    season: str
     cf_pct_5gp: List[TeamTrendPoint]
     cf_pct_10gp: List[TeamTrendPoint]
     xgf_pct_5gp: List[TeamTrendPoint]
@@ -209,7 +209,7 @@ class RosterPlayer(BaseModel):
 class TeamRoster(BaseModel):
     """Team roster with player stats."""
     team_id: int
-    season: int
+    season: str
     forwards: List[RosterPlayer]
     defensemen: List[RosterPlayer]
     goalies: List[RosterPlayer]
@@ -219,7 +219,7 @@ class TeamVsOpponent(BaseModel):
     """Head-to-head stats for team vs opponent."""
     team_id: int
     opponent_id: int
-    season: int
+    season: str
     games_played: int
     small_sample: bool = Field(description="True if < 3 games")
     wins: int
@@ -241,7 +241,7 @@ class PlayerDetail(BaseModel):
     position: str
     team_id: int
     team_abbrev: str
-    season: int
+    season: str
     games_played: int
     toi_per_gp: float
     points_per60: float
@@ -273,7 +273,7 @@ class PlayerTrendPoint(BaseModel):
 class PlayerTrends(BaseModel):
     """Rolling trends for a player."""
     player_id: int
-    season: int
+    season: str
     points_per60_5gp: List[PlayerTrendPoint]
     points_per60_10gp: List[PlayerTrendPoint]
     cf_pct_5gp: List[PlayerTrendPoint]
@@ -298,7 +298,7 @@ class GamelogEntry(BaseModel):
 class PlayerGamelog(BaseModel):
     """Game-by-game log for a player."""
     player_id: int
-    season: int
+    season: str
     games: List[GamelogEntry]
 
 
@@ -313,7 +313,7 @@ class ShotLocation(BaseModel):
 class PlayerShots(BaseModel):
     """Shot data for a player."""
     player_id: int
-    season: int
+    season: str
     total_shots: int
     low_danger: int
     medium_danger: int
@@ -325,7 +325,7 @@ class PlayerVsOpponent(BaseModel):
     """Player stats vs specific opponent."""
     player_id: int
     opponent_id: int
-    season: int
+    season: str
     games_played: int
     small_sample: bool = Field(description="True if < 3 games")
     toi_per_gp: Optional[float] = None
