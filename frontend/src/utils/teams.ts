@@ -102,6 +102,21 @@ export function getTeamColor(teamAbbrev: string): string {
 }
 
 /**
+ * Set the --color-team-primary CSS variable on the document root.
+ * This allows team-specific colors to be applied throughout the page.
+ */
+export function setTeamPrimaryColor(teamColor: string): void {
+  document.documentElement.style.setProperty('--color-team-primary', teamColor)
+}
+
+/**
+ * Clear the --color-team-primary CSS variable, resetting to default.
+ */
+export function clearTeamPrimaryColor(): void {
+  document.documentElement.style.setProperty('--color-team-primary', 'var(--color-accent)')
+}
+
+/**
  * Format date to display string.
  */
 export function formatGameDate(dateString: string): string {

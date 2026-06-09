@@ -2,36 +2,37 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  line-height: var(--text-xs-height);
   font-weight: 500;
+  line-height: 1;
 }
 
 .badge--hot {
-  background-color: color-mix(in srgb, var(--color-data-positive) 15%, transparent);
-  color: var(--color-data-positive);
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
 }
 
 .badge--cold {
-  background-color: color-mix(in srgb, var(--color-data-negative) 15%, transparent);
-  color: var(--color-data-negative);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .badge--preview {
-  background-color: var(--color-accent-subtle);
-  color: var(--color-accent);
+  background-color: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 .badge--live {
-  background-color: #e85d6a;
+  background-color: #dc2626;
   color: white;
 }
 
 .badge--small-sample {
-  background-color: color-mix(in srgb, var(--color-data-highlight) 15%, transparent);
-  color: var(--color-data-highlight);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .badge__pulse-dot {

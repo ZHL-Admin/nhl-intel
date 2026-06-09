@@ -1,0 +1,12 @@
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  color: var(--color-text-secondary);
+  transition: color 150ms ease;
+}
+
+.theme-toggle:hover {
+  color: var(--color-text-primary);
+}

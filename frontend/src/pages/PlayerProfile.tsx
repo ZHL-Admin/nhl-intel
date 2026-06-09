@@ -18,6 +18,7 @@ import {
   PlayerVsOpponent,
   PlayerGamelog
 } from '../api/types'
+import { setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import './PlayerProfile.css'
 
 // NHL team list for vs opponent dropdown
@@ -110,6 +111,9 @@ function PlayerProfile() {
         setErrorDetail(null)
         const data = await getPlayerDetail(parseInt(playerId))
         setPlayerDetail(data)
+        // Set team primary color for contextual theming
+        const teamColor = TEAM_COLORS[data.team_id] || '#4a7cf7'
+        setTeamPrimaryColor(teamColor)
       } catch (error) {
         setErrorDetail('Failed to load player details')
         console.error('Error fetching player detail:', error)
@@ -119,6 +123,11 @@ function PlayerProfile() {
     }
 
     fetchPlayerDetail()
+
+    // Cleanup: reset team primary color when leaving page
+    return () => {
+      clearTeamPrimaryColor()
+    }
   }, [playerId])
 
   // Fetch player trends

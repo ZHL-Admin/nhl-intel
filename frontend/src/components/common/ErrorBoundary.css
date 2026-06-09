@@ -29,7 +29,7 @@
 .error-boundary__details {
   background-color: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin-bottom: var(--space-6);
   text-align: left;
@@ -45,7 +45,7 @@
 .error-boundary__stack {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--color-data-negative);
+  color: var(--color-danger);
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -53,9 +53,9 @@
 
 .error-boundary__button {
   background-color: var(--color-accent);
-  color: white;
+  color: var(--color-text-inverse);
   padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;
   transition: background-color 150ms ease;

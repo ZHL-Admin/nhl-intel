@@ -6,6 +6,7 @@
   height: 56px;
   background-color: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
   z-index: 100;
 }
 
@@ -58,6 +59,12 @@
   right: 0;
   height: 2px;
   background-color: var(--color-accent);
+}
+
+.navbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
 }
 
 .navbar__search {
@@ -146,7 +153,7 @@
     display: none;
   }
 
-  .navbar__search {
+  .navbar__actions {
     display: none;
   }
 

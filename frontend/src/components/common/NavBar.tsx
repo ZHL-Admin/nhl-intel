@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Search, Menu, X } from 'lucide-react'
+import ThemeToggle from './ThemeToggle'
 import './NavBar.css'
 
 function NavBar() {
@@ -43,7 +44,9 @@ function NavBar() {
           </NavLink>
         </div>
 
-        <div className={`navbar__search ${isSearchFocused ? 'navbar__search--focused' : ''}`}>
+        <div className="navbar__actions">
+          <ThemeToggle />
+          <div className={`navbar__search ${isSearchFocused ? 'navbar__search--focused' : ''}`}>
           <Search size={16} className="navbar__search-icon" />
           <input
             type="text"
@@ -61,6 +64,7 @@ function NavBar() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         <button

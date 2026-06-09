@@ -4,7 +4,7 @@ import { PageLayout, SkeletonLoader, StatCard, Badge } from '../components/commo
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent } from '../api/teams'
 import { getTeamGames } from '../api/games'
 import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent } from '../api/types'
-import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI } from '../utils/teams'
+import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
 
@@ -42,6 +42,9 @@ function TeamProfile() {
       try {
         const detail = await getTeamDetail(parseInt(teamId))
         setTeamDetail(detail)
+        // Set team primary color for contextual theming
+        const teamColor = getTeamColor(detail.team_abbrev)
+        setTeamPrimaryColor(teamColor)
       } catch (err) {
         console.error('Error fetching team detail:', err)
         setDetailError('Failed to load team details.')
@@ -90,6 +93,11 @@ function TeamProfile() {
     }
 
     fetchData()
+
+    // Cleanup: reset team primary color when leaving page
+    return () => {
+      clearTeamPrimaryColor()
+    }
   }, [teamId])
 
   const handleRetryDetail = () => {

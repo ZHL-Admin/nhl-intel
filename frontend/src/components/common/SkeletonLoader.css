@@ -2,7 +2,7 @@
   background: linear-gradient(
     90deg,
     var(--color-bg-elevated) 0%,
-    color-mix(in srgb, var(--color-bg-elevated) 90%, white) 50%,
+    var(--color-bg-surface) 50%,
     var(--color-bg-elevated) 100%
   );
   background-size: 200% 100%;
