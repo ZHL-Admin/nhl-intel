@@ -364,4 +364,10 @@ export interface TeamSituational {
   ga?: number | null
   shots_for?: number | null
   shots_against?: number | null
+  xgf?: number | null
+  xga?: number | null
+  hdcf_per60?: number | null
+  hdca_per60?: number | null
+  zone_entry_success_rate?: number | null
+  shot_attempts?: number | null
 }

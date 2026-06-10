@@ -4,6 +4,12 @@
   padding: var(--space-6);
 }
 
+.game-detail__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
 /* Back Navigation */
 .game-detail__back-nav {
   display: flex;

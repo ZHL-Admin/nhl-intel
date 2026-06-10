@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, Badge, PossessionBar, Tooltip } from '../components/common'
+import { PageLayout, SkeletonLoader } from '../components/common'
 import GameHeader from '../components/games/GameHeader'
-import ShotMap from '../components/visualizations/ShotMap'
-import { getGameDetail, getGamePlayerStats, getGameShots } from '../api/games'
-import { GameDetail as GameDetailType, GamePlayerStats, GameShots } from '../api/types'
+import XGWormChart from '../components/visualizations/XGWormChart'
+import TeamComparisonPanel from '../components/visualizations/TeamComparisonPanel'
+import ShotMapKDE from '../components/visualizations/ShotMapKDE'
+import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
+import GamePlayerStatsTable from '../components/visualizations/GamePlayerStatsTable'
+import RollingContextPanel from '../components/visualizations/RollingContextPanel'
+import { getGameDetail, getGamePlayerStats } from '../api/games'
+import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats } from '../api/types'
 import { getTeamLogoUrl, getTeamColor } from '../utils/teams'
 import './GameDetail.css'
 
@@ -14,7 +19,6 @@ function GameDetail() {
 
   const [gameDetail, setGameDetail] = useState<GameDetailType | null>(null)
   const [playerStats, setPlayerStats] = useState<GamePlayerStats | null>(null)
-  const [shotData, setShotData] = useState<GameShots | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,15 +34,13 @@ function GameDetail() {
       setError(null)
 
       try {
-        const [detail, players, shots] = await Promise.all([
+        const [detail, players] = await Promise.all([
           getGameDetail(parseInt(gameId)),
-          getGamePlayerStats(parseInt(gameId)),
-          getGameShots(parseInt(gameId))
+          getGamePlayerStats(parseInt(gameId))
         ])
 
         setGameDetail(detail)
         setPlayerStats(players)
-        setShotData(shots)
       } catch (err) {
         console.error('Error fetching game data:', err)
         setError('Failed to load game data. Please try again.')
@@ -121,7 +123,7 @@ function GameDetail() {
         {is_preview ? (
           <PreviewModeContent gameDetail={gameDetail} playerStats={playerStats} />
         ) : (
-          <CompletedGameContent gameDetail={gameDetail} playerStats={playerStats} shotData={shotData} />
+          <CompletedGameContent gameDetail={gameDetail} playerStats={playerStats} />
         )}
       </div>
     </PageLayout>
@@ -130,192 +132,105 @@ function GameDetail() {
 
 function CompletedGameContent({
   gameDetail,
-  playerStats,
-  shotData
+  playerStats
 }: {
   gameDetail: GameDetailType
   playerStats: GamePlayerStats | null
-  shotData: GameShots | null
 }) {
-  const { home_team, away_team } = gameDetail
-
-  const xgf_pct_home = home_team.xgf && home_team.xga
-    ? (home_team.xgf / (home_team.xgf + home_team.xga)) * 100
-    : null
-
-  const xgf_pct_away = away_team.xgf && away_team.xga
-    ? (away_team.xgf / (away_team.xgf + away_team.xga)) * 100
-    : null
+  const { home_team, away_team, game_id } = gameDetail
+  const homeTeamColor = getTeamColor(home_team.team_abbrev)
+  const awayTeamColor = getTeamColor(away_team.team_abbrev)
 
   return (
-    <>
-      {/* Team Comparison Panel */}
-      <section className="game-detail__comparison-panel">
+    <div className="game-detail__content">
+      {/* Section 01: xG Worm Chart */}
+      <XGWormChart
+        gameId={game_id}
+        homeTeamAbbrev={home_team.team_abbrev}
+        awayTeamAbbrev={away_team.team_abbrev}
+        homeTeamColor={homeTeamColor}
+        awayTeamColor={awayTeamColor}
+      />
 
-        {/* Metrics */}
-        <div className="comparison-panel__metrics">
-          {/* CF% */}
-          {away_team.cf_pct !== null && home_team.cf_pct !== null && (
-            <div className="comparison-metric">
-              <div className="comparison-metric__label">
-                <Tooltip content="Corsi For Percentage at 5v5 - shot attempts for divided by total shot attempts">
-                  CF%
-                </Tooltip>
-              </div>
-              <div className="comparison-metric__bar">
-                <PossessionBar
-                  homeValue={home_team.cf_pct * 100}
-                  awayValue={away_team.cf_pct * 100}
-                  homeColor={getTeamColor(home_team.team_abbrev)}
-                  awayColor={getTeamColor(away_team.team_abbrev)}
-                />
-              </div>
-            </div>
-          )}
+      {/* Section 02: Team Comparison Panel */}
+      <TeamComparisonPanel
+        gameId={game_id}
+        homeTeamId={home_team.team_id}
+        awayTeamId={away_team.team_id}
+        homeTeamAbbrev={home_team.team_abbrev}
+        awayTeamAbbrev={away_team.team_abbrev}
+        homeTeamColor={homeTeamColor}
+        awayTeamColor={awayTeamColor}
+        homeTeamStats={home_team}
+        awayTeamStats={away_team}
+      />
 
-          {/* xGF% */}
-          {xgf_pct_away !== null && xgf_pct_home !== null && (
-            <div className="comparison-metric">
-              <div className="comparison-metric__label">
-                <Tooltip content="Expected Goals For Percentage at 5v5 - expected goals for divided by total expected goals">
-                  xGF%
-                </Tooltip>
-              </div>
-              <div className="comparison-metric__bar">
-                <PossessionBar
-                  homeValue={xgf_pct_home}
-                  awayValue={xgf_pct_away}
-                  homeColor={getTeamColor(home_team.team_abbrev)}
-                  awayColor={getTeamColor(away_team.team_abbrev)}
-                />
-              </div>
-            </div>
-          )}
+      {/* Section 03: KDE Shot Map */}
+      <ShotMapKDE
+        gameId={game_id}
+        homeTeamAbbrev={home_team.team_abbrev}
+        awayTeamAbbrev={away_team.team_abbrev}
+        homeTeamColor={homeTeamColor}
+        awayTeamColor={awayTeamColor}
+      />
 
-          {/* HDCF / HDCA */}
-          {away_team.hdcf_per60 !== null && home_team.hdcf_per60 !== null && (
-            <div className="comparison-metric">
-              <div className="comparison-metric__label">
-                <Tooltip content="High Danger Chances For/Against per 60 minutes at 5v5">
-                  HDCF / HDCA
-                </Tooltip>
-              </div>
-              <div className="comparison-metric__side-by-side">
-                <div className="comparison-metric__value">
-                  {away_team.hdcf_per60.toFixed(1)} / {away_team.hdca_per60?.toFixed(1) ?? '-'}
-                </div>
-                <div className="comparison-metric__value">
-                  {home_team.hdcf_per60.toFixed(1)} / {home_team.hdca_per60?.toFixed(1) ?? '-'}
-                </div>
-              </div>
-            </div>
-          )}
+      {/* Section 04: Period Breakdown Table */}
+      <PeriodBreakdownTable
+        homeTeamAbbrev={home_team.team_abbrev}
+        awayTeamAbbrev={away_team.team_abbrev}
+        homeTeamColor={homeTeamColor}
+        awayTeamColor={awayTeamColor}
+        homeStats={home_team}
+        awayStats={away_team}
+      />
 
-          {/* Zone Entry Success Rate */}
-          {away_team.zone_entry_success_rate !== null && home_team.zone_entry_success_rate !== null && (
-            <div className="comparison-metric">
-              <div className="comparison-metric__label">
-                <Tooltip content="Percentage of zone entries that were controlled (with possession)">
-                  Zone Entry %
-                </Tooltip>
-              </div>
-              <div className="comparison-metric__side-by-side">
-                <div className="comparison-metric__value">
-                  {(away_team.zone_entry_success_rate * 100).toFixed(1)}%
-                </div>
-                <div className="comparison-metric__value">
-                  {(home_team.zone_entry_success_rate * 100).toFixed(1)}%
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Shot Attempts */}
-          {away_team.shot_attempts !== null && home_team.shot_attempts !== null && (
-            <div className="comparison-metric">
-              <div className="comparison-metric__label">
-                <Tooltip content="Total shot attempts (shots, misses, and blocks) at 5v5">
-                  Shot Attempts
-                </Tooltip>
-              </div>
-              <div className="comparison-metric__side-by-side">
-                <div className="comparison-metric__value">
-                  {away_team.shot_attempts}
-                </div>
-                <div className="comparison-metric__value">
-                  {home_team.shot_attempts}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Shot Map */}
-      {shotData && shotData.home_shots.length > 0 && shotData.away_shots.length > 0 ? (
-        <section className="game-detail__shot-map">
-          <ShotMap
-            mode="game"
-            homeShots={shotData.home_shots}
-            awayShots={shotData.away_shots}
-            homeTeamColor={getTeamColor(home_team.team_abbrev)}
-            awayTeamColor={getTeamColor(away_team.team_abbrev)}
-            homeTeamAbbrev={home_team.team_abbrev}
-            awayTeamAbbrev={away_team.team_abbrev}
-          />
-        </section>
-      ) : (
-        <section className="game-detail__shot-map-placeholder">
-          <h2 className="game-detail__section-title">Shot Map</h2>
-          <div className="shot-map-placeholder">
-            <p className="shot-map-placeholder__label">Shot data unavailable</p>
-          </div>
-        </section>
-      )}
-
-      {/* Roster Section */}
+      {/* Section 05: Player Performance Tables */}
       {playerStats && (
-        <section className="game-detail__roster-section">
-          <h2 className="game-detail__section-title">Rosters</h2>
-          <div className="roster-section">
-            {/* Away Team Roster */}
-            <div className="roster-section__column">
-              <div className="roster-section__header">
-                <img
-                  src={getTeamLogoUrl(away_team.team_abbrev)}
-                  alt={away_team.team_abbrev}
-                  className="roster-section__logo"
-                />
-                <span>{away_team.team_abbrev}</span>
-              </div>
-              <div className="roster-section__players">
-                {playerStats.away_players.map((player) => (
-                  <PlayerRow key={player.player_id} player={player} />
-                ))}
-              </div>
-            </div>
-
-            {/* Home Team Roster */}
-            <div className="roster-section__column">
-              <div className="roster-section__header">
-                <img
-                  src={getTeamLogoUrl(home_team.team_abbrev)}
-                  alt={home_team.team_abbrev}
-                  className="roster-section__logo"
-                />
-                <span>{home_team.team_abbrev}</span>
-              </div>
-              <div className="roster-section__players">
-                {playerStats.home_players.map((player) => (
-                  <PlayerRow key={player.player_id} player={player} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <GamePlayerStatsTable
+          homeTeamAbbrev={home_team.team_abbrev}
+          awayTeamAbbrev={away_team.team_abbrev}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homePlayers={playerStats.home_players}
+          awayPlayers={playerStats.away_players}
+        />
       )}
-    </>
+
+      {/* Section 06: Rolling Context Panel */}
+      <RollingContextPanel
+        gameId={game_id}
+        homeTeamId={home_team.team_id}
+        awayTeamId={away_team.team_id}
+        homeTeamAbbrev={home_team.team_abbrev}
+        awayTeamAbbrev={away_team.team_abbrev}
+        homeTeamColor={homeTeamColor}
+        awayTeamColor={awayTeamColor}
+        homeGameCF={home_team.cf_pct}
+        awayGameCF={away_team.cf_pct}
+      />
+    </div>
   )
+}
+
+function PlayerRow({ player }: { player: PlayerGameStats }) {
+  const initials = player.player_name
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <div className="player-row">
+      <div className="player-row__info">
+        <div className="player-row__avatar">{initials}</div>
+        <div className="player-row__details">
+          <div className="player-row__name">{player.player_name}</div>
+          <div className="player-row__position">{player.position}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PreviewModeContent({
@@ -371,59 +286,6 @@ function PreviewModeContent({
         </section>
       )}
     </>
-  )
-}
-
-function PlayerRow({ player }: { player: any }) {
-  const navigate = useNavigate()
-
-  const handleClick = () => {
-    navigate(`/players/${player.player_id}`)
-  }
-
-  return (
-    <div className="player-row" onClick={handleClick}>
-      <div className="player-row__info">
-        <div className="player-row__avatar">
-          {player.player_name.split(' ').map((n: string) => n[0]).join('')}
-        </div>
-        <div className="player-row__details">
-          <div className="player-row__name">
-            {player.player_name}
-            {player.hot_cold_flag && player.hot_cold_flag !== 'neutral' && (
-              <Badge variant={player.hot_cold_flag as 'hot' | 'cold'} />
-            )}
-          </div>
-          <div className="player-row__position">{player.position}</div>
-        </div>
-      </div>
-      <div className="player-row__stats">
-        {player.toi !== null && (
-          <div className="player-row__stat">
-            <span className="player-row__stat-label">TOI</span>
-            <span className="player-row__stat-value">{player.toi.toFixed(1)}</span>
-          </div>
-        )}
-        {player.goals !== null && (
-          <div className="player-row__stat">
-            <span className="player-row__stat-label">G</span>
-            <span className="player-row__stat-value">{player.goals}</span>
-          </div>
-        )}
-        {player.assists !== null && (
-          <div className="player-row__stat">
-            <span className="player-row__stat-label">A</span>
-            <span className="player-row__stat-value">{player.assists}</span>
-          </div>
-        )}
-        {player.ixg !== null && (
-          <div className="player-row__stat">
-            <span className="player-row__stat-label">ixG</span>
-            <span className="player-row__stat-value">{player.ixg.toFixed(2)}</span>
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
