@@ -40,7 +40,7 @@ async def get_team_detail(
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         """
         season_result = bq_service.query(season_sql)
-        season = season_result[0]['current_season'] if season_result else 20232024
+        season = season_result[0]['current_season'] if season_result else "2025-26"
 
     # Aggregate team stats for the season with rankings
     sql = f"""
@@ -272,7 +272,7 @@ async def get_team_roster(
         FROM {bq_service.get_full_table_id('stg_boxscores')}
         """
         season_result = bq_service.query(season_sql)
-        season = season_result[0]['current_season'] if season_result else 20232024
+        season = season_result[0]['current_season'] if season_result else "2025-26"
 
     # Get player stats aggregated by season
     sql = f"""
@@ -353,7 +353,7 @@ async def get_team_vs_opponent(
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         """
         season_result = bq_service.query(season_sql)
-        season = season_result[0]['current_season'] if season_result else 20232024
+        season = season_result[0]['current_season'] if season_result else "2025-26"
 
     # Find games between these two teams
     sql = f"""
