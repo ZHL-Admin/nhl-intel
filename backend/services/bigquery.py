@@ -274,18 +274,14 @@ class BigQueryService:
             game_id,
             game_date,
             team_id,
-            team_abbrev,
             total_faceoffs,
             faceoffs_won,
             faceoffs_lost,
             faceoff_win_pct,
-            oz_faceoffs,
             oz_faceoffs_won,
             oz_faceoff_win_pct,
-            nz_faceoffs,
             nz_faceoffs_won,
             nz_faceoff_win_pct,
-            dz_faceoffs,
             dz_faceoffs_won,
             dz_faceoff_win_pct
         FROM {self.get_full_table_id('mart_team_faceoffs')}
