@@ -244,11 +244,6 @@ class BigQueryService:
             game_id,
             game_date,
             team_id,
-            team_abbrev,
-            oz_time_seconds,
-            nz_time_seconds,
-            dz_time_seconds,
-            total_time_seconds,
             oz_pct,
             nz_pct,
             dz_pct
