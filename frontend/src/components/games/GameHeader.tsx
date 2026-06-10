@@ -29,7 +29,7 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
       <div
         className="game-header"
         style={{
-          background: `linear-gradient(to right, ${getTeamColor(away_team.team_abbrev)}0D 0%, transparent 30%, transparent 70%, ${getTeamColor(home_team.team_abbrev)}0D 100%)`
+          background: `linear-gradient(to right, ${getTeamColor(away_team.team_abbrev)}26 0%, transparent 30%, transparent 70%, ${getTeamColor(home_team.team_abbrev)}26 100%)`
         }}
       >
         {/* Away Team */}
@@ -93,9 +93,6 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
           />
         </div>
       </div>
-
-      {/* Divider */}
-      <div className="game-header__divider" />
     </div>
   )
 }

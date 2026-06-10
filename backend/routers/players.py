@@ -443,7 +443,7 @@ async def get_player_vs_opponent(
         SELECT DISTINCT g.game_id
         FROM {bq_service.get_full_table_id('stg_boxscores')} g
         WHERE (g.home_team_id = {opponent_id} OR g.away_team_id = {opponent_id})
-          AND g.season = {season}
+          AND g.season = '{season}'
     )
     SELECT
         COUNT(*) as games_played,

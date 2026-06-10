@@ -152,7 +152,7 @@
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-3);
 }
 
 /* Comparison Metrics */
@@ -160,7 +160,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) 0;
+  padding: 0 0 var(--space-2) 0;
   border-bottom: 1px solid var(--color-border-subtle);
 }
 

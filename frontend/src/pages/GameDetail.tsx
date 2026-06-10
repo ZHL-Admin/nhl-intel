@@ -163,18 +163,12 @@ function CompletedGameContent({
                 </Tooltip>
               </div>
               <div className="comparison-metric__bar">
-                <span className="comparison-metric__value comparison-metric__value--away">
-                  {(away_team.cf_pct * 100).toFixed(1)}%
-                </span>
                 <PossessionBar
                   homeValue={home_team.cf_pct * 100}
                   awayValue={away_team.cf_pct * 100}
                   homeColor={getTeamColor(home_team.team_abbrev)}
                   awayColor={getTeamColor(away_team.team_abbrev)}
                 />
-                <span className="comparison-metric__value comparison-metric__value--home">
-                  {(home_team.cf_pct * 100).toFixed(1)}%
-                </span>
               </div>
             </div>
           )}
@@ -188,18 +182,12 @@ function CompletedGameContent({
                 </Tooltip>
               </div>
               <div className="comparison-metric__bar">
-                <span className="comparison-metric__value comparison-metric__value--away">
-                  {xgf_pct_away.toFixed(1)}%
-                </span>
                 <PossessionBar
                   homeValue={xgf_pct_home}
                   awayValue={xgf_pct_away}
                   homeColor={getTeamColor(home_team.team_abbrev)}
                   awayColor={getTeamColor(away_team.team_abbrev)}
                 />
-                <span className="comparison-metric__value comparison-metric__value--home">
-                  {xgf_pct_home.toFixed(1)}%
-                </span>
               </div>
             </div>
           )}

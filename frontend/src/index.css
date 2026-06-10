@@ -10,7 +10,7 @@
    ============================================================================ */
 :root {
   /* Page surfaces */
-  --color-bg-base: #f8f7f4;
+  --color-bg-base: #FFFCFC;
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #f2f1ee;
   --color-bg-overlay: #ffffff;
@@ -97,21 +97,21 @@
    ============================================================================ */
 html[data-theme="dark"] {
   /* Page surfaces */
-  --color-bg-base: #01011b;
-  --color-bg-surface: #080820;
-  --color-bg-elevated: #0f0f2a;
-  --color-bg-overlay: #141435;
+  --color-bg-base: #14141C;
+  --color-bg-surface: #1C1C24;
+  --color-bg-elevated: #26262E;
+  --color-bg-overlay: #2D2D38;
 
   /* Borders */
-  --color-border: #1e1e40;
-  --color-border-subtle: #161630;
-  --color-border-strong: #2a2a55;
+  --color-border: #333340;
+  --color-border-subtle: #26262E;
+  --color-border-strong: #4D4D5C;
 
   /* Text */
-  --color-text-primary: #e8e6f0;
-  --color-text-secondary: #8884a8;
-  --color-text-muted: #4a4870;
-  --color-text-inverse: #01011b;
+  --color-text-primary: #F2F1EE;
+  --color-text-secondary: #B0AFAF;
+  --color-text-muted: #7A7873;
+  --color-text-inverse: #14141C;
 
   /* Accent */
   --color-accent: #e8e6f0;
@@ -154,18 +154,37 @@ body {
 }
 
 /* Subtle noise texture overlay */
-body::before {
-  content: '';
+main::before {
+  content: "";
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+
+  background-image:
+    linear-gradient(to right, var(--color-accent) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-accent) 1px, transparent 1px);
+
+  background-size: 32px 32px;
+
+  opacity: .02;
+
+  z-index: -1;
   pointer-events: none;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+body::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-image: url(https://hex.tech/images/light-bkg-noise.webp);
   background-repeat: repeat;
   background-size: 256px 256px;
+  opacity: 0.06;
   z-index: -1;
 }
 

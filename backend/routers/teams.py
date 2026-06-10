@@ -62,7 +62,7 @@ async def get_team_detail(
             SUM(goals_against) as total_goals_against,
             AVG(zone_entry_success_rate) as zone_entry_success_rate
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
-        WHERE season = {season}
+        WHERE season = '{season}'
         GROUP BY team_id, team_abbrev
     ),
     team_ranks AS (
@@ -192,7 +192,7 @@ async def get_team_trends(
         FROM {bq_service.get_full_table_id('mart_team_rolling')}
         """
         season_result = bq_service.query(season_sql)
-        season = season_result[0]['current_season'] if season_result else 20232024
+        season = season_result[0]['current_season'] if season_result else "2025-26"
 
     # Get rolling trends
     sql = f"""
@@ -203,7 +203,7 @@ async def get_team_trends(
         rolling_hdcf_per60_5gp
     FROM {bq_service.get_full_table_id('mart_team_rolling')}
     WHERE team_id = {team_id}
-      AND season = {season}
+      AND season = '{season}'
       AND has_full_5game_sample = true
     ORDER BY game_date
     LIMIT 50
@@ -371,7 +371,7 @@ async def get_team_vs_opponent(
             ON t1.game_id = t2.game_id
         WHERE t1.team_id = {team_id}
           AND t2.team_id = {opponent_id}
-          AND t1.season = {season}
+          AND t1.season = '{season}'
     )
     SELECT
         COUNT(*) as games_played,

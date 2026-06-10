@@ -42,11 +42,12 @@
 
 .shot-map__toggle-option:hover {
   background: var(--color-bg-overlay);
+  color: var(--color-accent);
 }
 
 .shot-map__toggle-option--active {
   background: var(--color-accent);
-  color: var(--color-text-primary);
+  color: var(--color-accent-subtle);
 }
 
 /* Rink Container */
