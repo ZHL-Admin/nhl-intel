@@ -35,6 +35,11 @@
   color: var(--color-warning);
 }
 
+.badge--luck {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
 .badge__pulse-dot {
   width: 6px;
   height: 6px;

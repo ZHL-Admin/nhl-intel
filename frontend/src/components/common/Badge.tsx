@@ -1,13 +1,14 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import './Badge.css'
 
-type BadgeVariant = 'hot' | 'cold' | 'preview' | 'live' | 'small-sample'
+type BadgeVariant = 'hot' | 'cold' | 'preview' | 'live' | 'small-sample' | 'luck'
 
 interface BadgeProps {
   variant: BadgeVariant
+  label?: string
 }
 
-function Badge({ variant }: BadgeProps) {
+function Badge({ variant, label }: BadgeProps) {
   const getContent = () => {
     switch (variant) {
       case 'hot':
@@ -35,6 +36,8 @@ function Badge({ variant }: BadgeProps) {
         )
       case 'small-sample':
         return <span>Small sample</span>
+      case 'luck':
+        return <span>{label || 'Luck'}</span>
     }
   }
 
