@@ -60,6 +60,8 @@ function generateTitle(
 
 function XGWormChartInner({
   gameId,
+  homeTeamAbbrev,
+  awayTeamAbbrev,
   homeTeamColor,
   awayTeamColor
 }: XGWormChartProps) {
@@ -108,13 +110,27 @@ function XGWormChartInner({
     gameTimeMinutes: point.game_time_seconds / 60,
     positiveValue: point.cumulative_xg_diff > 0 ? point.cumulative_xg_diff : null,
     negativeValue: point.cumulative_xg_diff < 0 ? point.cumulative_xg_diff : null,
+    positiveLineValue: point.cumulative_xg_diff >= 0 ? point.cumulative_xg_diff : null,
+    negativeLineValue: point.cumulative_xg_diff < 0 ? point.cumulative_xg_diff : null,
   }));
 
   const goals = data.filter(point => point.event_type === 'goal');
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart
+    <div className="xg-worm-chart-container" style={{ position: 'relative' }}>
+      {/* Team identification labels */}
+      <div className="xg-worm-team-labels">
+        <div className="xg-worm-team-label xg-worm-team-label--positive">
+          <div className="xg-worm-team-swatch" style={{ backgroundColor: homeTeamColor }} />
+          <span>{homeTeamAbbrev}</span>
+        </div>
+        <div className="xg-worm-team-label xg-worm-team-label--negative">
+          <div className="xg-worm-team-swatch" style={{ backgroundColor: awayTeamColor }} />
+          <span>{awayTeamAbbrev}</span>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart
         data={chartData}
         margin={{ top: 10, right: 30, left: 20, bottom: 20 }}
       >
@@ -125,46 +141,57 @@ function XGWormChartInner({
           label={{ value: 'Game Time (minutes)', position: 'insideBottom', offset: -10 }}
           stroke="var(--color-text-secondary)"
           tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }}
+          ticks={[0, 10, 20, 30, 40, 50, 60, 65, 70]}
+          domain={[0, 'dataMax']}
         />
 
         <YAxis
           label={{ value: 'xG Difference', angle: -90, position: 'insideLeft' }}
           stroke="var(--color-text-secondary)"
           tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }}
+          tickFormatter={(value) => value.toFixed(1)}
         />
 
         <ReferenceLine
           y={0}
-          stroke="var(--color-data-neutral)"
+          stroke="var(--color-border)"
           strokeWidth={1}
           label={{ value: 'Even', fill: 'var(--color-text-muted)', fontSize: 11 }}
         />
 
-        {/* Positive area (home team leading) */}
+        {/* Positive area (home team leading) - use color-mix instead of opacity */}
         <Area
           type="monotone"
           dataKey="positiveValue"
-          fill={homeTeamColor}
-          fillOpacity={0.15}
+          fill={`color-mix(in srgb, ${homeTeamColor} 15%, var(--color-bg-base))`}
           stroke="none"
           connectNulls
         />
 
-        {/* Negative area (away team leading) */}
+        {/* Negative area (away team leading) - use color-mix instead of opacity */}
         <Area
           type="monotone"
           dataKey="negativeValue"
-          fill={awayTeamColor}
-          fillOpacity={0.15}
+          fill={`color-mix(in srgb, ${awayTeamColor} 15%, var(--color-bg-base))`}
           stroke="none"
           connectNulls
         />
 
-        {/* Main line - colored by current value */}
+        {/* Home team line (positive values) */}
         <Line
           type="monotone"
-          dataKey="cumulative_xg_diff"
-          stroke="var(--color-text-primary)"
+          dataKey="positiveLineValue"
+          stroke={homeTeamColor}
+          strokeWidth={2}
+          dot={false}
+          connectNulls
+        />
+
+        {/* Away team line (negative values) */}
+        <Line
+          type="monotone"
+          dataKey="negativeLineValue"
+          stroke={awayTeamColor}
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -206,6 +233,7 @@ function XGWormChartInner({
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -230,7 +258,6 @@ export default function XGWormChart(props: XGWormChartProps) {
 
   return (
     <ChartPanel
-      sectionNumber="01"
       title={title}
       subtitle="Cumulative expected goals differential over game time"
       footer={

@@ -242,23 +242,25 @@ function drawKDEContours(
 
   const contours = density(points);
 
-  // Color scale
-  const colorScale = d3.scaleLinear<string>()
-    .domain([0, d3.max(contours, d => d.value) || 1])
-    .range(['transparent', teamColor]);
+  // Get computed background color from CSS variable
+  const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-base').trim();
 
-  // Draw contours
+  // Draw contours using color-mix blending instead of opacity
+  const maxValue = d3.max(contours, c => c.value) || 1;
+
   g.append('g')
     .attr('class', 'kde-contours')
     .selectAll('path')
     .data(contours)
     .join('path')
     .attr('d', d3.geoPath())
-    .attr('fill', d => colorScale(d.value))
-    .attr('opacity', d => {
-      const maxValue = d3.max(contours, c => c.value) || 1;
+    .attr('fill', d => {
       const normalized = d.value / maxValue;
-      return 0.15 + (normalized * 0.35); // 15% to 50% opacity
+      // At peak density (normalized=1), use full team color
+      // At zero density, use background color
+      // Use color-mix to blend between them
+      const teamColorPercent = Math.round(normalized * 100);
+      return `color-mix(in srgb, ${teamColor} ${teamColorPercent}%, ${bgColor})`;
     })
     .attr('stroke', 'none');
 }
@@ -328,7 +330,6 @@ export default function ShotMapKDE(props: ShotMapKDEProps) {
 
   return (
     <ChartPanel
-      sectionNumber="03"
       title={title}
       subtitle="Shot density and goal locations for each team"
       footer={

@@ -165,7 +165,6 @@ export default function RollingContextPanel({
 
   return (
     <ChartPanel
-      sectionNumber="06"
       title={title}
       subtitle="Performance in context of recent 10-game trend"
       expandable={false}

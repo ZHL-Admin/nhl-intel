@@ -115,7 +115,6 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
 
   return (
     <ChartPanel
-      sectionNumber="04"
       title={title}
       subtitle="Period-by-period statistical breakdown"
       expandable={false}
@@ -126,7 +125,7 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
           <div className="period-breakdown__table">
             <div
               className="period-breakdown__table-header"
-              style={{ backgroundColor: `${awayTeamColor}1A` }}
+              style={{ backgroundColor: `color-mix(in srgb, ${awayTeamColor} 13%, var(--color-bg-base))` }}
             >
               {awayTeamAbbrev}
             </div>
@@ -190,7 +189,7 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
           <div className="period-breakdown__table">
             <div
               className="period-breakdown__table-header"
-              style={{ backgroundColor: `${homeTeamColor}1A` }}
+              style={{ backgroundColor: `color-mix(in srgb, ${homeTeamColor} 13%, var(--color-bg-base))` }}
             >
               {homeTeamAbbrev}
             </div>

@@ -137,7 +137,6 @@ export default function TeamComparisonPanel({
 
   return (
     <ChartPanel
-      sectionNumber="02"
       title="Team Comparison"
       subtitle="How each team performed across all metrics"
       expandable={false}
@@ -160,13 +159,13 @@ export default function TeamComparisonPanel({
         <div className="team-comparison__headers">
           <div
             className="team-comparison__header team-comparison__header--away"
-            style={{ backgroundColor: `${awayTeamColor}1A` }}
+            style={{ backgroundColor: `color-mix(in srgb, ${awayTeamColor} 13%, var(--color-bg-base))` }}
           >
             <span className="team-comparison__team-name">{awayTeamAbbrev}</span>
           </div>
           <div
             className="team-comparison__header team-comparison__header--home"
-            style={{ backgroundColor: `${homeTeamColor}1A` }}
+            style={{ backgroundColor: `color-mix(in srgb, ${homeTeamColor} 13%, var(--color-bg-base))` }}
           >
             <span className="team-comparison__team-name">{homeTeamAbbrev}</span>
           </div>

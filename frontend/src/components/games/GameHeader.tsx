@@ -29,7 +29,7 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
       <div
         className="game-header"
         style={{
-          background: `linear-gradient(to right, ${getTeamColor(away_team.team_abbrev)}26 0%, transparent 30%, transparent 70%, ${getTeamColor(home_team.team_abbrev)}26 100%)`
+          background: `linear-gradient(to right, color-mix(in srgb, ${getTeamColor(away_team.team_abbrev)} 10%, var(--color-bg-base)) 0%, var(--color-bg-base) 30%, var(--color-bg-base) 70%, color-mix(in srgb, ${getTeamColor(home_team.team_abbrev)} 10%, var(--color-bg-base)) 100%)`
         }}
       >
         {/* Away Team */}

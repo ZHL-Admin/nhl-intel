@@ -229,7 +229,6 @@ export default function GamePlayerStatsTable({
 
   return (
     <ChartPanel
-      sectionNumber="05"
       title={title}
       subtitle="Individual player performance and contributions"
       expandable={false}
