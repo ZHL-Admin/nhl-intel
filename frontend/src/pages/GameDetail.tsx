@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { PageLayout, SkeletonLoader } from '../components/common'
 import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
+import BoxscoreSummary from '../components/visualizations/BoxscoreSummary'
 import TeamComparisonPanel from '../components/visualizations/TeamComparisonPanel'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
@@ -155,22 +156,43 @@ function CompletedGameContent({
         awayTeamColor={awayTeamColor}
       />
 
-      {/* Section 02: Team Comparison Panel */}
-      <TeamComparisonPanel
-        gameId={game_id}
-        homeTeamId={home_team.team_id}
-        awayTeamId={away_team.team_id}
-        homeTeamAbbrev={home_team.team_abbrev}
-        awayTeamAbbrev={away_team.team_abbrev}
-        homeTeamColor={homeTeamColor}
-        awayTeamColor={awayTeamColor}
-        homeTeamStats={home_team}
-        awayTeamStats={away_team}
-        situation={situation}
-        onSituationChange={setSituation}
-      />
+      {/* Sections 02 & 03: Two-column layout on desktop */}
+      <div className="game-detail__two-column">
+        {/* Section 02: Boxscore Summary */}
+        <BoxscoreSummary
+          homeTeamAbbrev={home_team.team_abbrev}
+          awayTeamAbbrev={away_team.team_abbrev}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homeStats={{
+            score: home_team.score,
+            shots_on_goal: home_team.shots_on_goal,
+            shot_attempts: home_team.shot_attempts
+          }}
+          awayStats={{
+            score: away_team.score,
+            shots_on_goal: away_team.shots_on_goal,
+            shot_attempts: away_team.shot_attempts
+          }}
+        />
 
-      {/* Section 03: KDE Shot Map */}
+        {/* Section 03: Advanced Stats (Team Comparison Panel) */}
+        <TeamComparisonPanel
+          gameId={game_id}
+          homeTeamId={home_team.team_id}
+          awayTeamId={away_team.team_id}
+          homeTeamAbbrev={home_team.team_abbrev}
+          awayTeamAbbrev={away_team.team_abbrev}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homeTeamStats={home_team}
+          awayTeamStats={away_team}
+          situation={situation}
+          onSituationChange={setSituation}
+        />
+      </div>
+
+      {/* Section 04: KDE Shot Map */}
       <ShotMapKDE
         gameId={game_id}
         homeTeamAbbrev={home_team.team_abbrev}
@@ -180,9 +202,9 @@ function CompletedGameContent({
         situation={situation}
       />
 
-      {/* Sections 04 & 06: Two-column layout on desktop */}
+      {/* Sections 05 & 06: Two-column layout on desktop */}
       <div className="game-detail__two-column">
-        {/* Section 04: Period Breakdown Table */}
+        {/* Section 05: Period Breakdown Table */}
         <PeriodBreakdownTable
           homeTeamAbbrev={home_team.team_abbrev}
           awayTeamAbbrev={away_team.team_abbrev}
@@ -207,7 +229,7 @@ function CompletedGameContent({
         />
       </div>
 
-      {/* Section 05: Player Performance Tables */}
+      {/* Section 07: Player Performance Tables */}
       {playerStats && (
         <GamePlayerStatsTable
           homeTeamAbbrev={home_team.team_abbrev}

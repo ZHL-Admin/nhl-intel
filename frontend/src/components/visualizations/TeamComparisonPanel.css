@@ -5,25 +5,6 @@
   padding: var(--space-4);
 }
 
-.team-comparison__headers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-}
-
-.team-comparison__header {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  text-align: center;
-  font-weight: 500;
-  font-size: var(--text-sm);
-}
-
-.team-comparison__team-name {
-  color: var(--color-text-primary);
-}
-
 .team-comparison__group {
   display: flex;
   flex-direction: column;

@@ -233,3 +233,42 @@ img {
 .mono {
   font-family: var(--font-mono);
 }
+
+/* Grid system for page layout */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--space-6);
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 var(--space-8);
+}
+
+.col-full { grid-column: span 12; }
+.col-8 { grid-column: span 8; }
+.col-6 { grid-column: span 6; }
+.col-4 { grid-column: span 4; }
+
+/* Section title pattern (NOT inside a card) */
+.section-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.section-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.section-gap {
+  margin-top: var(--space-16);
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .col-8, .col-6, .col-4 { grid-column: span 12; }
+  .page-grid { padding: 0 var(--space-4); }
+}

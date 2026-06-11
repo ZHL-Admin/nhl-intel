@@ -7,6 +7,11 @@
 // Game Types
 // ============================================================================
 
+export interface GameDate {
+  date: string
+  gameCount: number
+}
+
 export interface Game {
   game_id: number
   game_date: string
@@ -42,6 +47,7 @@ export interface TeamGameStats {
   xga: number | null
   zone_entry_success_rate: number | null
   shot_attempts: number | null
+  shots_on_goal: number | null
   // Period-by-period breakdowns
   cf_p1?: number | null
   cf_p2?: number | null

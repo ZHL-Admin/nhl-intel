@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Badge } from '../common'
-import { getTeamLogoUrl, getTeamName, getTeamColor, formatGameDate } from '../../utils/teams'
+import { getTeamLogoUrl, getTeamName, getTeamColorWash, formatGameDate } from '../../utils/teams'
 import { GameDetail } from '../../api/types'
 import './GameHeader.css'
 
@@ -29,7 +29,7 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
       <div
         className="game-header"
         style={{
-          background: `linear-gradient(to right, color-mix(in srgb, ${getTeamColor(away_team.team_abbrev)} 10%, var(--color-bg-base)) 0%, var(--color-bg-base) 30%, var(--color-bg-base) 70%, color-mix(in srgb, ${getTeamColor(home_team.team_abbrev)} 10%, var(--color-bg-base)) 100%)`
+          background: `linear-gradient(to right, ${getTeamColorWash(away_team.team_abbrev)} 0%, var(--color-bg-base) 30%, var(--color-bg-base) 70%, ${getTeamColorWash(home_team.team_abbrev)} 100%)`
         }}
       >
         {/* Away Team */}
@@ -55,11 +55,50 @@ function GameHeader({ gameDetail }: GameHeaderProps) {
               <div className="game-header__game-time">{/* Game time would go here if available */}</div>
             </>
           ) : (
-            <div className="game-header__score">
-              <span className="game-header__score-value">{away_team.score ?? 0}</span>
-              <span className="game-header__score-separator">—</span>
-              <span className="game-header__score-value">{home_team.score ?? 0}</span>
-            </div>
+            <>
+              <div className="game-header__score">
+                <span className="game-header__score-value">{away_team.score ?? 0}</span>
+                <span className="game-header__score-separator">—</span>
+                <span className="game-header__score-value">{home_team.score ?? 0}</span>
+              </div>
+
+              {/* Period-by-Period Score Grid */}
+              <div className="period-score-grid">
+                <div className="period-score-grid__header">
+                  <div className="period-score-grid__cell period-score-grid__cell--empty"></div>
+                  <div className="period-score-grid__cell period-score-grid__cell--header mono">1</div>
+                  <div className="period-score-grid__cell period-score-grid__cell--header mono">2</div>
+                  <div className="period-score-grid__cell period-score-grid__cell--header mono">3</div>
+                  <div className="period-score-grid__cell period-score-grid__cell--header mono">T</div>
+                </div>
+                <div className="period-score-grid__row">
+                  <div className="period-score-grid__cell period-score-grid__cell--team">
+                    <img
+                      src={getTeamLogoUrl(away_team.team_abbrev)}
+                      alt={away_team.team_abbrev}
+                      className="period-score-grid__logo"
+                    />
+                  </div>
+                  <div className="period-score-grid__cell mono">{away_team.gf_p1 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{away_team.gf_p2 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{away_team.gf_p3 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{away_team.score ?? 0}</div>
+                </div>
+                <div className="period-score-grid__row">
+                  <div className="period-score-grid__cell period-score-grid__cell--team">
+                    <img
+                      src={getTeamLogoUrl(home_team.team_abbrev)}
+                      alt={home_team.team_abbrev}
+                      className="period-score-grid__logo"
+                    />
+                  </div>
+                  <div className="period-score-grid__cell mono">{home_team.gf_p1 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{home_team.gf_p2 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{home_team.gf_p3 ?? 0}</div>
+                  <div className="period-score-grid__cell mono">{home_team.score ?? 0}</div>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="game-header__game-type">

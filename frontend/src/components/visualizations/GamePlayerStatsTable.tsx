@@ -43,7 +43,7 @@ function generateTitle(homePlayers: PlayerGameStats[], awayPlayers: PlayerGameSt
 
 function PlayerTable({
   players,
-  teamAbbrev,
+  teamAbbrev: _teamAbbrev,
   teamColor
 }: {
   players: PlayerGameStats[];
@@ -78,14 +78,7 @@ function PlayerTable({
   const goalies = sortedPlayers.filter(p => p.position === 'G');
 
   return (
-    <div className="player-table">
-      <div
-        className="player-table__header"
-        style={{ backgroundColor: `color-mix(in srgb, ${teamColor} 13%, var(--color-bg-base))` }}
-      >
-        {teamAbbrev}
-      </div>
-
+    <div className="player-table" style={{ borderTop: `4px solid color-mix(in srgb, ${teamColor} 50%, var(--color-bg-base))`, paddingTop: 'var(--space-3)', borderRadius: 'var(--radius-md)' }}>
       {/* Skaters Table */}
       <div className="player-table__section">
         <table className="stats-table">

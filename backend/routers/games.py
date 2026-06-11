@@ -4,16 +4,65 @@ Provides endpoints for game lists, game details, and game player stats.
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from models.schemas import (
-    Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
+    GameDate, Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
     GameShots, ShotAttempt, XGWormPoint
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+@router.get("/dates", response_model=List[GameDate])
+@cache(ttl=3600)  # 1 hour cache
+async def get_game_dates(
+    from_date: Optional[date] = Query(None, description="Start date for game date range"),
+    to_date: Optional[date] = Query(None, description="End date for game date range"),
+) -> List[GameDate]:
+    """Get list of dates on which games occurred or are scheduled.
+
+    Returns distinct game dates with game counts for date navigation.
+    Default range: 30 days before today through 14 days after today.
+
+    Args:
+        from_date: Optional start date. Defaults to 30 days before today.
+        to_date: Optional end date. Defaults to 14 days after today.
+
+    Returns:
+        List of dates with game counts, sorted in descending order.
+    """
+    # Set default date range if not provided
+    today = datetime.now().date()
+    if from_date is None:
+        from_date = today - timedelta(days=30)
+    if to_date is None:
+        to_date = today + timedelta(days=14)
+
+    # Query for distinct game dates with counts
+    sql = f"""
+    SELECT
+        game_date as date,
+        COUNT(DISTINCT game_id) as game_count
+    FROM {bq_service.get_full_table_id('stg_games')}
+    WHERE game_date BETWEEN '{from_date}' AND '{to_date}'
+    GROUP BY game_date
+    ORDER BY game_date DESC
+    """
+
+    results = bq_service.query(sql)
+
+    game_dates = []
+    for row in results:
+        game_date = GameDate(
+            date=row['date'],
+            game_count=row['game_count']
+        )
+        game_dates.append(game_date)
+
+    return game_dates
 
 
 @router.get("/", response_model=List[Game])
@@ -128,6 +177,8 @@ async def get_game_detail(game_id: int) -> GameDetail:
         away_team_abbrev,
         home_team_score,
         away_team_score,
+        home_team_sog,
+        away_team_sog,
         game_state,
         venue_name
     FROM {bq_service.get_full_table_id('stg_boxscores')}
@@ -199,6 +250,7 @@ async def get_game_detail(game_id: int) -> GameDetail:
                 xga=row.get('xga'),
                 zone_entry_success_rate=row.get('zone_entry_success_rate'),
                 shot_attempts=row.get('shot_attempts_for'),
+                shots_on_goal=game_row['home_team_sog'] if row['home_away'] == 'home' else game_row['away_team_sog'],
                 cf_p1=row.get('cf_p1'),
                 cf_p2=row.get('cf_p2'),
                 cf_p3=row.get('cf_p3'),
@@ -231,12 +283,14 @@ async def get_game_detail(game_id: int) -> GameDetail:
             home_stats = TeamGameStats(
                 team_id=game_row['home_team_id'],
                 team_abbrev=game_row['home_team_abbrev'],
-                score=game_row['home_team_score']
+                score=game_row['home_team_score'],
+                shots_on_goal=game_row.get('home_team_sog')
             )
             away_stats = TeamGameStats(
                 team_id=game_row['away_team_id'],
                 team_abbrev=game_row['away_team_abbrev'],
-                score=game_row['away_team_score']
+                score=game_row['away_team_score'],
+                shots_on_goal=game_row.get('away_team_sog')
             )
     else:
         # Preview game - no stats

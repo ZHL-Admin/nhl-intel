@@ -2,7 +2,24 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint } from './types'
+import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint } from './types'
+
+/**
+ * Fetch list of dates on which games occurred or are scheduled.
+ */
+export async function getGameDates(fromDate?: string, toDate?: string): Promise<GameDate[]> {
+  const response = await apiClient.get<Array<{ date: string; game_count: number }>>(`/games/dates`, {
+    params: {
+      from_date: fromDate,
+      to_date: toDate
+    },
+  })
+  // Transform snake_case API response to camelCase
+  return response.data.map(d => ({
+    date: d.date,
+    gameCount: d.game_count
+  }))
+}
 
 /**
  * Fetch all games for a specific date.

@@ -1,0 +1,83 @@
+.goaltending-box {
+  padding: var(--space-4);
+}
+
+.goaltending-box__cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+.goaltending-box__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.goalie-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-md);
+  border-top: 4px solid;
+}
+
+.goalie-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.goalie-card__logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.goalie-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.goalie-card__name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.goalie-card__position {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.goalie-card__stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.goalie-card__stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.goalie-card__stat-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.goalie-card__stat-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 960px) {
+  .goaltending-box__cards {
+    grid-template-columns: 1fr;
+  }
+}

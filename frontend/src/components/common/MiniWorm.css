@@ -1,0 +1,8 @@
+.mini-worm {
+  display: block;
+}
+
+.mini-worm--empty {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+}

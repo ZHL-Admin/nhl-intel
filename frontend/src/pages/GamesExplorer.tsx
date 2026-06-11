@@ -1,151 +1,214 @@
-import { useState, useEffect } from 'react'
-import { PageLayout } from '../components/common'
-import GameCard from '../components/games/GameCard'
-import GameCardSkeleton from '../components/games/GameCardSkeleton'
-import DateNavigation from '../components/games/DateNavigation'
-import { getGamesByDate } from '../api/games'
-import { Game } from '../api/types'
-import { getTodayDate, formatDateForAPI, formatGameDate } from '../utils/teams'
-import './GamesExplorer.css'
+import { useState, useEffect } from 'react';
+import { PageLayout } from '../components/common';
+import DateStrip from '../components/common/DateStrip';
+import GameOfTheNight from '../components/games/GameOfTheNight';
+import GameCard from '../components/games/GameCard';
+import GameCardSkeleton from '../components/games/GameCardSkeleton';
+import { getGameDates, getGamesByDate } from '../api/games';
+import { GameDate as GameDateType, Game } from '../api/types';
+import { formatDateForAPI } from '../utils/teams';
+import './GamesExplorer.css';
 
 function GamesExplorer() {
-  const [currentDate, setCurrentDate] = useState<Date>(getTodayDate())
-  const [games, setGames] = useState<Game[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [fallbackMessage, setFallbackMessage] = useState<string>('')
-  const [isInitialMount, setIsInitialMount] = useState(true)
+  const [gameDates, setGameDates] = useState<GameDateType[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [todayDate, setTodayDate] = useState<string>('');
+  const [games, setGames] = useState<Game[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [datesLoading, setDatesLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = 'NHL Intel - Games'
-  }, [])
+    document.title = 'NHL Intel - Games';
+    initializeDates();
+  }, []);
 
   useEffect(() => {
-    fetchGames(currentDate, isInitialMount)
-    if (isInitialMount) {
-      setIsInitialMount(false)
+    if (selectedDate) {
+      fetchGames(selectedDate);
     }
-  }, [currentDate])
+  }, [selectedDate]);
 
-  const fetchGames = async (date: Date, isInitialLoad = false) => {
-    setLoading(true)
-    setError(null)
-    setFallbackMessage('')
+  const initializeDates = async () => {
+    setDatesLoading(true);
+    const today = formatDateForAPI(new Date());
+    setTodayDate(today);
 
     try {
-      const dateStr = formatDateForAPI(date)
-      const data = await getGamesByDate(dateStr)
+      const dates = await getGameDates();
 
-      if (data.length === 0 && isInitialLoad) {
-        await findMostRecentGameDate(date)
-      } else {
-        setGames(data)
+      if (dates.length === 0) {
+        setError('No games found in the date range');
+        setDatesLoading(false);
+        return;
       }
+
+      setGameDates(dates);
+
+      // Set initial selected date: today if games exist, otherwise most recent
+      const todayHasGames = dates.some(d => d.date === today);
+      const initialDate = todayHasGames ? today : dates[0].date;
+      setSelectedDate(initialDate);
+
     } catch (err) {
-      console.error('Error fetching games:', err)
-      setError('Failed to load games. Please try again.')
-      setGames([])
+      console.error('Error fetching game dates:', err);
+      setError('Failed to load game schedule');
     } finally {
-      setLoading(false)
+      setDatesLoading(false);
     }
-  }
+  };
 
-  const findMostRecentGameDate = async (startDate: Date) => {
-    let searchDate = new Date(startDate)
-    let attempts = 0
-    const maxAttempts = 30
+  const fetchGames = async (date: string) => {
+    setLoading(true);
+    setError(null);
 
-    while (attempts < maxAttempts) {
-      searchDate.setDate(searchDate.getDate() - 1)
-      attempts++
+    try {
+      const data = await getGamesByDate(date);
 
-      try {
-        const dateStr = formatDateForAPI(searchDate)
-        const data = await getGamesByDate(dateStr)
-
-        if (data.length > 0) {
-          setCurrentDate(searchDate)
-          setGames(data)
-          setFallbackMessage(
-            `No games today - showing most recent games (${formatGameDate(dateStr)})`
-          )
-          return
+      // If no games on selected date (shouldn't happen with DateStrip disabled dates)
+      // auto-redirect to nearest game date
+      if (data.length === 0 && gameDates.length > 0) {
+        const nearestDate = findNearestGameDate(date);
+        if (nearestDate && nearestDate !== date) {
+          setSelectedDate(nearestDate);
+          return;
         }
-      } catch (err) {
-        console.error('Error searching for games:', err)
+      }
+
+      setGames(data);
+    } catch (err) {
+      console.error('Error fetching games:', err);
+      setError('Failed to load games');
+      setGames([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const findNearestGameDate = (targetDate: string): string | null => {
+    if (gameDates.length === 0) return null;
+
+    const target = new Date(targetDate);
+
+    // Search backward first
+    for (let i = 0; i < gameDates.length; i++) {
+      const gameDate = new Date(gameDates[i].date);
+      if (gameDate < target) {
+        return gameDates[i].date;
       }
     }
 
-    setError('No recent games found')
-  }
+    // Search forward
+    for (let i = gameDates.length - 1; i >= 0; i--) {
+      const gameDate = new Date(gameDates[i].date);
+      if (gameDate > target) {
+        return gameDates[i].date;
+      }
+    }
 
-  const handlePreviousDay = () => {
-    const newDate = new Date(currentDate)
-    newDate.setDate(newDate.getDate() - 1)
-    setCurrentDate(newDate)
-  }
+    return gameDates[0]?.date || null;
+  };
 
-  const handleNextDay = () => {
-    const newDate = new Date(currentDate)
-    newDate.setDate(newDate.getDate() + 1)
-    setCurrentDate(newDate)
-  }
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+  };
 
-  const handleDateChange = (date: Date) => {
-    setCurrentDate(date)
-  }
+  // Sort games: Live → Final → Upcoming
+  const sortedGames = [...games].sort((a, b) => {
+    if (a.is_live && !b.is_live) return -1;
+    if (!a.is_live && b.is_live) return 1;
+    if (!a.is_preview && b.is_preview) return -1;
+    if (a.is_preview && !b.is_preview) return 1;
+    return 0;
+  });
 
-  const handleRetry = () => {
-    fetchGames(currentDate)
+  // Select Game of the Night (only for completed dates with multiple games)
+  const selectGameOfTheNight = (): Game | null => {
+    const completedGames = games.filter(g => !g.is_preview && !g.is_live);
+
+    if (completedGames.length <= 1) return null;
+
+    // Heuristic: game with largest xG divergence (mocked for now)
+    // In real implementation, would check for OT/SO first, then xG divergence
+    const hasOT = completedGames.find(g => g.period && g.period.includes('OT'));
+    if (hasOT) return hasOT;
+
+    // For now, return the game with the highest combined score
+    return completedGames.reduce((best, current) => {
+      const bestTotal = (best.home_score || 0) + (best.away_score || 0);
+      const currentTotal = (current.home_score || 0) + (current.away_score || 0);
+      return currentTotal > bestTotal ? current : best;
+    }, completedGames[0]);
+  };
+
+  const gameOfTheNight = selectGameOfTheNight();
+
+  // Filter out Game of the Night from the regular grid
+  const gridGames = gameOfTheNight
+    ? sortedGames.filter(g => g.game_id !== gameOfTheNight.game_id)
+    : sortedGames;
+
+  if (datesLoading) {
+    return (
+      <PageLayout>
+        <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
+          <div style={{ height: '44px', background: 'var(--color-bg-elevated)', borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-6)' }} />
+          <div className="games-explorer__grid">
+            {[1, 2, 3].map((i) => (
+              <GameCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
+      </PageLayout>
+    );
   }
 
   return (
     <PageLayout>
-      <DateNavigation
-        currentDate={currentDate}
-        onPreviousDay={handlePreviousDay}
-        onNextDay={handleNextDay}
-        onDateChange={handleDateChange}
-        fallbackMessage={fallbackMessage}
-      />
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <DateStrip
+          dates={gameDates}
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
+          todayDate={todayDate}
+        />
+      </div>
 
-      {error && (
-        <div className="games-explorer__error">
-          <p className="games-explorer__error-message">{error}</p>
-          <button className="games-explorer__retry-button" onClick={handleRetry}>
-            Retry
-          </button>
-        </div>
-      )}
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 var(--space-8)' }}>
+        {error && (
+          <div className="games-explorer__error">
+            <p className="games-explorer__error-message">{error}</p>
+            <button
+              className="games-explorer__retry-button"
+              onClick={() => fetchGames(selectedDate)}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
-      {loading && !error && (
-        <div className="games-explorer__grid">
-          {[1, 2, 3].map((i) => (
-            <GameCardSkeleton key={i} />
-          ))}
-        </div>
-      )}
+        {loading && !error && (
+          <div className="games-explorer__grid">
+            {[1, 2, 3].map((i) => (
+              <GameCardSkeleton key={i} />
+            ))}
+          </div>
+        )}
 
-      {!loading && !error && games.length === 0 && (
-        <div className="games-explorer__empty">
-          <p className="games-explorer__empty-message">
-            No games scheduled for {formatGameDate(formatDateForAPI(currentDate))}
-          </p>
-          <p className="games-explorer__empty-hint">
-            Use the date navigation above to find games on other dates
-          </p>
-        </div>
-      )}
+        {!loading && !error && games.length > 0 && (
+          <>
+            {gameOfTheNight && <GameOfTheNight game={gameOfTheNight} />}
 
-      {!loading && !error && games.length > 0 && (
-        <div className="games-explorer__grid">
-          {games.map((game) => (
-            <GameCard key={game.game_id} game={game} />
-          ))}
-        </div>
-      )}
+            <div className="games-explorer__grid">
+              {gridGames.map((game) => (
+                <GameCard key={game.game_id} game={game} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </PageLayout>
-  )
+  );
 }
 
-export default GamesExplorer
+export default GamesExplorer;

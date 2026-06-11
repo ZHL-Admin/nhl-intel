@@ -14,15 +14,6 @@
   gap: var(--space-4);
 }
 
-.player-table__header {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  text-align: center;
-  font-weight: 600;
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-
 .player-table__section {
   display: flex;
   flex-direction: column;

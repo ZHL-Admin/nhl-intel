@@ -64,7 +64,7 @@ const TEAM_COLORS: Record<string, string> = {
   BOS: '#FFB81C',
   BUF: '#002654',
   CGY: '#C8102E',
-  CAR: '#CC0000',
+  CAR: '#CE1126',
   CHI: '#CF0A2C',
   COL: '#6F263D',
   CBJ: '#002654',
@@ -99,6 +99,24 @@ const TEAM_COLORS: Record<string, string> = {
  */
 export function getTeamColor(teamAbbrev: string): string {
   return TEAM_COLORS[teamAbbrev] || 'var(--color-accent)'
+}
+
+/**
+ * Get team color with wash treatment for large background areas.
+ * Uses 10% team color mixed with page background for subtle tints.
+ */
+export function getTeamColorWash(teamAbbrev: string): string {
+  const teamColor = getTeamColor(teamAbbrev)
+  return `color-mix(in srgb, ${teamColor} 10%, var(--color-bg-base))`
+}
+
+/**
+ * Get team color with accent treatment for smaller elements.
+ * Uses 50% team color mixed with background for muted, readable color.
+ */
+export function getTeamColorAccent(teamAbbrev: string): string {
+  const teamColor = getTeamColor(teamAbbrev)
+  return `color-mix(in srgb, ${teamColor} 50%, var(--color-bg-base))`
 }
 
 /**
@@ -146,4 +164,36 @@ export function getTodayDate(): Date {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return today
+}
+
+/**
+ * Get the current NHL season ID in YYYYZZZZ format.
+ * Season runs from October to June, so the season year is based on the start year.
+ * For example: 2025-26 season = 20252026
+ */
+export function getCurrentSeasonId(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() // 0-11
+
+  // NHL season typically starts in October (month 9)
+  // If current month is Jan-Sep, we're in the latter half of the season
+  const seasonStartYear = month >= 9 ? year : year - 1
+  const seasonEndYear = seasonStartYear + 1
+
+  return `${seasonStartYear}${seasonEndYear}`
+}
+
+/**
+ * Get player headshot URL from NHL assets.
+ * Format: https://assets.nhle.com/mugs/nhl/{seasonid}/{teamabbrv}/{playerid}.png
+ * Example: https://assets.nhle.com/mugs/nhl/20252026/VGK/8478403.png
+ */
+export function getPlayerHeadshotUrl(
+  playerId: number,
+  teamAbbrev: string,
+  seasonId?: string
+): string {
+  const season = seasonId || getCurrentSeasonId()
+  return `https://assets.nhle.com/mugs/nhl/${season}/${teamAbbrev}/${playerId}.png`
 }

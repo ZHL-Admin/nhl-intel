@@ -11,6 +11,12 @@ from datetime import date, datetime
 # Game Models
 # ============================================================================
 
+class GameDate(BaseModel):
+    """Date with game count for date navigation."""
+    date: date = Field(description="Date on which games occurred or are scheduled")
+    game_count: int = Field(description="Number of games on this date")
+
+
 class Game(BaseModel):
     """Basic game information for game list."""
     game_id: int
@@ -37,6 +43,7 @@ class TeamGameStats(BaseModel):
     xga: Optional[float] = Field(None, description="Expected goals against")
     zone_entry_success_rate: Optional[float] = Field(None, description="Controlled zone entry success rate")
     shot_attempts: Optional[int] = Field(None, description="Total shot attempts")
+    shots_on_goal: Optional[int] = Field(None, description="Shots on goal")
 
     # Period-by-period breakdowns
     cf_p1: Optional[int] = Field(None, description="Corsi for in period 1")

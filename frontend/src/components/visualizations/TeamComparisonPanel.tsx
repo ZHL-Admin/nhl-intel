@@ -56,8 +56,8 @@ export default function TeamComparisonPanel({
   gameId,
   homeTeamId,
   awayTeamId,
-  homeTeamAbbrev,
-  awayTeamAbbrev,
+  homeTeamAbbrev: _homeTeamAbbrev,
+  awayTeamAbbrev: _awayTeamAbbrev,
   homeTeamColor,
   awayTeamColor,
   homeTeamStats,
@@ -158,22 +158,6 @@ export default function TeamComparisonPanel({
       }
     >
       <div className="team-comparison">
-        {/* Column Headers */}
-        <div className="team-comparison__headers">
-          <div
-            className="team-comparison__header team-comparison__header--away"
-            style={{ backgroundColor: `color-mix(in srgb, ${awayTeamColor} 13%, var(--color-bg-base))` }}
-          >
-            <span className="team-comparison__team-name">{awayTeamAbbrev}</span>
-          </div>
-          <div
-            className="team-comparison__header team-comparison__header--home"
-            style={{ backgroundColor: `color-mix(in srgb, ${homeTeamColor} 13%, var(--color-bg-base))` }}
-          >
-            <span className="team-comparison__team-name">{homeTeamAbbrev}</span>
-          </div>
-        </div>
-
         {/* Group 1: Who controlled the puck? */}
         <div className="team-comparison__group">
           <h4 className="team-comparison__group-title">Who controlled the puck?</h4>
@@ -206,23 +190,6 @@ export default function TeamComparisonPanel({
               <PossessionBar
                 homeValue={homeXgfPct}
                 awayValue={awayXgfPct}
-                homeColor={homeTeamColor}
-                awayColor={awayTeamColor}
-              />
-            </div>
-          )}
-
-          {/* FF% (using shot attempts as proxy) */}
-          {currentHome.shot_attempts !== null && currentAway.shot_attempts !== null && (
-            <div className="team-comparison__metric">
-              <div className="team-comparison__metric-label">
-                <Tooltip content="Fenwick For Percentage - unblocked shot attempts for divided by total unblocked shot attempts">
-                  FF%
-                </Tooltip>
-              </div>
-              <PossessionBar
-                homeValue={((currentHome.shot_attempts ?? 0) / ((currentHome.shot_attempts ?? 0) + (currentAway.shot_attempts ?? 0))) * 100}
-                awayValue={((currentAway.shot_attempts ?? 0) / ((currentHome.shot_attempts ?? 0) + (currentAway.shot_attempts ?? 0))) * 100}
                 homeColor={homeTeamColor}
                 awayColor={awayTeamColor}
               />
@@ -306,21 +273,6 @@ export default function TeamComparisonPanel({
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Shots on Goal */}
-          {currentHome.shot_attempts !== null && currentAway.shot_attempts !== null && (
-            <div className="team-comparison__stat-row">
-              <div className="team-comparison__stat-label">
-                <Tooltip content="Total shots on goal">
-                  Shots on Goal
-                </Tooltip>
-              </div>
-              <div className="team-comparison__stat-values">
-                <span className="mono">{currentAway.shot_attempts}</span>
-                <span className="mono">{currentHome.shot_attempts}</span>
-              </div>
             </div>
           )}
 

@@ -123,13 +123,7 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
       <div className="period-breakdown">
         <div className="period-breakdown__tables">
           {/* Away Team Table */}
-          <div className="period-breakdown__table">
-            <div
-              className="period-breakdown__table-header"
-              style={{ backgroundColor: `color-mix(in srgb, ${awayTeamColor} 13%, var(--color-bg-base))` }}
-            >
-              {awayTeamAbbrev}
-            </div>
+          <div className="period-breakdown__table" style={{ borderTop: `4px solid color-mix(in srgb, ${awayTeamColor} 50%, var(--color-bg-base))` }}>
             <table className="period-table">
               <thead>
                 <tr>
@@ -187,13 +181,7 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
           </div>
 
           {/* Home Team Table */}
-          <div className="period-breakdown__table">
-            <div
-              className="period-breakdown__table-header"
-              style={{ backgroundColor: `color-mix(in srgb, ${homeTeamColor} 13%, var(--color-bg-base))` }}
-            >
-              {homeTeamAbbrev}
-            </div>
+          <div className="period-breakdown__table" style={{ borderTop: `4px solid color-mix(in srgb, ${homeTeamColor} 50%, var(--color-bg-base))` }}>
             <table className="period-table">
               <thead>
                 <tr>

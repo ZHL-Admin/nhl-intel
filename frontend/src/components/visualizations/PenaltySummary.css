@@ -1,0 +1,77 @@
+.penalty-summary {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.penalty-summary__period {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.penalty-summary__period-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.penalty-summary__penalties {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.penalty-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+}
+
+.penalty-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.penalty-item__team {
+  display: flex;
+  align-items: center;
+}
+
+.penalty-item__logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.penalty-item__time {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.penalty-item__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.penalty-item__player {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.penalty-item__infraction {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}

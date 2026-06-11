@@ -1,0 +1,120 @@
+.date-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-8);
+  height: 44px;
+}
+
+.date-strip__arrow,
+.date-strip__calendar {
+  background: var(--color-bg-elevated);
+  border: none;
+  border-radius: var(--radius-full);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.date-strip__arrow:hover:not(:disabled),
+.date-strip__calendar:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.date-strip__arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.date-strip__dates {
+  flex: 1;
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.date-strip__dates::-webkit-scrollbar {
+  display: none;
+}
+
+.date-strip__pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-elevated);
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.date-strip__pill:hover {
+  background: var(--color-bg-surface);
+}
+
+.date-strip__pill--selected {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.date-strip__pill-label {
+  font-weight: 500;
+}
+
+.date-strip__pill-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-full);
+  color: var(--color-text-primary);
+}
+
+.date-strip__pill-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-warning);
+  color: var(--color-text-inverse);
+  border-radius: var(--radius-sm);
+}
+
+.date-strip__today {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  transition: opacity 100ms ease;
+}
+
+.date-strip__today:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 960px) {
+  .date-strip {
+    padding: var(--space-4);
+  }
+}
