@@ -6,6 +6,7 @@ interface PeriodBreakdownTableProps {
   awayTeamAbbrev: string;
   homeTeamColor: string;
   awayTeamColor: string;
+  situation: string;
   homeStats: {
     cf_pct_p1?: number | null;
     cf_pct_p2?: number | null;

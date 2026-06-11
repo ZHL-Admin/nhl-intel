@@ -17,6 +17,8 @@ interface TeamComparisonPanelProps {
   awayTeamAbbrev: string;
   homeTeamColor: string;
   awayTeamColor: string;
+  situation: string;
+  onSituationChange: (situation: string) => void;
   // Default data from game detail for 'all' situation
   homeTeamStats: {
     cf_pct: number | null;
@@ -59,9 +61,10 @@ export default function TeamComparisonPanel({
   homeTeamColor,
   awayTeamColor,
   homeTeamStats,
-  awayTeamStats
+  awayTeamStats,
+  situation,
+  onSituationChange
 }: TeamComparisonPanelProps) {
-  const [situation, setSituation] = useState('all');
   const [homeSituational, setHomeSituational] = useState<TeamSituational[]>([]);
   const [awaySituational, setAwaySituational] = useState<TeamSituational[]>([]);
 
@@ -150,7 +153,7 @@ export default function TeamComparisonPanel({
             { value: 'pk', label: 'PK' },
           ]}
           value={situation}
-          onChange={setSituation}
+          onChange={onSituationChange}
         />
       }
     >
@@ -290,7 +293,7 @@ export default function TeamComparisonPanel({
               <ResponsiveContainer width="100%" height={100}>
                 <BarChart data={periodData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                   <XAxis dataKey="period" stroke="var(--color-text-secondary)" tick={{ fontSize: 11 }} />
-                  <YAxis hide />
+                  <YAxis hide tickFormatter={(value) => Math.round(value).toString()} />
                   <Bar dataKey="away" fill={awayTeamColor} radius={[4, 4, 0, 0]}>
                     {periodData.map((_, index) => (
                       <Cell key={`away-${index}`} fill={awayTeamColor} opacity={0.8} />

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import ChartPanel from '../common/ChartPanel';
-import Tabs from '../common/Tabs';
 import { getGameShots } from '../../api/games';
 import { ShotAttempt } from '../../api/types';
 import './ShotMapKDE.css';
@@ -12,6 +11,7 @@ interface ShotMapKDEProps {
   awayTeamAbbrev: string;
   homeTeamColor: string;
   awayTeamColor: string;
+  situation: string;
 }
 
 // Rink dimensions (NHL standard, scaled for SVG)
@@ -308,14 +308,13 @@ function drawGoalMarkers(
 }
 
 export default function ShotMapKDE(props: ShotMapKDEProps) {
-  const [situation, setSituation] = useState('all');
   const [homeShots, setHomeShots] = useState<ShotAttempt[]>([]);
   const [awayShots, setAwayShots] = useState<ShotAttempt[]>([]);
 
   useEffect(() => {
     const fetchTitleData = async () => {
       try {
-        const data = await getGameShots(props.gameId, situation);
+        const data = await getGameShots(props.gameId, props.situation);
         setHomeShots(data.home_shots || []);
         setAwayShots(data.away_shots || []);
       } catch (err) {
@@ -324,7 +323,7 @@ export default function ShotMapKDE(props: ShotMapKDEProps) {
     };
 
     fetchTitleData();
-  }, [props.gameId, situation]);
+  }, [props.gameId, props.situation]);
 
   const title = generateTitle(homeShots, awayShots, props.homeTeamAbbrev, props.awayTeamAbbrev);
 
@@ -332,22 +331,12 @@ export default function ShotMapKDE(props: ShotMapKDEProps) {
     <ChartPanel
       title={title}
       subtitle="Shot density and goal locations for each team"
-      footer={
-        <Tabs
-          options={[
-            { value: 'all', label: 'All Situations' },
-            { value: '5v5', label: '5v5 Only' },
-          ]}
-          value={situation}
-          onChange={setSituation}
-        />
-      }
     >
       <ShotMapKDEChart
         gameId={props.gameId}
         homeTeamColor={props.homeTeamColor}
         awayTeamColor={props.awayTeamColor}
-        situation={situation}
+        situation={props.situation}
       />
     </ChartPanel>
   );

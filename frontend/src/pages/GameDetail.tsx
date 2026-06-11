@@ -141,6 +141,9 @@ function CompletedGameContent({
   const homeTeamColor = getTeamColor(home_team.team_abbrev)
   const awayTeamColor = getTeamColor(away_team.team_abbrev)
 
+  // Lift situation filter state for sections 02, 03, 04
+  const [situation, setSituation] = useState('all')
+
   return (
     <div className="game-detail__content">
       {/* Section 01: xG Worm Chart */}
@@ -163,6 +166,8 @@ function CompletedGameContent({
         awayTeamColor={awayTeamColor}
         homeTeamStats={home_team}
         awayTeamStats={away_team}
+        situation={situation}
+        onSituationChange={setSituation}
       />
 
       {/* Section 03: KDE Shot Map */}
@@ -172,17 +177,35 @@ function CompletedGameContent({
         awayTeamAbbrev={away_team.team_abbrev}
         homeTeamColor={homeTeamColor}
         awayTeamColor={awayTeamColor}
+        situation={situation}
       />
 
-      {/* Section 04: Period Breakdown Table */}
-      <PeriodBreakdownTable
-        homeTeamAbbrev={home_team.team_abbrev}
-        awayTeamAbbrev={away_team.team_abbrev}
-        homeTeamColor={homeTeamColor}
-        awayTeamColor={awayTeamColor}
-        homeStats={home_team}
-        awayStats={away_team}
-      />
+      {/* Sections 04 & 06: Two-column layout on desktop */}
+      <div className="game-detail__two-column">
+        {/* Section 04: Period Breakdown Table */}
+        <PeriodBreakdownTable
+          homeTeamAbbrev={home_team.team_abbrev}
+          awayTeamAbbrev={away_team.team_abbrev}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homeStats={home_team}
+          awayStats={away_team}
+          situation={situation}
+        />
+
+        {/* Section 06: Rolling Context Panel */}
+        <RollingContextPanel
+          gameId={game_id}
+          homeTeamId={home_team.team_id}
+          awayTeamId={away_team.team_id}
+          homeTeamAbbrev={home_team.team_abbrev}
+          awayTeamAbbrev={away_team.team_abbrev}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homeGameCF={home_team.cf_pct}
+          awayGameCF={away_team.cf_pct}
+        />
+      </div>
 
       {/* Section 05: Player Performance Tables */}
       {playerStats && (
@@ -195,19 +218,6 @@ function CompletedGameContent({
           awayPlayers={playerStats.away_players}
         />
       )}
-
-      {/* Section 06: Rolling Context Panel */}
-      <RollingContextPanel
-        gameId={game_id}
-        homeTeamId={home_team.team_id}
-        awayTeamId={away_team.team_id}
-        homeTeamAbbrev={home_team.team_abbrev}
-        awayTeamAbbrev={away_team.team_abbrev}
-        homeTeamColor={homeTeamColor}
-        awayTeamColor={awayTeamColor}
-        homeGameCF={home_team.cf_pct}
-        awayGameCF={away_team.cf_pct}
-      />
     </div>
   )
 }

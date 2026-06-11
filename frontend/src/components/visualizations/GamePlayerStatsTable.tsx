@@ -81,7 +81,7 @@ function PlayerTable({
     <div className="player-table">
       <div
         className="player-table__header"
-        style={{ backgroundColor: `${teamColor}1A` }}
+        style={{ backgroundColor: `color-mix(in srgb, ${teamColor} 13%, var(--color-bg-base))` }}
       >
         {teamAbbrev}
       </div>

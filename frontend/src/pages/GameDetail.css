@@ -428,8 +428,20 @@
   background: var(--color-bg-overlay);
 }
 
+/* Two-column layout for sections 04 & 06 */
+.game-detail__two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
 /* Responsive Design */
 @media (max-width: 960px) {
+  .game-detail__two-column {
+    grid-template-columns: 1fr;
+  }
+
   .comparison-panel {
     grid-template-columns: 1fr;
   }
