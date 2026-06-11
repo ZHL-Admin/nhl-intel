@@ -161,10 +161,17 @@ class BigQueryService:
         sql = f"""
         WITH shot_xg AS (
             SELECT
-                game_seconds,
-                event_team_id,
+                -- Calculate game_seconds from period and time_in_period
+                CASE
+                    WHEN period_number = 1 THEN CAST(SPLIT(time_in_period, ':')[OFFSET(0)] AS INT64) * 60 + CAST(SPLIT(time_in_period, ':')[OFFSET(1)] AS INT64)
+                    WHEN period_number = 2 THEN 1200 + CAST(SPLIT(time_in_period, ':')[OFFSET(0)] AS INT64) * 60 + CAST(SPLIT(time_in_period, ':')[OFFSET(1)] AS INT64)
+                    WHEN period_number = 3 THEN 2400 + CAST(SPLIT(time_in_period, ':')[OFFSET(0)] AS INT64) * 60 + CAST(SPLIT(time_in_period, ':')[OFFSET(1)] AS INT64)
+                    WHEN period_number >= 4 THEN 3600 + CAST(SPLIT(time_in_period, ':')[OFFSET(0)] AS INT64) * 60 + CAST(SPLIT(time_in_period, ':')[OFFSET(1)] AS INT64)
+                    ELSE 0
+                END as game_seconds,
+                event_owner_team_id as event_team_id,
                 is_goal,
-                xg
+                COALESCE(xg_value, 0) as xg
             FROM {self.get_full_table_id('int_shot_types')}
             WHERE game_id = {game_id}
                 {situation_filter}
