@@ -122,18 +122,22 @@ function GamesExplorer() {
     return 0;
   });
 
-  // Select Game of the Night (only for completed dates with multiple games)
+  // Select Game of the Night (for completed games)
   const selectGameOfTheNight = (): Game | null => {
     const completedGames = games.filter(g => !g.is_preview && !g.is_live);
 
-    if (completedGames.length <= 1) return null;
+    // No completed games - no featured game
+    if (completedGames.length === 0) return null;
 
-    // Heuristic: game with largest xG divergence (mocked for now)
-    // In real implementation, would check for OT/SO first, then xG divergence
+    // Single game on the date - always feature it
+    if (completedGames.length === 1) return completedGames[0];
+
+    // Multiple games - select based on heuristic
+    // Priority: OT/SO games, then highest combined score
     const hasOT = completedGames.find(g => g.period && g.period.includes('OT'));
     if (hasOT) return hasOT;
 
-    // For now, return the game with the highest combined score
+    // Return the game with the highest combined score
     return completedGames.reduce((best, current) => {
       const bestTotal = (best.home_score || 0) + (best.away_score || 0);
       const currentTotal = (current.home_score || 0) + (current.away_score || 0);

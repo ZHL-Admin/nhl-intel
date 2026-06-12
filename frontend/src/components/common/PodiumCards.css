@@ -62,12 +62,12 @@
 
 .podium-card__team-logo {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 16px;
-  height: 16px;
+  bottom: -6px;
+  right: -6px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-full);
-  border: 2px solid var(--color-bg-surface);
+  border: 2px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
 }
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import './DateStrip.css';
 
@@ -20,6 +21,19 @@ export default function DateStrip({
   onDateChange,
   todayDate
 }: DateStripProps) {
+  const selectedDateRef = useRef<HTMLButtonElement>(null);
+
+  // Auto-scroll to keep selected date centered
+  useEffect(() => {
+    if (selectedDateRef.current) {
+      selectedDateRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      });
+    }
+  }, [selectedDate]);
+
   const formatDateLabel = (dateStr: string): string => {
     const date = new Date(dateStr);
     const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
@@ -58,6 +72,7 @@ export default function DateStrip({
         {dates.map(date => (
           <button
             key={date.date}
+            ref={selectedDate === date.date ? selectedDateRef : null}
             className={`date-strip__pill ${selectedDate === date.date ? 'date-strip__pill--selected' : ''}`}
             onClick={() => onDateChange(date.date)}
           >

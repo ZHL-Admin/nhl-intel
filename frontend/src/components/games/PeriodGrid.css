@@ -1,0 +1,57 @@
+.period-grid {
+  display: flex;
+  justify-content: center;
+}
+
+.period-grid__table {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.period-grid__header {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: var(--space-2) var(--space-4);
+  text-align: center;
+}
+
+.period-grid__header--team {
+  width: 80px;
+}
+
+.period-grid__row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.period-grid__team {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.period-grid__logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.period-grid__abbrev {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.period-grid__value {
+  text-align: center;
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.period-grid__value--total {
+  font-weight: 600;
+  border-left: 1px solid var(--color-border);
+}

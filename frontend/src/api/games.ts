@@ -8,15 +8,16 @@ import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint } f
  * Fetch list of dates on which games occurred or are scheduled.
  */
 export async function getGameDates(fromDate?: string, toDate?: string): Promise<GameDate[]> {
-  const response = await apiClient.get<Array<{ date: string; game_count: number }>>(`/games/dates`, {
-    params: {
-      from_date: fromDate,
-      to_date: toDate
-    },
+  const params: Record<string, string> = {}
+  if (fromDate) params.from_date = fromDate
+  if (toDate) params.to_date = toDate
+
+  const response = await apiClient.get<Array<{ game_date: string; game_count: number }>>(`/games/dates`, {
+    params,
   })
   // Transform snake_case API response to camelCase
   return response.data.map(d => ({
-    date: d.date,
+    date: d.game_date,
     gameCount: d.game_count
   }))
 }
