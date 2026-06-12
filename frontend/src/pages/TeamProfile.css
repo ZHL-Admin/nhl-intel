@@ -6,6 +6,12 @@
   margin: 0 auto;
 }
 
+.team-profile__content {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
 /* Team Header */
 .team-profile__header {
   display: flex;
