@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, TimelineList, MiniWorm } from '../components/common'
+import ChartPanel from '../components/common/ChartPanel'
 import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
-import BoxscoreSummary from '../components/visualizations/BoxscoreSummary'
 import TeamComparisonPanel from '../components/visualizations/TeamComparisonPanel'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
@@ -772,22 +772,44 @@ function AnalyticsTab({
         />
 
         <div className="game-detail__two-column">
-          <BoxscoreSummary
-            homeTeamAbbrev={home_team.team_abbrev}
-            awayTeamAbbrev={away_team.team_abbrev}
-            homeTeamColor={homeTeamColor}
-            awayTeamColor={awayTeamColor}
-            homeStats={{
-              score: home_team.score,
-              shots_on_goal: home_team.shots_on_goal,
-              shot_attempts: home_team.shot_attempts
-            }}
-            awayStats={{
-              score: away_team.score,
-              shots_on_goal: away_team.shots_on_goal,
-              shot_attempts: away_team.shot_attempts
-            }}
-          />
+          <ChartPanel
+            title="Key Statistics"
+            subtitle="Team performance comparison"
+            expandable={false}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <ComparisonRow
+                label="Goals"
+                awayValue={away_team.score?.toString() || '0'}
+                homeValue={home_team.score?.toString() || '0'}
+                awayRaw={away_team.score || 0}
+                homeRaw={home_team.score || 0}
+                awayColor={awayTeamColor}
+                homeColor={homeTeamColor}
+                showBar={true}
+              />
+              <ComparisonRow
+                label="Shots on Goal"
+                awayValue={away_team.shots_on_goal?.toString() || '0'}
+                homeValue={home_team.shots_on_goal?.toString() || '0'}
+                awayRaw={away_team.shots_on_goal || 0}
+                homeRaw={home_team.shots_on_goal || 0}
+                awayColor={awayTeamColor}
+                homeColor={homeTeamColor}
+                showBar={true}
+              />
+              <ComparisonRow
+                label="Shot Attempts"
+                awayValue={away_team.shot_attempts?.toString() || '0'}
+                homeValue={home_team.shot_attempts?.toString() || '0'}
+                awayRaw={away_team.shot_attempts || 0}
+                homeRaw={home_team.shot_attempts || 0}
+                awayColor={awayTeamColor}
+                homeColor={homeTeamColor}
+                showBar={true}
+              />
+            </div>
+          </ChartPanel>
 
           <TeamComparisonPanel
             gameId={game_id}

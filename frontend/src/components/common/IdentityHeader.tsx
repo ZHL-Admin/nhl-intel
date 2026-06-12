@@ -27,7 +27,7 @@ export default function IdentityHeader({
 
     if (teamColors.away && teamColors.home) {
       return {
-        background: `linear-gradient(to right, color-mix(in srgb, ${teamColors.away} 10%, var(--color-bg-surface)) 0%, var(--color-bg-surface) 50%, color-mix(in srgb, ${teamColors.home} 10%, var(--color-bg-surface)) 100%)`
+        background: `linear-gradient(to right, color-mix(in srgb, ${teamColors.away} 15%, var(--color-bg-surface)) 0%, var(--color-bg-surface) 50%, color-mix(in srgb, ${teamColors.home} 15%, var(--color-bg-surface)) 100%)`
       };
     }
 

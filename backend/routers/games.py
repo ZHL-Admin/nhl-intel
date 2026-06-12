@@ -44,12 +44,12 @@ async def get_game_dates(
     # Query for distinct game dates with counts
     sql = f"""
     SELECT
-        game_date as date,
+        game_date,
         COUNT(DISTINCT game_id) as game_count
     FROM {bq_service.get_full_table_id('stg_games')}
     WHERE game_date BETWEEN '{from_date}' AND '{to_date}'
     GROUP BY game_date
-    ORDER BY game_date DESC
+    ORDER BY game_date ASC
     """
 
     results = bq_service.query(sql)
@@ -57,7 +57,7 @@ async def get_game_dates(
     game_dates = []
     for row in results:
         game_date = GameDate(
-            date=row['date'],
+            game_date=row['game_date'],
             game_count=row['game_count']
         )
         game_dates.append(game_date)

@@ -4,7 +4,8 @@ Defines the data models for API responses following the dashboard spec.
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import datetime
+from datetime import date as DateType
 
 
 # ============================================================================
@@ -13,14 +14,14 @@ from datetime import date, datetime
 
 class GameDate(BaseModel):
     """Date with game count for date navigation."""
-    date: date = Field(description="Date on which games occurred or are scheduled")
+    game_date: DateType = Field(description="Date on which games occurred or are scheduled")
     game_count: int = Field(description="Number of games on this date")
 
 
 class Game(BaseModel):
     """Basic game information for game list."""
     game_id: int
-    game_date: date
+    game_date: DateType
     season: str
     home_team_id: int
     home_team_abbrev: str
@@ -72,7 +73,7 @@ class TeamGameStats(BaseModel):
 class GameDetail(BaseModel):
     """Detailed game information."""
     game_id: int
-    game_date: date
+    game_date: DateType
     season: str
     home_team: TeamGameStats
     away_team: TeamGameStats
@@ -186,7 +187,7 @@ class TeamDetail(BaseModel):
 
 class TeamTrendPoint(BaseModel):
     """Single data point in team trends."""
-    game_date: date
+    game_date: DateType
     value: float
 
 
@@ -273,7 +274,7 @@ class PlayerDetail(BaseModel):
 
 class PlayerTrendPoint(BaseModel):
     """Single data point in player trends."""
-    game_date: date
+    game_date: DateType
     value: float
 
 
@@ -290,7 +291,7 @@ class PlayerTrends(BaseModel):
 class GamelogEntry(BaseModel):
     """Single game entry in player gamelog."""
     game_id: int
-    game_date: date
+    game_date: DateType
     opponent_id: int
     opponent_abbrev: str
     toi: float
