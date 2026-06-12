@@ -761,20 +761,7 @@ function AnalyticsTab({
 
   return (
     <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
-      <div style={{
-        padding: 'var(--space-4)',
-        background: 'var(--color-bg-elevated)',
-        borderRadius: 'var(--radius-lg)',
-        textAlign: 'center',
-        color: 'var(--color-text-secondary)',
-        marginBottom: 'var(--space-6)'
-      }}>
-        <p style={{ fontSize: 'var(--text-sm)' }}>
-          Analytics Tab - Existing visualizations preserved below (will be reorganized in Phase 2/3)
-        </p>
-      </div>
-
-      {/* Existing visualizations preserved here */}
+      {/* Analytics visualizations */}
       <div className="game-detail__content">
         <XGWormChart
           gameId={game_id}
@@ -870,20 +857,7 @@ function PlayersTab({
 
   return (
     <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
-      <div style={{
-        padding: 'var(--space-4)',
-        background: 'var(--color-bg-elevated)',
-        borderRadius: 'var(--radius-lg)',
-        textAlign: 'center',
-        color: 'var(--color-text-secondary)',
-        marginBottom: 'var(--space-6)'
-      }}>
-        <p style={{ fontSize: 'var(--text-sm)' }}>
-          Players Tab - Existing player stats table preserved below (will be reorganized in Phase 2/3)
-        </p>
-      </div>
-
-      {/* Existing player stats table preserved here */}
+      {/* Player stats table */}
       {playerStats && (
         <GamePlayerStatsTable
           homeTeamAbbrev={home_team.team_abbrev}
