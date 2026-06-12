@@ -6,7 +6,6 @@ import Teams from './pages/Teams'
 import TeamProfile from './pages/TeamProfile'
 import Players from './pages/Players'
 import PlayerProfile from './pages/PlayerProfile'
-import DevComponents from './pages/DevComponents'
 
 function App() {
   return (
@@ -19,9 +18,6 @@ function App() {
           <Route path="/teams/:teamId" element={<TeamProfile />} />
           <Route path="/players" element={<Players />} />
           <Route path="/players/:playerId" element={<PlayerProfile />} />
-          {import.meta.env.DEV && (
-            <Route path="/dev/components" element={<DevComponents />} />
-          )}
         </Routes>
       </Router>
     </ErrorBoundary>
