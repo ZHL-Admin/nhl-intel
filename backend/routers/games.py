@@ -2,13 +2,15 @@
 
 Provides endpoints for game lists, game details, and game player stats.
 """
+import math
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import date, datetime, timedelta
 
 from models.schemas import (
     GameDate, Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
-    GameShots, ShotAttempt, XGWormPoint
+    GameShots, ShotAttempt, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat,
+    SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -36,23 +38,43 @@ async def get_game_dates(
     """
     # Set default date range if not provided
     today = datetime.now().date()
+    used_default_range = from_date is None and to_date is None
     if from_date is None:
         from_date = today - timedelta(days=30)
     if to_date is None:
         to_date = today + timedelta(days=14)
+
+    games_table = bq_service.get_full_table_id('stg_games')
 
     # Query for distinct game dates with counts
     sql = f"""
     SELECT
         game_date,
         COUNT(DISTINCT game_id) as game_count
-    FROM {bq_service.get_full_table_id('stg_games')}
+    FROM {games_table}
     WHERE game_date BETWEEN '{from_date}' AND '{to_date}'
     GROUP BY game_date
     ORDER BY game_date ASC
     """
 
     results = bq_service.query(sql)
+
+    # Fall back to the most recent slate of games when the default window is empty
+    # (e.g. during the offseason, or before the current season has been ingested).
+    # This keeps the explorer populated instead of showing "no games" near today.
+    if not results and used_default_range:
+        fallback_sql = f"""
+        SELECT
+            game_date,
+            COUNT(DISTINCT game_id) as game_count
+        FROM {games_table}
+        WHERE game_date >= (
+            SELECT DATE_SUB(MAX(game_date), INTERVAL 45 DAY) FROM {games_table}
+        )
+        GROUP BY game_date
+        ORDER BY game_date ASC
+        """
+        results = bq_service.query(fallback_sql)
 
     game_dates = []
     for row in results:
@@ -102,7 +124,7 @@ async def get_games(
         filters.append(f"(g.home_team_id = {team_id} OR g.away_team_id = {team_id})")
 
     if season:
-        filters.append(f"g.season = {season}")
+        filters.append(f"g.season = '{season}'")
 
     where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
 
@@ -575,3 +597,229 @@ async def get_xg_worm(
         worm_points.append(point)
 
     return worm_points
+
+
+def _goal_strength(situation_code: Optional[str], scoring_is_home: bool) -> str:
+    """Derive a goal's strength (EV/PP/SH/EN) from the situation code.
+
+    situationCode digits are [away_goalie_in, away_skaters, home_skaters, home_goalie_in].
+    """
+    sc = situation_code or ""
+    if len(sc) != 4 or not sc.isdigit():
+        return "EV"
+    away_g, away_sk, home_sk, home_g = (int(sc[0]), int(sc[1]), int(sc[2]), int(sc[3]))
+    if scoring_is_home:
+        scoring_sk, opp_sk, opp_goalie_in = home_sk, away_sk, away_g
+    else:
+        scoring_sk, opp_sk, opp_goalie_in = away_sk, home_sk, home_g
+
+    if opp_goalie_in == 0:
+        return "EN"
+    if scoring_sk > opp_sk:
+        return "PP"
+    if scoring_sk < opp_sk:
+        return "SH"
+    return "EV"
+
+
+@router.get("/{game_id}/goals", response_model=List[GoalDetail])
+@cache(ttl=86400)
+async def get_game_goals(game_id: int) -> List[GoalDetail]:
+    """Get detailed goal info (scorer, assists, strength) for the xG worm tooltip."""
+    rows = bq_service.get_game_goals(game_id)
+
+    goals: List[GoalDetail] = []
+    for row in rows:
+        scoring_is_home = row['event_owner_team_id'] == row['home_team_id']
+        team_abbrev = row['home_team_abbrev'] if scoring_is_home else row['away_team_abbrev']
+
+        assists: List[str] = []
+        if row.get('assist1_player_id') and (row.get('assist1_name') or '').strip():
+            assists.append(row['assist1_name'].strip())
+        if row.get('assist2_player_id') and (row.get('assist2_name') or '').strip():
+            assists.append(row['assist2_name'].strip())
+
+        scorer_name = (row.get('scorer_name') or '').strip() or None
+
+        goals.append(GoalDetail(
+            game_time_seconds=row['game_seconds'],
+            period=row['period_number'],
+            time_in_period=row['time_in_period'],
+            team_id=row['event_owner_team_id'],
+            team_abbrev=team_abbrev,
+            strength=_goal_strength(row.get('situation_code'), scoring_is_home),
+            scorer_id=row.get('scoring_player_id'),
+            scorer_name=scorer_name,
+            scorer_headshot=row.get('scorer_headshot'),
+            assists=assists
+        ))
+
+    return goals
+
+
+# Gaussian smoothing bandwidth (seconds) and sample step for the shot-pressure curve.
+_PRESSURE_BANDWIDTH = 120.0
+_PRESSURE_STEP = 30
+_SQRT_2PI = math.sqrt(2 * math.pi)
+
+
+def _smoothed_rate(shot_times: List[int], t: int) -> float:
+    """Gaussian kernel density of shot timestamps at time t, expressed as shots per 60 min."""
+    if not shot_times:
+        return 0.0
+    density = 0.0
+    for ts in shot_times:
+        z = (t - ts) / _PRESSURE_BANDWIDTH
+        density += math.exp(-0.5 * z * z)
+    density /= (_PRESSURE_BANDWIDTH * _SQRT_2PI)  # shots per second
+    return density * 3600.0  # shots per 60 minutes
+
+
+@router.get("/{game_id}/goaltending", response_model=List[GoaltenderStat])
+@cache(ttl=86400)
+async def get_goaltending(game_id: int) -> List[GoaltenderStat]:
+    """Per-goalie line (shots/goals against) from the goalie in net for each shot."""
+    rows = bq_service.get_goaltending(game_id)
+    out: List[GoaltenderStat] = []
+    for r in rows:
+        out.append(GoaltenderStat(
+            player_id=r['player_id'],
+            goalie_name=(r.get('goalie_name') or '').strip() or 'Goalie',
+            team_abbrev=r.get('team_abbrev') or '',
+            shots_against=int(r.get('shots_against') or 0),
+            goals_against=int(r.get('goals_against') or 0),
+            gsax=round(float(r.get('gsax') or 0.0), 2),
+            headshot=r.get('headshot')
+        ))
+    return out
+
+
+@router.get("/{game_id}/teamstats", response_model=TeamComparisonStats)
+@cache(ttl=86400)
+async def get_team_stats(game_id: int) -> TeamComparisonStats:
+    """Box-score team comparison (goals, shots, PP, hits, faceoffs, etc.) from play-by-play."""
+    row = bq_service.get_team_comparison(game_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return TeamComparisonStats(**{k: int(v or 0) for k, v in row.items()})
+
+
+@router.get("/{game_id}/pressure", response_model=List[PressurePoint])
+@cache(ttl=86400)
+async def get_shot_pressure(game_id: int) -> List[PressurePoint]:
+    """Smoothed unblocked shots/60 per team over game time (shot pressure chart)."""
+    rows = bq_service.get_pressure_shots(game_id)
+    if not rows:
+        return []
+
+    home_times = [r['game_seconds'] for r in rows if r['is_home']]
+    away_times = [r['game_seconds'] for r in rows if not r['is_home']]
+
+    last_shot = max(r['game_seconds'] for r in rows)
+    # Round the timeline up to the end of the period in progress (min one full game).
+    end = max(3600, math.ceil(last_shot / 1200) * 1200)
+
+    points: List[PressurePoint] = []
+    for t in range(0, end + 1, _PRESSURE_STEP):
+        points.append(PressurePoint(
+            game_time_seconds=t,
+            home_rate=round(_smoothed_rate(home_times, t), 2),
+            away_rate=round(_smoothed_rate(away_times, t), 2)
+        ))
+
+    return points
+
+
+@router.get("/{game_id}/specialteams", response_model=List[SpecialTeamsStat])
+@cache(ttl=86400)
+async def get_special_teams(game_id: int) -> List[SpecialTeamsStat]:
+    """Per-team power-play and penalty-kill detail (PP goals/opp/xG/shots, PK saves)."""
+    rows = bq_service.get_special_teams(game_id)
+    out: List[SpecialTeamsStat] = []
+    for r in rows:
+        out.append(SpecialTeamsStat(
+            team_abbrev=r.get('team_abbrev') or '',
+            is_home=bool(r.get('is_home')),
+            pp_goals=int(r.get('pp_goals') or 0),
+            pp_opp=int(r.get('pp_opp') or 0),
+            pp_xg=round(float(r.get('pp_xg') or 0.0), 2),
+            pp_shots=int(r.get('pp_shots') or 0),
+            pk_saves=int(r.get('pk_saves') or 0),
+            pk_shots=int(r.get('pk_shots') or 0),
+        ))
+    return out
+
+
+@router.get("/{game_id}/goalie-danger", response_model=List[GoalieDangerStat])
+@cache(ttl=86400)
+async def get_goalie_danger(game_id: int) -> List[GoalieDangerStat]:
+    """Per-goalie save record split by shot-danger band, plus total GSAx."""
+    rows = bq_service.get_goalie_danger(game_id)
+    out: List[GoalieDangerStat] = []
+    for r in rows:
+        out.append(GoalieDangerStat(
+            player_id=int(r['player_id']),
+            goalie_name=(r.get('goalie_name') or '').strip() or 'Goalie',
+            team_abbrev=r.get('team_abbrev') or '',
+            high_saves=int(r.get('high_saves') or 0),
+            high_shots=int(r.get('high_shots') or 0),
+            med_saves=int(r.get('med_saves') or 0),
+            med_shots=int(r.get('med_shots') or 0),
+            low_saves=int(r.get('low_saves') or 0),
+            low_shots=int(r.get('low_shots') or 0),
+            gsax=round(float(r.get('gsax') or 0.0), 2),
+        ))
+    return out
+
+
+@router.get("/{game_id}/shot-quality", response_model=List[ShotQualityRow])
+@cache(ttl=86400)
+async def get_shot_quality(game_id: int) -> List[ShotQualityRow]:
+    """Per-team shot attempts and goals by danger band (shot-quality ladder)."""
+    rows = bq_service.get_shot_quality(game_id)
+    out: List[ShotQualityRow] = []
+    for r in rows:
+        out.append(ShotQualityRow(
+            band=r.get('band') or '',
+            home_abbrev=r.get('home_abbrev') or '',
+            away_abbrev=r.get('away_abbrev') or '',
+            home_attempts=int(r.get('home_attempts') or 0),
+            home_goals=int(r.get('home_goals') or 0),
+            away_attempts=int(r.get('away_attempts') or 0),
+            away_goals=int(r.get('away_goals') or 0),
+        ))
+    return out
+
+
+def _toi_to_seconds(toi: str) -> int:
+    """Convert a 'MM:SS' time-on-ice string to total seconds."""
+    try:
+        m, s = toi.split(':')
+        return int(m) * 60 + int(s)
+    except (ValueError, AttributeError):
+        return 0
+
+
+@router.get("/{game_id}/skater-impact", response_model=List[SkaterImpact])
+@cache(ttl=86400)
+async def get_skater_impact(game_id: int) -> List[SkaterImpact]:
+    """Per-skater impact line: real TOI + box-score G/A/P joined to individual xG / HDC."""
+    rows = bq_service.get_skater_impact(game_id)
+    out: List[SkaterImpact] = []
+    for r in rows:
+        toi = r.get('toi') or '0:00'
+        out.append(SkaterImpact(
+            player_id=int(r['player_id']),
+            player_name=r.get('player_name') or '',
+            team_abbrev=r.get('team_abbrev') or '',
+            position=r.get('position') or '',
+            toi=toi,
+            toi_seconds=_toi_to_seconds(toi),
+            goals=int(r.get('goals') or 0),
+            assists=int(r.get('assists') or 0),
+            points=int(r.get('points') or 0),
+            shots=int(r.get('shots') or 0),
+            ixg=round(float(r.get('ixg') or 0.0), 2),
+            ihdcf=int(r.get('ihdcf') or 0),
+        ))
+    return out

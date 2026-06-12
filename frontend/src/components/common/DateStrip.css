@@ -10,6 +10,7 @@
 
 .date-strip__arrow,
 .date-strip__calendar {
+  position: relative;
   background: var(--color-bg-elevated);
   border: none;
   border-radius: var(--radius-full);
@@ -21,6 +22,18 @@
   cursor: pointer;
   color: var(--color-text-secondary);
   transition: background 100ms ease, color 100ms ease;
+}
+
+/* Native date input anchors the browser picker to the button but stays invisible */
+.date-strip__calendar-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  padding: 0;
+  pointer-events: none;
 }
 
 .date-strip__arrow:hover:not(:disabled),

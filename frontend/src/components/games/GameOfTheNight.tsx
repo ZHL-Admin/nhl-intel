@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Game } from '../../api/types';
 import MiniWorm from '../common/MiniWorm';
+import { getGameXGWorm } from '../../api/games';
 import { getTeamLogoUrl, getTeamColor } from '../../utils/teams';
 import './GameOfTheNight.css';
 
@@ -13,6 +14,28 @@ export default function GameOfTheNight({ game }: GameOfTheNightProps) {
   const navigate = useNavigate();
   const [homeLogoError, setHomeLogoError] = useState(false);
   const [awayLogoError, setAwayLogoError] = useState(false);
+  const [wormData, setWormData] = useState<{ time: number; diff: number }[]>([]);
+  const [wormGoals, setWormGoals] = useState<{ time: number; label: string }[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getGameXGWorm(game.game_id)
+      .then((points) => {
+        if (!active) return;
+        setWormData(points.map((p) => ({ time: p.game_time_seconds, diff: p.cumulative_xg_diff })));
+        setWormGoals(
+          points
+            .filter((p) => p.event_type === 'goal')
+            .map((p) => ({ time: p.game_time_seconds, label: p.label || '' }))
+        );
+      })
+      .catch(() => {
+        if (active) setWormData([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [game.game_id]);
 
   const handleClick = () => {
     navigate(`/games/${game.game_id}`);
@@ -31,18 +54,6 @@ export default function GameOfTheNight({ game }: GameOfTheNightProps) {
       />
     );
   };
-
-  // Generate mock xG worm data (in real implementation, this would come from API)
-  const generateMockXGData = () => {
-    const points = [];
-    for (let time = 0; time <= 3600; time += 300) {
-      const diff = Math.random() * 2 - 1;
-      points.push({ time, diff });
-    }
-    return points;
-  };
-
-  const xgData = generateMockXGData();
 
   const generateNote = (): string => {
     if (game.ai_note) return game.ai_note;
@@ -90,16 +101,19 @@ export default function GameOfTheNight({ game }: GameOfTheNightProps) {
           <div className="game-of-night__note">{generateNote()}</div>
         </div>
 
-        <div className="game-of-night__right">
-          <div className="game-of-night__worm-label">Expected Goals Flow</div>
-          <MiniWorm
-            data={xgData}
-            homeColor={getTeamColor(game.home_team_abbrev)}
-            awayColor={getTeamColor(game.away_team_abbrev)}
-            width={400}
-            height={80}
-          />
-        </div>
+        {wormData.length > 0 && (
+          <div className="game-of-night__right">
+            <div className="game-of-night__worm-label">Expected Goals Flow</div>
+            <MiniWorm
+              data={wormData}
+              goals={wormGoals}
+              homeColor={getTeamColor(game.home_team_abbrev)}
+              awayColor={getTeamColor(game.away_team_abbrev)}
+              width={400}
+              height={80}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

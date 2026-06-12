@@ -407,3 +407,114 @@ class XGWormPoint(BaseModel):
     event_type: Optional[str] = Field(None, description="'goal' for goal events, null otherwise")
     team_id: Optional[int] = Field(None, description="Team ID for goal events, null otherwise")
     label: Optional[str] = Field(None, description="Goal label like 'CAR 1-0', null for non-events")
+
+
+class PressurePoint(BaseModel):
+    """Smoothed shots/60 rate for each team at one game-time sample (shot pressure chart)."""
+    game_time_seconds: int = Field(description="Seconds elapsed in game at this sample")
+    home_rate: float = Field(description="Home team smoothed unblocked shots per 60 minutes")
+    away_rate: float = Field(description="Away team smoothed unblocked shots per 60 minutes")
+
+
+class GoaltenderStat(BaseModel):
+    """A goalie's line for a game, from the goalie who was actually in net per shot."""
+    player_id: int
+    goalie_name: str
+    team_abbrev: str
+    shots_against: int
+    goals_against: int
+    gsax: float = 0.0
+    headshot: Optional[str] = None
+
+
+class TeamComparisonStats(BaseModel):
+    """Box-score style team-vs-team counts for the Overview comparison, from play-by-play."""
+    home_team_id: int
+    away_team_id: int
+    home_goals: int
+    away_goals: int
+    home_sog: int
+    away_sog: int
+    home_pp_goals: int
+    away_pp_goals: int
+    home_penalties: int
+    away_penalties: int
+    home_pim: int
+    away_pim: int
+    home_hits: int
+    away_hits: int
+    home_faceoff_wins: int
+    away_faceoff_wins: int
+    home_blocks: int
+    away_blocks: int
+    home_giveaways: int
+    away_giveaways: int
+    home_takeaways: int
+    away_takeaways: int
+
+
+class GoalDetail(BaseModel):
+    """Detailed information about a single goal, for the xG worm goal tooltip."""
+    game_time_seconds: int = Field(description="Seconds elapsed in game when the goal was scored")
+    period: int = Field(description="Period number (4+ = overtime)")
+    time_in_period: str = Field(description="Elapsed clock within the period, mm:ss")
+    team_id: int = Field(description="Scoring team ID")
+    team_abbrev: str = Field(description="Scoring team abbreviation")
+    strength: str = Field(description="Goal strength: EV, PP, SH, or EN")
+    scorer_id: Optional[int] = Field(None, description="Scorer player ID")
+    scorer_name: Optional[str] = Field(None, description="Scorer full name")
+    scorer_headshot: Optional[str] = Field(None, description="Scorer headshot image URL")
+    assists: List[str] = Field(default_factory=list, description="Assisting player names, in order")
+
+
+class SpecialTeamsStat(BaseModel):
+    """A team's power-play and penalty-kill detail for one game."""
+    team_abbrev: str
+    is_home: bool
+    pp_goals: int
+    pp_opp: int
+    pp_xg: float
+    pp_shots: int
+    pk_saves: int
+    pk_shots: int
+
+
+class GoalieDangerStat(BaseModel):
+    """A goalie's save record split by shot-danger band, plus total GSAx."""
+    player_id: int
+    goalie_name: str
+    team_abbrev: str
+    high_saves: int
+    high_shots: int
+    med_saves: int
+    med_shots: int
+    low_saves: int
+    low_shots: int
+    gsax: float
+
+
+class ShotQualityRow(BaseModel):
+    """Shot attempts and goals by danger band, per team (the shot-quality ladder)."""
+    band: str
+    home_abbrev: str
+    away_abbrev: str
+    home_attempts: int
+    home_goals: int
+    away_attempts: int
+    away_goals: int
+
+
+class SkaterImpact(BaseModel):
+    """A skater's impact line: real TOI + box-score scoring + individual xG / HDC."""
+    player_id: int
+    player_name: str
+    team_abbrev: str
+    position: str
+    toi: str
+    toi_seconds: int
+    goals: int
+    assists: int
+    points: int
+    shots: int
+    ixg: float
+    ihdcf: int

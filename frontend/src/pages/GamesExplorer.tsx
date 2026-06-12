@@ -45,9 +45,10 @@ function GamesExplorer() {
 
       setGameDates(dates);
 
-      // Set initial selected date: today if games exist, otherwise most recent
+      // Set initial selected date: today if games exist, otherwise the most recent
+      // game date. Dates come back in ascending order, so the last entry is newest.
       const todayHasGames = dates.some(d => d.date === today);
-      const initialDate = todayHasGames ? today : dates[0].date;
+      const initialDate = todayHasGames ? today : dates[dates.length - 1].date;
       setSelectedDate(initialDate);
 
     } catch (err) {
@@ -113,6 +114,42 @@ function GamesExplorer() {
     setSelectedDate(date);
   };
 
+  // Shift a YYYY-MM-DD string by N days using local date parts (tz-safe)
+  const offsetDate = (dateStr: string, days: number): string => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    return formatDateForAPI(dt);
+  };
+
+  const closestDate = (list: GameDateType[], target: string): string => {
+    const t = new Date(target).getTime();
+    return list.reduce((best, cur) =>
+      Math.abs(new Date(cur.date).getTime() - t) < Math.abs(new Date(best.date).getTime() - t)
+        ? cur : best
+    ).date;
+  };
+
+  // Calendar picker: load the slate of game dates around any chosen date so the user
+  // can jump to arbitrary periods (e.g. weeks/months/seasons back), not just the
+  // default window. Selects the exact date if it had games, else the nearest one.
+  const handlePickDate = async (date: string) => {
+    try {
+      const newDates = await getGameDates(offsetDate(date, -45), offsetDate(date, 15));
+      if (newDates.length === 0) {
+        setError(`No games found near ${date}`);
+        return;
+      }
+      setError(null);
+      setGameDates(newDates);
+      const exact = newDates.find(d => d.date === date);
+      setSelectedDate(exact ? date : closestDate(newDates, date));
+    } catch (err) {
+      console.error('Error loading games for picked date:', err);
+      setError('Failed to load games for that date');
+    }
+  };
+
   // Sort games: Live → Final → Upcoming
   const sortedGames = [...games].sort((a, b) => {
     if (a.is_live && !b.is_live) return -1;
@@ -174,6 +211,7 @@ function GamesExplorer() {
           dates={gameDates}
           selectedDate={selectedDate}
           onDateChange={handleDateChange}
+          onPickDate={handlePickDate}
           todayDate={todayDate}
         />
       </div>

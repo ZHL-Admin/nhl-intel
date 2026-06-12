@@ -39,6 +39,13 @@
   --color-warning: #b7770d;
   --color-warning-bg: #fdf6e8;
 
+  /* Live indicator (constant across themes) */
+  --color-live: #dc2626;
+  --color-live-text: #ffffff;
+
+  /* Text that sits on top of a saturated team/accent color fill */
+  --color-text-on-accent: #ffffff;
+
   /* Data visualization palette */
   --color-data-1: #2563eb;
   --color-data-2: #ea580c;
@@ -184,7 +191,7 @@ body::before {
   background-image: url(https://hex.tech/images/light-bkg-noise.webp);
   background-repeat: repeat;
   background-size: 256px 256px;
-  opacity: 0.06;
+  opacity: 0.04;
   z-index: -1;
 }
 

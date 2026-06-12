@@ -12,6 +12,7 @@ interface DateStripProps {
   dates: GameDate[];
   selectedDate: string;
   onDateChange: (date: string) => void;
+  onPickDate?: (date: string) => void;
   todayDate: string;
 }
 
@@ -19,9 +20,23 @@ export default function DateStrip({
   dates,
   selectedDate,
   onDateChange,
+  onPickDate,
   todayDate
 }: DateStripProps) {
   const selectedDateRef = useRef<HTMLButtonElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const openPicker = () => {
+    const input = dateInputRef.current;
+    if (!input) return;
+    // showPicker() is supported in modern browsers; fall back to focus+click
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    } else {
+      input.focus();
+      input.click();
+    }
+  };
 
   // Auto-scroll to keep selected date centered
   useEffect(() => {
@@ -95,8 +110,26 @@ export default function DateStrip({
         <ChevronRight size={20} />
       </button>
 
-      <button className="date-strip__calendar">
+      <button
+        className="date-strip__calendar"
+        onClick={openPicker}
+        aria-label="Jump to a date"
+      >
         <Calendar size={18} />
+        <input
+          ref={dateInputRef}
+          type="date"
+          className="date-strip__calendar-input"
+          value={selectedDate || todayDate}
+          max={todayDate}
+          onChange={(e) => {
+            if (e.target.value) {
+              (onPickDate ?? onDateChange)(e.target.value);
+            }
+          }}
+          tabIndex={-1}
+          aria-hidden="true"
+        />
       </button>
 
       {showTodayButton && (

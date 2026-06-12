@@ -29,7 +29,7 @@ import argparse
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, date as date_cls, timedelta
 from pathlib import Path
 from typing import List, Dict, Set
 import httpx
@@ -78,15 +78,15 @@ class BackfillStats:
         print(f"{'='*60}\n")
 
 
-async def enumerate_season_games(season: str, bq_client: bigquery.Client) -> tuple[List[int], BackfillStats]:
-    """Enumerate all game IDs for a season.
+async def enumerate_season_games(season: str, bq_client: bigquery.Client) -> tuple[List[int], List[dict], BackfillStats]:
+    """Enumerate all game IDs for a season and collect schedule data.
 
     Args:
         season: Season string in format "YYYY-YY" (e.g., "2023-24").
         bq_client: BigQuery client for checking existing games.
 
     Returns:
-        Tuple of (game_ids_to_fetch, stats).
+        Tuple of (game_ids_to_fetch, schedule_responses, stats).
     """
     stats = BackfillStats(season)
 
@@ -96,42 +96,47 @@ async def enumerate_season_games(season: str, bq_client: bigquery.Client) -> tup
     print(f"\n[{season}] Enumerating games for season {season} (API ID: {api_season_id})")
 
     all_game_ids = set()
+    schedule_responses = []  # Collect all schedule API responses
 
-    # Sample dates across the season (October through June)
-    sample_days = [1, 10, 20]
+    # Walk the entire season week-by-week. Each /schedule/{date} call returns a full
+    # gameWeek, so stepping 7 days at a time covers every game day with no gaps.
+    # Range spans Oct 1 (season start) through Jul 1 to include the full playoffs.
+    season_start = date_cls(start_year, 10, 1)
+    season_end = date_cls(start_year + 1, 7, 1)
 
-    for month_offset in range(9):  # October through June
-        target_month = 10 + month_offset
-        target_year = start_year
+    current = season_start
+    while current < season_end:
+        target_date = current.isoformat()
 
-        if target_month > 12:
-            target_month -= 12
-            target_year += 1
+        try:
+            schedule_data = get_schedule(target_date)
+            game_week = schedule_data.get("gameWeek", [])
 
-        for day in sample_days:
-            target_date = f"{target_year}-{target_month:02d}-{day:02d}"
+            # Save schedule response if it has games for this season
+            has_season_games = False
+            for week_day in game_week:
+                games = week_day.get("games", [])
+                for game in games:
+                    game_id = game.get("id")
+                    game_season = game.get("season")
 
-            try:
-                schedule_data = get_schedule(target_date)
-                game_week = schedule_data.get("gameWeek", [])
+                    if game_id and game_season == api_season_id:
+                        all_game_ids.add(game_id)
+                        has_season_games = True
 
-                for week_day in game_week:
-                    games = week_day.get("games", [])
-                    for game in games:
-                        game_id = game.get("id")
-                        game_season = game.get("season")
+            if has_season_games:
+                schedule_responses.append(schedule_data)
 
-                        if game_id and game_season == api_season_id:
-                            all_game_ids.add(game_id)
+            await asyncio.sleep(0.1)  # Small delay between requests
 
-                await asyncio.sleep(0.1)  # Small delay between requests
+        except Exception as e:
+            print(f"[{season}] Warning: Could not fetch schedule for {target_date}: {e}")
 
-            except Exception as e:
-                print(f"[{season}] Warning: Could not fetch schedule for {target_date}: {e}")
-                continue
+        current += timedelta(days=7)
 
     stats.total_games = len(all_game_ids)
     print(f"[{season}] Found {stats.total_games} total games")
+    print(f"[{season}] Collected {len(schedule_responses)} schedule responses")
 
     # Check for existing games in BigQuery
     project_id = os.getenv("GCP_PROJECT_ID")
@@ -159,7 +164,7 @@ async def enumerate_season_games(season: str, bq_client: bigquery.Client) -> tup
         games_to_fetch = sorted(list(all_game_ids))
         stats.games_to_fetch = len(games_to_fetch)
 
-    return games_to_fetch, stats
+    return games_to_fetch, schedule_responses, stats
 
 
 async def fetch_with_retry(
@@ -307,19 +312,52 @@ async def fetch_single_game(
         })
 
 
-def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], failures: List[dict], season: str):
+def _trim_schedule_response(resp: dict) -> dict:
+    """Reduce a schedule API response to the minimal fields stg_games consumes.
+
+    The NHL schedule feed carries many volatile nested fields (e.g. gameWeek.datePromo,
+    tvBroadcasts) whose types drift between API versions and break the BigQuery load.
+    stg_games only reads game ids and the week date, so we strip everything else. This
+    also keeps raw_games matching its existing thin schema.
+    """
+    trimmed_weeks = []
+    for week_day in resp.get("gameWeek", []):
+        trimmed_weeks.append({
+            "date": week_day.get("date"),
+            "games": [
+                {"id": game.get("id")}
+                for game in week_day.get("games", [])
+                if game.get("id") is not None
+            ],
+        })
+    return {"gameWeek": trimmed_weeks}
+
+
+def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_responses: List[dict], failures: List[dict], season: str):
     """Load fetched data to BigQuery.
 
     Args:
         boxscores: List of boxscore dicts.
         play_by_plays: List of play-by-play dicts.
+        schedule_responses: List of schedule API response dicts.
         failures: List of failure dicts.
         season: Season string.
     """
     project_id = os.getenv("GCP_PROJECT_ID")
     dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
 
-    print(f"[{season}] Loading to BigQuery: {len(boxscores)} boxscores, {len(play_by_plays)} play-by-plays")
+    print(f"[{season}] Loading to BigQuery: {len(schedule_responses)} schedules, {len(boxscores)} boxscores, {len(play_by_plays)} play-by-plays")
+
+    if schedule_responses:
+        trimmed_schedules = [_trim_schedule_response(r) for r in schedule_responses]
+        load_json_to_bigquery(
+            project_id=project_id,
+            dataset_id=dataset_raw,
+            table_id="raw_games",
+            data=trimmed_schedules,
+            season=season,
+        )
+        print(f"[{season}] ✓ Loaded {len(schedule_responses)} schedule responses")
 
     if boxscores:
         load_json_to_bigquery(
@@ -372,8 +410,8 @@ async def backfill_season(season: str, dry_run: bool = False, max_concurrent: in
     """
     bq_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"))
 
-    # Enumerate games
-    game_ids, stats = await enumerate_season_games(season, bq_client)
+    # Enumerate games and collect schedule data
+    game_ids, schedule_responses, stats = await enumerate_season_games(season, bq_client)
 
     if dry_run:
         print(f"[{season}] Dry run complete - would fetch {stats.games_to_fetch} games")
@@ -381,14 +419,18 @@ async def backfill_season(season: str, dry_run: bool = False, max_concurrent: in
 
     if stats.games_to_fetch == 0:
         print(f"[{season}] No games to fetch - all data already in BigQuery")
+        # Still load schedule data even if no new games to fetch
+        if schedule_responses:
+            print(f"[{season}] Loading schedule data to raw_games")
+            load_to_bigquery([], [], schedule_responses, [], season)
         stats.print_summary()
         return stats
 
     # Fetch data
     boxscores, play_by_plays, failures = await fetch_game_data(game_ids, season, stats, max_concurrent)
 
-    # Load to BigQuery
-    load_to_bigquery(boxscores, play_by_plays, failures, season)
+    # Load to BigQuery (including schedule data)
+    load_to_bigquery(boxscores, play_by_plays, schedule_responses, failures, season)
 
     stats.print_summary()
     return stats
@@ -405,7 +447,7 @@ def drop_raw_tables():
 
     client = bigquery.Client(project=project_id)
 
-    tables_to_drop = ["raw_boxscores", "raw_play_by_play", "raw_rosters"]
+    tables_to_drop = ["raw_games", "raw_boxscores", "raw_play_by_play", "raw_rosters"]
 
     print(f"\n{'='*60}")
     print(f"Dropping raw tables in {dataset_raw}")

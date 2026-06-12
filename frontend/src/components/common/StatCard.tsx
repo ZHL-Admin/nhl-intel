@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react'
 import Tooltip from './Tooltip'
 import './StatCard.css'
 
@@ -12,10 +13,10 @@ interface StatCardProps {
 }
 
 function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, trendLabel }: StatCardProps) {
-  const getRankColor = (rank: number): string => {
-    if (rank <= 10) return 'var(--color-data-positive)'
-    if (rank >= 23) return 'var(--color-data-negative)'
-    return 'var(--color-text-muted)'
+  const getRankTier = (rank: number): string => {
+    if (rank <= 10) return 'top'
+    if (rank >= 23) return 'bottom'
+    return 'mid'
   }
 
   const getRankText = (rank: number): string => {
@@ -43,10 +44,6 @@ function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, tren
       })
       .join(' ')
 
-    const sparklineColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--color-team-primary')
-      .trim() || 'var(--color-data-1)'
-
     return (
       <svg
         width={width}
@@ -57,7 +54,7 @@ function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, tren
         <polyline
           points={points}
           fill="none"
-          stroke={sparklineColor}
+          style={{ stroke: 'var(--color-team-primary)' }}
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -77,15 +74,19 @@ function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, tren
     return delta.toFixed(1)
   }
 
-  const card = (
+  return (
     <div className="stat-card">
-      <div className="stat-card__label">{label}</div>
+      <div className="stat-card__header">
+        <span className="stat-card__label">{label}</span>
+        {tooltip && (
+          <Tooltip content={tooltip}>
+            <Info size={14} className="stat-card__info-icon" />
+          </Tooltip>
+        )}
+      </div>
       <div className="stat-card__value mono">{value}</div>
       {rank !== undefined && (
-        <div
-          className="stat-card__rank"
-          style={{ color: getRankColor(rank) }}
-        >
+        <div className={`stat-card__rank stat-card__rank--${getRankTier(rank)}`}>
           {getRankText(rank)}
         </div>
       )}
@@ -107,12 +108,6 @@ function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, tren
       )}
     </div>
   )
-
-  if (tooltip) {
-    return <Tooltip content={tooltip}>{card}</Tooltip>
-  }
-
-  return card
 }
 
 export default StatCard

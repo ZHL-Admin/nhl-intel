@@ -13,10 +13,29 @@
   box-shadow: var(--shadow-lg);
 }
 
+.stat-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .stat-card__label {
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+.stat-card__info-icon {
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: help;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+.stat-card:hover .stat-card__info-icon {
+  opacity: 1;
 }
 
 .stat-card__value {
@@ -27,8 +46,27 @@
 }
 
 .stat-card__rank {
+  align-self: flex-start;
   font-size: var(--text-xs);
-  line-height: var(--text-xs-height);
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  line-height: 1;
+}
+
+.stat-card__rank--top {
+  color: var(--color-success);
+  background-color: var(--color-success-bg);
+}
+
+.stat-card__rank--bottom {
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+}
+
+.stat-card__rank--mid {
+  color: var(--color-text-muted);
+  background-color: var(--color-bg-elevated);
 }
 
 .stat-card__trend {

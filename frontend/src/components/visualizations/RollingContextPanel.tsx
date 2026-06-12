@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ChartPanel from '../common/ChartPanel';
+import SkeletonLoader from '../common/SkeletonLoader';
 import { getTeamTrends } from '../../api/teams';
 import { TeamTrends } from '../../api/types';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -18,7 +19,7 @@ interface RollingContextPanelProps {
 }
 
 function renderSparkline(data: number[], color: string): JSX.Element {
-  if (data.length === 0) return <div className="sparkline-empty">-</div>;
+  if (data.length === 0) return <div className="sparkline-empty" title="No recent games available">—</div>;
 
   const width = 60;
   const height = 24;
@@ -98,7 +99,7 @@ function TeamRollingContext({
     return (
       <div className="rolling-context__row">
         <div className="rolling-context__team">{teamAbbrev}</div>
-        <div className="rolling-context__loading">Loading...</div>
+        <div className="rolling-context__loading"><SkeletonLoader height={24} /></div>
       </div>
     );
   }
@@ -128,8 +129,8 @@ function TeamRollingContext({
       <div className="rolling-context__sparkline">
         {renderSparkline(last10CF, teamColor)}
       </div>
-      <div className="rolling-context__value mono">
-        {rolling5CF !== null ? (rolling5CF * 100).toFixed(1) + '%' : '-'}
+      <div className="rolling-context__value mono" title={rolling5CF === null ? 'Rolling 5-game CF% not yet available' : undefined}>
+        {rolling5CF !== null ? (rolling5CF * 100).toFixed(1) + '%' : '—'}
       </div>
       <div className="rolling-context__trend" style={{ color: trendColor }}>
         <TrendIcon size={16} />

@@ -411,17 +411,19 @@ function OverviewTab({
             value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)}
             rank={teamDetail.ga_per_gp_rank}
           />
-          <StatCard
-            label="PDO"
-            value="1.005"
-            rank={16}
-            tooltip="PDO measures shooting % + save % at 5v5. Values above 1.000 suggest good luck, below suggests bad luck. League average is 1.000."
-          />
-          <StatCard
-            label="Zone Entry Success"
-            value={teamDetail.zone_entry_success_rate ? `${(teamDetail.zone_entry_success_rate * 100).toFixed(1)}%` : 'N/A'}
-            rank={teamDetail.zone_entry_success_rate_rank || undefined}
-          />
+          {teamDetail.zone_entry_success_rate != null && (
+            <StatCard
+              label="Zone Entry Success"
+              value={`${(teamDetail.zone_entry_success_rate * 100).toFixed(1)}%`}
+              rank={teamDetail.zone_entry_success_rate_rank || undefined}
+            />
+          )}
+          {teamDetail.faceoff_win_pct != null && (
+            <StatCard
+              label="Faceoff Win %"
+              value={`${(teamDetail.faceoff_win_pct * 100).toFixed(1)}%`}
+            />
+          )}
         </div>
       </div>
 
@@ -506,7 +508,7 @@ function OverviewTab({
 
       {/* Season Trends - Chart 2: HDCF/60 vs HDCA/60 */}
       <div className="team-profile__section">
-        <h2 className="team-profile__section-title">High Danger Chances (5-Game Rolling)</h2>
+        <h2 className="team-profile__section-title">High Danger Chances For (5-Game Rolling)</h2>
         {trendsError ? (
           <div className="team-profile__section-error">
             <p>{trendsError}</p>
@@ -519,8 +521,7 @@ function OverviewTab({
             <LineChart
               data={teamTrends.hdcf_per60_5gp.map((point) => ({
                 date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                hdcf: point.value,
-                hdca: point.value * 0.9 // Placeholder - backend doesn't have hdca rolling yet
+                hdcf: point.value
               }))}
               margin={{ right: 80 }}
             >
@@ -556,21 +557,6 @@ function OverviewTab({
                   position="insideBottomRight"
                   offset={15}
                   fill="var(--color-data-positive)"
-                  style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
-                />
-              </Line>
-              <Line
-                type="monotone"
-                dataKey="hdca"
-                stroke="var(--color-data-negative)"
-                strokeWidth={2}
-                dot={false}
-                name="HDCA/60"
-              >
-                <Label
-                  value="HDCA/60"
-                  position="insideBottomRight"
-                  fill="var(--color-data-negative)"
                   style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
                 />
               </Line>
@@ -632,15 +618,18 @@ function OverviewTab({
               />
               <StatCard
                 label="CF%"
-                value={opponentStats.cf_pct ? `${(opponentStats.cf_pct * 100).toFixed(1)}%` : 'N/A'}
+                value={opponentStats.cf_pct != null ? `${(opponentStats.cf_pct * 100).toFixed(1)}%` : '—'}
+                tooltip={opponentStats.cf_pct == null ? 'Not enough games against this opponent to report CF%' : undefined}
               />
               <StatCard
                 label="HDCF/60"
-                value={opponentStats.hdcf_per60?.toFixed(2) || 'N/A'}
+                value={opponentStats.hdcf_per60 != null ? opponentStats.hdcf_per60.toFixed(2) : '—'}
+                tooltip={opponentStats.hdcf_per60 == null ? 'Not enough games against this opponent to report HDCF/60' : undefined}
               />
               <StatCard
                 label="xGF/60"
-                value={opponentStats.xgf_per60?.toFixed(2) || 'N/A'}
+                value={opponentStats.xgf_per60 != null ? opponentStats.xgf_per60.toFixed(2) : '—'}
+                tooltip={opponentStats.xgf_per60 == null ? 'Not enough games against this opponent to report xGF/60' : undefined}
               />
             </div>
             <button
@@ -808,7 +797,6 @@ function RosterTab({
                       <th onClick={() => handleSort('toi_per_gp')} className="team-profile__roster-table-number team-profile__roster-sortable">
                         TOI/GP {sortConfig.key === 'toi_per_gp' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                       </th>
-                      <th className="team-profile__roster-table-number hide-mobile">SV%</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -821,7 +809,6 @@ function RosterTab({
                         <td>{player.player_name}</td>
                         <td className="team-profile__roster-table-number mono">{player.games_played}</td>
                         <td className="team-profile__roster-table-number mono">{player.toi_per_gp.toFixed(1)}</td>
-                        <td className="team-profile__roster-table-number mono hide-mobile">N/A</td>
                       </tr>
                     ))}
                   </tbody>

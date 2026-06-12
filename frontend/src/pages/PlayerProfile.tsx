@@ -18,7 +18,7 @@ import {
   PlayerVsOpponent,
   PlayerGamelog
 } from '../api/types'
-import { setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
+import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
 import './PlayerProfile.css'
 
 // NHL team list for vs opponent dropdown
@@ -56,17 +56,6 @@ const NHL_TEAMS = [
   { id: 54, abbrev: 'VGK', name: 'Vegas Golden Knights' },
   { id: 55, abbrev: 'SEA', name: 'Seattle Kraken' }
 ]
-
-// Team colors mapping (sample - expand as needed)
-const TEAM_COLORS: Record<number, string> = {
-  1: '#CE1126', 2: '#00539B', 3: '#0038A8', 4: '#F74902', 5: '#FCB514',
-  6: '#FFB81C', 7: '#002654', 8: '#AF1E2D', 9: '#C52032', 10: '#00205B',
-  12: '#CE1126', 13: '#041E42', 14: '#002868', 15: '#041E42', 16: '#CF0A2C',
-  17: '#CE1126', 18: '#FFB81C', 19: '#002F87', 20: '#C8102E', 21: '#6F263D',
-  22: '#FF4C00', 23: '#00205B', 24: '#F47A38', 25: '#006847', 26: '#111111',
-  28: '#006D75', 29: '#002654', 30: '#154734', 52: '#041E42', 53: '#8C2633',
-  54: '#B4975A', 55: '#001628'
-}
 
 type SortColumn = 'game_date' | 'toi' | 'points' | 'goals' | 'assists' | 'shots' | 'cf' | 'hdcf'
 type SortDirection = 'asc' | 'desc'
@@ -112,8 +101,7 @@ function PlayerProfile() {
         const data = await getPlayerDetail(parseInt(playerId))
         setPlayerDetail(data)
         // Set team primary color for contextual theming
-        const teamColor = TEAM_COLORS[data.team_id] || '#4a7cf7'
-        setTeamPrimaryColor(teamColor)
+        setTeamPrimaryColor(getTeamColorByAbbrev(data.team_abbrev))
       } catch (error) {
         setErrorDetail('Failed to load player details')
         console.error('Error fetching player detail:', error)
@@ -223,11 +211,6 @@ function PlayerProfile() {
     return name.slice(0, 2).toUpperCase()
   }
 
-  // Helper: Get team color
-  const getTeamColor = (teamId: number): string => {
-    return TEAM_COLORS[teamId] || '#4a7cf7'
-  }
-
   // Helper: Format TOI from minutes to MM:SS
   const formatTOI = (minutes: number): string => {
     const mins = Math.floor(minutes)
@@ -286,7 +269,7 @@ function PlayerProfile() {
   }
 
   const isGoalie = playerDetail?.position === 'G'
-  const teamColor = playerDetail ? getTeamColor(playerDetail.team_id) : '#4a7cf7'
+  const teamColor = playerDetail ? getTeamColorByAbbrev(playerDetail.team_abbrev) : 'var(--color-accent)'
 
   return (
     <PageLayout>

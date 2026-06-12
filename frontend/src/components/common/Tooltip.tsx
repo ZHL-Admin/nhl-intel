@@ -69,6 +69,11 @@ function Tooltip({ content, children }: TooltipProps) {
         ref={triggerRef}
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        tabIndex={0}
+        role="button"
+        aria-label={content}
         className="tooltip-trigger"
       >
         {children}

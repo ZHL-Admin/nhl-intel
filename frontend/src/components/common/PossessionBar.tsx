@@ -11,8 +11,8 @@ interface PossessionBarProps {
 function PossessionBar({
   homeValue,
   awayValue,
-  homeColor = 'var(--color-data-orange)',
-  awayColor = 'var(--color-data-blue)',
+  homeColor = 'var(--color-data-2)',
+  awayColor = 'var(--color-data-1)',
   height = 28
 }: PossessionBarProps) {
   const total = homeValue + awayValue
@@ -26,7 +26,7 @@ function PossessionBar({
         style={{
           width: `${awayPercentage}%`,
           backgroundColor: awayColor,
-          opacity: 0.7,
+          opacity: 0.8,
         }}
       >
         <span className="possession-bar__value possession-bar__value--left">
@@ -38,7 +38,7 @@ function PossessionBar({
         style={{
           width: `${homePercentage}%`,
           backgroundColor: homeColor,
-          opacity: 0.7,
+          opacity: 0.8,
         }}
       >
         <span className="possession-bar__value possession-bar__value--right">

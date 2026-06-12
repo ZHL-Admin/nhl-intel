@@ -1,7 +1,17 @@
 .identity-header {
+  position: relative;
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-6) var(--space-8);
+}
+
+/* Floated back link: occupies no vertical space so the section stays condensed */
+.identity-header__back--absolute {
+  position: absolute;
+  top: var(--space-6);
+  left: var(--space-8);
+  margin-bottom: 0;
+  z-index: 1;
 }
 
 .identity-header__back {
@@ -55,6 +65,11 @@
 @media (max-width: 960px) {
   .identity-header {
     padding: var(--space-4);
+  }
+
+  .identity-header__back--absolute {
+    top: var(--space-4);
+    left: var(--space-4);
   }
 
   .identity-header__main {

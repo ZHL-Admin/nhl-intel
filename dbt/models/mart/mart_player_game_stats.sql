@@ -20,17 +20,23 @@ with rosters as (
     from {{ ref('stg_rosters') }}
 ),
 
+-- Individual counting stats span ALL situations (incl. power play / empty net) so a
+-- player's goals, shots and xG aren't undercounted. Possession context (on-ice xGF%)
+-- remains 5v5 via mart_team_game_stats below.
+-- Goal events carry the shooter in scoring_player_id (shooting_player_id is null), so
+-- attribute every shot attempt to coalesce(shooting_player_id, scoring_player_id),
+-- otherwise goals are never credited to the scorer.
 player_shots as (
     select
         game_id,
-        shooting_player_id as player_id,
+        coalesce(shooting_player_id, scoring_player_id) as player_id,
         count(*) as individual_shot_attempts,
         sum(case when is_goal then 1 else 0 end) as individual_goals,
         sum(case when is_high_danger then 1 else 0 end) as individual_high_danger_attempts,
         sum(xg_value) as ixg
-    from {{ ref('int_shot_attempts') }}
-    where shooting_player_id is not null
-    group by game_id, shooting_player_id
+    from {{ ref('int_shot_attempts_all') }}
+    where coalesce(shooting_player_id, scoring_player_id) is not null
+    group by game_id, coalesce(shooting_player_id, scoring_player_id)
 ),
 
 player_first_assists as (
@@ -112,7 +118,7 @@ player_stats_combined as (
     left join team_xg tx
         on r.game_id = tx.game_id
         and r.team_id = tx.team_id
-    where r.position_code in ('C', 'L', 'R', 'D')
+    where r.position_code in ('C', 'L', 'R', 'D', 'G')
 ),
 
 metrics_calculated as (

@@ -15,7 +15,8 @@ def get_daily_report_data(date: str) -> List[Dict[str, Any]]:
         Returns empty list if no games found for the date.
     """
     project_id = os.getenv("GCP_PROJECT_ID", "nhl-intel-498216")
-    dataset = os.getenv("GCP_DATASET_STAGING", "nhl_staging")
+    # mart_* tables are materialized in the mart dataset by dbt
+    dataset = os.getenv("GCP_DATASET_MART", "nhl_mart")
 
     client = bigquery.Client(project=project_id)
 

@@ -6,7 +6,6 @@ interface PeriodBreakdownTableProps {
   awayTeamAbbrev: string;
   homeTeamColor: string;
   awayTeamColor: string;
-  situation: string;
   homeStats: {
     cf_pct_p1?: number | null;
     cf_pct_p2?: number | null;
@@ -114,6 +113,27 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
   const totalAwayXgf = (awayStats.xgf_p1 || 0) + (awayStats.xgf_p2 || 0) + (awayStats.xgf_p3 || 0);
   const totalAwayXga = (awayStats.xga_p1 || 0) + (awayStats.xga_p2 || 0) + (awayStats.xga_p3 || 0);
 
+  const fmtCF = (stats: typeof homeStats, period: number) => {
+    const v = getStatForPeriod(stats, 'cf_pct', period);
+    return v !== null && v !== undefined ? (v as number * 100).toFixed(1) + '%' : '—';
+  };
+  const fmtXGF = (stats: typeof homeStats, period: number) => {
+    const v = calculateXgfPct(
+      getStatForPeriod(stats, 'xgf', period) as number,
+      getStatForPeriod(stats, 'xga', period) as number
+    );
+    return v !== null ? v + '%' : '—';
+  };
+  const fmtTotalCF = (cf: number | null | undefined) =>
+    cf !== null && cf !== undefined ? (cf * 100).toFixed(1) + '%' : '—';
+  const fmtTotalXGF = (xgf: number, xga: number) => {
+    const v = calculateXgfPct(xgf, xga);
+    return v !== null ? v + '%' : '—';
+  };
+
+  const awaySwatch = `color-mix(in srgb, ${awayTeamColor} 50%, var(--color-bg-base))`;
+  const homeSwatch = `color-mix(in srgb, ${homeTeamColor} 50%, var(--color-bg-base))`;
+
   return (
     <ChartPanel
       title={title}
@@ -121,123 +141,46 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
       expandable={false}
     >
       <div className="period-breakdown">
-        <div className="period-breakdown__tables">
-          {/* Away Team Table */}
-          <div className="period-breakdown__table" style={{ borderTop: `4px solid color-mix(in srgb, ${awayTeamColor} 50%, var(--color-bg-base))` }}>
-            <table className="period-table">
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th>CF%</th>
-                  <th>xGF%</th>
-                  <th>GF</th>
-                  <th>GA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periods.map(p => (
-                  <tr key={p.period}>
-                    <td className="period-table__period">{p.label}</td>
-                    <td className="mono">
-                      {getStatForPeriod(awayStats, 'cf_pct', p.period) !== null &&
-                      getStatForPeriod(awayStats, 'cf_pct', p.period) !== undefined
-                        ? ((getStatForPeriod(awayStats, 'cf_pct', p.period) as number) * 100).toFixed(1) + '%'
-                        : '-'}
-                    </td>
-                    <td className="mono">
-                      {calculateXgfPct(
-                        getStatForPeriod(awayStats, 'xgf', p.period) as number,
-                        getStatForPeriod(awayStats, 'xga', p.period) as number
-                      ) !== null
-                        ? calculateXgfPct(
-                            getStatForPeriod(awayStats, 'xgf', p.period) as number,
-                            getStatForPeriod(awayStats, 'xga', p.period) as number
-                          ) + '%'
-                        : '-'}
-                    </td>
-                    <td className="mono">{getStatForPeriod(awayStats, 'gf', p.period) ?? '-'}</td>
-                    <td className="mono">{getStatForPeriod(awayStats, 'ga', p.period) ?? '-'}</td>
-                  </tr>
-                ))}
-                <tr className="period-table__total">
-                  <td className="period-table__period">Final</td>
-                  <td className="mono">
-                    {awayStats.cf_pct !== null && awayStats.cf_pct !== undefined ? (awayStats.cf_pct * 100).toFixed(1) + '%' : '-'}
-                  </td>
-                  <td className="mono">
-                    {calculateXgfPct(totalAwayXgf, totalAwayXga) !== null
-                      ? calculateXgfPct(totalAwayXgf, totalAwayXga) + '%'
-                      : '-'}
-                  </td>
-                  <td className="mono">
-                    {(awayStats.gf_p1 || 0) + (awayStats.gf_p2 || 0) + (awayStats.gf_p3 || 0)}
-                  </td>
-                  <td className="mono">
-                    {(awayStats.ga_p1 || 0) + (awayStats.ga_p2 || 0) + (awayStats.ga_p3 || 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Home Team Table */}
-          <div className="period-breakdown__table" style={{ borderTop: `4px solid color-mix(in srgb, ${homeTeamColor} 50%, var(--color-bg-base))` }}>
-            <table className="period-table">
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th>CF%</th>
-                  <th>xGF%</th>
-                  <th>GF</th>
-                  <th>GA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periods.map(p => (
-                  <tr key={p.period}>
-                    <td className="period-table__period">{p.label}</td>
-                    <td className="mono">
-                      {getStatForPeriod(homeStats, 'cf_pct', p.period) !== null &&
-                      getStatForPeriod(homeStats, 'cf_pct', p.period) !== undefined
-                        ? ((getStatForPeriod(homeStats, 'cf_pct', p.period) as number) * 100).toFixed(1) + '%'
-                        : '-'}
-                    </td>
-                    <td className="mono">
-                      {calculateXgfPct(
-                        getStatForPeriod(homeStats, 'xgf', p.period) as number,
-                        getStatForPeriod(homeStats, 'xga', p.period) as number
-                      ) !== null
-                        ? calculateXgfPct(
-                            getStatForPeriod(homeStats, 'xgf', p.period) as number,
-                            getStatForPeriod(homeStats, 'xga', p.period) as number
-                          ) + '%'
-                        : '-'}
-                    </td>
-                    <td className="mono">{getStatForPeriod(homeStats, 'gf', p.period) ?? '-'}</td>
-                    <td className="mono">{getStatForPeriod(homeStats, 'ga', p.period) ?? '-'}</td>
-                  </tr>
-                ))}
-                <tr className="period-table__total">
-                  <td className="period-table__period">Final</td>
-                  <td className="mono">
-                    {homeStats.cf_pct !== null && homeStats.cf_pct !== undefined ? (homeStats.cf_pct * 100).toFixed(1) + '%' : '-'}
-                  </td>
-                  <td className="mono">
-                    {calculateXgfPct(totalHomeXgf, totalHomeXga) !== null
-                      ? calculateXgfPct(totalHomeXgf, totalHomeXga) + '%'
-                      : '-'}
-                  </td>
-                  <td className="mono">
-                    {(homeStats.gf_p1 || 0) + (homeStats.gf_p2 || 0) + (homeStats.gf_p3 || 0)}
-                  </td>
-                  <td className="mono">
-                    {(homeStats.ga_p1 || 0) + (homeStats.ga_p2 || 0) + (homeStats.ga_p3 || 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <table className="period-table period-table--combined">
+          <thead>
+            <tr>
+              <th rowSpan={2} className="period-table__period">Period</th>
+              <th colSpan={2}>CF%</th>
+              <th colSpan={2}>xGF%</th>
+              <th colSpan={2}>Goals</th>
+            </tr>
+            <tr>
+              <th><span className="period-table__swatch" style={{ background: awaySwatch }} />{awayTeamAbbrev}</th>
+              <th><span className="period-table__swatch" style={{ background: homeSwatch }} />{homeTeamAbbrev}</th>
+              <th><span className="period-table__swatch" style={{ background: awaySwatch }} />{awayTeamAbbrev}</th>
+              <th><span className="period-table__swatch" style={{ background: homeSwatch }} />{homeTeamAbbrev}</th>
+              <th><span className="period-table__swatch" style={{ background: awaySwatch }} />{awayTeamAbbrev}</th>
+              <th><span className="period-table__swatch" style={{ background: homeSwatch }} />{homeTeamAbbrev}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map(p => (
+              <tr key={p.period}>
+                <td className="period-table__period">{p.label}</td>
+                <td className="mono">{fmtCF(awayStats, p.period)}</td>
+                <td className="mono">{fmtCF(homeStats, p.period)}</td>
+                <td className="mono">{fmtXGF(awayStats, p.period)}</td>
+                <td className="mono">{fmtXGF(homeStats, p.period)}</td>
+                <td className="mono">{getStatForPeriod(awayStats, 'gf', p.period) ?? '—'}</td>
+                <td className="mono">{getStatForPeriod(homeStats, 'gf', p.period) ?? '—'}</td>
+              </tr>
+            ))}
+            <tr className="period-table__total">
+              <td className="period-table__period">Final</td>
+              <td className="mono">{fmtTotalCF(awayStats.cf_pct)}</td>
+              <td className="mono">{fmtTotalCF(homeStats.cf_pct)}</td>
+              <td className="mono">{fmtTotalXGF(totalAwayXgf, totalAwayXga)}</td>
+              <td className="mono">{fmtTotalXGF(totalHomeXgf, totalHomeXga)}</td>
+              <td className="mono">{(awayStats.gf_p1 || 0) + (awayStats.gf_p2 || 0) + (awayStats.gf_p3 || 0)}</td>
+              <td className="mono">{(homeStats.gf_p1 || 0) + (homeStats.gf_p2 || 0) + (homeStats.gf_p3 || 0)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </ChartPanel>
   );

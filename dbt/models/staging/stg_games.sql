@@ -1,83 +1,72 @@
-with source as (
+-- The raw_games schedule feed now stores only {game_id, date} per game, so the
+-- schedule spine is enriched with played-game detail from stg_boxscores. Team,
+-- score, venue, and state columns are therefore null for any scheduled-but-unplayed game.
+with schedule as (
     select
-        season,
-        ingestion_date,
-        gameWeek
-    from {{ source('nhl', 'raw_games') }}
-),
-
-flattened as (
-    select
-        source.ingestion_date,
-        source.season as season_str,
-        week.date as game_date,
-        game.id as game_id,
-        game.season as api_season_id,
-        game.gameType as game_type,
-        game.venue.default as venue_name,
-        game.neutralSite as is_neutral_site,
-        game.startTimeUTC as start_time_utc,
-        game.easternUTCOffset as eastern_utc_offset,
-        game.venueUTCOffset as venue_utc_offset,
-        game.gameState as game_state,
-        game.gameScheduleState as game_schedule_state,
-        game.awayTeam.id as away_team_id,
-        game.awayTeam.abbrev as away_team_abbrev,
-        game.awayTeam.score as away_team_score,
-        game.awayTeam.placeName.default as away_team_city,
-        game.homeTeam.id as home_team_id,
-        game.homeTeam.abbrev as home_team_abbrev,
-        game.homeTeam.score as home_team_score,
-        game.homeTeam.placeName.default as home_team_city,
-        game.periodDescriptor.number as period_number,
-        game.periodDescriptor.periodType as period_type,
-        game.gameOutcome.lastPeriodType as last_period_type
-    from source
-    cross join unnest(gameWeek) as week
+        cast(game.id as int64) as game_id,
+        cast(week.date as date) as game_date,
+        cast(src.season as string) as season,
+        cast(src.ingestion_date as date) as ingestion_date
+    from {{ source('nhl', 'raw_games') }} src
+    cross join unnest(src.gameWeek) as week
     cross join unnest(week.games) as game
 ),
 
-renamed as (
-    select
-        cast(game_id as int64) as game_id,
-        cast(season_str as string) as season,
-        cast(api_season_id as int64) as api_season_id,
-        cast(game_type as int64) as game_type,
-        cast(game_date as date) as game_date,
-        cast(start_time_utc as timestamp) as start_time_utc,
-        cast(venue_name as string) as venue_name,
-        cast(is_neutral_site as bool) as is_neutral_site,
-        cast(eastern_utc_offset as string) as eastern_utc_offset,
-        cast(venue_utc_offset as string) as venue_utc_offset,
-        cast(game_state as string) as game_state,
-        cast(game_schedule_state as string) as game_schedule_state,
-        cast(away_team_id as int64) as away_team_id,
-        cast(away_team_abbrev as string) as away_team_abbrev,
-        cast(away_team_score as int64) as away_team_score,
-        cast(away_team_city as string) as away_team_city,
-        cast(home_team_id as int64) as home_team_id,
-        cast(home_team_abbrev as string) as home_team_abbrev,
-        cast(home_team_score as int64) as home_team_score,
-        cast(home_team_city as string) as home_team_city,
-        cast(period_number as int64) as period_number,
-        cast(period_type as string) as period_type,
-        cast(last_period_type as string) as last_period_type,
-        cast(ingestion_date as date) as ingestion_date,
-        current_timestamp() as _loaded_at
-    from flattened
+schedule_deduped as (
+    select * except (rn)
+    from (
+        select
+            *,
+            row_number() over (partition by game_id order by ingestion_date desc) as rn
+        from schedule
+    )
+    where rn = 1
 ),
 
-deduped as (
+boxscores as (
     select
-        *,
-        row_number() over (partition by game_id order by _loaded_at desc) as row_num
-    from renamed
+        game_id,
+        game_type,
+        start_time_utc,
+        venue_name,
+        eastern_utc_offset,
+        venue_utc_offset,
+        game_state,
+        game_schedule_state,
+        away_team_id,
+        away_team_abbrev,
+        away_team_score,
+        home_team_id,
+        home_team_abbrev,
+        home_team_score,
+        last_period_type
+    from {{ ref('stg_boxscores') }}
 ),
 
 final as (
-    select * except (row_num)
-    from deduped
-    where row_num = 1
+    select
+        s.game_id,
+        s.season,
+        s.game_date,
+        s.ingestion_date,
+        b.game_type,
+        b.start_time_utc,
+        b.venue_name,
+        b.eastern_utc_offset,
+        b.venue_utc_offset,
+        b.game_state,
+        b.game_schedule_state,
+        b.away_team_id,
+        b.away_team_abbrev,
+        b.away_team_score,
+        b.home_team_id,
+        b.home_team_abbrev,
+        b.home_team_score,
+        b.last_period_type,
+        current_timestamp() as _loaded_at
+    from schedule_deduped s
+    left join boxscores b
+        on s.game_id = b.game_id
 )
 
 select * from final

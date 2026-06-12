@@ -14,8 +14,9 @@ with shot_attempts as (
         y_coord,
         situation_code
     from {{ ref('stg_play_by_play') }}
-    where situation_code = '1551'
-      and type_desc_key in ('shot-on-goal', 'goal', 'missed-shot', 'blocked-shot')
+    -- All situations: rates are computed per situation bucket (5v5 / special / other)
+    -- so power-play and other strengths get their own conversion rates.
+    where type_desc_key in ('shot-on-goal', 'goal', 'missed-shot', 'blocked-shot')
       and x_coord is not null
       and y_coord is not null
 ),

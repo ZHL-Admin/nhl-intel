@@ -2,7 +2,11 @@ version: 2
 
 models:
   - name: stg_games
-    description: Cleaned and flattened game schedule data from raw NHL API responses
+    description: >
+      Game schedule spine from raw_games (game_id, date, season) enriched with
+      played-game detail from stg_boxscores. The raw schedule feed only stores
+      game ids and dates, so team/score/venue/state columns are sourced from the
+      boxscore and are null for any scheduled-but-unplayed game.
     columns:
       - name: game_id
         description: Unique NHL game identifier
@@ -10,59 +14,43 @@ models:
           - not_null
           - unique
       - name: season
-        description: NHL season identifier (e.g. 20252026 for 2025-26 season)
-        tests:
-          - not_null
-      - name: game_type
-        description: Game type code (2=regular season, 3=playoffs)
+        description: NHL season identifier string (e.g. "2024-25")
         tests:
           - not_null
       - name: game_date
         description: Date the game was scheduled
         tests:
           - not_null
+      - name: game_type
+        description: Game type code from boxscore (2=regular season, 3=playoffs); null if unplayed
       - name: start_time_utc
-        description: Game start time in UTC
+        description: Game start time in UTC (from boxscore)
       - name: venue_name
-        description: Name of the arena where game was played
-      - name: is_neutral_site
-        description: Whether game was played at a neutral site
+        description: Name of the arena (from boxscore)
       - name: eastern_utc_offset
-        description: UTC offset for Eastern time zone
+        description: UTC offset for Eastern time zone (from boxscore)
       - name: venue_utc_offset
-        description: UTC offset for venue time zone
+        description: UTC offset for venue time zone (from boxscore)
       - name: game_state
-        description: Current state of the game
+        description: Current state of the game (from boxscore)
       - name: game_schedule_state
-        description: Scheduling state of the game
+        description: Scheduling state of the game (from boxscore)
       - name: away_team_id
-        description: NHL team ID for away team
-        tests:
-          - not_null
+        description: NHL team ID for away team (from boxscore); null if unplayed
       - name: away_team_abbrev
-        description: Three-letter abbreviation for away team
+        description: Three-letter abbreviation for away team (from boxscore)
       - name: away_team_score
-        description: Final score for away team
-      - name: away_team_city
-        description: City name for away team
+        description: Final score for away team (from boxscore)
       - name: home_team_id
-        description: NHL team ID for home team
-        tests:
-          - not_null
+        description: NHL team ID for home team (from boxscore); null if unplayed
       - name: home_team_abbrev
-        description: Three-letter abbreviation for home team
+        description: Three-letter abbreviation for home team (from boxscore)
       - name: home_team_score
-        description: Final score for home team
-      - name: home_team_city
-        description: City name for home team
-      - name: period_number
-        description: Current period number
-      - name: period_type
-        description: Type of current period
+        description: Final score for home team (from boxscore)
       - name: last_period_type
-        description: Type of the last period played
+        description: Type of the last period played (from boxscore)
       - name: ingestion_date
-        description: Date when raw data was ingested
+        description: Date when raw schedule data was ingested
         tests:
           - not_null
       - name: _loaded_at

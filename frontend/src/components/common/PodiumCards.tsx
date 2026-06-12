@@ -28,7 +28,7 @@ export default function PodiumCards({ players, title }: PodiumCardsProps) {
   };
 
   // Component for each player card with headshot error handling
-  function PlayerCard({ player }: { player: PodiumPlayer }) {
+  function PlayerCard({ player, rank }: { player: PodiumPlayer; rank: number }) {
     const [headshotError, setHeadshotError] = useState(false);
     const headshotUrl = getPlayerHeadshotUrl(
       player.playerId,
@@ -41,10 +41,11 @@ export default function PodiumCards({ players, title }: PodiumCardsProps) {
         key={player.playerId}
         to={`/players/${player.playerId}`}
         className="podium-card"
-        style={{ borderTopColor: player.accentColor }}
+        style={{ borderLeftColor: player.accentColor }}
       >
-        <div className="podium-card__headshot-container"
-        >
+        <span className="podium-card__rank">{rank}</span>
+
+        <div className="podium-card__headshot-container">
           {!headshotError ? (
             <img
               src={headshotUrl}
@@ -59,24 +60,27 @@ export default function PodiumCards({ players, title }: PodiumCardsProps) {
           )}
           <img
             src={player.teamLogo}
-            alt="Team"
+            alt=""
+            aria-hidden="true"
             className="podium-card__team-logo"
           />
         </div>
 
-        <div className="podium-card__name-container">
-        <div className="podium-card__name">{player.name}</div>
-        <div className="podium-card__position">{player.position}</div>
+        <div className="podium-card__info">
+          <div className="podium-card__name-row">
+            <span className="podium-card__name">{player.name}</span>
+            <span className="podium-card__position">{player.position}</span>
+          </div>
+          <div className="podium-card__stat-line mono">{player.statLine}</div>
         </div>
-        <div className="podium-card__stat-line mono">{player.statLine}</div>
 
         {player.highlight && (
-          <div
+          <span
             className="podium-card__highlight"
             style={{ backgroundColor: player.accentColor }}
           >
             {player.highlight}
-          </div>
+          </span>
         )}
       </Link>
     );
@@ -87,8 +91,8 @@ export default function PodiumCards({ players, title }: PodiumCardsProps) {
       {title && <h3 className="podium-cards__title">{title}</h3>}
 
       <div className="podium-cards__grid">
-        {players.slice(0, 3).map(player => (
-          <PlayerCard key={player.playerId} player={player} />
+        {players.slice(0, 3).map((player, i) => (
+          <PlayerCard key={player.playerId} player={player} rank={i + 1} />
         ))}
       </div>
     </div>

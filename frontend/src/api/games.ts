@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint } from './types'
+import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact } from './types'
 
 /**
  * Fetch list of dates on which games occurred or are scheduled.
@@ -72,6 +72,62 @@ export async function getGameXGWorm(gameId: number, situation?: string): Promise
       situation: situation || 'all'
     },
   })
+  return response.data
+}
+
+/**
+ * Fetch detailed goal information (scorer, assists, strength) for a game.
+ */
+export async function getGameGoals(gameId: number): Promise<GoalDetail[]> {
+  const response = await apiClient.get<GoalDetail[]>(`/games/${gameId}/goals`)
+  return response.data
+}
+
+/**
+ * Fetch smoothed shots-per-60 pressure curves for both teams over game time.
+ */
+export async function getGamePressure(gameId: number): Promise<PressurePoint[]> {
+  const response = await apiClient.get<PressurePoint[]>(`/games/${gameId}/pressure`)
+  return response.data
+}
+
+/** Fetch per-team power-play / penalty-kill detail. */
+export async function getGameSpecialTeams(gameId: number): Promise<SpecialTeamsStat[]> {
+  const response = await apiClient.get<SpecialTeamsStat[]>(`/games/${gameId}/specialteams`)
+  return response.data
+}
+
+/** Fetch per-goalie save record split by shot-danger band, with GSAx. */
+export async function getGameGoalieDanger(gameId: number): Promise<GoalieDangerStat[]> {
+  const response = await apiClient.get<GoalieDangerStat[]>(`/games/${gameId}/goalie-danger`)
+  return response.data
+}
+
+/** Fetch per-team shot attempts and goals by danger band (shot-quality ladder). */
+export async function getGameShotQuality(gameId: number): Promise<ShotQualityRow[]> {
+  const response = await apiClient.get<ShotQualityRow[]>(`/games/${gameId}/shot-quality`)
+  return response.data
+}
+
+/** Fetch per-skater impact lines (real TOI, G/A/P, ixG, iHDCF). */
+export async function getGameSkaterImpact(gameId: number): Promise<SkaterImpact[]> {
+  const response = await apiClient.get<SkaterImpact[]>(`/games/${gameId}/skater-impact`)
+  return response.data
+}
+
+/**
+ * Fetch box-score team comparison counts (goals, shots, PP, hits, faceoffs, etc.).
+ */
+export async function getGameTeamStats(gameId: number): Promise<TeamComparisonStats> {
+  const response = await apiClient.get<TeamComparisonStats>(`/games/${gameId}/teamstats`)
+  return response.data
+}
+
+/**
+ * Fetch per-goalie lines (shots/goals against) for a game.
+ */
+export async function getGameGoaltending(gameId: number): Promise<GoaltenderStat[]> {
+  const response = await apiClient.get<GoaltenderStat[]>(`/games/${gameId}/goaltending`)
   return response.data
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import ChartPanel from '../common/ChartPanel';
+import SkeletonLoader from '../common/SkeletonLoader';
 import { getGameShots } from '../../api/games';
 import { ShotAttempt } from '../../api/types';
 import './ShotMapKDE.css';
@@ -148,6 +149,10 @@ function ShotMapKDEChart({
       drawKDEContours(g, homeShots, xScaleHome, yScale, homeTeamColor);
     }
 
+    // Draw rink markings on top of the density layer so they stay visible
+    drawRinkMarkings(g, 50, width / 2 - 50, height);
+    drawRinkMarkings(g, width / 2 + 50, width - 50, height);
+
     // Draw goal markers on top
     drawGoalMarkers(g, awayShots.filter(s => s.outcome === 'goal'), xScale, yScale, awayTeamColor);
     const xScaleHome = d3.scaleLinear()
@@ -158,7 +163,7 @@ function ShotMapKDEChart({
   }, [homeShots, awayShots, loading, homeTeamColor, awayTeamColor]);
 
   if (loading) {
-    return <div className="shot-map-loading">Loading shot data...</div>;
+    return <div className="shot-map-loading"><SkeletonLoader height={320} borderRadius={12} /></div>;
   }
 
   const awayOnGoal = awayShots.filter(s => s.outcome === 'shot_on_goal' || s.outcome === 'goal').length;
@@ -220,6 +225,44 @@ function drawRink(g: d3.Selection<SVGGElement, unknown, null, undefined>, width:
     .attr('rx', 28);
 }
 
+// Draw zone markings (goal line, crease, faceoff circles) for one team's half.
+// The net sits near the top of each half (center-ice line is at the bottom).
+function drawRinkMarkings(
+  g: d3.Selection<SVGGElement, unknown, null, undefined>,
+  xLeft: number,
+  xRight: number,
+  height: number
+) {
+  const marks = g.append('g').attr('class', 'rink-marks');
+  const center = (xLeft + xRight) / 2;
+  const line = 'var(--color-border-strong)';
+  const goalLineY = 78;
+
+  // Goal line
+  marks.append('line')
+    .attr('x1', xLeft + 10).attr('y1', goalLineY)
+    .attr('x2', xRight - 10).attr('y2', goalLineY)
+    .attr('stroke', line).attr('stroke-width', 1);
+
+  // Goal crease (semicircle opening toward center ice)
+  marks.append('path')
+    .attr('d', `M ${center - 18} ${goalLineY} A 18 18 0 0 0 ${center + 18} ${goalLineY}`)
+    .attr('fill', 'color-mix(in srgb, var(--color-data-1) 12%, transparent)')
+    .attr('stroke', line).attr('stroke-width', 1);
+
+  // Two faceoff circles in the offensive zone
+  const faceoffY = height * 0.55;
+  const offsetX = (xRight - xLeft) * 0.22;
+  [center - offsetX, center + offsetX].forEach(fx => {
+    marks.append('circle')
+      .attr('cx', fx).attr('cy', faceoffY).attr('r', 26)
+      .attr('fill', 'none').attr('stroke', line).attr('stroke-width', 1);
+    marks.append('circle')
+      .attr('cx', fx).attr('cy', faceoffY).attr('r', 2)
+      .attr('fill', line);
+  });
+}
+
 function drawKDEContours(
   g: d3.Selection<SVGGElement, unknown, null, undefined>,
   shots: ShotAttempt[],
@@ -274,36 +317,46 @@ function drawGoalMarkers(
 ) {
   const goalsGroup = g.append('g').attr('class', 'goals');
 
+  const fill = 'var(--color-bg-surface)';
+
   goals.forEach(goal => {
     const cx = xScale(goal.x);
     const cy = yScale(Math.abs(goal.y));
     const shape = getShotTypeShape(goal.shot_type);
+    const r = 6;
 
-    if (shape === 'circle') {
-      goalsGroup
-        .append('circle')
-        .attr('cx', cx)
-        .attr('cy', cy)
-        .attr('r', 6)
-        .attr('fill', 'var(--color-bg-surface)')
-        .attr('stroke', teamColor)
-        .attr('stroke-width', 2)
-        .append('title')
-        .text(`${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`);
-    } else if (shape === 'square') {
-      goalsGroup
-        .append('rect')
-        .attr('x', cx - 5)
-        .attr('y', cy - 5)
-        .attr('width', 10)
-        .attr('height', 10)
-        .attr('fill', 'var(--color-bg-surface)')
-        .attr('stroke', teamColor)
-        .attr('stroke-width', 2)
-        .append('title')
-        .text(`${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let node: d3.Selection<any, unknown, null, undefined>;
+
+    if (shape === 'square') {
+      node = goalsGroup.append('rect')
+        .attr('x', cx - 5).attr('y', cy - 5)
+        .attr('width', 10).attr('height', 10);
+    } else if (shape === 'triangle') {
+      node = goalsGroup.append('polygon')
+        .attr('points', `${cx},${cy - r} ${cx - r},${cy + r} ${cx + r},${cy + r}`);
+    } else if (shape === 'diamond') {
+      node = goalsGroup.append('polygon')
+        .attr('points', `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`);
+    } else if (shape === 'star') {
+      const pts: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const radius = i % 2 === 0 ? r : r / 2;
+        const angle = (Math.PI / 5) * i - Math.PI / 2;
+        pts.push(`${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`);
+      }
+      node = goalsGroup.append('polygon').attr('points', pts.join(' '));
+    } else {
+      node = goalsGroup.append('circle')
+        .attr('cx', cx).attr('cy', cy).attr('r', r);
     }
-    // Additional shapes can be added here
+
+    node
+      .attr('fill', fill)
+      .attr('stroke', teamColor)
+      .attr('stroke-width', 2)
+      .append('title')
+      .text(`${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`);
   });
 }
 

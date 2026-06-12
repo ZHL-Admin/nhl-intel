@@ -3,6 +3,8 @@ import './IdentityHeader.css';
 
 interface IdentityHeaderProps {
   backLink?: { label: string; to: string };
+  /** Float the back link in the top-left corner so it doesn't add to the header's height */
+  absoluteBack?: boolean;
   leftContent: React.ReactNode;
   centerContent?: React.ReactNode;
   rightContent?: React.ReactNode;
@@ -13,6 +15,7 @@ interface IdentityHeaderProps {
 
 export default function IdentityHeader({
   backLink,
+  absoluteBack,
   leftContent,
   centerContent,
   rightContent,
@@ -45,7 +48,7 @@ export default function IdentityHeader({
     <div className="identity-header" style={getBackgroundStyle()}>
       {backLink && (
         <button
-          className="identity-header__back"
+          className={`identity-header__back${absoluteBack ? ' identity-header__back--absolute' : ''}`}
           onClick={() => navigate(backLink.to)}
         >
           <span>{backLink.label}</span>

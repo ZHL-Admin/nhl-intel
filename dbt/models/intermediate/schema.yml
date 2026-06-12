@@ -1,6 +1,19 @@
 version: 2
 
 models:
+  - name: int_shot_attempts_all
+    description: >
+      Shot attempts across all strength states (5v5, special teams, other) with
+      per-situation xG. Powers the all-situations xG worm. The 5v5-only
+      int_shot_attempts remains the basis for the even-strength possession marts.
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: xg_value
+        description: Expected goals value from the per-situation conversion-rate model
+
   - name: int_shot_attempts
     description: Shot attempts at 5v5 strength with high-danger classification
     columns:

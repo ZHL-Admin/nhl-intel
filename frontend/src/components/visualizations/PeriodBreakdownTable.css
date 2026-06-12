@@ -2,23 +2,19 @@
   padding: var(--space-4);
 }
 
-.period-breakdown__tables {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
-}
-
-.period-breakdown__table {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-md);
-  padding-top: var(--space-3);
-}
-
 .period-table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
+}
+
+.period-table__swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-sm);
+  margin-right: var(--space-1);
+  vertical-align: middle;
 }
 
 .period-table thead th {
@@ -65,13 +61,16 @@
   border-top: 2px solid var(--color-border) !important;
 }
 
-.mono {
-  font-family: var(--font-mono);
+.period-table--combined thead tr:first-child th {
+  text-align: center;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
-@media (max-width: 960px) {
-  .period-breakdown__tables {
-    grid-template-columns: 1fr;
-    gap: var(--space-8);
-  }
+.period-table--combined thead tr:nth-child(2) th {
+  text-align: right;
+}
+
+.mono {
+  font-family: var(--font-mono);
 }

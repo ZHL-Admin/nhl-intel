@@ -1,0 +1,32 @@
+.timeline-stack {
+  width: 100%;
+}
+
+.timeline-stack__readout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  min-height: 24px;
+}
+
+.timeline-stack__readout-time {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.timeline-stack__readout strong {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.timeline-stack__hint {
+  color: var(--color-text-muted);
+  font-style: italic;
+}

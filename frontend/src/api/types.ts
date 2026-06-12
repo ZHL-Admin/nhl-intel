@@ -333,6 +333,109 @@ export interface XGWormPoint {
   label?: string | null
 }
 
+export interface PressurePoint {
+  game_time_seconds: number
+  home_rate: number
+  away_rate: number
+}
+
+export interface GoaltenderStat {
+  player_id: number
+  goalie_name: string
+  team_abbrev: string
+  shots_against: number
+  goals_against: number
+  gsax: number
+  headshot?: string | null
+}
+
+export interface TeamComparisonStats {
+  home_team_id: number
+  away_team_id: number
+  home_goals: number
+  away_goals: number
+  home_sog: number
+  away_sog: number
+  home_pp_goals: number
+  away_pp_goals: number
+  home_penalties: number
+  away_penalties: number
+  home_pim: number
+  away_pim: number
+  home_hits: number
+  away_hits: number
+  home_faceoff_wins: number
+  away_faceoff_wins: number
+  home_blocks: number
+  away_blocks: number
+  home_giveaways: number
+  away_giveaways: number
+  home_takeaways: number
+  away_takeaways: number
+}
+
+export interface GoalDetail {
+  game_time_seconds: number
+  period: number
+  time_in_period: string
+  team_id: number
+  team_abbrev: string
+  strength: string
+  scorer_id?: number | null
+  scorer_name?: string | null
+  scorer_headshot?: string | null
+  assists: string[]
+}
+
+export interface SpecialTeamsStat {
+  team_abbrev: string
+  is_home: boolean
+  pp_goals: number
+  pp_opp: number
+  pp_xg: number
+  pp_shots: number
+  pk_saves: number
+  pk_shots: number
+}
+
+export interface GoalieDangerStat {
+  player_id: number
+  goalie_name: string
+  team_abbrev: string
+  high_saves: number
+  high_shots: number
+  med_saves: number
+  med_shots: number
+  low_saves: number
+  low_shots: number
+  gsax: number
+}
+
+export interface ShotQualityRow {
+  band: string
+  home_abbrev: string
+  away_abbrev: string
+  home_attempts: number
+  home_goals: number
+  away_attempts: number
+  away_goals: number
+}
+
+export interface SkaterImpact {
+  player_id: number
+  player_name: string
+  team_abbrev: string
+  position: string
+  toi: string
+  toi_seconds: number
+  goals: number
+  assists: number
+  points: number
+  shots: number
+  ixg: number
+  ihdcf: number
+}
+
 export interface PlayerZoneDeployment {
   player_id: number
   season: string
