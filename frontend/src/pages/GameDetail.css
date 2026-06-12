@@ -436,6 +436,15 @@
   align-items: start;
 }
 
+/* Page grid utility (12-column grid, 1280px max width, 24px gutters) */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--space-6);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
 /* Responsive Design */
 @media (max-width: 960px) {
   .game-detail__two-column {

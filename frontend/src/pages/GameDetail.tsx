@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, TimelineList, MiniWorm } from '../components/common'
-import ChartPanel from '../components/common/ChartPanel'
+import Tabs from '../components/common/Tabs'
+import Badge from '../components/common/Badge'
 import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
-import TeamComparisonPanel from '../components/visualizations/TeamComparisonPanel'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
 import GamePlayerStatsTable from '../components/visualizations/GamePlayerStatsTable'
@@ -744,7 +744,7 @@ function GameDetailsSection({
   )
 }
 
-// Analytics Tab - Placeholder with existing visualizations
+// Analytics Tab - Rebuilt per PART 1 specifications
 function AnalyticsTab({
   gameDetail,
   playerStats: _playerStats,
@@ -759,10 +759,35 @@ function AnalyticsTab({
   const { home_team, away_team, game_id } = gameDetail
   const [situation, setSituation] = useState('all')
 
+  // Calculate xGF% for both teams
+  const homeXGF = home_team.xgf || 0
+  const awayXGF = away_team.xgf || 0
+  const totalXG = homeXGF + awayXGF
+  const homeXGFPct = totalXG > 0 ? ((homeXGF / totalXG) * 100) : 50
+  const awayXGFPct = totalXG > 0 ? ((awayXGF / totalXG) * 100) : 50
+
+  // Calculate PDO (placeholder - will be implemented when backend supports it)
+  const homePDO = 1.000
+  const awayPDO = 1.000
+
   return (
     <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
-      {/* Analytics visualizations */}
-      <div className="game-detail__content">
+      {/* Situation Filter */}
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <Tabs
+          options={[
+            { value: 'all', label: 'All' },
+            { value: '5v5', label: '5v5' },
+            { value: 'pp', label: 'PP' },
+            { value: 'pk', label: 'PK' }
+          ]}
+          value={situation}
+          onChange={setSituation}
+        />
+      </div>
+
+      {/* 1. Game Flow (xG Worm) */}
+      <div style={{ marginBottom: 'var(--space-16)' }}>
         <XGWormChart
           gameId={game_id}
           homeTeamAbbrev={home_team.team_abbrev}
@@ -770,62 +795,118 @@ function AnalyticsTab({
           homeTeamColor={homeTeamColor}
           awayTeamColor={awayTeamColor}
         />
+      </div>
 
-        <div className="game-detail__two-column">
-          <ChartPanel
-            title="Key Statistics"
-            subtitle="Team performance comparison"
-            expandable={false}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              <ComparisonRow
-                label="Goals"
-                awayValue={away_team.score?.toString() || '0'}
-                homeValue={home_team.score?.toString() || '0'}
-                awayRaw={away_team.score || 0}
-                homeRaw={home_team.score || 0}
-                awayColor={awayTeamColor}
-                homeColor={homeTeamColor}
-                showBar={true}
-              />
-              <ComparisonRow
-                label="Shots on Goal"
-                awayValue={away_team.shots_on_goal?.toString() || '0'}
-                homeValue={home_team.shots_on_goal?.toString() || '0'}
-                awayRaw={away_team.shots_on_goal || 0}
-                homeRaw={home_team.shots_on_goal || 0}
-                awayColor={awayTeamColor}
-                homeColor={homeTeamColor}
-                showBar={true}
-              />
-              <ComparisonRow
-                label="Shot Attempts"
-                awayValue={away_team.shot_attempts?.toString() || '0'}
-                homeValue={home_team.shot_attempts?.toString() || '0'}
-                awayRaw={away_team.shot_attempts || 0}
-                homeRaw={home_team.shot_attempts || 0}
-                awayColor={awayTeamColor}
-                homeColor={homeTeamColor}
-                showBar={true}
-              />
-            </div>
-          </ChartPanel>
-
-          <TeamComparisonPanel
-            gameId={game_id}
-            homeTeamId={home_team.team_id}
-            awayTeamId={away_team.team_id}
-            homeTeamAbbrev={home_team.team_abbrev}
-            awayTeamAbbrev={away_team.team_abbrev}
-            homeTeamColor={homeTeamColor}
-            awayTeamColor={awayTeamColor}
-            homeTeamStats={home_team}
-            awayTeamStats={away_team}
-            situation={situation}
-            onSituationChange={setSituation}
+      {/* 2. Possession & Quality - ComparisonRow stacks */}
+      <div style={{ maxWidth: '800px', margin: '0 auto var(--space-16)' }}>
+        {/* Control Group */}
+        <h3 style={{
+          fontSize: 'var(--text-xs)',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--color-text-muted)',
+          marginBottom: 'var(--space-4)'
+        }}>
+          Control
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-12)' }}>
+          <ComparisonRow
+            label="CF%"
+            awayValue={away_team.cf_pct?.toFixed(1) || '—'}
+            homeValue={home_team.cf_pct?.toFixed(1) || '—'}
+            awayRaw={away_team.cf_pct || 0}
+            homeRaw={home_team.cf_pct || 0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={away_team.cf_pct !== null && home_team.cf_pct !== null}
+            tooltip="Corsi For Percentage: shot attempts for divided by total shot attempts (for + against)"
+          />
+          <ComparisonRow
+            label="xGF%"
+            awayValue={awayXGFPct.toFixed(1)}
+            homeValue={homeXGFPct.toFixed(1)}
+            awayRaw={awayXGFPct}
+            homeRaw={homeXGFPct}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={true}
+            tooltip="Expected Goals For Percentage: xG for divided by total xG (for + against)"
+          />
+          <ComparisonRow
+            label="FF%"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Fenwick For Percentage: unblocked shot attempts (data not yet available)"
           />
         </div>
 
+        {/* Danger Group */}
+        <h3 style={{
+          fontSize: 'var(--text-xs)',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--color-text-muted)',
+          marginBottom: 'var(--space-4)'
+        }}>
+          Danger
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <ComparisonRow
+            label="HDCF/60"
+            awayValue={away_team.hdcf_per60?.toFixed(1) || '—'}
+            homeValue={home_team.hdcf_per60?.toFixed(1) || '—'}
+            awayRaw={away_team.hdcf_per60 || 0}
+            homeRaw={home_team.hdcf_per60 || 0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={away_team.hdcf_per60 !== null && home_team.hdcf_per60 !== null}
+            tooltip="High-danger chances for per 60 minutes"
+          />
+          <ComparisonRow
+            label="HDCA/60"
+            awayValue={away_team.hdca_per60?.toFixed(1) || '—'}
+            homeValue={home_team.hdca_per60?.toFixed(1) || '—'}
+            awayRaw={away_team.hdca_per60 || 0}
+            homeRaw={home_team.hdca_per60 || 0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={away_team.hdca_per60 !== null && home_team.hdca_per60 !== null}
+            tooltip="High-danger chances against per 60 minutes (lower is better)"
+          />
+          <ComparisonRow
+            label="Rush Shot Share"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Percentage of shot attempts that came off the rush (data not yet available)"
+          />
+          <ComparisonRow
+            label="Zone Entry Success"
+            awayValue={away_team.zone_entry_success_rate ? `${(away_team.zone_entry_success_rate * 100).toFixed(1)}%` : '—'}
+            homeValue={home_team.zone_entry_success_rate ? `${(home_team.zone_entry_success_rate * 100).toFixed(1)}%` : '—'}
+            awayRaw={away_team.zone_entry_success_rate || 0}
+            homeRaw={home_team.zone_entry_success_rate || 0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={away_team.zone_entry_success_rate !== null && home_team.zone_entry_success_rate !== null}
+            tooltip="Percentage of zone entry attempts that were controlled entries"
+          />
+        </div>
+      </div>
+
+      {/* 3. Shot Map */}
+      <div style={{ marginBottom: 'var(--space-16)' }}>
         <ShotMapKDE
           gameId={game_id}
           homeTeamAbbrev={home_team.team_abbrev}
@@ -834,8 +915,11 @@ function AnalyticsTab({
           awayTeamColor={awayTeamColor}
           situation={situation}
         />
+      </div>
 
-        <div className="game-detail__two-column">
+      {/* 4. Period Momentum + Recent Form (side by side) */}
+      <div className="page-grid" style={{ marginBottom: 'var(--space-16)' }}>
+        <div style={{ gridColumn: 'span 6' }}>
           <PeriodBreakdownTable
             homeTeamAbbrev={home_team.team_abbrev}
             awayTeamAbbrev={away_team.team_abbrev}
@@ -845,7 +929,9 @@ function AnalyticsTab({
             awayStats={away_team}
             situation={situation}
           />
+        </div>
 
+        <div style={{ gridColumn: 'span 6' }}>
           <RollingContextPanel
             gameId={game_id}
             homeTeamId={home_team.team_id}
@@ -858,6 +944,33 @@ function AnalyticsTab({
             awayGameCF={away_team.cf_pct}
           />
         </div>
+      </div>
+
+      {/* 5. PDO - Single ComparisonRow with luck badge */}
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+          <h3 style={{
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)'
+          }}>
+            PDO
+          </h3>
+          <Badge variant="luck" label="Luck" />
+        </div>
+        <ComparisonRow
+          label="PDO"
+          awayValue={awayPDO.toFixed(3)}
+          homeValue={homePDO.toFixed(3)}
+          awayRaw={awayPDO}
+          homeRaw={homePDO}
+          awayColor={awayTeamColor}
+          homeColor={homeTeamColor}
+          showBar={false}
+          tooltip="PDO measures shooting percentage plus save percentage. Values above 1.000 often reflect good luck and tend to regress toward average over time. Data not yet available."
+        />
       </div>
     </div>
   )
