@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, TimelineList, MiniWorm } from '../components/common'
-import PeriodGrid from '../components/games/PeriodGrid'
 import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
 import BoxscoreSummary from '../components/visualizations/BoxscoreSummary'
@@ -72,14 +71,6 @@ function GameDetail() {
     setSearchParams({ tab })
   }
 
-  // Format game date for back link (e.g., "Jun 8 Games")
-  const formatGameDate = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    const month = date.toLocaleDateString('en-US', { month: 'short' })
-    const day = date.getDate()
-    return `${month} ${day} Games`
-  }
-
   if (loading) {
     return (
       <PageLayout>
@@ -129,7 +120,7 @@ function GameDetail() {
     )
   }
 
-  const { is_preview, home_team, away_team, game_date, venue_name } = gameDetail
+  const { is_preview, home_team, away_team } = gameDetail
   const homeTeamColor = getTeamColor(home_team.team_abbrev)
   const awayTeamColor = getTeamColor(away_team.team_abbrev)
 
@@ -155,77 +146,55 @@ function GameDetail() {
   return (
     <PageLayout>
       <div className="game-detail">
-        {/* Identity Header with team logos, score, period grid */}
+        {/* Identity Header - following DevComponents approved pattern */}
         <IdentityHeader
           backLink={{
-            label: `← ${formatGameDate(game_date)}`,
+            label: `← Back to Games`,
             to: '/games'
           }}
           leftContent={
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div>
               <img
                 src={getTeamLogoUrl(away_team.team_abbrev)}
                 alt={away_team.team_abbrev}
-                style={{ width: '48px', height: '48px', objectFit: 'contain' }}
+                style={{ width: 48, height: 48 }}
               />
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
                   {away_team.team_abbrev}
                 </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
                   Away
                 </div>
               </div>
             </div>
           }
           centerContent={
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <div style={{ fontSize: 'var(--text-4xl)', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                {away_team.score ?? 0} – {home_team.score ?? 0}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--text-4xl)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                {away_team.score ?? 0} - {home_team.score ?? 0}
               </div>
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
                 Final
               </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                {new Date(game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                {venue_name && ` · ${venue_name}`}
-              </div>
             </div>
           }
           rightContent={
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div style={{ textAlign: 'right' }}>
               <img
                 src={getTeamLogoUrl(home_team.team_abbrev)}
                 alt={home_team.team_abbrev}
-                style={{ width: '48px', height: '48px', objectFit: 'contain' }}
+                style={{ width: 48, height: 48, marginLeft: 'auto' }}
               />
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
                   {home_team.team_abbrev}
                 </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
                   Home
                 </div>
               </div>
             </div>
-          }
-          heroContent={
-            <PeriodGrid
-              homeTeamAbbrev={home_team.team_abbrev}
-              awayTeamAbbrev={away_team.team_abbrev}
-              homeStats={{
-                gf_p1: home_team.gf_p1,
-                gf_p2: home_team.gf_p2,
-                gf_p3: home_team.gf_p3,
-                score: home_team.score
-              }}
-              awayStats={{
-                gf_p1: away_team.gf_p1,
-                gf_p2: away_team.gf_p2,
-                gf_p3: away_team.gf_p3,
-                score: away_team.score
-              }}
-            />
           }
           teamColors={{
             away: awayTeamColor,

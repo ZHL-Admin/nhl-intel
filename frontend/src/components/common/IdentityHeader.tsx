@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './IdentityHeader.css';
 
@@ -49,7 +48,6 @@ export default function IdentityHeader({
           className="identity-header__back"
           onClick={() => navigate(backLink.to)}
         >
-          <ArrowLeft size={16} />
           <span>{backLink.label}</span>
         </button>
       )}
