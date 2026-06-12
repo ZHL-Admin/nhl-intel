@@ -3,7 +3,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, TimelineList, MiniWorm } from '../components/common'
 import Tabs from '../components/common/Tabs'
 import Badge from '../components/common/Badge'
-import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
@@ -123,13 +122,78 @@ function GameDetail() {
   const homeTeamColor = getTeamColor(home_team.team_abbrev)
   const awayTeamColor = getTeamColor(away_team.team_abbrev)
 
-  // Preview games: use old GameHeader (no tabs for Phase 1)
+  // Preview games: single focused preview page (no tabs)
   if (is_preview) {
     return (
       <PageLayout>
         <div className="game-detail">
-          <GameHeader gameDetail={gameDetail} />
-          <PreviewModeContent gameDetail={gameDetail} playerStats={playerStats} />
+          {/* Preview Header */}
+          <IdentityHeader
+            backLink={{
+              label: `← Back to Games`,
+              to: '/games'
+            }}
+            leftContent={
+              <div>
+                <img
+                  src={getTeamLogoUrl(away_team.team_abbrev)}
+                  alt={away_team.team_abbrev}
+                  style={{ width: 48, height: 48 }}
+                />
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
+                    {away_team.team_abbrev}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                    Away
+                  </div>
+                </div>
+              </div>
+            }
+            centerContent={
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 500, color: 'var(--color-text-muted)' }}>
+                  vs
+                </div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-2)' }}>
+                  {new Date(gameDetail.game_date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </div>
+                <Badge variant="preview" />
+              </div>
+            }
+            rightContent={
+              <div style={{ textAlign: 'right' }}>
+                <img
+                  src={getTeamLogoUrl(home_team.team_abbrev)}
+                  alt={home_team.team_abbrev}
+                  style={{ width: 48, height: 48, marginLeft: 'auto' }}
+                />
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
+                    {home_team.team_abbrev}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                    Home
+                  </div>
+                </div>
+              </div>
+            }
+            teamColors={{
+              away: awayTeamColor,
+              home: homeTeamColor
+            }}
+          />
+
+          <PreviewModeContent
+            gameDetail={gameDetail}
+            playerStats={playerStats}
+            homeTeamColor={homeTeamColor}
+            awayTeamColor={awayTeamColor}
+          />
         </div>
       </PageLayout>
     )
@@ -1238,57 +1302,230 @@ function PlayerRow({ player }: { player: PlayerGameStats }) {
 
 function PreviewModeContent({
   gameDetail,
-  playerStats
+  playerStats,
+  homeTeamColor,
+  awayTeamColor
 }: {
   gameDetail: GameDetailType
   playerStats: GamePlayerStats | null
+  homeTeamColor: string
+  awayTeamColor: string
 }) {
+  const { home_team, away_team } = gameDetail
+  const [showRosters, setShowRosters] = useState(false)
+
+  // Calculate xGF% for matchup comparison (using placeholder data)
+  const homeXGF = home_team.xgf || 0
+  const awayXGF = away_team.xgf || 0
+  const totalXG = homeXGF + awayXGF
+  const homeXGFPct = totalXG > 0 ? ((homeXGF / totalXG) * 100) : 50
+  const awayXGFPct = totalXG > 0 ? ((awayXGF / totalXG) * 100) : 50
+
+  // Select top 3 players based on hot streak (placeholder logic using ixG)
+  const allPlayers = playerStats
+    ? [...playerStats.home_players, ...playerStats.away_players].filter(p => p.position !== 'G')
+    : []
+
+  const topPlayers = allPlayers
+    .sort((a, b) => (b.ixg_per60 || 0) - (a.ixg_per60 || 0))
+    .slice(0, 3)
+    .map(player => {
+      const teamAbbrev = player.team_id === home_team.team_id ? home_team.team_abbrev : away_team.team_abbrev
+      const teamColor = getTeamColor(teamAbbrev)
+
+      return {
+        playerId: player.player_id,
+        name: player.player_name,
+        teamAbbrev,
+        teamLogo: getTeamLogoUrl(teamAbbrev),
+        position: player.position,
+        statLine: `${(player.ixg_per60 || 0).toFixed(1)} ixG/60`,
+        highlight: 'Hot streak',
+        accentColor: teamColor
+      }
+    })
+
   return (
-    <>
-      <section className="game-detail__preview-notice">
-        <p>Game preview - stats will be available after the game is played</p>
+    <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
+      {/* 1. Matchup Comparison */}
+      <section style={{ marginBottom: 'var(--space-16)' }}>
+        <h2 style={{
+          fontSize: 'var(--text-sm)',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--color-text-muted)',
+          marginBottom: 'var(--space-2)'
+        }}>
+          Matchup
+        </h2>
+        <p style={{
+          fontSize: 'var(--text-sm)',
+          color: 'var(--color-text-secondary)',
+          marginBottom: 'var(--space-6)'
+        }}>
+          Season averages · {gameDetail.season}
+        </p>
+
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <ComparisonRow
+            label="CF%"
+            awayValue={away_team.cf_pct?.toFixed(1) || '50.0'}
+            homeValue={home_team.cf_pct?.toFixed(1) || '50.0'}
+            awayRaw={away_team.cf_pct || 50}
+            homeRaw={home_team.cf_pct || 50}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={true}
+            tooltip="Corsi For Percentage - season average"
+          />
+          <ComparisonRow
+            label="xGF%"
+            awayValue={awayXGFPct.toFixed(1)}
+            homeValue={homeXGFPct.toFixed(1)}
+            awayRaw={awayXGFPct}
+            homeRaw={homeXGFPct}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={true}
+            tooltip="Expected Goals For Percentage - season average"
+          />
+          <ComparisonRow
+            label="GF/GP"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Goals for per game - data not yet available"
+          />
+          <ComparisonRow
+            label="GA/GP"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Goals against per game - data not yet available"
+          />
+          <ComparisonRow
+            label="Faceoff %"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Faceoff win percentage - data not yet available"
+          />
+          <ComparisonRow
+            label="PP%"
+            awayValue="—"
+            homeValue="—"
+            awayRaw={0}
+            homeRaw={0}
+            awayColor={awayTeamColor}
+            homeColor={homeTeamColor}
+            showBar={false}
+            tooltip="Power play percentage - data not yet available"
+          />
+        </div>
       </section>
 
-      {/* Roster Preview */}
-      {playerStats && (
-        <section className="game-detail__roster-section">
-          <h2 className="game-detail__section-title">Rosters</h2>
-          <div className="roster-section">
-            <div className="roster-section__column">
-              <div className="roster-section__header">
-                <img
-                  src={getTeamLogoUrl(gameDetail.away_team.team_abbrev)}
-                  alt={gameDetail.away_team.team_abbrev}
-                  className="roster-section__logo"
-                />
-                <span>{gameDetail.away_team.team_abbrev}</span>
-              </div>
-              <div className="roster-section__players">
-                {playerStats.away_players.map((player) => (
-                  <PlayerRow key={player.player_id} player={player} />
-                ))}
-              </div>
-            </div>
-
-            <div className="roster-section__column">
-              <div className="roster-section__header">
-                <img
-                  src={getTeamLogoUrl(gameDetail.home_team.team_abbrev)}
-                  alt={gameDetail.home_team.team_abbrev}
-                  className="roster-section__logo"
-                />
-                <span>{gameDetail.home_team.team_abbrev}</span>
-              </div>
-              <div className="roster-section__players">
-                {playerStats.home_players.map((player) => (
-                  <PlayerRow key={player.player_id} player={player} />
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* 2. Players to Watch */}
+      {topPlayers.length > 0 && (
+        <section style={{ marginBottom: 'var(--space-16)' }}>
+          <h2 style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)',
+            marginBottom: 'var(--space-6)'
+          }}>
+            Players to Watch
+          </h2>
+          <PodiumCards players={topPlayers} />
         </section>
       )}
-    </>
+
+      {/* 3. Projected Rosters (disclosure) */}
+      {playerStats && (
+        <section style={{ marginBottom: 'var(--space-16)' }}>
+          <button
+            onClick={() => setShowRosters(!showRosters)}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'var(--color-accent)',
+              cursor: 'pointer',
+              padding: 0,
+              marginBottom: showRosters ? 'var(--space-6)' : 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)'
+            }}
+          >
+            View full rosters {showRosters ? '▾' : '▸'}
+          </button>
+
+          {showRosters && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+              <div style={{
+                background: 'var(--color-bg-surface)',
+                borderRadius: 'var(--radius-lg)',
+                padding: 'var(--space-6)',
+                borderTop: `3px solid ${awayTeamColor}`
+              }}>
+                <h3 style={{
+                  fontSize: 'var(--text-base)',
+                  fontWeight: 600,
+                  marginBottom: 'var(--space-4)',
+                  color: 'var(--color-text-primary)'
+                }}>
+                  {away_team.team_abbrev}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  {playerStats.away_players.map((player) => (
+                    <PlayerRow key={player.player_id} player={player} />
+                  ))}
+                </div>
+              </div>
+
+              <div style={{
+                background: 'var(--color-bg-surface)',
+                borderRadius: 'var(--radius-lg)',
+                padding: 'var(--space-6)',
+                borderTop: `3px solid ${homeTeamColor}`
+              }}>
+                <h3 style={{
+                  fontSize: 'var(--text-base)',
+                  fontWeight: 600,
+                  marginBottom: 'var(--space-4)',
+                  color: 'var(--color-text-primary)'
+                }}>
+                  {home_team.team_abbrev}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  {playerStats.home_players.map((player) => (
+                    <PlayerRow key={player.player_id} player={player} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
   )
 }
 
