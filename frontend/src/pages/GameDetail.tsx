@@ -7,7 +7,6 @@ import GameHeader from '../components/games/GameHeader'
 import XGWormChart from '../components/visualizations/XGWormChart'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
-import GamePlayerStatsTable from '../components/visualizations/GamePlayerStatsTable'
 import RollingContextPanel from '../components/visualizations/RollingContextPanel'
 import { getGameDetail, getGamePlayerStats, getGameShots, getGameXGWorm } from '../api/games'
 import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, GameShots, XGWormPoint, TeamGameStats } from '../api/types'
@@ -976,7 +975,7 @@ function AnalyticsTab({
   )
 }
 
-// Players Tab - Placeholder with existing player stats table
+// Players Tab - Rebuilt per PART 2 specifications
 function PlayersTab({
   gameDetail,
   playerStats,
@@ -989,19 +988,228 @@ function PlayersTab({
   awayTeamColor: string
 }) {
   const { home_team, away_team } = gameDetail
+  const [sortColumn, setSortColumn] = useState<string>('toi')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+
+  if (!playerStats) return null
+
+  // Separate skaters and goalies
+  const awaySkaters = playerStats.away_players.filter(p => p.position !== 'G')
+  const homeSkaters = playerStats.home_players.filter(p => p.position !== 'G')
+  const goalies = [...playerStats.away_players, ...playerStats.home_players].filter(p => p.position === 'G')
+
+  // Format TOI from seconds to mm:ss
+  const formatTOI = (seconds: number | null): string => {
+    if (!seconds) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Calculate shooting percentage
+  const calculateSH = (goals: number | null, shots: number | null): string => {
+    if (!goals || !shots || shots === 0) return '0.0'
+    return ((goals / shots) * 100).toFixed(1)
+  }
+
+  // Sort function
+  const sortPlayers = (players: PlayerGameStats[]) => {
+    return [...players].sort((a, b) => {
+      let aVal: any = a[sortColumn as keyof PlayerGameStats]
+      let bVal: any = b[sortColumn as keyof PlayerGameStats]
+
+      // Handle null values
+      if (aVal === null) aVal = -Infinity
+      if (bVal === null) bVal = -Infinity
+
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1
+      } else {
+        return aVal < bVal ? 1 : -1
+      }
+    })
+  }
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('desc')
+    }
+  }
+
+  const renderSkaterTable = (players: PlayerGameStats[], teamAbbrev: string, teamColor: string) => {
+    const sorted = sortPlayers(players)
+
+    return (
+      <div style={{
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-lg)',
+        borderTop: `3px solid ${teamColor}`,
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: 'var(--space-4) var(--space-6)',
+          borderBottom: '1px solid var(--color-border)'
+        }}>
+          <h3 style={{
+            fontSize: 'var(--text-base)',
+            fontWeight: 600,
+            color: 'var(--color-text-primary)',
+            margin: 0
+          }}>
+            {teamAbbrev}
+          </h3>
+        </div>
+
+        <div style={{ maxHeight: sorted.length > 14 ? '600px' : 'auto', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{
+              position: sorted.length > 14 ? 'sticky' : 'static',
+              top: 0,
+              background: 'var(--color-bg-surface)',
+              zIndex: 1
+            }}>
+              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <th onClick={() => handleSort('player_name')} style={{ ...headerStyle, textAlign: 'left', width: '200px' }}>Player</th>
+                <th onClick={() => handleSort('toi')} style={{ ...headerStyle, width: '70px' }}>TOI</th>
+                <th onClick={() => handleSort('goals')} style={headerStyle}>G</th>
+                <th onClick={() => handleSort('first_assists')} style={headerStyle}>A1</th>
+                <th onClick={() => handleSort('second_assists')} style={headerStyle}>A2</th>
+                <th onClick={() => handleSort('points')} style={headerStyle}>P</th>
+                <th onClick={() => handleSort('shots')} style={headerStyle}>SOG</th>
+                <th onClick={() => handleSort('goals')} style={headerStyle}>SH%</th>
+                <th onClick={() => handleSort('ixg')} style={headerStyle}>ixG</th>
+                <th onClick={() => handleSort('cf')} style={headerStyle}>iCF</th>
+                <th onClick={() => handleSort('hdcf')} style={headerStyle}>iSCF</th>
+                <th onClick={() => handleSort('ihdcf')} style={headerStyle}>iHDCF</th>
+                <th onClick={() => handleSort('pim')} style={headerStyle}>PIM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((player, idx) => (
+                <tr
+                  key={player.player_id}
+                  style={{
+                    borderBottom: '1px solid var(--color-border-subtle)',
+                    background: idx % 2 === 0 ? 'var(--color-bg-surface)' : 'var(--color-bg-elevated)',
+                    cursor: 'pointer',
+                    transition: 'background 100ms ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = idx % 2 === 0 ? 'var(--color-bg-surface)' : 'var(--color-bg-elevated)'}
+                >
+                  <td style={{ ...cellStyle, textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: 'var(--color-bg-elevated)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-text-muted)'
+                      }}>
+                        {player.player_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{player.player_name}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{player.position}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={cellStyle}>{formatTOI(player.toi)}</td>
+                  <td style={cellStyle}>{player.goals ?? 0}</td>
+                  <td style={cellStyle}>{player.first_assists ?? 0}</td>
+                  <td style={cellStyle}>{player.second_assists ?? 0}</td>
+                  <td style={cellStyle}>{player.points ?? 0}</td>
+                  <td style={cellStyle}>{player.shots ?? 0}</td>
+                  <td style={cellStyle}>{calculateSH(player.goals, player.shots)}</td>
+                  <td style={cellStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+                      {player.ixg?.toFixed(2) ?? '0.00'}
+                      {player.hot_cold_flag === 'hot' && <Badge variant="hot" />}
+                      {player.hot_cold_flag === 'cold' && <Badge variant="cold" />}
+                    </div>
+                  </td>
+                  <td style={cellStyle}>{player.cf ?? 0}</td>
+                  <td style={cellStyle}>—</td>
+                  <td style={cellStyle}>{player.ihdcf ?? player.hdcf ?? 0}</td>
+                  <td style={cellStyle}>{player.pim ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  const headerStyle = {
+    padding: 'var(--space-3) var(--space-2)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 500,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    color: 'var(--color-text-muted)',
+    textAlign: 'right' as const,
+    cursor: 'pointer',
+    userSelect: 'none' as const
+  }
+
+  const cellStyle = {
+    padding: 'var(--space-3) var(--space-2)',
+    fontSize: 'var(--text-sm)',
+    fontFamily: 'var(--font-mono)',
+    textAlign: 'right' as const,
+    color: 'var(--color-text-primary)'
+  }
 
   return (
     <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
-      {/* Player stats table */}
-      {playerStats && (
-        <GamePlayerStatsTable
-          homeTeamAbbrev={home_team.team_abbrev}
-          awayTeamAbbrev={away_team.team_abbrev}
-          homeTeamColor={homeTeamColor}
-          awayTeamColor={awayTeamColor}
-          homePlayers={playerStats.home_players}
-          awayPlayers={playerStats.away_players}
-        />
+      <h2 style={{
+        fontSize: 'var(--text-sm)',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        color: 'var(--color-text-muted)',
+        marginBottom: 'var(--space-6)'
+      }}>
+        Skaters
+      </h2>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', marginBottom: 'var(--space-12)' }}>
+        {renderSkaterTable(awaySkaters, away_team.team_abbrev, awayTeamColor)}
+        {renderSkaterTable(homeSkaters, home_team.team_abbrev, homeTeamColor)}
+      </div>
+
+      {goalies.length > 0 && (
+        <>
+          <h2 style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)',
+            marginBottom: 'var(--space-6)'
+          }}>
+            Goalies
+          </h2>
+          <div style={{
+            background: 'var(--color-bg-surface)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-6)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--color-text-secondary)',
+            textAlign: 'center'
+          }}>
+            Detailed goalie statistics not yet available
+          </div>
+        </>
       )}
     </div>
   )
