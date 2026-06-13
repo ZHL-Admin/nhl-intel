@@ -14,7 +14,7 @@ Usage:
     # Multiple seasons
     python backfill_historical.py --seasons 2024-25 2025-26
 
-    # All seasons (2015-16 through 2025-26)
+    # All seasons (2010-11 through 2025-26; floor 2010-11 chosen for xG depth)
     python backfill_historical.py --all
 
     # Drop tables and start fresh
@@ -547,7 +547,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Backfill historical NHL data")
     parser.add_argument("--season", help="Single season to backfill (e.g., 2023-24)")
     parser.add_argument("--seasons", nargs="+", help="Multiple seasons to backfill")
-    parser.add_argument("--all", action="store_true", help="Backfill all seasons (2015-16 through 2025-26)")
+    parser.add_argument("--all", action="store_true", help="Backfill all seasons (2010-11 through 2025-26)")
     parser.add_argument("--dry-run", action="store_true", help="Enumerate games only, don't fetch")
     parser.add_argument("--concurrent", type=int, default=10, help="Max concurrent requests (default: 10)")
     parser.add_argument("--drop-tables", action="store_true", help="Drop and recreate raw tables before backfill")
@@ -563,7 +563,10 @@ async def main():
 
     # Determine which seasons to process
     if args.all:
-        seasons = [f"{year}-{str(year+1)[2:]}" for year in range(2015, 2026)]
+        # Floor is 2010-11: NHL event coordinates are reliable from ~2007, but event
+        # detail (shot types, zones, sequence-able plays) thins out pre-2010. 2010-11 is
+        # the chosen floor for xG training depth (~16 seasons of shots through 2025-26).
+        seasons = [f"{year}-{str(year+1)[2:]}" for year in range(2010, 2026)]
     elif args.seasons:
         seasons = args.seasons
     elif args.season:
