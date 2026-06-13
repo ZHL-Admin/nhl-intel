@@ -70,3 +70,8 @@ select
     duration_seconds
 from parsed
 where player_id is not null
+    -- Documented noise rule: keep only physically valid shifts (1..1200s). Excludes
+    -- ~0.01% of rows that are either zero-duration degenerate records (start == end,
+    -- concentrated in 2019-20) or corrupt over-length shifts (up to ~44 min, a handful
+    -- in 2021-22/2023-24). Neither represents a real on-ice interval.
+    and duration_seconds between 1 and 1200
