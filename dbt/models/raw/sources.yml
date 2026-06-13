@@ -62,3 +62,37 @@ sources:
             description: >
               Serialized JSON array of shift rows. typeCode 517 = real shifts;
               typeCode 505 = goal annotations (null duration, excluded downstream).
+
+      - name: raw_edge_skaters
+        description: >
+          NHL Edge skater season aggregates, one row per (entity_id, season_id,
+          game_type, report). The per-report payload is serialized in `data`.
+        columns:
+          - name: entity_id
+            description: Player id
+          - name: season_id
+            description: Season as YYYYYYYY
+          - name: game_type
+            description: 2 = regular season, 3 = playoffs
+          - name: report
+            description: Edge report (e.g. skating-speed-detail, zone-time)
+          - name: data
+            description: Serialized JSON Edge payload for the report
+
+      - name: raw_edge_goalies
+        description: NHL Edge goalie season aggregates (see raw_edge_skaters for shape).
+        columns:
+          - name: entity_id
+          - name: season_id
+          - name: game_type
+          - name: report
+          - name: data
+
+      - name: raw_edge_teams
+        description: NHL Edge team season aggregates (see raw_edge_skaters for shape).
+        columns:
+          - name: entity_id
+          - name: season_id
+          - name: game_type
+          - name: report
+          - name: data

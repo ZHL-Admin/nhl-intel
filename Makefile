@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test
+.PHONY: setup dbt-build backend frontend test edge-refresh
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -21,3 +21,9 @@ frontend:
 # Run the Python test suite (backend API + pipeline).
 test:
 	pytest -q
+
+# Refresh NHL Edge season aggregates for the current season into raw tables.
+# Run per season (resumable) to backfill history, e.g. SEASON=2023-24.
+SEASON ?= 2025-26
+edge-refresh:
+	python -m scripts.refresh_edge --season $(SEASON)

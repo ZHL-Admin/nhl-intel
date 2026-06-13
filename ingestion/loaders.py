@@ -89,6 +89,11 @@ def load_json_to_bigquery(
         # Shift charts: store the whole shift array as a serialized JSON string,
         # parsed downstream by stg_shifts (resilient to API schema drift).
         "raw_shift_charts": ["data"],
+        # Edge reports: each report's payload shape differs; store it serialized and
+        # parse per-report in the stg_edge_* models.
+        "raw_edge_skaters": ["data"],
+        "raw_edge_goalies": ["data"],
+        "raw_edge_teams": ["data"],
     }
 
     cleaned_data = []
