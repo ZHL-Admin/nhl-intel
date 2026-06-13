@@ -276,3 +276,28 @@ models:
         description: Timestamp when staging model was loaded
         tests:
           - not_null
+
+  - name: stg_shifts
+    description: >
+      One row per shift per player per game, parsed from nhl_raw.raw_shift_charts.
+      Goal-event annotation rows (typeCode 505, null duration) are excluded. Times
+      are game-elapsed seconds; OT handled via (period-1)*1200 period offsets.
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+      - name: player_id
+        description: NHL player identifier for the skater/goalie on this shift
+        tests:
+          - not_null
+      - name: team_id
+        description: Team the player was on
+      - name: period
+        description: Period number (4+ = overtime)
+      - name: shift_start_seconds
+        description: Game-elapsed seconds at shift start
+      - name: shift_end_seconds
+        description: Game-elapsed seconds at shift end
+      - name: duration_seconds
+        description: Shift length in seconds (1..1200; 1200 = a goalie's full period)

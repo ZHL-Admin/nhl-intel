@@ -46,3 +46,19 @@ sources:
             description: Array of all events in the game
           - name: rosterSpots
             description: Array of all players who dressed for the game
+
+      - name: raw_shift_charts
+        description: >
+          Raw shift-chart data from api.nhle.com/stats/rest/en/shiftcharts, one row
+          per game. The shift array is stored as a serialized JSON string in `data`.
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier
+          - name: ingestion_date
+            description: Date when data was ingested into BigQuery
+          - name: season
+            description: NHL season identifier
+          - name: data
+            description: >
+              Serialized JSON array of shift rows. typeCode 517 = real shifts;
+              typeCode 505 = goal annotations (null duration, excluded downstream).

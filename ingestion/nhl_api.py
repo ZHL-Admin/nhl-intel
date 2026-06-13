@@ -4,6 +4,8 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 BASE_URL = "https://api-web.nhle.com"
+# Shift charts live on the stats REST host, not the api-web host.
+STATS_REST_URL = "https://api.nhle.com/stats/rest/en"
 
 
 def derive_season_from_game_id(game_id: int) -> str:
@@ -71,5 +73,32 @@ def get_play_by_play(game_id: str) -> dict:
     """
     url = f"{BASE_URL}/v1/gamecenter/{game_id}/play-by-play"
     response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_shift_charts(game_id: str) -> dict:
+    """Fetch shift-chart data for a single game.
+
+    Source: api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={id}
+
+    Returns a dict with a "data" array; each element is one shift with fields
+    including playerId, teamId, period, startTime/endTime ("MM:SS" within period),
+    duration, shiftNumber, typeCode, eventNumber.
+
+    Note on typeCode (verified empirically, not per the original plan text):
+    typeCode 517 rows are REAL shifts; typeCode 505 rows are goal-event
+    annotations and carry a null/empty duration. The robust rule for building
+    shift intervals is therefore to exclude rows with a null/empty duration.
+
+    Args:
+        game_id: NHL game ID.
+
+    Returns:
+        Full shift-charts API response dict ({"data": [...], "total": N}).
+    """
+    url = f"{STATS_REST_URL}/shiftcharts"
+    response = httpx.get(url, params={"cayenneExp": f"gameId={game_id}"}, timeout=30.0)
     response.raise_for_status()
     return response.json()

@@ -86,6 +86,9 @@ def load_json_to_bigquery(
         "raw_boxscores": ["tvBroadcasts", "gameVideo"],
         "raw_play_by_play": ["tvBroadcasts"],
         "raw_schedule": ["tvBroadcasts", "ticketsLink"],
+        # Shift charts: store the whole shift array as a serialized JSON string,
+        # parsed downstream by stg_shifts (resilient to API schema drift).
+        "raw_shift_charts": ["data"],
     }
 
     cleaned_data = []
@@ -95,7 +98,7 @@ def load_json_to_bigquery(
             cleaned_row["ingestion_date"] = ingestion_date
             cleaned_row["season"] = season
             # Add game_id from id field if it exists (for boxscores and play-by-play)
-            if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play"]:
+            if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play", "raw_shift_charts"]:
                 cleaned_row["game_id"] = cleaned_row["id"]
 
             # Serialize vulnerable nested fields to JSON strings
