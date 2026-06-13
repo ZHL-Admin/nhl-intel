@@ -156,3 +156,42 @@ models:
           - not_null
       - name: is_controlled_entry
         description: Whether entry was controlled (true) or dump-in (false)
+
+  - name: int_shift_segments
+    description: >
+      Shift-overlap segmentation: maximal intervals of unchanged on-ice skaters.
+      One row per (game_id, segment_index, player_id). Sub-second line-change
+      overlaps (>6 skaters/side) are excluded as documented noise.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: segment_index
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: segment_duration
+        description: Segment length in seconds (always > 0)
+
+  - name: int_segment_context
+    description: >
+      One row per (game_id, segment_index): strength state, score at segment start,
+      score-state bucket (home perspective), and zone-start faceoff context.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: segment_index
+        tests: [not_null]
+      - name: strength_state
+        description: e.g. 5v5, 5v4, 4v5, 4v4, 3v3, EN (home perspective; EN = goalie pulled)
+
+  - name: int_on_ice_events
+    description: >
+      Every play-by-play event joined to its containing shift segment, with on-ice
+      player arrays for (event-owner team) and against (opponent). The attribution
+      backbone for on-ice xG, RAPM, GSAx, chemistry, and coach-trust. Events attribute
+      to the segment (start, end] so stoppage events credit the line that was playing.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: event_id
+        tests: [not_null]
