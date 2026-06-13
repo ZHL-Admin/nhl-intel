@@ -76,13 +76,41 @@ Last updated at the end of the shift-foundation + Edge-ingestion session.
     `backfill_historical.py` intentionally NOT touched (per Edge precedent, new surfaces use
     their own refresh scripts).
 
+- **Phase 1.4 — ppt-replay tracking + backfill floor (CODE COMPLETE; backfills running)**
+  - **Plan was UPDATED** mid-project: ppt-replay is no longer a spike — it's confirmed-real
+    tracking ingestion (re-read the plan if resuming; acceptance now requires raw_ppt_replay
+    + stg_ppt_tracking_frames + int_goal_release_frame populated, transform orientation-checked).
+  - **Task 1 (ppt-replay), DONE + validated, committed:** `get_ppt_replay` two-hop fetch
+    (metadata → wsr.nhle.com sprite). wsr is Cloudflare-fronted: bare req 403s, **Referer +
+    browser UA via plain httpx = 200 (no curl-impersonate needed here)**. On-disk sprite cache.
+    onIce map → list (entityKey preserved) so BigQuery can UNNEST. `raw_ppt_replay`,
+    `stg_ppt_tracking_frames`, `int_goal_release_frame` (release pinned geometrically: puck
+    nearest a net — sprite has no frame→game-clock field). `backfill_ppt_replay.py` (resumable,
+    ≤1 req/s, batch-flush), smoke test, methodology doc, DAG step after pbp.
+    - **COORDINATE UNITS CORRECTED:** plan said "tenths of a foot / 2000×850"; observed raw is
+      **inches** (2400×1020 = 12×200ft by 12×85ft). Transform = raw/12−100 (x), raw/12−42.5 (y).
+      /10 put skaters 20ft past the boards; /12 puts all in-rink + release puck on the goal line.
+    - Validated on 3 games (24 sprites): frame counts match, all entities in-rink, release puck
+      at x_std≈±89 / y≈0.
+  - **Task 2 (backfill floor → 2010-11), code DONE + committed:** `backfill_historical.py --all`
+    now spans 2010-11→2025-26. Free-tier OK (core raw 5.0 GB for 11 seasons; +5 stays <10 GB).
+  - **RUNNING NOW (detached nohup, ~home-dir logs):**
+    (a) `backfill_historical --seasons 2010-11..2014-15 --tables boxscore pbp shiftcharts`
+        (~/backfill_2010_2014.log);
+    (b) full Edge backfill `backfill_edge --seasons 2024-25 2025-26` (~/edge_backfill2.log) —
+        now durable: get_edge_detail returns None on 404 (no 3× retry), _ingest batch-flushes
+        every 500 rows (the old accumulate-then-load-once was slow + lossy; fixed + committed).
+  - **AFTER backfills finish (finalization steps):** (1) `dbt run --select mart_edge_player_profile
+    mart_edge_team_profile` so the Edge marts reflect the full roster (they're TABLES; currently
+    sample + partial); (2) print per-season row counts of stg_play_by_play + stg_shifts as the
+    2010-2015 completion proof (both are views — no rebuild needed); (3) optionally rebuild the
+    int_shift_segments chain to include 2010-15 (heavy ~17min — tied to the incremental refactor).
+
 ## Next up (fresh-context work)
-1. **Full Edge backfill** — `python -m scripts.backfill_edge` (2021-22→2025-26) to populate
-   the Edge marts beyond the 15-entity 2024-25 sample. Resumable; run in background.
-2. **Phase 1.4** — ppt-replay spike (note: `pptReplayUrl` JSON sprites exist per goal in
-   landing, e.g. `wsr.nhle.com/sprites/{season}/{game}/ev{eventId}.json` — may be live) +
-   backfill floor extension to 2010-11.
-3. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds.
+1. **Finalize Phase 1.4** (once the two running backfills complete): rebuild Edge marts,
+   print 2010-2015 stg_play_by_play/stg_shifts per-season row counts. See finalization steps above.
+2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds.
+3. **Phase 2** — sequence mining → in-house xG → adjustments → win prob/leverage → GSAx.
 4. **Incremental refactor (important):** make `int_shift_segments`/`int_segment_context`/
    `int_on_ice_events` incremental by game so the nightly run doesn't rescan 11 seasons
    (the monolithic build is ~17 min and needs the raised timeout below).
