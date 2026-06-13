@@ -19,7 +19,7 @@ def ingest_nhl_data(**context):
     schedule, boxscore, and play-by-play data into the nhl_raw dataset.
     """
     # Import heavy packages inside task function to avoid DAG parse timeout
-    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play, derive_season_from_game_id
+    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play, get_shift_charts, derive_season_from_game_id
     from ingestion.loaders import load_json_to_bigquery
 
     execution_date = context["execution_date"]
@@ -120,6 +120,27 @@ def ingest_nhl_data(**context):
             season=season,
         )
         print(f"Loaded {len(play_by_plays)} play-by-play records to {dataset_raw}.raw_play_by_play")
+
+    # Fetch and load shift charts for each game (on-ice attribution backbone)
+    shift_charts = []
+    for game_id in all_game_ids:
+        print(f"Fetching shift charts for game {game_id}")
+        try:
+            payload = get_shift_charts(game_id)
+            shift_charts.append({"id": game_id, "game_id": game_id, "data": payload.get("data", [])})
+        except Exception as e:
+            print(f"Error fetching shift charts for game {game_id}: {e}")
+            continue
+
+    if shift_charts:
+        load_json_to_bigquery(
+            project_id=project_id,
+            dataset_id=dataset_raw,
+            table_id="raw_shift_charts",
+            data=shift_charts,
+            season=season,
+        )
+        print(f"Loaded {len(shift_charts)} shift charts to {dataset_raw}.raw_shift_charts")
 
     print(f"Ingestion complete: {len(all_game_ids)} games across {len(dates_with_games)} dates")
 

@@ -57,8 +57,10 @@ class BackfillStats:
         self.games_to_fetch = 0
         self.boxscores_fetched = 0
         self.pbp_fetched = 0
+        self.shifts_fetched = 0
         self.boxscores_failed = 0
         self.pbp_failed = 0
+        self.shifts_failed = 0
         self.start_time = time.time()
 
     def print_summary(self):
@@ -74,6 +76,8 @@ class BackfillStats:
         print(f"Boxscores failed:        {self.boxscores_failed}")
         print(f"Play-by-play fetched:    {self.pbp_fetched}")
         print(f"Play-by-play failed:     {self.pbp_failed}")
+        print(f"Shift charts fetched:    {self.shifts_fetched}")
+        print(f"Shift charts failed:     {self.shifts_failed}")
         print(f"Duration:                {duration/60:.1f} minutes")
         print(f"{'='*60}\n")
 
@@ -217,31 +221,39 @@ async def fetch_game_data(
     game_ids: List[int],
     season: str,
     stats: BackfillStats,
+    tables: List[str],
     max_concurrent: int = 10
-) -> tuple[List[dict], List[dict], List[dict]]:
-    """Fetch boxscore and play-by-play data for all games concurrently.
+) -> tuple[List[dict], List[dict], List[dict], List[dict]]:
+    """Fetch the requested surfaces for all games concurrently.
 
     Args:
         game_ids: List of game IDs to fetch.
         season: Season string.
         stats: BackfillStats object to update.
-        max_concurrent: Maximum concurrent requests.
+        tables: Surfaces to fetch (subset of boxscore/pbp/shiftcharts).
+        max_concurrent: Maximum concurrent requests against api-web.nhle.com.
 
     Returns:
-        Tuple of (boxscores, play_by_plays, failures).
+        Tuple of (boxscores, play_by_plays, shift_charts, failures).
     """
     semaphore = asyncio.Semaphore(max_concurrent)
+    # api.nhle.com (stats REST) is the more sensitive host: cap at 5 per HANDOFF-1.
+    shift_semaphore = asyncio.Semaphore(min(5, max_concurrent))
     boxscores = []
     play_by_plays = []
+    shift_charts = []
     failures = []
 
-    print(f"[{season}] Fetching data for {len(game_ids)} games (max {max_concurrent} concurrent)")
+    print(f"[{season}] Fetching {tables} for {len(game_ids)} games (max {max_concurrent} concurrent)")
 
     async with httpx.AsyncClient() as client:
         tasks = []
 
         for game_id in game_ids:
-            tasks.append(fetch_single_game(game_id, season, client, semaphore, stats, boxscores, play_by_plays, failures))
+            tasks.append(fetch_single_game(
+                game_id, season, client, semaphore, stats,
+                boxscores, play_by_plays, failures, shift_charts, tables, shift_semaphore,
+            ))
 
         # Show progress
         total = len(tasks)
@@ -250,7 +262,7 @@ async def fetch_game_data(
             if (i + 1) % 50 == 0 or (i + 1) == total:
                 print(f"[{season}] Progress: {i+1}/{total} games processed")
 
-    return boxscores, play_by_plays, failures
+    return boxscores, play_by_plays, shift_charts, failures
 
 
 async def fetch_single_game(
@@ -261,55 +273,71 @@ async def fetch_single_game(
     stats: BackfillStats,
     boxscores: List[dict],
     play_by_plays: List[dict],
-    failures: List[dict]
+    failures: List[dict],
+    shift_charts: List[dict],
+    tables: List[str],
+    shift_semaphore: asyncio.Semaphore,
 ):
-    """Fetch boxscore and play-by-play for a single game.
+    """Fetch the requested surfaces (boxscore, pbp, shiftcharts) for a single game.
 
     Args:
         game_id: Game ID to fetch.
         season: Season string.
         client: httpx async client.
-        semaphore: Rate limiting semaphore.
+        semaphore: Rate limiting semaphore for api-web.nhle.com.
         stats: BackfillStats to update.
         boxscores: List to append successful boxscores.
         play_by_plays: List to append successful play-by-plays.
         failures: List to append failures.
+        shift_charts: List to append successful shift-chart rows.
+        tables: Surfaces to fetch (subset of boxscore/pbp/shiftcharts).
+        shift_semaphore: Separate, smaller semaphore for the stats REST host.
     """
     base_url = "https://api-web.nhle.com/v1/gamecenter"
 
     # Fetch boxscore
-    try:
-        boxscore_url = f"{base_url}/{game_id}/boxscore"
-        boxscore = await fetch_with_retry(boxscore_url, game_id, client, semaphore)
-        boxscore["game_id"] = game_id
-        boxscores.append(boxscore)
-        stats.boxscores_fetched += 1
-    except Exception as e:
-        stats.boxscores_failed += 1
-        failures.append({
-            "game_id": game_id,
-            "season": season,
-            "data_type": "boxscore",
-            "error_message": str(e)[:500],
-            "timestamp": datetime.utcnow().isoformat()
-        })
+    if "boxscore" in tables:
+        try:
+            boxscore_url = f"{base_url}/{game_id}/boxscore"
+            boxscore = await fetch_with_retry(boxscore_url, game_id, client, semaphore)
+            boxscore["game_id"] = game_id
+            boxscores.append(boxscore)
+            stats.boxscores_fetched += 1
+        except Exception as e:
+            stats.boxscores_failed += 1
+            failures.append({
+                "game_id": game_id, "season": season, "data_type": "boxscore",
+                "error_message": str(e)[:500], "timestamp": datetime.utcnow().isoformat()
+            })
 
     # Fetch play-by-play
-    try:
-        pbp_url = f"{base_url}/{game_id}/play-by-play"
-        pbp = await fetch_with_retry(pbp_url, game_id, client, semaphore)
-        pbp["game_id"] = game_id
-        play_by_plays.append(pbp)
-        stats.pbp_fetched += 1
-    except Exception as e:
-        stats.pbp_failed += 1
-        failures.append({
-            "game_id": game_id,
-            "season": season,
-            "data_type": "play_by_play",
-            "error_message": str(e)[:500],
-            "timestamp": datetime.utcnow().isoformat()
-        })
+    if "pbp" in tables:
+        try:
+            pbp_url = f"{base_url}/{game_id}/play-by-play"
+            pbp = await fetch_with_retry(pbp_url, game_id, client, semaphore)
+            pbp["game_id"] = game_id
+            play_by_plays.append(pbp)
+            stats.pbp_fetched += 1
+        except Exception as e:
+            stats.pbp_failed += 1
+            failures.append({
+                "game_id": game_id, "season": season, "data_type": "play_by_play",
+                "error_message": str(e)[:500], "timestamp": datetime.utcnow().isoformat()
+            })
+
+    # Fetch shift charts (stats REST host; smaller semaphore per HANDOFF-1)
+    if "shiftcharts" in tables:
+        try:
+            shift_url = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={game_id}"
+            payload = await fetch_with_retry(shift_url, game_id, client, shift_semaphore)
+            shift_charts.append({"id": game_id, "game_id": game_id, "data": payload.get("data", [])})
+            stats.shifts_fetched += 1
+        except Exception as e:
+            stats.shifts_failed += 1
+            failures.append({
+                "game_id": game_id, "season": season, "data_type": "shift_charts",
+                "error_message": str(e)[:500], "timestamp": datetime.utcnow().isoformat()
+            })
 
 
 def _trim_schedule_response(resp: dict) -> dict:
@@ -333,7 +361,7 @@ def _trim_schedule_response(resp: dict) -> dict:
     return {"gameWeek": trimmed_weeks}
 
 
-def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_responses: List[dict], failures: List[dict], season: str):
+def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_responses: List[dict], failures: List[dict], season: str, shift_charts: List[dict] = None):
     """Load fetched data to BigQuery.
 
     Args:
@@ -342,11 +370,13 @@ def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_
         schedule_responses: List of schedule API response dicts.
         failures: List of failure dicts.
         season: Season string.
+        shift_charts: List of shift-chart rows ({id, game_id, data}).
     """
     project_id = os.getenv("GCP_PROJECT_ID")
     dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+    shift_charts = shift_charts or []
 
-    print(f"[{season}] Loading to BigQuery: {len(schedule_responses)} schedules, {len(boxscores)} boxscores, {len(play_by_plays)} play-by-plays")
+    print(f"[{season}] Loading to BigQuery: {len(schedule_responses)} schedules, {len(boxscores)} boxscores, {len(play_by_plays)} play-by-plays, {len(shift_charts)} shift charts")
 
     if schedule_responses:
         trimmed_schedules = [_trim_schedule_response(r) for r in schedule_responses]
@@ -379,6 +409,16 @@ def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_
         )
         print(f"[{season}] ✓ Loaded {len(play_by_plays)} play-by-play records")
 
+    if shift_charts:
+        load_json_to_bigquery(
+            project_id=project_id,
+            dataset_id=dataset_raw,
+            table_id="raw_shift_charts",
+            data=shift_charts,
+            season=season,
+        )
+        print(f"[{season}] ✓ Loaded {len(shift_charts)} shift charts")
+
     if failures:
         print(f"[{season}] Logging {len(failures)} failures")
         client = bigquery.Client(project=project_id)
@@ -400,17 +440,56 @@ def load_to_bigquery(boxscores: List[dict], play_by_plays: List[dict], schedule_
             print(f"[{season}] Warning: Could not log failures: {e}")
 
 
-async def backfill_season(season: str, dry_run: bool = False, max_concurrent: int = 10):
-    """Backfill all data for a single season.
+def _games_missing_shifts(client: bigquery.Client, season: str) -> List[int]:
+    """Season game ids present in raw_boxscores but missing from raw_shift_charts."""
+    project = os.getenv("GCP_PROJECT_ID")
+    dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+    sql = f"""
+        SELECT game_id FROM `{project}.{dataset_raw}.raw_boxscores`
+        WHERE season = '{season}'
+          AND game_id NOT IN (SELECT game_id FROM `{project}.{dataset_raw}.raw_shift_charts`)
+        GROUP BY game_id
+    """
+    try:
+        return [int(r.game_id) for r in client.query(sql).result()]
+    except Exception:
+        # raw_shift_charts does not exist yet on the first shift backfill
+        sql2 = f"SELECT DISTINCT game_id FROM `{project}.{dataset_raw}.raw_boxscores` WHERE season = '{season}'"
+        return [int(r.game_id) for r in client.query(sql2).result()]
+
+
+async def backfill_season(season: str, dry_run: bool = False, max_concurrent: int = 10, tables: List[str] = None):
+    """Backfill the requested surfaces for a single season.
 
     Args:
         season: Season string in format "YYYY-YY".
         dry_run: If True, only enumerate games without fetching.
         max_concurrent: Maximum concurrent API requests.
+        tables: Surfaces to fetch (subset of boxscore/pbp/shiftcharts). Defaults to
+            boxscore + pbp. Pass exactly ["shiftcharts"] for a resumable shift-only
+            backfill that targets games missing from raw_shift_charts (no pbp re-pull).
     """
+    tables = tables or ["boxscore", "pbp"]
     bq_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"))
 
-    # Enumerate games and collect schedule data
+    # Resumable shift-only path: enumerate from raw_shift_charts gaps, not raw_boxscores.
+    if tables == ["shiftcharts"]:
+        game_ids = _games_missing_shifts(bq_client, season)
+        stats = BackfillStats(season)
+        stats.total_games = len(game_ids)
+        stats.games_to_fetch = len(game_ids)
+        if dry_run:
+            print(f"[{season}] Dry run - would fetch shift charts for {len(game_ids)} games")
+            return stats
+        if not game_ids:
+            print(f"[{season}] No shift charts to fetch - all already in BigQuery")
+            return stats
+        _, _, shift_charts, failures = await fetch_game_data(game_ids, season, stats, tables, max_concurrent)
+        load_to_bigquery([], [], [], failures, season, shift_charts=shift_charts)
+        stats.print_summary()
+        return stats
+
+    # Standard path: enumerate games missing from raw_boxscores, collect schedule data.
     game_ids, schedule_responses, stats = await enumerate_season_games(season, bq_client)
 
     if dry_run:
@@ -419,7 +498,6 @@ async def backfill_season(season: str, dry_run: bool = False, max_concurrent: in
 
     if stats.games_to_fetch == 0:
         print(f"[{season}] No games to fetch - all data already in BigQuery")
-        # Still load schedule data even if no new games to fetch
         if schedule_responses:
             print(f"[{season}] Loading schedule data to raw_games")
             load_to_bigquery([], [], schedule_responses, [], season)
@@ -427,10 +505,10 @@ async def backfill_season(season: str, dry_run: bool = False, max_concurrent: in
         return stats
 
     # Fetch data
-    boxscores, play_by_plays, failures = await fetch_game_data(game_ids, season, stats, max_concurrent)
+    boxscores, play_by_plays, shift_charts, failures = await fetch_game_data(game_ids, season, stats, tables, max_concurrent)
 
     # Load to BigQuery (including schedule data)
-    load_to_bigquery(boxscores, play_by_plays, schedule_responses, failures, season)
+    load_to_bigquery(boxscores, play_by_plays, schedule_responses, failures, season, shift_charts=shift_charts)
 
     stats.print_summary()
     return stats
@@ -473,6 +551,13 @@ async def main():
     parser.add_argument("--dry-run", action="store_true", help="Enumerate games only, don't fetch")
     parser.add_argument("--concurrent", type=int, default=10, help="Max concurrent requests (default: 10)")
     parser.add_argument("--drop-tables", action="store_true", help="Drop and recreate raw tables before backfill")
+    parser.add_argument(
+        "--tables", nargs="+", default=["boxscore", "pbp"],
+        choices=["boxscore", "pbp", "shiftcharts"],
+        help="Surfaces to fetch. Use '--tables shiftcharts' alone for a resumable "
+             "shift-only backfill that does not re-pull pbp (default: boxscore pbp).",
+    )
+    parser.add_argument("--sleep-ms", type=int, default=100, help="Politeness delay between requests (ms)")
 
     args = parser.parse_args()
 
@@ -490,6 +575,7 @@ async def main():
     print(f"NHL Historical Backfill")
     print(f"{'='*60}")
     print(f"Seasons: {', '.join(seasons)}")
+    print(f"Tables: {', '.join(args.tables)}")
     print(f"Max concurrent requests: {args.concurrent}")
     print(f"Dry run: {args.dry_run}")
     print(f"Drop tables: {args.drop_tables}")
@@ -502,7 +588,7 @@ async def main():
     # Process each season
     all_stats = []
     for season in seasons:
-        stats = await backfill_season(season, args.dry_run, args.concurrent)
+        stats = await backfill_season(season, args.dry_run, args.concurrent, tables=args.tables)
         all_stats.append(stats)
 
     # Print overall summary
