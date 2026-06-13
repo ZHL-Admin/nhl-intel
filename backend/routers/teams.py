@@ -7,12 +7,23 @@ from typing import Optional, List
 
 from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
-    TeamVsOpponent, PlayerZoneDeployment, TeamSituational
+    TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+def _season_str_to_id(season: Optional[str]) -> Optional[int]:
+    """Convert a 'YYYY-YY' season string to the Edge YYYYYYYY id (e.g. 2024-25 -> 20242025)."""
+    if not season:
+        return None
+    try:
+        start = int(season[:4])
+        return start * 10000 + (start + 1)
+    except (ValueError, IndexError):
+        return None
 
 
 @router.get("/{team_id}", response_model=TeamDetail)
@@ -165,6 +176,20 @@ async def get_team_detail(
         nz_faceoff_win_pct=nz_faceoff_win_pct,
         dz_faceoff_win_pct=dz_faceoff_win_pct
     )
+
+
+@router.get("/{team_id}/edge", response_model=EdgeTeamProfile)
+@cache(ttl=86400)
+async def get_team_edge(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (e.g., 2024-25); latest if omitted"),
+    game_type: int = Query(2, description="2=regular season, 3=playoffs"),
+) -> EdgeTeamProfile:
+    """NHL Edge team profile: NHL danger-bucket shot shares (season-aggregate)."""
+    row = bq_service.get_team_edge(team_id, _season_str_to_id(season), game_type)
+    if not row:
+        raise HTTPException(status_code=404, detail="No NHL Edge data for this team/season")
+    return EdgeTeamProfile(**row)
 
 
 @router.get("/{team_id}/trends", response_model=TeamTrends)

@@ -584,3 +584,54 @@ class GameContext(BaseModel):
     goal_highlights: List[ContextGoalHighlight] = Field(default_factory=list)
     away_last10: Optional[ContextLast10] = None
     home_last10: Optional[ContextLast10] = None
+
+
+# ============================================================================
+# NHL Edge Profiles (Phase 1.2: season-aggregate tracking data)
+# ============================================================================
+
+class EdgePlayerProfile(BaseModel):
+    """Per player-season NHL Edge profile (season-aggregate tracking data)."""
+    player_id: int
+    season_id: int
+    game_type: int
+    max_skating_speed_mph: Optional[float] = None
+    max_skating_speed_pctile: Optional[float] = None
+    bursts_22_plus: Optional[int] = None
+    bursts_22_plus_pctile: Optional[float] = None
+    bursts_20_to_22: Optional[int] = None
+    bursts_18_to_20: Optional[int] = None
+    bursts_22_plus_per60: Optional[float] = None
+    bursts_20_plus_per60: Optional[float] = None
+    avg_shot_speed_mph: Optional[float] = None
+    max_shot_speed_mph: Optional[float] = None
+    distance_per60_mi: Optional[float] = None
+    distance_total_mi: Optional[float] = None
+    oz_time_pct: Optional[float] = None
+    nz_time_pct: Optional[float] = None
+    dz_time_pct: Optional[float] = None
+    oz_time_pct_es: Optional[float] = None
+    dz_time_pct_es: Optional[float] = None
+    oz_start_pct: Optional[float] = None
+    dz_start_pct: Optional[float] = None
+    total_sog: Optional[int] = None
+    high_danger_sog: Optional[int] = None
+    high_danger_goals: Optional[int] = None
+    high_danger_sog_share: Optional[float] = None
+    toi_minutes: Optional[float] = None
+
+
+class EdgeTeamProfile(BaseModel):
+    """Per team-season NHL Edge profile (danger-bucket shot shares)."""
+    team_id: int
+    season_id: int
+    game_type: int
+    total_sog: Optional[int] = None
+    high_danger_sog: Optional[int] = None
+    mid_danger_sog: Optional[int] = None
+    long_danger_sog: Optional[int] = None
+    high_danger_goals: Optional[int] = None
+    high_danger_sog_share: Optional[float] = None
+    mid_danger_sog_share: Optional[float] = None
+    long_danger_sog_share: Optional[float] = None
+    high_danger_shooting_pct: Optional[float] = None

@@ -97,6 +97,33 @@ def _ingest(client, entity, table, ids, reports, season, season_id, game_type, d
             time.sleep(sleep_ms / 1000.0)
 
 
+def refresh_season(client: bigquery.Client, season: str, game_type: int = 2,
+                   limit: int | None = None, sleep_ms: int = 100) -> int:
+    """Refresh all Edge reports for one season. Returns total rows loaded.
+
+    Resumable: skips (entity, season, game_type, report) tuples already present.
+    Reused by backfill_edge.py to sweep multiple seasons.
+    """
+    season_id = _season_id(season)
+    skaters, goalies = _roster(client, season, limit)
+    teams = _teams(client, season) if not limit else _teams(client, season)[: max(1, limit // 3)]
+    logger.info("Refreshing Edge %s (gt=%d): %d skaters, %d goalies, %d teams",
+                season, game_type, len(skaters), len(goalies), len(teams))
+
+    rows_by_table = {"raw_edge_skaters": [], "raw_edge_goalies": [], "raw_edge_teams": []}
+    _ingest(client, "skater", "raw_edge_skaters", skaters, EDGE_SKATER_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_skaters"), rows_by_table, sleep_ms)
+    _ingest(client, "goalie", "raw_edge_goalies", goalies, EDGE_GOALIE_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_goalies"), rows_by_table, sleep_ms)
+    _ingest(client, "team", "raw_edge_teams", teams, EDGE_TEAM_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_teams"), rows_by_table, sleep_ms)
+
+    total = 0
+    for table, rows in rows_by_table.items():
+        if rows:
+            load_json_to_bigquery(PROJECT, DATASET_RAW, table, rows, season)
+            logger.info("Loaded %d rows to %s", len(rows), table)
+            total += len(rows)
+    return total
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", default="2025-26")
@@ -106,21 +133,7 @@ def main() -> None:
     args = ap.parse_args()
 
     client = bigquery.Client(project=PROJECT)
-    season_id = _season_id(args.season)
-    skaters, goalies = _roster(client, args.season, args.limit)
-    teams = _teams(client, args.season) if not args.limit else _teams(client, args.season)[: max(1, args.limit // 3)]
-    logger.info("Refreshing Edge %s (gt=%d): %d skaters, %d goalies, %d teams",
-                args.season, args.game_type, len(skaters), len(goalies), len(teams))
-
-    rows_by_table = {"raw_edge_skaters": [], "raw_edge_goalies": [], "raw_edge_teams": []}
-    _ingest(client, "skater", "raw_edge_skaters", skaters, EDGE_SKATER_REPORTS, args.season, season_id, args.game_type, _existing(client, "raw_edge_skaters"), rows_by_table, args.sleep_ms)
-    _ingest(client, "goalie", "raw_edge_goalies", goalies, EDGE_GOALIE_REPORTS, args.season, season_id, args.game_type, _existing(client, "raw_edge_goalies"), rows_by_table, args.sleep_ms)
-    _ingest(client, "team", "raw_edge_teams", teams, EDGE_TEAM_REPORTS, args.season, season_id, args.game_type, _existing(client, "raw_edge_teams"), rows_by_table, args.sleep_ms)
-
-    for table, rows in rows_by_table.items():
-        if rows:
-            load_json_to_bigquery(PROJECT, DATASET_RAW, table, rows, args.season)
-            logger.info("Loaded %d rows to %s", len(rows), table)
+    refresh_season(client, args.season, args.game_type, args.limit, args.sleep_ms)
     logger.info("Edge refresh complete.")
 
 

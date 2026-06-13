@@ -98,6 +98,43 @@ class BigQueryService:
 
         return f"{self.project_id}.{dataset}.{table_name}"
 
+    def get_player_edge(self, player_id: int, season_id: Optional[int] = None, game_type: int = 2) -> Optional[Dict[str, Any]]:
+        """Fetch a skater's NHL Edge profile for a season (latest if unspecified).
+
+        Args:
+            player_id: NHL player id.
+            season_id: Season as YYYYYYYY (e.g. 20242025). Latest available if None.
+            game_type: 2 = regular season, 3 = playoffs.
+
+        Returns:
+            The Edge profile row, or None if no Edge data exists for the player.
+        """
+        table = self.get_full_table_id('mart_edge_player_profile')
+        season_filter = f"AND season_id = {int(season_id)}" if season_id else ""
+        sql = f"""
+        SELECT * FROM {table}
+        WHERE player_id = {int(player_id)} AND game_type = {int(game_type)}
+            {season_filter}
+        ORDER BY season_id DESC
+        LIMIT 1
+        """
+        rows = self.query(sql)
+        return rows[0] if rows else None
+
+    def get_team_edge(self, team_id: int, season_id: Optional[int] = None, game_type: int = 2) -> Optional[Dict[str, Any]]:
+        """Fetch a team's NHL Edge profile for a season (latest if unspecified)."""
+        table = self.get_full_table_id('mart_edge_team_profile')
+        season_filter = f"AND season_id = {int(season_id)}" if season_id else ""
+        sql = f"""
+        SELECT * FROM {table}
+        WHERE team_id = {int(team_id)} AND game_type = {int(game_type)}
+            {season_filter}
+        ORDER BY season_id DESC
+        LIMIT 1
+        """
+        rows = self.query(sql)
+        return rows[0] if rows else None
+
     def get_game_context(self, game_id: int) -> Optional[Dict[str, Any]]:
         """Fetch GameDetail context: scratches, season series, team stats, goal videos.
 

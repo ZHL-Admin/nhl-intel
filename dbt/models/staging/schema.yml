@@ -378,3 +378,40 @@ models:
         description: NHL game identifier
       - name: home_win_prob_devig
         description: De-vigged implied home win probability (normalized pair sums to 1)
+
+  - name: stg_edge_skaters
+    description: >
+      NHL Edge skater season aggregates, pivoted from the 5 per-report raw rows into
+      one typed row per (player, season, game_type): skating speed/bursts, distance,
+      shot speed, zone time (all + even-strength) + zone starts, danger-bucket shots.
+      Season-aggregate profile data — never joined to individual plays.
+    columns:
+      - name: player_id
+        tests: [not_null]
+      - name: season_id
+        description: Season as YYYYYYYY (integer)
+        tests: [not_null]
+      - name: oz_time_pct
+        description: Offensive-zone time share, all strengths (oz+nz+dz sum to 1)
+
+  - name: stg_edge_goalies
+    description: >
+      NHL Edge goalie season aggregates. SCOPE: the Edge endpoint exposes only
+      gamesAbove900 / pctgGamesAbove900 + a last-10 per-game save pct list — NO
+      high-danger or 5v5 save-pct split. Danger splits come from the Phase 2.5
+      GSAx marts (our xG layer); this is the independent "quality start" view.
+    columns:
+      - name: player_id
+        tests: [not_null]
+      - name: season_id
+        tests: [not_null]
+
+  - name: stg_edge_teams
+    description: >
+      NHL Edge team season aggregates: NHL danger-bucket (high/mid/long) shot counts
+      and shares from team-shot-location-detail (position='all' rows).
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: season_id
+        tests: [not_null]

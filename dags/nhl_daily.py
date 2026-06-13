@@ -192,11 +192,11 @@ def ingest_nhl_data(**context):
 
 
 def refresh_weekly_aux(**context):
-    """Weekly-cadence aux ingestion: season faceoff splits + glossary refresh.
+    """Weekly-cadence aux ingestion: NHL Edge + season faceoff splits + glossary.
 
-    Season-level faceoff aggregates change slowly, so this runs only on Mondays
-    (execution_date.weekday() == 0). The glossary is refreshed opportunistically
-    in the same task (idempotent: only loaded if not already present).
+    Edge season aggregates and season-level faceoff splits change slowly, so this
+    runs only on Mondays (execution_date.weekday() == 0). The glossary is refreshed
+    opportunistically in the same task (idempotent: only loaded if not already present).
     """
     execution_date = context["execution_date"]
     if execution_date.weekday() != 0:
@@ -214,6 +214,15 @@ def refresh_weekly_aux(**context):
     year = execution_date.year
     season = f"{year}-{str(year + 1)[2:]}" if execution_date.month >= 10 else f"{year - 1}-{str(year)[2:]}"
     season_id = season[:4] + str(int(season[:4]) + 1)
+
+    # NHL Edge season aggregates (current season, resumable per-entity).
+    try:
+        from scripts.refresh_edge import refresh_season
+        client = bigquery.Client(project=project_id)
+        loaded = refresh_season(client, season, game_type=2)
+        print(f"Edge refresh loaded {loaded} rows for {season}")
+    except Exception as e:
+        print(f"Error refreshing Edge: {e}")
 
     # Faceoff splits (regular season). Always refresh the current season (it grows).
     try:

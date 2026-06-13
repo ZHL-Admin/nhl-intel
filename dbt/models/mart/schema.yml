@@ -184,3 +184,28 @@ models:
         description: Offensive-zone faceoff win percentage (null-safe)
       - name: dz_faceoff_win_pct
         description: Defensive-zone faceoff win percentage (null-safe)
+
+  - name: mart_edge_player_profile
+    description: >
+      Per player-season NHL Edge profile: skating speed/bursts, distance, shot speed,
+      zone time/starts (all + even-strength), and danger-bucket shot share. Burst
+      rates per 60 use REAL season TOI from stg_shifts (null-safe when TOI absent).
+      Season-aggregate tracking data, never joined to plays.
+    columns:
+      - name: player_id
+        tests: [not_null]
+      - name: season_id
+        tests: [not_null]
+      - name: bursts_22_plus_per60
+        description: 22+ mph bursts per 60 min of real shift TOI (null when TOI=0)
+
+  - name: mart_edge_team_profile
+    description: >
+      Per team-season NHL Edge profile: NHL danger-bucket (high/mid/long) shot shares.
+      Goalie HD aggregates are intentionally NOT joined (Edge goalie data has no team
+      linkage and no HD split; goalie danger lives in the Phase 2.5 goaltending marts).
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: season_id
+        tests: [not_null]
