@@ -102,3 +102,58 @@ def get_shift_charts(game_id: str) -> dict:
     response = httpx.get(url, params={"cayenneExp": f"gameId={game_id}"}, timeout=30.0)
     response.raise_for_status()
     return response.json()
+
+
+# NHL Edge reports confirmed live (see scripts/EDGE_FINDINGS.md). Each endpoint is a
+# whole-season aggregate; metrics ship as value + league percentile + leagueAvg.
+# NOTE the suffix is inconsistent: most reports end in "-detail", but "zone-time"
+# does NOT. We therefore store the full report path segment per entity.
+EDGE_SKATER_REPORTS = (
+    "skating-speed-detail",
+    "skating-distance-detail",
+    "shot-speed-detail",
+    "shot-location-detail",
+    "zone-time",
+)
+EDGE_GOALIE_REPORTS = ("save-percentage-detail",)
+EDGE_TEAM_REPORTS = ("shot-location-detail",)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_edge_detail(entity: str, entity_id: str, season: str, game_type: int, report: str) -> dict:
+    """Fetch one NHL Edge per-metric report payload (season aggregate).
+
+    Endpoint family (verified):
+        GET /v1/edge/{entity}-{report}/{id}/{season}/{gameType}
+    where ``report`` is the full path segment, e.g. "skating-speed-detail" or
+    "zone-time" (the latter intentionally has no "-detail" suffix).
+
+    Args:
+        entity: One of "skater", "goalie", "team".
+        entity_id: Player id (skater/goalie) or team id.
+        season: Season as YYYYYYYY (e.g. "20242025").
+        game_type: 2 = regular season, 3 = playoffs.
+        report: Full report path segment.
+
+    Returns:
+        Full Edge payload dict for the (entity, season, gameType).
+    """
+    url = f"{BASE_URL}/v1/edge/{entity}-{report}/{entity_id}/{season}/{game_type}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_edge_skater(player_id: str, season: str, game_type: int = 2, report: str = "skating-speed-detail") -> dict:
+    """Fetch a skater's NHL Edge report (default skating-speed-detail)."""
+    return get_edge_detail("skater", player_id, season, game_type, report)
+
+
+def get_edge_goalie(player_id: str, season: str, game_type: int = 2, report: str = "save-percentage-detail") -> dict:
+    """Fetch a goalie's NHL Edge report (default save-percentage-detail)."""
+    return get_edge_detail("goalie", player_id, season, game_type, report)
+
+
+def get_edge_team(team_id: str, season: str, game_type: int = 2, report: str = "shot-location-detail") -> dict:
+    """Fetch a team's NHL Edge report (default shot-location-detail)."""
+    return get_edge_detail("team", team_id, season, game_type, report)
