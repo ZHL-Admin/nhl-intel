@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from models.schemas import (
     GameDate, Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
     GameShots, ShotAttempt, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat,
-    SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact
+    SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -702,6 +702,17 @@ async def get_team_stats(game_id: int) -> TeamComparisonStats:
     if not row:
         raise HTTPException(status_code=404, detail="Game not found")
     return TeamComparisonStats(**{k: int(v or 0) for k, v in row.items()})
+
+
+@router.get("/{game_id}/context", response_model=GameContext)
+@cache(ttl=86400)
+async def get_game_context(game_id: int) -> GameContext:
+    """Game context: scratches, season series, team-stat comparisons, last-10 records,
+    and per-goal highlight video URLs keyed by event id (landing + right-rail)."""
+    row = bq_service.get_game_context(game_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Game context not available")
+    return GameContext(**row)
 
 
 @router.get("/{game_id}/pressure", response_model=List[PressurePoint])

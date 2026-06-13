@@ -96,3 +96,72 @@ sources:
           - name: game_type
           - name: report
           - name: data
+
+      - name: raw_statsrest_faceoffs
+        description: >
+          Season-level per-player faceoff splits from the stats-REST
+          skater/faceoffwins report. One row per (playerId, seasonId, gameType)
+          per ingestion. Flat records (zone + ev/pp/sh win/loss counts).
+        columns:
+          - name: playerId
+            description: NHL player id
+          - name: seasonId
+            description: Season as YYYYYYYY (integer)
+          - name: ingestion_date
+            description: Date when data was ingested into BigQuery
+
+      - name: raw_game_landing
+        description: >
+          Raw gamecenter landing payload, one row per game. Heavy nested objects
+          (summary, awayTeam, homeTeam, ...) are serialized JSON strings; parsed by
+          stg_game_context for goal highlight links and three stars.
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier
+          - name: summary
+            description: Serialized JSON; summary.scoring[].goals[] carry highlight links
+          - name: ingestion_date
+
+      - name: raw_game_right_rail
+        description: >
+          Raw gamecenter right-rail payload, one row per game. Nested objects
+          (gameInfo, seasonSeries, teamGameStats, ...) serialized as JSON strings;
+          parsed by stg_game_context for scratches, season series, and stat comparisons.
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier (injected by the loader)
+          - name: gameInfo
+            description: Serialized JSON; carries per-team scratches and coaches
+          - name: ingestion_date
+
+      - name: raw_partner_odds
+        description: >
+          Partner sportsbook odds snapshots (api-web partner-game/{cc}/now). One row
+          per snapshot; games + bettingPartner serialized. INTERNAL CALIBRATION ONLY
+          (blueprint 13.2): never exposed via API/UI.
+        columns:
+          - name: games
+            description: Serialized JSON array of per-game odds
+          - name: ingestion_date
+
+      - name: raw_glossary
+        description: >
+          NHL stats-REST glossary term definitions (api.nhle.com/stats/rest/en/glossary).
+          Ingested once for Phase 6 concept cards. Flat records (id, abbreviation, definition).
+        columns:
+          - name: id
+          - name: abbreviation
+          - name: definition
+          - name: ingestion_date
+
+      - name: raw_standings
+        description: >
+          League standings as of a date (api-web standings/{date}), one row per team
+          per date. Localized name objects (teamName, teamAbbrev, ...) serialized as
+          JSON strings; parsed by stg_standings.
+        columns:
+          - name: date
+            description: Standings as-of date (YYYY-MM-DD)
+          - name: teamAbbrev
+            description: Serialized JSON {default, fr}
+          - name: ingestion_date

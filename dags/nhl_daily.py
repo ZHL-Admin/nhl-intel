@@ -19,7 +19,11 @@ def ingest_nhl_data(**context):
     schedule, boxscore, and play-by-play data into the nhl_raw dataset.
     """
     # Import heavy packages inside task function to avoid DAG parse timeout
-    from ingestion.nhl_api import get_schedule, get_boxscore, get_play_by_play, get_shift_charts, derive_season_from_game_id
+    from ingestion.nhl_api import (
+        get_schedule, get_boxscore, get_play_by_play, get_shift_charts,
+        get_game_landing, get_game_right_rail, get_standings_by_date,
+        get_partner_odds, derive_season_from_game_id,
+    )
     from ingestion.loaders import load_json_to_bigquery
 
     execution_date = context["execution_date"]
@@ -142,7 +146,104 @@ def ingest_nhl_data(**context):
         )
         print(f"Loaded {len(shift_charts)} shift charts to {dataset_raw}.raw_shift_charts")
 
+    # --- Phase 1.3 surfaces (current-season games / execution date) ---
+
+    # Game landing + right-rail context (goal video links, scratches, season series).
+    landings, rails = [], []
+    for game_id in all_game_ids:
+        try:
+            landings.append(get_game_landing(game_id))
+        except Exception as e:
+            print(f"Error fetching landing for game {game_id}: {e}")
+        try:
+            rr = get_game_right_rail(game_id)
+            rr["id"] = game_id          # right-rail payload has no id; inject it
+            rr["game_id"] = game_id
+            rails.append(rr)
+        except Exception as e:
+            print(f"Error fetching right-rail for game {game_id}: {e}")
+    if landings:
+        load_json_to_bigquery(project_id, dataset_raw, "raw_game_landing", landings, season)
+        print(f"Loaded {len(landings)} landing records to {dataset_raw}.raw_game_landing")
+    if rails:
+        load_json_to_bigquery(project_id, dataset_raw, "raw_game_right_rail", rails, season)
+        print(f"Loaded {len(rails)} right-rail records to {dataset_raw}.raw_game_right_rail")
+
+    # Standings for each date that had games.
+    standings_rows = []
+    for target_date in sorted(set(dates_with_games)):
+        try:
+            standings_rows.extend(get_standings_by_date(target_date).get("standings", []))
+        except Exception as e:
+            print(f"Error fetching standings for {target_date}: {e}")
+    if standings_rows:
+        load_json_to_bigquery(project_id, dataset_raw, "raw_standings", standings_rows, season)
+        print(f"Loaded {len(standings_rows)} standings rows to {dataset_raw}.raw_standings")
+
+    # Partner odds snapshot (INTERNAL CALIBRATION ONLY — never exposed via API/UI).
+    try:
+        odds = get_partner_odds("US")
+        load_json_to_bigquery(project_id, dataset_raw, "raw_partner_odds", odds, season)
+        print(f"Loaded partner-odds snapshot ({len(odds.get('games', []))} games) to {dataset_raw}.raw_partner_odds")
+    except Exception as e:
+        print(f"Error fetching partner odds: {e}")
+
     print(f"Ingestion complete: {len(all_game_ids)} games across {len(dates_with_games)} dates")
+
+
+def refresh_weekly_aux(**context):
+    """Weekly-cadence aux ingestion: season faceoff splits + glossary refresh.
+
+    Season-level faceoff aggregates change slowly, so this runs only on Mondays
+    (execution_date.weekday() == 0). The glossary is refreshed opportunistically
+    in the same task (idempotent: only loaded if not already present).
+    """
+    execution_date = context["execution_date"]
+    if execution_date.weekday() != 0:
+        print(f"Not Monday ({execution_date.date()}, weekday={execution_date.weekday()}); skipping weekly aux refresh.")
+        return
+
+    from ingestion.nhl_api import get_skater_faceoffs, get_glossary, derive_season_from_game_id
+    from ingestion.loaders import load_json_to_bigquery
+    from google.cloud import bigquery
+
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+
+    # Derive the current season string/id from the execution date (Oct rollover).
+    year = execution_date.year
+    season = f"{year}-{str(year + 1)[2:]}" if execution_date.month >= 10 else f"{year - 1}-{str(year)[2:]}"
+    season_id = season[:4] + str(int(season[:4]) + 1)
+
+    # Faceoff splits (regular season). Always refresh the current season (it grows).
+    try:
+        records = get_skater_faceoffs(season_id, game_type=2)
+        for r in records:
+            r["game_type"] = 2
+        if records:
+            load_json_to_bigquery(project_id, dataset_raw, "raw_statsrest_faceoffs", records, season)
+            print(f"Loaded {len(records)} faceoff records for {season_id}")
+    except Exception as e:
+        print(f"Error refreshing faceoffs: {e}")
+
+    # Glossary (only if empty).
+    try:
+        client = bigquery.Client(project=project_id)
+        n = next(iter(client.query(
+            f"SELECT COUNT(*) AS n FROM `{project_id}.{dataset_raw}.raw_glossary`"
+        ).result())).n
+    except Exception:
+        n = 0
+    if n == 0:
+        try:
+            terms = get_glossary().get("data", [])
+            if terms:
+                load_json_to_bigquery(project_id, dataset_raw, "raw_glossary", terms)
+                print(f"Loaded {len(terms)} glossary terms")
+        except Exception as e:
+            print(f"Error refreshing glossary: {e}")
+    else:
+        print(f"Glossary already present ({n} terms); skipping.")
 
 
 def generate_daily_report(**context):
@@ -250,6 +351,12 @@ with DAG(
         provide_context=True,
     )
 
+    weekly_aux_task = PythonOperator(
+        task_id="refresh_weekly_aux",
+        python_callable=refresh_weekly_aux,
+        provide_context=True,
+    )
+
     run_dbt_models = BashOperator(
         task_id="run_dbt_models",
         bash_command="cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run --profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs --target-path /tmp/dbt_target",
@@ -274,4 +381,4 @@ with DAG(
         provide_context=True,
     )
 
-    ingest_task >> run_dbt_models >> generate_report >> publish_report
+    ingest_task >> weekly_aux_task >> run_dbt_models >> generate_report >> publish_report

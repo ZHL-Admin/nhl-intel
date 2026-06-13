@@ -301,3 +301,80 @@ models:
         description: Game-elapsed seconds at shift end
       - name: duration_seconds
         description: Shift length in seconds (1..1200; 1200 = a goalie's full period)
+
+  - name: stg_statsrest_faceoffs
+    description: >
+      Season-level per-player faceoff splits (zone + ev/pp/sh win/loss counts) from
+      the stats-REST skater/faceoffwins report. SEASON grain — this complements, and
+      does NOT replace, the event-derived per-GAME faceoff data in mart_team_faceoffs.
+      Use this for set-play/zone faceoff analysis; use mart_team_faceoffs for per-game
+      team faceoff outcomes.
+    columns:
+      - name: player_id
+        description: NHL player identifier
+        tests:
+          - not_null
+      - name: season_id
+        description: Season as YYYYYYYY (integer)
+        tests:
+          - not_null
+      - name: total_faceoffs
+        description: Total faceoffs taken in the season
+      - name: oz_faceoff_wins
+        description: Offensive-zone faceoff wins
+      - name: dz_faceoff_wins
+        description: Defensive-zone faceoff wins
+
+  - name: stg_standings
+    description: >
+      League standings as of a date (one row per team per date), parsed from
+      raw_standings. Carries points/record, league/conference/division ranks, and
+      last-10 (l10*) splits. The /games/{id}/context endpoint joins l10* as-of the
+      game date because last-10 records are absent from the landing/right-rail payloads.
+    columns:
+      - name: team_abbrev
+        description: Team abbreviation (e.g. "COL")
+        tests:
+          - not_null
+      - name: standings_date
+        description: Standings as-of date (YYYY-MM-DD)
+        tests:
+          - not_null
+      - name: points
+        description: Standings points
+      - name: l10_wins
+        description: Wins in the team's last 10 games as of the date
+
+  - name: stg_game_context
+    description: >
+      One row per game of pregame/postgame context for the GameDetail surface:
+      scratches and head coaches (from right-rail gameInfo), season series wins +
+      prior meetings, team game-stat comparisons, and per-goal highlight video links
+      keyed by event_id (from landing summary.scoring). Last-10 records are NOT here
+      (absent from the source payloads); they are joined from stg_standings in the API.
+    columns:
+      - name: game_id
+        description: Unique NHL game identifier
+        tests:
+          - not_null
+          - unique
+      - name: goal_highlights
+        description: >
+          Array of per-goal records (event_id, period, scorer_player_id,
+          time_in_period, highlight_url, ppt_replay_url).
+      - name: away_scratches
+        description: Array of {player_id, player_name} scratched for the away team
+
+  - name: stg_partner_odds
+    description: >
+      De-vigged implied win probabilities from partner sportsbook snapshots.
+      INTERNAL CALIBRATION ONLY (blueprint 13.2) — there is intentionally NO backend
+      endpoint and NO frontend surface for this model; it exists only so Phase 2.4 can
+      benchmark our win-probability model against the market. PENDING in-season
+      validation of the american-odds JSON path (probed in the offseason with an empty
+      games[] array — see scripts/STATSREST_FINDINGS.md).
+    columns:
+      - name: game_id
+        description: NHL game identifier
+      - name: home_win_prob_devig
+        description: De-vigged implied home win probability (normalized pair sums to 1)

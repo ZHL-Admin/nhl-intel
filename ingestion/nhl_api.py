@@ -157,3 +157,122 @@ def get_edge_goalie(player_id: str, season: str, game_type: int = 2, report: str
 def get_edge_team(team_id: str, season: str, game_type: int = 2, report: str = "shot-location-detail") -> dict:
     """Fetch a team's NHL Edge report (default shot-location-detail)."""
     return get_edge_detail("team", team_id, season, game_type, report)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.3 surfaces: stats-REST faceoffs, game landing/right-rail, partner odds,
+# glossary, standings-by-date. See scripts/STATSREST_FINDINGS.md for the probed
+# report names and payload shapes that justify the parsing choices below.
+# ---------------------------------------------------------------------------
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _get_statsrest_page(report: str, season_id: str, game_type: int, limit: int, start: int) -> dict:
+    """Fetch one page of a stats-REST skater report (internal helper)."""
+    url = f"{STATS_REST_URL}/skater/{report}"
+    params = {
+        "cayenneExp": f"seasonId={season_id} and gameTypeId={game_type}",
+        "limit": limit,
+        "start": start,
+    }
+    response = httpx.get(url, params=params, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_skater_faceoffs(season_id: str, game_type: int = 2, limit: int = 100) -> list[dict]:
+    """Fetch every skater's season faceoff splits from the stats REST API.
+
+    Report: GET api.nhle.com/stats/rest/en/skater/faceoffwins (richest report,
+    carrying zone splits AND ev/pp/sh splits; faceoffpercentages is a redundant
+    percentage-only view — see STATSREST_FINDINGS.md). Pages with limit/start
+    until the reported total is reached.
+
+    Args:
+        season_id: Season as YYYYYYYY (e.g. "20242025").
+        game_type: 2 = regular season, 3 = playoffs.
+        limit: Page size (NHL caps effective page size around 100).
+
+    Returns:
+        List of per-player faceoff records (flat dicts) for the season.
+    """
+    out: list[dict] = []
+    start = 0
+    while True:
+        page = _get_statsrest_page("faceoffwins", season_id, game_type, limit, start)
+        rows = page.get("data", [])
+        out.extend(rows)
+        total = page.get("total", 0)
+        start += limit
+        if start >= total or not rows:
+            break
+    return out
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_game_landing(game_id: str) -> dict:
+    """Fetch the gamecenter landing payload for a game.
+
+    Source: api-web.nhle.com/v1/gamecenter/{id}/landing. Carries summary.scoring
+    (per-goal highlight links: goals[].highlightClipSharingUrl, .pptReplayUrl),
+    three stars, and penalties.
+    """
+    url = f"{BASE_URL}/v1/gamecenter/{game_id}/landing"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_game_right_rail(game_id: str) -> dict:
+    """Fetch the gamecenter right-rail payload for a game.
+
+    Source: api-web.nhle.com/v1/gamecenter/{id}/right-rail. Carries gameInfo
+    (scratches + coaches per team), seasonSeries + seasonSeriesWins, and
+    teamGameStats (category/awayValue/homeValue comparison rows).
+    """
+    url = f"{BASE_URL}/v1/gamecenter/{game_id}/right-rail"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_partner_odds(country_code: str = "US") -> dict:
+    """Fetch the current partner sportsbook odds snapshot.
+
+    Source: api-web.nhle.com/v1/partner-game/{countryCode}/now. Returns
+    currentOddsDate, bettingPartner, and a games[] array (empty in the offseason).
+    INTERNAL CALIBRATION ONLY per blueprint 13.2 — never exposed via API/UI.
+    """
+    url = f"{BASE_URL}/v1/partner-game/{country_code}/now"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_glossary() -> dict:
+    """Fetch the stats-REST glossary (term definitions) for Phase 6 concept cards.
+
+    Source: api.nhle.com/stats/rest/en/glossary (the api-web /v1/glossary path is
+    dead — 404). Returns {"data": [{id, abbreviation, definition}, ...], "total"}.
+    """
+    url = f"{STATS_REST_URL}/glossary"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_standings_by_date(date: str) -> dict:
+    """Fetch league standings as of a given date.
+
+    Source: api-web.nhle.com/v1/standings/{date} (date as YYYY-MM-DD). Returns
+    {"standings": [...]} with one row per team carrying points/wins/losses/otLosses,
+    league/conference/division sequences (ranks), and last-10 (l10*) splits.
+    """
+    url = f"{BASE_URL}/v1/standings/{date}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()

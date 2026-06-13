@@ -94,6 +94,19 @@ def load_json_to_bigquery(
         "raw_edge_skaters": ["data"],
         "raw_edge_goalies": ["data"],
         "raw_edge_teams": ["data"],
+        # Phase 1.3 surfaces: serialize the deeply nested arrays/objects and parse
+        # them downstream in the stg_* models (resilient to API schema drift).
+        "raw_game_landing": [
+            "summary", "awayTeam", "homeTeam", "periodDescriptor", "clock",
+            "venue", "tvBroadcasts", "gameOutcome", "matchup",
+        ],
+        "raw_game_right_rail": [
+            "seasonSeries", "seasonSeriesWins", "gameInfo", "teamGameStats",
+            "linescore", "shotsByPeriod", "gameVideo", "gameReports",
+        ],
+        "raw_partner_odds": ["games", "bettingPartner"],
+        # Standings rows carry nested {default, fr} localized name objects.
+        "raw_standings": ["teamName", "teamAbbrev", "placeName", "teamCommonName"],
     }
 
     cleaned_data = []
@@ -103,7 +116,7 @@ def load_json_to_bigquery(
             cleaned_row["ingestion_date"] = ingestion_date
             cleaned_row["season"] = season
             # Add game_id from id field if it exists (for boxscores and play-by-play)
-            if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play", "raw_shift_charts"]:
+            if "id" in cleaned_row and table_id in ["raw_boxscores", "raw_play_by_play", "raw_shift_charts", "raw_game_landing"]:
                 cleaned_row["game_id"] = cleaned_row["id"]
 
             # Serialize vulnerable nested fields to JSON strings

@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact } from './types'
+import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext } from './types'
 
 /**
  * Fetch list of dates on which games occurred or are scheduled.
@@ -147,4 +147,18 @@ export async function getTeamGames(
     },
   })
   return response.data
+}
+
+/**
+ * Fetch game context: scratches, season series, last-10 records, team-stat
+ * comparisons, and per-goal highlight video URLs keyed by event id.
+ * Returns null when no context has been ingested for the game (e.g. older games).
+ */
+export async function getGameContext(gameId: number): Promise<GameContext | null> {
+  try {
+    const response = await apiClient.get<GameContext>(`/games/${gameId}/context`)
+    return response.data
+  } catch {
+    return null
+  }
 }

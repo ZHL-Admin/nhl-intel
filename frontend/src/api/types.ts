@@ -480,3 +480,63 @@ export interface TeamSituational {
   zone_entry_proxy_success_rate?: number | null
   shot_attempts?: number | null
 }
+
+// ============================================================================
+// Game Context (Phase 1.3: landing + right-rail enrichment)
+// ============================================================================
+
+export interface ContextScratch {
+  player_id: number
+  player_name: string
+}
+
+export interface ContextGoalHighlight {
+  event_id: number
+  period?: number | null
+  scorer_player_id?: number | null
+  time_in_period?: string | null
+  highlight_url?: string | null
+  ppt_replay_url?: string | null
+}
+
+export interface ContextSeriesGame {
+  game_id?: number | null
+  game_date?: string | null
+  away_abbrev?: string | null
+  away_score?: number | null
+  home_abbrev?: string | null
+  home_score?: number | null
+}
+
+export interface ContextTeamStat {
+  category: string
+  away_value?: string | null
+  home_value?: string | null
+}
+
+export interface ContextLast10 {
+  team_abbrev?: string | null
+  l10_wins?: number | null
+  l10_losses?: number | null
+  l10_ot_losses?: number | null
+  league_rank?: number | null
+  points?: number | null
+}
+
+export interface GameContext {
+  game_id: number
+  away_team_id?: number | null
+  home_team_id?: number | null
+  away_head_coach?: string | null
+  home_head_coach?: string | null
+  away_scratches: ContextScratch[]
+  home_scratches: ContextScratch[]
+  season_series_away_wins?: number | null
+  season_series_home_wins?: number | null
+  season_series_needed_to_win?: number | null
+  season_series_games: ContextSeriesGame[]
+  team_game_stats: ContextTeamStat[]
+  goal_highlights: ContextGoalHighlight[]
+  away_last10?: ContextLast10 | null
+  home_last10?: ContextLast10 | null
+}

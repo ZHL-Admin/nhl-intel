@@ -98,6 +98,55 @@ class BigQueryService:
 
         return f"{self.project_id}.{dataset}.{table_name}"
 
+    def get_game_context(self, game_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch GameDetail context: scratches, season series, team stats, goal videos.
+
+        Sources stg_game_context (the parsed landing/right-rail surface) and joins each
+        team's last-10 record from stg_standings as-of the game date (last-10 is absent
+        from the landing/right-rail payloads). Returns None if the game has no context.
+
+        Args:
+            game_id: Game identifier.
+
+        Returns:
+            A single context dict with nested arrays, or None if not ingested.
+        """
+        ctx = self.get_full_table_id('stg_game_context')
+        games = self.get_full_table_id('stg_games')
+        standings = self.get_full_table_id('stg_standings')
+
+        sql = f"""
+        WITH g AS (
+            SELECT game_id, game_date, home_team_abbrev, away_team_abbrev
+            FROM {games} WHERE game_id = {game_id}
+        ),
+        -- Latest standings row on or before the game date, per team abbrev.
+        l10 AS (
+            SELECT
+                s.team_abbrev, s.l10_wins, s.l10_losses, s.l10_ot_losses,
+                s.league_rank, s.points,
+                ROW_NUMBER() OVER (
+                    PARTITION BY s.team_abbrev ORDER BY s.standings_date DESC
+                ) AS rn
+            FROM {standings} s
+            JOIN g ON s.standings_date <= g.game_date
+                  AND s.team_abbrev IN (g.home_team_abbrev, g.away_team_abbrev)
+        )
+        SELECT
+            c.*,
+            g.home_team_abbrev,
+            g.away_team_abbrev,
+            (SELECT AS STRUCT team_abbrev, l10_wins, l10_losses, l10_ot_losses, league_rank, points
+             FROM l10 WHERE team_abbrev = g.home_team_abbrev AND rn = 1) AS home_last10,
+            (SELECT AS STRUCT team_abbrev, l10_wins, l10_losses, l10_ot_losses, league_rank, points
+             FROM l10 WHERE team_abbrev = g.away_team_abbrev AND rn = 1) AS away_last10
+        FROM {ctx} c
+        CROSS JOIN g
+        WHERE c.game_id = {game_id}
+        """
+        rows = self.query(sql)
+        return rows[0] if rows else None
+
     def get_game_shots(self, game_id: int, situation: str = "all") -> List[Dict[str, Any]]:
         """Fetch all shot coordinates for both teams in a game from int_shot_types.
 

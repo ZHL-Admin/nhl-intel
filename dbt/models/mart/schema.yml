@@ -163,3 +163,24 @@ models:
         description: Points per 60 for top player
       - name: top_player_hot_cold
         description: Hot/cold flag for top player
+
+  - name: mart_player_faceoff_zones
+    description: >
+      Season-level per-player faceoff results by zone (offensive/neutral/defensive)
+      from the stats-REST faceoffwins report. This is the SEASON / set-play complement
+      to the event-derived per-GAME team faceoff data in mart_team_faceoffs — the two
+      are deliberately kept separate (different grain and data source). A team-season
+      rollup, if needed, is a trivial group-by on this model and is not duplicated here.
+    columns:
+      - name: player_id
+        description: NHL player identifier
+        tests:
+          - not_null
+      - name: season_id
+        description: Season as YYYYYYYY (integer)
+        tests:
+          - not_null
+      - name: oz_faceoff_win_pct
+        description: Offensive-zone faceoff win percentage (null-safe)
+      - name: dz_faceoff_win_pct
+        description: Defensive-zone faceoff win percentage (null-safe)

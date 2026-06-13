@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Calendar, MapPin, Lightbulb } from 'lucide-react'
+import type { CSSProperties } from 'react'
+import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow } from '../components/common'
 import Badge from '../components/common/Badge'
@@ -7,8 +8,8 @@ import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
 import RollingContextPanel from '../components/visualizations/RollingContextPanel'
-import { getGameDetail, getGamePlayerStats, getGameTeamStats, getGameGoals, getGameGoaltending, getGamePressure, getGameSpecialTeams, getGameGoalieDanger, getGameShotQuality, getGameSkaterImpact } from '../api/games'
-import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, TeamGameStats, TeamComparisonStats, GoalDetail, GoaltenderStat, PressurePoint, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact } from '../api/types'
+import { getGameDetail, getGamePlayerStats, getGameTeamStats, getGameGoals, getGameGoaltending, getGamePressure, getGameSpecialTeams, getGameGoalieDanger, getGameShotQuality, getGameSkaterImpact, getGameContext } from '../api/games'
+import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, TeamGameStats, TeamComparisonStats, GoalDetail, GoaltenderStat, PressurePoint, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext } from '../api/types'
 import { getTeamLogoUrl, getTeamColor, getPlayerHeadshotUrl } from '../utils/teams'
 import './GameDetail.css'
 
@@ -374,6 +375,7 @@ function OverviewTab({ gameDetail, playerStats }: { gameDetail: GameDetailType; 
   const [pressure, setPressure] = useState<PressurePoint[]>([])
   const [teamStats, setTeamStats] = useState<TeamComparisonStats | null>(null)
   const [goaltending, setGoaltending] = useState<GoaltenderStat[]>([])
+  const [context, setContext] = useState<GameContext | null>(null)
 
   useEffect(() => {
     let active = true
@@ -381,8 +383,18 @@ function OverviewTab({ gameDetail, playerStats }: { gameDetail: GameDetailType; 
     getGamePressure(game_id).then(d => { if (active) setPressure(d) }).catch(() => {})
     getGameTeamStats(game_id).then(d => { if (active) setTeamStats(d) }).catch(() => {})
     getGameGoaltending(game_id).then(d => { if (active) setGoaltending(d) }).catch(() => {})
+    getGameContext(game_id).then(d => { if (active) setContext(d) }).catch(() => {})
     return () => { active = false }
   }, [game_id])
+
+  // Map each goal's (period, clock) to its highlight URL so the scoring timeline
+  // rows can link out to the video when one exists.
+  const highlightByGoal = new Map<string, string>()
+  for (const gh of context?.goal_highlights ?? []) {
+    if (gh.highlight_url && gh.period != null && gh.time_in_period) {
+      highlightByGoal.set(`${gh.period}-${gh.time_in_period}`, gh.highlight_url)
+    }
+  }
 
   const handleNavigateToAnalytics = () => {
     searchParams.set('tab', 'analytics')
@@ -405,11 +417,12 @@ function OverviewTab({ gameDetail, playerStats }: { gameDetail: GameDetailType; 
             awayAbbrev={away_team.team_abbrev}
             onNavigate={handleNavigateToAnalytics}
           />
-          <ScoringTimeline goals={goals} homeTeamId={home_team.team_id} />
+          <ScoringTimeline goals={goals} homeTeamId={home_team.team_id} highlightByGoal={highlightByGoal} />
         </div>
 
         <div className="overview-col">
           {playerStats && <TopPerformersList playerStats={playerStats} homeTeam={home_team} awayTeam={away_team} />}
+          <MatchupContext context={context} homeTeam={home_team} awayTeam={away_team} homeColor={homeColor} awayColor={awayColor} />
           <TeamStatsCompact teamStats={teamStats} homeTeam={home_team} awayTeam={away_team} homeColor={homeColor} awayColor={awayColor} />
           <GoalieDuel goaltending={goaltending} />
         </div>
@@ -519,7 +532,7 @@ function GameFlowMini({ pressure, goals, homeTeamId, homeColor, awayColor, homeA
 }
 
 // Condensed goal-by-goal list with running score.
-function ScoringTimeline({ goals, homeTeamId }: { goals: GoalDetail[]; homeTeamId: number }) {
+function ScoringTimeline({ goals, homeTeamId, highlightByGoal }: { goals: GoalDetail[]; homeTeamId: number; highlightByGoal?: Map<string, string> }) {
   if (goals.length === 0) return null
   const sorted = [...goals].sort((a, b) => a.game_time_seconds - b.game_time_seconds)
   let hs = 0
@@ -531,19 +544,91 @@ function ScoringTimeline({ goals, homeTeamId }: { goals: GoalDetail[]; homeTeamI
         {sorted.map((g, i) => {
           if (g.team_id === homeTeamId) hs++; else as++
           const color = getTeamColor(g.team_abbrev)
-          return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-2) 0 var(--space-2) var(--space-3)', borderLeft: `3px solid ${color}`, borderBottom: i < sorted.length - 1 ? '1px solid var(--color-border-subtle)' : 'none' }}>
+          const highlightUrl = highlightByGoal?.get(`${g.period}-${g.time_in_period}`)
+          const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-2) 0 var(--space-2) var(--space-3)', borderLeft: `3px solid ${color}`, borderBottom: i < sorted.length - 1 ? '1px solid var(--color-border-subtle)' : 'none', textDecoration: 'none', color: 'inherit' }
+          const inner = (
+            <>
               <span style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', flexShrink: 0, width: 58 }}>P{g.period} {g.time_in_period}</span>
               <span style={{ flex: 1, fontSize: 'var(--text-sm)', minWidth: 0 }}>
                 <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{lastNameOf(g.scorer_name || 'Goal')}</span>
                 {g.strength !== 'EV' && <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}> ({g.strength})</span>}
                 {g.assists.length > 0 && <span style={{ color: 'var(--color-text-muted)' }}> · {g.assists.map(lastNameOf).join(', ')}</span>}
+                {highlightUrl && <PlayCircle size={13} style={{ marginLeft: 'var(--space-2)', color: 'var(--color-accent)', verticalAlign: 'text-bottom' }} aria-label="Watch highlight" />}
               </span>
               <span style={{ fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-text-primary)', flexShrink: 0 }}>{as}–{hs}</span>
-            </div>
+            </>
+          )
+          return highlightUrl ? (
+            <a key={i} href={highlightUrl} target="_blank" rel="noopener noreferrer" title="Watch goal highlight" style={rowStyle}>{inner}</a>
+          ) : (
+            <div key={i} style={rowStyle}>{inner}</div>
           )
         })}
       </div>
+    </section>
+  )
+}
+
+// Pregame/postgame matchup context: season series, last-10 form, and scratches.
+// Composed from existing common components (ComparisonRow, Badge); no one-off visuals.
+function MatchupContext({ context, homeTeam, awayTeam, homeColor, awayColor }: { context: GameContext | null; homeTeam: TeamGameStats; awayTeam: TeamGameStats; homeColor: string; awayColor: string }) {
+  if (!context) return null
+  const hasSeries = (context.season_series_away_wins ?? 0) + (context.season_series_home_wins ?? 0) > 0
+  const a10 = context.away_last10
+  const h10 = context.home_last10
+  const hasLast10 = !!(a10 || h10)
+  const fmt10 = (r?: typeof a10) => r ? `${r.l10_wins ?? 0}-${r.l10_losses ?? 0}-${r.l10_ot_losses ?? 0}` : '—'
+  const hasScratches = context.away_scratches.length > 0 || context.home_scratches.length > 0
+  if (!hasSeries && !hasLast10 && !hasScratches) return null
+
+  return (
+    <section className="overview-card">
+      <SectionTitle>Matchup context</SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+        {hasSeries && (
+          <ComparisonRow
+            label="Season series"
+            awayValue={String(context.season_series_away_wins ?? 0)}
+            homeValue={String(context.season_series_home_wins ?? 0)}
+            awayRaw={context.season_series_away_wins ?? 0}
+            homeRaw={context.season_series_home_wins ?? 0}
+            awayColor={awayColor}
+            homeColor={homeColor}
+            showBar
+          />
+        )}
+        {hasLast10 && (
+          <ComparisonRow
+            label="Last 10 (W-L-OT)"
+            awayValue={fmt10(a10)}
+            homeValue={fmt10(h10)}
+            awayRaw={a10?.l10_wins ?? 0}
+            homeRaw={h10?.l10_wins ?? 0}
+            awayColor={awayColor}
+            homeColor={homeColor}
+            showBar
+          />
+        )}
+      </div>
+      {hasScratches && (
+        <div style={{ marginTop: 'var(--space-5)', display: 'flex', gap: 'var(--space-6)', flexWrap: 'wrap' }}>
+          {[{ team: awayTeam, scr: context.away_scratches }, { team: homeTeam, scr: context.home_scratches }].map(({ team, scr }) => (
+            <div key={team.team_id} style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{team.team_abbrev} scratches</span>
+                <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{scr.length}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {scr.length === 0
+                  ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>None</span>
+                  : scr.map(s => (
+                      <Link key={s.player_id} to={`/players/${s.player_id}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', textDecoration: 'none' }}>{s.player_name}</Link>
+                    ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }

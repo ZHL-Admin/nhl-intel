@@ -518,3 +518,69 @@ class SkaterImpact(BaseModel):
     shots: int
     ixg: float
     ihdcf: int
+
+
+# ============================================================================
+# Game Context Models (Phase 1.3: landing + right-rail enrichment)
+# ============================================================================
+
+class ContextScratch(BaseModel):
+    """A scratched (healthy/injured) player for a game."""
+    player_id: int
+    player_name: str
+
+
+class ContextGoalHighlight(BaseModel):
+    """A goal's highlight video links, keyed by play-by-play event id."""
+    event_id: int
+    period: Optional[int] = None
+    scorer_player_id: Optional[int] = None
+    time_in_period: Optional[str] = None
+    highlight_url: Optional[str] = Field(None, description="Shareable nhl.com highlight clip URL")
+    ppt_replay_url: Optional[str] = None
+
+
+class ContextSeriesGame(BaseModel):
+    """One prior meeting in the season series."""
+    game_id: Optional[int] = None
+    game_date: Optional[str] = None
+    away_abbrev: Optional[str] = None
+    away_score: Optional[int] = None
+    home_abbrev: Optional[str] = None
+    home_score: Optional[int] = None
+
+
+class ContextTeamStat(BaseModel):
+    """One team-vs-team game-stat comparison row (category / away / home)."""
+    category: str
+    away_value: Optional[str] = None
+    home_value: Optional[str] = None
+
+
+class ContextLast10(BaseModel):
+    """A team's last-10 record + standing as of the game date (from stg_standings)."""
+    team_abbrev: Optional[str] = None
+    l10_wins: Optional[int] = None
+    l10_losses: Optional[int] = None
+    l10_ot_losses: Optional[int] = None
+    league_rank: Optional[int] = None
+    points: Optional[int] = None
+
+
+class GameContext(BaseModel):
+    """Pregame/postgame context for GameDetail: scratches, series, last-10, goal videos."""
+    game_id: int
+    away_team_id: Optional[int] = None
+    home_team_id: Optional[int] = None
+    away_head_coach: Optional[str] = None
+    home_head_coach: Optional[str] = None
+    away_scratches: List[ContextScratch] = Field(default_factory=list)
+    home_scratches: List[ContextScratch] = Field(default_factory=list)
+    season_series_away_wins: Optional[int] = None
+    season_series_home_wins: Optional[int] = None
+    season_series_needed_to_win: Optional[int] = None
+    season_series_games: List[ContextSeriesGame] = Field(default_factory=list)
+    team_game_stats: List[ContextTeamStat] = Field(default_factory=list)
+    goal_highlights: List[ContextGoalHighlight] = Field(default_factory=list)
+    away_last10: Optional[ContextLast10] = None
+    home_last10: Optional[ContextLast10] = None
