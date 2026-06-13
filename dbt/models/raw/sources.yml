@@ -165,3 +165,21 @@ sources:
           - name: teamAbbrev
             description: Serialized JSON {default, fr}
           - name: ingestion_date
+
+      - name: raw_ppt_replay
+        description: >
+          ppt-replay goal tracking, one row per (game_id, event_id) goal. Real per-frame
+          player + puck coordinates from wsr.nhle.com sprite files. goal_metadata and the
+          frames array are serialized JSON strings; parsed by stg_ppt_tracking_frames.
+        columns:
+          - name: game_id
+            description: NHL game id
+          - name: event_id
+            description: Play-by-play eventId of the goal
+          - name: goal_metadata
+            description: Serialized JSON goal metadata (carries timeInPeriod for alignment)
+          - name: frames
+            description: Serialized JSON array of tracking frames ({timeStamp, onIce})
+          - name: frame_count
+            description: Number of frames in the sprite
+          - name: ingestion_date

@@ -1,11 +1,31 @@
 """Client for NHL API data ingestion."""
 
+import json
+import logging
+import os
+from pathlib import Path
+
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api-web.nhle.com"
 # Shift charts live on the stats REST host, not the api-web host.
 STATS_REST_URL = "https://api.nhle.com/stats/rest/en"
+# ppt-replay sprite files live on a Cloudflare-fronted host that 403s a bare request;
+# it requires an nhl.com referer + a browser User-Agent (verified: plain httpx with
+# these headers returns 200, no curl-impersonate needed).
+WSR_HEADERS = {
+    "Referer": "https://www.nhl.com/",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
+# Sprite files are immutable once a game is final; cache them on disk so re-runs of a
+# backfill don't re-hit the host. Override with PPT_REPLAY_CACHE_DIR.
+PPT_CACHE_DIR = Path(os.environ.get("PPT_REPLAY_CACHE_DIR", Path(__file__).parent.parent / "scripts" / "ppt_cache"))
 
 
 def derive_season_from_game_id(game_id: int) -> str:
@@ -276,3 +296,106 @@ def get_standings_by_date(date: str) -> dict:
     response = httpx.get(url, timeout=30.0)
     response.raise_for_status()
     return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _fetch_ppt_metadata(game_id, event_id: int) -> dict | None:
+    """Stage 1: goal metadata (carrying the sprite URL). None on 404/empty."""
+    # The /goal/ path 307-redirects to /v1/ppt-replay/{gid}/{eid}; follow it.
+    url = f"{BASE_URL}/v1/ppt-replay/goal/{game_id}/{event_id}"
+    resp = httpx.get(url, timeout=30.0, follow_redirects=True)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _normalize_frames(frames: list) -> list:
+    """Convert each frame's onIce MAP (keyed by dynamic entity keys) into a LIST.
+
+    NHL serves onIce as {entityKey: {id, playerId, x, y, ...}}; BigQuery can't UNNEST a
+    JSON object with dynamic keys, so we flatten onIce to an array of entity objects with
+    the original map key preserved as `entityKey` (nothing is lost). Frame timeStamp and
+    order are unchanged. The puck remains the entity with entityKey '1' (empty player/team).
+    """
+    out = []
+    for fr in frames:
+        on_ice = fr.get("onIce", {}) or {}
+        if isinstance(on_ice, dict):
+            entities = []
+            for key, ent in on_ice.items():
+                e = dict(ent)
+                e["entityKey"] = key
+                entities.append(e)
+            out.append({"timeStamp": fr.get("timeStamp"), "onIce": entities})
+        else:
+            out.append(fr)  # already a list (defensive)
+    return out
+
+
+@retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=2, max=15))
+def _fetch_ppt_sprite(sprite_url: str) -> list | None:
+    """Stage 2: the sprite frame array from the Cloudflare-fronted wsr host.
+
+    Requires the nhl.com referer + browser UA (a bare request 403s). Honors 429 via
+    tenacity's exponential backoff. Returns None on a confirmed 404/empty.
+    """
+    resp = httpx.get(sprite_url, headers=WSR_HEADERS, timeout=30.0, follow_redirects=True)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_ppt_replay(game_id, event_id: int, use_cache: bool = True) -> dict | None:
+    """Fetch ppt-replay goal tracking: metadata + per-frame player/puck coordinates.
+
+    Two hops: (1) the goal metadata endpoint, which carries `goal.pptReplayUrl`;
+    (2) the sprite file on wsr.nhle.com (referer/UA-gated). The sprite URL is read
+    from the metadata rather than constructed, so a future scheme change can't silently
+    break us. Sprites are immutable once a game is final, so they are cached on disk.
+
+    Args:
+        game_id: NHL game id.
+        event_id: Play-by-play eventId of a GOAL (the /goal/ path only returns a
+            full payload for actual goals).
+        use_cache: Read/write the on-disk sprite cache (PPT_CACHE_DIR).
+
+    Returns:
+        {"game_id", "event_id", "goal_metadata", "frames", "frame_count"} or None if
+        the event has no sprite (not a goal, or no tracking for that game).
+    """
+    cache_path = PPT_CACHE_DIR / f"{game_id}_ev{event_id}.json"
+    if use_cache and cache_path.exists():
+        try:
+            return json.loads(cache_path.read_text())
+        except Exception:  # noqa: BLE001 — corrupt cache entry; re-fetch
+            pass
+
+    meta = _fetch_ppt_metadata(game_id, event_id)
+    if not meta:
+        return None
+    goal = meta.get("goal") or {}
+    sprite_url = goal.get("pptReplayUrl")
+    if not sprite_url:
+        logger.info("ppt-replay %s/%s has no pptReplayUrl (not a tracked goal)", game_id, event_id)
+        return None
+
+    frames = _fetch_ppt_sprite(sprite_url)
+    if not frames:
+        return None
+
+    result = {
+        "game_id": game_id,
+        "event_id": event_id,
+        "goal_metadata": goal,
+        "frames": _normalize_frames(frames),
+        "frame_count": len(frames),
+    }
+    if use_cache:
+        try:
+            PPT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(result))
+        except Exception as e:  # noqa: BLE001 — cache is best-effort
+            logger.warning("ppt-replay cache write failed for %s/%s: %s", game_id, event_id, e)
+    return result

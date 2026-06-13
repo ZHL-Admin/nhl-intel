@@ -22,7 +22,7 @@ def ingest_nhl_data(**context):
     from ingestion.nhl_api import (
         get_schedule, get_boxscore, get_play_by_play, get_shift_charts,
         get_game_landing, get_game_right_rail, get_standings_by_date,
-        get_partner_odds, derive_season_from_game_id,
+        get_partner_odds, get_ppt_replay, derive_season_from_game_id,
     )
     from ingestion.loaders import load_json_to_bigquery
 
@@ -145,6 +145,33 @@ def ingest_nhl_data(**context):
             season=season,
         )
         print(f"Loaded {len(shift_charts)} shift charts to {dataset_raw}.raw_shift_charts")
+
+    # ppt-replay goal tracking: enumerate each game's goal eventIds from the freshly
+    # ingested pbp and fetch the sprite for each (real per-frame player/puck coords).
+    ppt_rows = []
+    for pbp in play_by_plays:
+        gid = pbp["game_id"]
+        goal_event_ids = [
+            p.get("eventId") for p in pbp.get("plays", [])
+            if p.get("typeDescKey") == "goal" and p.get("eventId") is not None
+        ]
+        for eid in goal_event_ids:
+            try:
+                payload = get_ppt_replay(gid, eid)
+            except Exception as e:
+                print(f"Error fetching ppt-replay for {gid}/{eid}: {e}")
+                continue
+            if payload:
+                ppt_rows.append(payload)
+    if ppt_rows:
+        load_json_to_bigquery(
+            project_id=project_id,
+            dataset_id=dataset_raw,
+            table_id="raw_ppt_replay",
+            data=ppt_rows,
+            season=season,
+        )
+        print(f"Loaded {len(ppt_rows)} goal sprites to {dataset_raw}.raw_ppt_replay")
 
     # --- Phase 1.3 surfaces (current-season games / execution date) ---
 

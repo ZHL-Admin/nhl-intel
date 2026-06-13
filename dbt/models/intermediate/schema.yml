@@ -195,3 +195,18 @@ models:
         tests: [not_null]
       - name: event_id
         tests: [not_null]
+
+  - name: int_goal_release_frame
+    description: >
+      One row per (game_id, event_id, entity) at each goal's release/arrival frame —
+      the puck plus every on-ice skater in standard center-origin coords, team-labeled.
+      The release frame is pinned geometrically (puck nearest a net) since the sprite
+      carries no frame->game-clock field; see docs/methodology/ppt-replay-tracking.md.
+      This is the single tracked moment Phase 6.4 renders on the rink.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: x_std
+        description: Entity x in standard feet at the release frame (goal line ±89)

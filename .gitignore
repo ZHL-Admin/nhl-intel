@@ -64,3 +64,6 @@ frontend/.vite/
 # Model layer: versioned artifacts are large/binary; keep the dir, not the contents
 models_ml/artifacts/*
 !models_ml/artifacts/.gitkeep
+
+# ppt-replay sprite on-disk cache (immutable, re-fetchable)
+scripts/ppt_cache/

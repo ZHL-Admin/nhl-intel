@@ -415,3 +415,20 @@ models:
         tests: [not_null]
       - name: season_id
         tests: [not_null]
+
+  - name: stg_ppt_tracking_frames
+    description: >
+      ppt-replay goal tracking: one row per (game_id, event_id, frame_index, entity) —
+      the puck (is_puck) plus every on-ice skater per frame. Raw corner-origin coords are
+      in INCHES (empirically: 2400 x 1020 grid = 12 x 200ft by 12 x 85ft) and are
+      transformed to the standard center-origin feet system (x_std=raw_x/12-100,
+      y_std=raw_y/12-42.5). See docs/methodology/ppt-replay-tracking.md.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: x_std
+        description: Puck/skater x in standard feet (center-origin; goal line ±89)
+      - name: is_puck
+        description: True for the puck entity (entityKey '1')

@@ -107,6 +107,8 @@ def load_json_to_bigquery(
         "raw_partner_odds": ["games", "bettingPartner"],
         # Standings rows carry nested {default, fr} localized name objects.
         "raw_standings": ["teamName", "teamAbbrev", "placeName", "teamCommonName"],
+        # ppt-replay: goal metadata object + the (large) per-frame sprite array.
+        "raw_ppt_replay": ["goal_metadata", "frames"],
     }
 
     cleaned_data = []
