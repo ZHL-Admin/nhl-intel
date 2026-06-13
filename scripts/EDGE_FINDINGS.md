@@ -62,6 +62,9 @@ falls back to the event-derived `mart_team_zone_time` proxy (labeled a proxy).
 4. `mart_edge_player_profile` / `mart_edge_team_profile`.
 5. Backend `GET /players/{id}/edge`, `GET /teams/{id}/edge`; `refresh_edge.py` + `backfill_edge.py`.
 
-## Season coverage
-Tracking era only. Confirmed for 20242025. `explore_edge.py` records the earliest
-season that returns data when the backfill runs.
+## Season coverage (empirically probed)
+Tracking era only. **Floor = 2021-22**: probing a known player (McDavid 8478402) for
+`skater-skating-speed-detail` returns data for 20212022, 20222023, 20232024, 20242025,
+20252026, and 404s for 20202021 and earlier. `backfill_edge.py` defaults to the full
+2021-22→2025-26 range. (The per-goal ppt-replay sprites — a different surface — only go
+back to 2023-24; see docs/methodology/ppt-replay-tracking.md.)

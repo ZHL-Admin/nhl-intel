@@ -77,8 +77,13 @@ could widen later; goals are the chosen floor (highest value, bounded volume). S
 have no puck coordinates in their sprite (untracked); Phase 6.4 must gate on the presence
 of tracking rows and fall back to event-inferred positions (never claiming "tracking").
 
-## Season coverage
+## Season coverage (empirically probed)
 
-Confirmed working for 2025-26 playoffs (sampled). Tracking is the player-and-puck era
-(~2021-22 onward); the backfill records per-season goal-sprite counts as it runs and
-skips goals with no sprite.
+ppt-replay goal sprites exist from **2023-24 onward** — confirmed by probing real
+regular-season AND playoff goals: 2021-22 and 2022-23 goals 404 (both game types),
+while 2023-24, 2024-25, 2025-26 return tracking. Note this is a NARROWER window than the
+Edge aggregates (which go back to 2021-22) — the per-goal replay sprites are a newer
+feature than the season tracking aggregates. Preseason games (gameType 01) have no
+sprites in any season and are skipped automatically ("not a tracked goal"). The backfill
+covers regular + playoff goals for 2023-24, 2024-25, 2025-26 and records per-season
+goal-sprite counts as it runs.

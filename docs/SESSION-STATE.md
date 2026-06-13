@@ -106,9 +106,23 @@ Last updated at the end of the shift-foundation + Edge-ingestion session.
     2010-2015 completion proof (both are views — no rebuild needed); (3) optionally rebuild the
     int_shift_segments chain to include 2010-15 (heavy ~17min — tied to the incremental refactor).
 
+- **Historical coverage deepened (empirically-probed floors, backfills RUNNING):**
+  Probed each surface before backfilling — the floors differ and are NOT what you'd assume:
+  - **Edge floor = 2021-22** (McDavid 404s for 2020-21 and earlier). Backfilling
+    2021-22→2025-26 (`~/edge_backfill_full.log`).
+  - **ppt-replay floor = 2023-24** (2021-22 & 2022-23 goals 404 for BOTH regular-season and
+    playoffs; narrower than Edge — replay sprites are a newer feature than tracking aggregates).
+    Backfilling 2023-24/2024-25/2025-26 goals (`~/ppt_backfill_full.log`; long ~hours job;
+    preseason goals skip fast as "not a tracked goal").
+  - **Faceoffs go back to ≥2010-11** (non-tracking; full depth). Backfilling 2010-11→2023-24
+    to match the 16-season core (`~/faceoffs_backfill.log`; fast).
+  - 2010-2014 core (pbp/box/shifts) backfill DONE: **16 seasons (2010-11→2025-26)**, proof run.
+
 ## Next up (fresh-context work)
-1. **Finalize Phase 1.4** (once the two running backfills complete): rebuild Edge marts,
-   print 2010-2015 stg_play_by_play/stg_shifts per-season row counts. See finalization steps above.
+1. **Finalize once the 3 running backfills complete:** rebuild Edge marts
+   (`dbt run --select mart_edge_player_profile mart_edge_team_profile`); confirm ppt-replay
+   per-season goal-sprite counts and Edge/faceoff season spans. Check BQ storage vs 10 GB
+   free tier after ppt (frames are heavy).
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds.
 3. **Phase 2** — sequence mining → in-house xG → adjustments → win prob/leverage → GSAx.
 4. **Incremental refactor (important):** make `int_shift_segments`/`int_segment_context`/

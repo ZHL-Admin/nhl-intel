@@ -20,6 +20,10 @@ in June with no current-day games, which limits live validation of two surfaces.
   `faceoffwins`, so we do NOT ingest faceoffpercentages.
 - Zone-specific report names (`faceoffwins-byzone`, etc.) do **not** exist; the zone
   detail is columns on `faceoffwins`, not separate reports.
+- **Historical depth: ≥2010-11** (probed: faceoffwins returns ~880–1000 players/season
+  for 2010-11, 2013-14, 2015-16, 2018-19, 2021-22, 2024-25). Unlike Edge/ppt-replay (which
+  are tracking-era only), faceoff splits are available for the full 16-season core window,
+  so they are backfilled 2010-11→2025-26 to match pbp/shifts.
 
 ## B) Game landing + right-rail (api-web.nhle.com)
 
