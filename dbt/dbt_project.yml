@@ -4,6 +4,16 @@ config-version: 2
 
 profile: 'nhl_intel'
 
+# Centralized thresholds so SQL never hardcodes sequence-mining or danger constants.
+# Rationale and tuning live in docs/methodology/sequence-mining.md (Phase 2.1).
+vars:
+  rush_window_seconds: 5
+  rebound_window_seconds: 3
+  forecheck_window_seconds: 6
+  cross_ice_window_seconds: 2
+  high_danger_x_min: 55
+  high_danger_y_max: 22
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]

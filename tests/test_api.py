@@ -1,12 +1,14 @@
 """Simple sanity check for NHL API connectivity."""
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ingestion.nhl_api import get_schedule
+
+UTC = timezone.utc
 
 
 def test_fetch_schedule():

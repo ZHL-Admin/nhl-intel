@@ -43,8 +43,10 @@ models:
         description: High-danger chances for per 60 minutes at 5v5
       - name: hdca_per60
         description: High-danger chances against per 60 minutes at 5v5
-      - name: zone_entry_success_rate
-        description: Controlled zone entries divided by total entries
+      - name: zone_entry_proxy_success_rate
+        description: >
+          Derived proxy: inferred from consecutive event zone codes at 5v5, not measured
+          entries. Undercounts entries that produce no recorded event.
       - name: toi_5v5_minutes
         description: Estimated time on ice at 5v5 in minutes
 

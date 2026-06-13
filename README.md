@@ -36,8 +36,81 @@ See `backend/README.md` for full API documentation and deployment instructions.
 
 ## Setup Instructions
 
-_Local environment setup and GCP configuration instructions coming soon._
+The project runs locally against BigQuery (the warehouse). You need a GCP project
+with the `nhl_raw` / `nhl_staging` / `nhl_mart` datasets and a service-account key
+with BigQuery read (and, for the model layer, write) access.
+
+### 1. Python environment
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt           # pipeline, dbt, models, tests
+pip install -r backend/requirements.txt   # FastAPI backend
+```
+
+### 2. Credentials and environment
+
+Put your service-account JSON at `secrets/nhl-intel-sa.json` (the `secrets/`
+directory is gitignored). Copy `.env.example` to `.env` and fill in:
+
+```bash
+cp .env.example .env
+```
+
+Required for local app + dbt:
+
+| Variable | Purpose |
+|---|---|
+| `GCP_PROJECT_ID` | BigQuery project id |
+| `GCP_DATASET_RAW` / `GCP_DATASET_STAGING` / `GCP_DATASET_MART` | `nhl_raw` / `nhl_staging` / `nhl_mart` |
+| `GOOGLE_APPLICATION_CREDENTIALS` | absolute path to `secrets/nhl-intel-sa.json` |
+
+Load it into your shell before running anything: `set -a; source .env; set +a`.
+
+### 3. dbt
+
+dbt reads `dbt/profiles.yml` (copy from `dbt/profiles.yml.example`). The `dev`
+target points at your local keyfile and the `nhl_staging` dataset.
+
+```bash
+cd dbt
+dbt deps                          # no-op today; safe to run
+dbt build --select staging --target dev
+```
+
+> Always pass `--target dev` locally — the default `prod` target expects the
+> Airflow VM keyfile path.
+
+### 4. Backend
+
+```bash
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+### 5. Frontend
+
+```bash
+cd frontend
+npm install
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+The frontend defaults `VITE_API_BASE_URL` to `http://localhost:8000`, so the env
+var is only needed if the backend runs elsewhere.
 
 ## Local Development
 
-_Docker Compose setup and testing workflow coming soon._
+A top-level `Makefile` wraps the common workflows (run from the repo root with
+`.env` sourced):
+
+| Target | What it does |
+|---|---|
+| `make setup` | create the venv and install all Python deps + frontend deps |
+| `make dbt-build` | `dbt build --target dev` (full graph + tests) |
+| `make backend` | run the FastAPI backend with reload on :8000 |
+| `make frontend` | run the Vite dev server |
+| `make test` | run the backend/pipeline pytest suite |
+
+Model-training and insight jobs (`models_ml/`, `insight_engine/`) get their own
+targets as those layers land in later phases.

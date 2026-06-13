@@ -45,7 +45,7 @@ export interface TeamGameStats {
   hdca_per60: number | null
   xgf: number | null
   xga: number | null
-  zone_entry_success_rate: number | null
+  zone_entry_proxy_success_rate: number | null
   shot_attempts: number | null
   shots_on_goal: number | null
   // Period-by-period breakdowns
@@ -158,14 +158,14 @@ export interface TeamDetail {
   xga_per60: number
   total_goals_for: number
   total_goals_against: number
-  zone_entry_success_rate: number | null
+  zone_entry_proxy_success_rate: number | null
   cf_pct_rank: number
   xgf_pct_rank: number
   hdcf_per60_rank: number
   hdca_per60_rank: number
   gf_per_gp_rank: number
   ga_per_gp_rank: number
-  zone_entry_success_rate_rank: number | null
+  zone_entry_proxy_success_rate_rank: number | null
   // Zone time percentages
   oz_pct?: number | null
   nz_pct?: number | null
@@ -477,6 +477,6 @@ export interface TeamSituational {
   xga?: number | null
   hdcf_per60?: number | null
   hdca_per60?: number | null
-  zone_entry_success_rate?: number | null
+  zone_entry_proxy_success_rate?: number | null
   shot_attempts?: number | null
 }

@@ -42,7 +42,7 @@ class TeamGameStats(BaseModel):
     hdca_per60: Optional[float] = Field(None, description="High-danger chances against per 60")
     xgf: Optional[float] = Field(None, description="Expected goals for")
     xga: Optional[float] = Field(None, description="Expected goals against")
-    zone_entry_success_rate: Optional[float] = Field(None, description="Controlled zone entry success rate")
+    zone_entry_proxy_success_rate: Optional[float] = Field(None, description="Controlled zone entry success rate")
     shot_attempts: Optional[int] = Field(None, description="Total shot attempts")
     shots_on_goal: Optional[int] = Field(None, description="Shots on goal")
 
@@ -164,14 +164,14 @@ class TeamDetail(BaseModel):
     xga_per60: float
     total_goals_for: int
     total_goals_against: int
-    zone_entry_success_rate: Optional[float] = None
+    zone_entry_proxy_success_rate: Optional[float] = None
     cf_pct_rank: int
     xgf_pct_rank: int
     hdcf_per60_rank: int
     hdca_per60_rank: int
     gf_per_gp_rank: int
     ga_per_gp_rank: int
-    zone_entry_success_rate_rank: Optional[int] = None
+    zone_entry_proxy_success_rate_rank: Optional[int] = None
 
     # Zone time percentages
     oz_pct: Optional[float] = Field(None, description="Offensive zone percentage")

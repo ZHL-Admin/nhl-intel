@@ -130,8 +130,11 @@ models:
         tests:
           - not_null
 
-  - name: int_zone_entries
-    description: Zone entry events at 5v5 with controlled/uncontrolled classification
+  - name: int_zone_entry_proxy
+    description: >
+      Derived proxy for zone entries at 5v5, inferred from consecutive event zone-code
+      transitions (not directly observable in the NHL API). Undercounts entries that
+      produce no recorded event. Controlled/uncontrolled classification is also inferred.
     columns:
       - name: game_id
         description: Unique NHL game identifier

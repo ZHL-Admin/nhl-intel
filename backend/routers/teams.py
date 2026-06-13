@@ -60,7 +60,7 @@ async def get_team_detail(
             AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60,
             SUM(goals_for) as total_goals_for,
             SUM(goals_against) as total_goals_against,
-            AVG(zone_entry_success_rate) as zone_entry_success_rate
+            AVG(zone_entry_proxy_success_rate) as zone_entry_proxy_success_rate
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE season = '{season}'
         GROUP BY team_id, team_abbrev
@@ -74,7 +74,7 @@ async def get_team_detail(
             RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
             RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
             RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank,
-            RANK() OVER (ORDER BY zone_entry_success_rate DESC NULLS LAST) as zone_entry_success_rate_rank
+            RANK() OVER (ORDER BY zone_entry_proxy_success_rate DESC NULLS LAST) as zone_entry_proxy_success_rate_rank
         FROM team_stats
     )
     SELECT * FROM team_ranks
@@ -149,14 +149,14 @@ async def get_team_detail(
         xga_per60=row['xga_per60'],
         total_goals_for=row['total_goals_for'],
         total_goals_against=row['total_goals_against'],
-        zone_entry_success_rate=row.get('zone_entry_success_rate'),
+        zone_entry_proxy_success_rate=row.get('zone_entry_proxy_success_rate'),
         cf_pct_rank=row['cf_pct_rank'],
         xgf_pct_rank=row['xgf_pct_rank'],
         hdcf_per60_rank=row['hdcf_per60_rank'],
         hdca_per60_rank=row['hdca_per60_rank'],
         gf_per_gp_rank=row['gf_per_gp_rank'],
         ga_per_gp_rank=row['ga_per_gp_rank'],
-        zone_entry_success_rate_rank=row.get('zone_entry_success_rate_rank'),
+        zone_entry_proxy_success_rate_rank=row.get('zone_entry_proxy_success_rate_rank'),
         oz_pct=oz_pct,
         nz_pct=nz_pct,
         dz_pct=dz_pct,

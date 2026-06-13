@@ -802,7 +802,7 @@ function ControlDangerBars({ homeTeam, awayTeam, homeColor, awayColor }: { homeT
     { label: 'Corsi for %', av: (awayTeam.cf_pct ?? 0).toFixed(1), hv: (homeTeam.cf_pct ?? 0).toFixed(1), ar: awayTeam.cf_pct ?? 0, hr: homeTeam.cf_pct ?? 0, bar: awayTeam.cf_pct != null && homeTeam.cf_pct != null },
     { label: 'Expected goals %', av: (totalXg ? (awayXgf / totalXg) * 100 : 50).toFixed(1), hv: (totalXg ? (homeXgf / totalXg) * 100 : 50).toFixed(1), ar: awayXgf, hr: homeXgf, bar: totalXg > 0 },
     { label: 'High-danger chances /60', av: (awayTeam.hdcf_per60 ?? 0).toFixed(1), hv: (homeTeam.hdcf_per60 ?? 0).toFixed(1), ar: awayTeam.hdcf_per60 ?? 0, hr: homeTeam.hdcf_per60 ?? 0, bar: awayTeam.hdcf_per60 != null && homeTeam.hdcf_per60 != null },
-    { label: 'Zone entry success %', av: ((awayTeam.zone_entry_success_rate ?? 0) * 100).toFixed(1), hv: ((homeTeam.zone_entry_success_rate ?? 0) * 100).toFixed(1), ar: awayTeam.zone_entry_success_rate ?? 0, hr: homeTeam.zone_entry_success_rate ?? 0, bar: awayTeam.zone_entry_success_rate != null && homeTeam.zone_entry_success_rate != null },
+    { label: 'Zone entry success % (proxy)', av: ((awayTeam.zone_entry_proxy_success_rate ?? 0) * 100).toFixed(1), hv: ((homeTeam.zone_entry_proxy_success_rate ?? 0) * 100).toFixed(1), ar: awayTeam.zone_entry_proxy_success_rate ?? 0, hr: homeTeam.zone_entry_proxy_success_rate ?? 0, bar: awayTeam.zone_entry_proxy_success_rate != null && homeTeam.zone_entry_proxy_success_rate != null },
   ]
   return (
     <section className="overview-card">

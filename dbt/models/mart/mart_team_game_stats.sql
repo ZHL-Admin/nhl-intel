@@ -39,7 +39,7 @@ zone_entries as (
         team_id,
         count(*) as total_entries,
         sum(case when is_controlled_entry then 1 else 0 end) as controlled_entries
-    from {{ ref('int_zone_entries') }}
+    from {{ ref('int_zone_entry_proxy') }}
     where is_controlled_entry is not null
     group by game_id, team_id
 ),
@@ -279,7 +279,7 @@ metrics_calculated as (
             when zone_entries > 0
             then cast(controlled_zone_entries as float64) / zone_entries
             else null
-        end as zone_entry_success_rate
+        end as zone_entry_proxy_success_rate
 
     from all_teams
 ),
@@ -304,7 +304,7 @@ final as (
         xgf_pct,
         hdcf_per60,
         hdca_per60,
-        zone_entry_success_rate,
+        zone_entry_proxy_success_rate,
         estimated_toi_5v5_minutes as toi_5v5_minutes,
         cf_p1,
         cf_p2,

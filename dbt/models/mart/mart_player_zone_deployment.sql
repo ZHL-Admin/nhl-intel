@@ -8,9 +8,9 @@
 ) }}
 
 -- Player zone deployment metrics using team-level proxies
--- LIMITATION: NHL API play-by-play does not include shift-level data (which players were on ice)
--- or faceoff participant IDs. This model assigns each player their team's zone deployment stats
--- as a baseline. True player-level zone deployment requires shift tracking data.
+-- LIMITATION: Shift-level data exists at api.nhle.com/stats/rest/en/shiftcharts but is not yet
+-- ingested; this model uses team-level proxies until the shift layer (Phase 1) lands.
+-- This model assigns each player their team's zone deployment stats as a baseline.
 
 with rosters as (
     select
@@ -45,7 +45,7 @@ team_zone_entries as (
         ze.team_id,
         count(*) as total_entries,
         sum(case when ze.is_controlled_entry then 1 else 0 end) as controlled_entries
-    from {{ ref('int_zone_entries') }} ze
+    from {{ ref('int_zone_entry_proxy') }} ze
     where ze.is_controlled_entry is not null
     group by ze.game_id, ze.season, ze.team_id
 ),

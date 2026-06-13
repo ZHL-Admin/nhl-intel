@@ -30,7 +30,7 @@ team_stats as (
         cf_pct,
         hdcf_per60,
         hdca_per60,
-        zone_entry_success_rate
+        zone_entry_proxy_success_rate
     from {{ ref('mart_team_game_stats') }}
 ),
 
@@ -80,7 +80,7 @@ combined as (
         ts.cf_pct,
         ts.hdcf_per60,
         ts.hdca_per60,
-        ts.zone_entry_success_rate,
+        ts.zone_entry_proxy_success_rate,
         tr.rolling_cf_pct_5gp,
         tr.rolling_hdcf_per60_5gp,
         tr.rolling_hdca_per60_5gp,

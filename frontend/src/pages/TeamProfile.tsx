@@ -411,11 +411,11 @@ function OverviewTab({
             value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)}
             rank={teamDetail.ga_per_gp_rank}
           />
-          {teamDetail.zone_entry_success_rate != null && (
+          {teamDetail.zone_entry_proxy_success_rate != null && (
             <StatCard
-              label="Zone Entry Success"
-              value={`${(teamDetail.zone_entry_success_rate * 100).toFixed(1)}%`}
-              rank={teamDetail.zone_entry_success_rate_rank || undefined}
+              label="Zone Entry Success (proxy)"
+              value={`${(teamDetail.zone_entry_proxy_success_rate * 100).toFixed(1)}%`}
+              rank={teamDetail.zone_entry_proxy_success_rate_rank || undefined}
             />
           )}
           {teamDetail.faceoff_win_pct != null && (
