@@ -50,10 +50,14 @@ Last updated at the end of the shift-foundation + Edge-ingestion session.
     ComparisonRow) + scoring-timeline rows link to highlight video (`target=_blank`). `npm run build` green.
   - DAG: landing/right-rail/standings/partner-odds added to daily `ingest_nhl_data`;
     new weekly `refresh_weekly_aux` task (faceoffs + glossary, Monday-gated).
+  - **Backfilled:** 2025-26 game context fully loaded — **1,453 games** in raw_game_landing /
+    raw_game_right_rail, stg_game_context = 1,453 rows, **8,734 goals with highlight links**.
+    `refresh_game_context.py` now flushes to BigQuery every `--batch-size` (200) games so a
+    long run is durable/resumable mid-run (the accumulate-then-load-once version lost work).
   - **NOT done:** `partner_odds` de-vig path is PENDING in-season payload (offseason → games=[]);
-    full landing/right-rail backfill for current+prev season (run `refresh_game_context --season`);
-    daily standings backfill (have weekly sample); `backfill_historical.py` intentionally NOT
-    touched (per Edge precedent, new surfaces use their own refresh scripts).
+    2024-25 game-context backfill (`refresh_game_context --season 2024-25`); daily standings
+    backfill (have weekly sample only); `backfill_historical.py` intentionally NOT touched
+    (per Edge precedent, new surfaces use their own refresh scripts).
 
 ## Next up (fresh-context work)
 1. **Phase 1.2 finish — Edge staging/marts/backend.** `stg_edge_skaters/goalies/teams`

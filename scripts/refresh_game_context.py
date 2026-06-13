@@ -59,7 +59,9 @@ def main() -> None:
     ap.add_argument("--season", default="2025-26")
     ap.add_argument("--game-id", type=int, help="Single game (overrides --season)")
     ap.add_argument("--sleep-ms", type=int, default=80)
+    ap.add_argument("--batch-size", type=int, default=200, help="Flush to BigQuery every N games")
     args = ap.parse_args()
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     client = bigquery.Client(project=PROJECT)
 
@@ -74,6 +76,20 @@ def main() -> None:
     have_rail = _existing(client, "raw_game_right_rail")
 
     landings, rails = [], []
+    total_l, total_r = 0, 0
+
+    def flush():
+        nonlocal landings, rails, total_l, total_r
+        if landings:
+            load_json_to_bigquery(PROJECT, DATASET_RAW, "raw_game_landing", landings, season)
+            total_l += len(landings)
+        if rails:
+            load_json_to_bigquery(PROJECT, DATASET_RAW, "raw_game_right_rail", rails, season)
+            total_r += len(rails)
+        if landings or rails:
+            logger.info("Flushed batch (cumulative: %d landing, %d right-rail)", total_l, total_r)
+        landings, rails = [], []
+
     for gid in game_ids:
         if gid not in have_landing:
             try:
@@ -88,15 +104,15 @@ def main() -> None:
                 rails.append(rr)
             except Exception as e:  # noqa: BLE001
                 logger.warning("right-rail %s failed: %s", gid, str(e)[:80])
+        # Flush periodically so a long backfill is durable and resumable mid-run.
+        if len(landings) >= args.batch_size or len(rails) >= args.batch_size:
+            flush()
         time.sleep(args.sleep_ms / 1000.0)
 
-    if landings:
-        load_json_to_bigquery(PROJECT, DATASET_RAW, "raw_game_landing", landings, season)
-        logger.info("Loaded %d landing rows", len(landings))
-    if rails:
-        load_json_to_bigquery(PROJECT, DATASET_RAW, "raw_game_right_rail", rails, season)
-        logger.info("Loaded %d right-rail rows", len(rails))
-    if not landings and not rails:
+    flush()
+    if total_l or total_r:
+        logger.info("Done: loaded %d landing, %d right-rail rows", total_l, total_r)
+    else:
         logger.info("Nothing to load (all %d games already present).", len(game_ids))
 
 
