@@ -125,6 +125,14 @@ Last updated at the end of the shift-foundation + Edge-ingestion session.
    free tier after ppt (frames are heavy).
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds.
 3. **Phase 2** — sequence mining → in-house xG → adjustments → win prob/leverage → GSAx.
+
+## Deferred (revisit AFTER all ingestion finishes — user-confirmed, not now)
+- **Storage compaction/optimization.** DB is ~14.3 GB now (past the 10 GB free tier;
+  ~$0.09/mo) and heading to ~19 GB once ppt-replay (+~3 GB) lands and the int_shift_segments
+  chain is rebuilt for 16 seasons (+~1.5 GB). Biggest tables: raw_shift_charts (6.2 GB),
+  int_shift_segments (4.9 GB), raw_play_by_play (0.9 GB), raw_ppt_replay (→~3 GB). Levers:
+  compress verbose serialized-JSON raw tables, or drop raw layers for older seasons once
+  staging/marts are built. Cost is trivial; purely a tidiness pass. Do NOT do it mid-ingestion.
 4. **Incremental refactor (important):** make `int_shift_segments`/`int_segment_context`/
    `int_on_ice_events` incremental by game so the nightly run doesn't rescan 11 seasons
    (the monolithic build is ~17 min and needs the raised timeout below).
