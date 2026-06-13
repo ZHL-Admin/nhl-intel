@@ -156,10 +156,14 @@ def get_edge_detail(entity: str, entity_id: str, season: str, game_type: int, re
         report: Full report path segment.
 
     Returns:
-        Full Edge payload dict for the (entity, season, gameType).
+        Full Edge payload dict, or None when the entity has no Edge data for that
+        (season, gameType, report) — many skaters legitimately 404. A 404 returns
+        None immediately (NOT retried); transient 429/5xx still retry via tenacity.
     """
     url = f"{BASE_URL}/v1/edge/{entity}-{report}/{entity_id}/{season}/{game_type}"
     response = httpx.get(url, timeout=30.0)
+    if response.status_code == 404:
+        return None
     response.raise_for_status()
     return response.json()
 

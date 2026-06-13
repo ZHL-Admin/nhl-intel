@@ -80,7 +80,10 @@ def _teams(client: bigquery.Client, season: str) -> list[int]:
     return [int(r.home_team_id) for r in client.query(sql).result()]
 
 
-def _ingest(client, entity, table, ids, reports, season, season_id, game_type, done, rows_by_table, sleep_ms):
+def _ingest(client, entity, table, ids, reports, season, season_id, game_type, done,
+            rows_by_table, sleep_ms, flush_size=500, loaded_counts=None):
+    """Fetch+stage Edge reports for a set of entities, flushing to BigQuery every
+    flush_size rows so a long backfill is durable/resumable mid-run (skips None 404s)."""
     for eid in ids:
         for report in reports:
             if (eid, season_id, game_type, report) in done:
@@ -90,10 +93,18 @@ def _ingest(client, entity, table, ids, reports, season, season_id, game_type, d
             except Exception as e:  # noqa: BLE001
                 logger.warning("  %s %s %s failed: %s", entity, eid, report, str(e)[:60])
                 continue
+            if payload is None:  # 404 — entity has no Edge data for this report
+                continue
             rows_by_table[table].append({
                 "entity_id": eid, "season_id": season_id,
                 "game_type": game_type, "report": report, "data": payload,
             })
+            if len(rows_by_table[table]) >= flush_size:
+                load_json_to_bigquery(PROJECT, DATASET_RAW, table, rows_by_table[table], season)
+                if loaded_counts is not None:
+                    loaded_counts[table] = loaded_counts.get(table, 0) + len(rows_by_table[table])
+                logger.info("  flushed %d rows to %s", len(rows_by_table[table]), table)
+                rows_by_table[table] = []
             time.sleep(sleep_ms / 1000.0)
 
 
@@ -111,16 +122,18 @@ def refresh_season(client: bigquery.Client, season: str, game_type: int = 2,
                 season, game_type, len(skaters), len(goalies), len(teams))
 
     rows_by_table = {"raw_edge_skaters": [], "raw_edge_goalies": [], "raw_edge_teams": []}
-    _ingest(client, "skater", "raw_edge_skaters", skaters, EDGE_SKATER_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_skaters"), rows_by_table, sleep_ms)
-    _ingest(client, "goalie", "raw_edge_goalies", goalies, EDGE_GOALIE_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_goalies"), rows_by_table, sleep_ms)
-    _ingest(client, "team", "raw_edge_teams", teams, EDGE_TEAM_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_teams"), rows_by_table, sleep_ms)
+    loaded_counts: dict[str, int] = {}
+    _ingest(client, "skater", "raw_edge_skaters", skaters, EDGE_SKATER_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_skaters"), rows_by_table, sleep_ms, loaded_counts=loaded_counts)
+    _ingest(client, "goalie", "raw_edge_goalies", goalies, EDGE_GOALIE_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_goalies"), rows_by_table, sleep_ms, loaded_counts=loaded_counts)
+    _ingest(client, "team", "raw_edge_teams", teams, EDGE_TEAM_REPORTS, season, season_id, game_type, _existing(client, "raw_edge_teams"), rows_by_table, sleep_ms, loaded_counts=loaded_counts)
 
-    total = 0
+    # Flush any remaining (< flush_size) rows per table.
     for table, rows in rows_by_table.items():
         if rows:
             load_json_to_bigquery(PROJECT, DATASET_RAW, table, rows, season)
-            logger.info("Loaded %d rows to %s", len(rows), table)
-            total += len(rows)
+            loaded_counts[table] = loaded_counts.get(table, 0) + len(rows)
+    total = sum(loaded_counts.values())
+    logger.info("Season %s loaded: %s (total %d)", season, dict(loaded_counts), total)
     return total
 
 
