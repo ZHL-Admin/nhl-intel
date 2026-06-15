@@ -211,12 +211,27 @@ New model jobs: train_xg/score_xg, train_winprob/score_winprob, tune_sequence_th
 Methodology docs: sequence-mining, xg-model, scorer-bias, score-state-adjustment, win-probability,
 goaltending. **Next: Phase 3 (team products: power ratings, identity, Streak Doctor).**
 
+### xG external validation (spot-check vs public models, 2026-06-15)
+Compared our per-game xGF to Natural Stat Trick + MoneyPuck on one random game
+(2024020626, MTL @ COL 2025-01-04): ours COL 2.71 / MTL 2.28 (all sit.), NST 2.35/2.13,
+MoneyPuck 2.51/2.47. **Our game total (4.99) ≈ MoneyPuck (4.98); ordering agrees; MTL in
+range; COL ~0.2 hot.** Consistent with the documented top-bin over-prediction (model says
+~21% on high-danger shots; actual ~17%) — same root cause as the HD-GSAx positive bias.
+**OPEN DECISION (user-aware, not yet done):** optionally bolt an isotonic/Platt CALIBRATION
+layer onto the xG model so top-end probabilities match reality, then rescore shot_xg (fixes
+the COL-type overshoot + HD-GSAx bias). User asked to keep it noted; decide before/with Phase 3.
+
 ## Next up (fresh-context work)
-1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
-   (only remaining ingestion gap; offseason-blocked).
-2. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
-   tied to the incremental refactor). stg_shifts (view) already covers 16 seasons.
-3. **Phase 2** — sequence mining → in-house xG → adjustments → win prob/leverage → GSAx.
+1. **Phase 3** — team products: power ratings + deserved standings, identity fingerprints +
+   style map, Streak Doctor, Edge zone-time conversion (blueprint section 5 + 12.1).
+   Note: Phase 3.1 power ratings replace the interim WP/opponent-adjustment rating source
+   (the single RATING_SOURCE constant in models_ml/config.py) — refit winprob after.
+2. **(Optional, before/with Phase 3) xG top-end recalibration** — see "xG external validation" above.
+3. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
+   (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
+4. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
+   tied to the incremental refactor). stg_shifts (view) already covers 16 seasons; WP/segments
+   currently 2015-16+ only.
 
 ## Deferred (revisit AFTER all ingestion finishes — user-confirmed, not now)
 - **Storage compaction/optimization.** DB is ~14.3 GB now (past the 10 GB free tier;
