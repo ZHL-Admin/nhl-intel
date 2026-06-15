@@ -210,3 +210,40 @@ models:
         tests: [not_null]
       - name: x_std
         description: Entity x in standard feet at the release frame (goal line ±89)
+
+  - name: int_shot_sequence
+    description: >
+      Sequence mining (blueprint 3.2): one row per UNBLOCKED shot attempt (shot-on-goal,
+      missed-shot, goal) classified by how it was generated. seq_type is a single
+      precedence label (rebound > rush > forecheck > cycle > point_shot > other) and the
+      individual seq_* booleans (incl. the seq_cross_ice royal-road proxy) are exposed for
+      downstream grouping. Strength + is_empty_net are derived from situation_code relative
+      to the shooting team. Thresholds are dbt vars tuned in
+      models_ml/tune_sequence_thresholds.py; see docs/methodology/sequence-mining.md.
+      This is the feature backbone the in-house xG model (Phase 2.2) consumes.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: shooter_id
+        description: Shooting player (shooting_player_id, or scoring_player_id for goals)
+      - name: strength
+        description: Strength relative to the shooting team (5v5, PP, SH, other)
+        tests:
+          - accepted_values:
+              values: ['5v5', 'PP', 'SH', 'other']
+      - name: seq_type
+        description: Single precedence label for how the shot was generated
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['rebound', 'rush', 'forecheck', 'cycle', 'point_shot', 'other']
+      - name: is_goal
+        tests: [not_null]
+      - name: time_since_faceoff
+        description: Seconds since the most recent faceoff, capped 60, null if none ≤60s
+      - name: time_since_turnover
+        description: Seconds since the most recent giveaway/takeaway, capped 60, null if none

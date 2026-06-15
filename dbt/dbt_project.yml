@@ -5,11 +5,15 @@ config-version: 2
 profile: 'nhl_intel'
 
 # Centralized thresholds so SQL never hardcodes sequence-mining or danger constants.
-# Rationale and tuning live in docs/methodology/sequence-mining.md (Phase 2.1).
+# Sequence windows are TUNED, not guessed: models_ml/tune_sequence_thresholds.py sweeps
+# each window over 2018-19..2024-25 and reports flagged-vs-unflagged goal-rate lift and
+# season-share stability. Tuning table + rationale: docs/methodology/sequence-mining.md.
+#   rush=4, forecheck=5 are the data-driven max-lift/most-stable picks.
+#   rebound=3 retained over 2 (identical lift 2.44 vs 2.45) for coverage + convention.
 vars:
-  rush_window_seconds: 5
+  rush_window_seconds: 4
   rebound_window_seconds: 3
-  forecheck_window_seconds: 6
+  forecheck_window_seconds: 5
   cross_ice_window_seconds: 2
   high_danger_x_min: 55
   high_danger_y_max: 22

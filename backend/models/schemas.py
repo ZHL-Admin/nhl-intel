@@ -69,6 +69,23 @@ class TeamGameStats(BaseModel):
     ga_p2: Optional[int] = Field(None, description="Goals against in period 2")
     ga_p3: Optional[int] = Field(None, description="Goals against in period 3")
 
+    # 5v5 sequence-mix shares (Phase 2.1): how shot attempts were generated.
+    # _for = the team's own offense, _against = the offense it allowed.
+    rebound_share_for: Optional[float] = Field(None, description="5v5 share of attempts off rebounds (for)")
+    rush_share_for: Optional[float] = Field(None, description="5v5 share of attempts off the rush (for)")
+    forecheck_share_for: Optional[float] = Field(None, description="5v5 share of attempts off the forecheck (for)")
+    cycle_share_for: Optional[float] = Field(None, description="5v5 share of attempts off the cycle (for)")
+    point_shot_share_for: Optional[float] = Field(None, description="5v5 share of point shots (for)")
+    other_share_for: Optional[float] = Field(None, description="5v5 share of other-origin attempts (for)")
+    cross_ice_share_for: Optional[float] = Field(None, description="5v5 share preceded by a royal-road pass proxy (for)")
+    rebound_share_against: Optional[float] = Field(None, description="5v5 share of attempts off rebounds (against)")
+    rush_share_against: Optional[float] = Field(None, description="5v5 share of attempts off the rush (against)")
+    forecheck_share_against: Optional[float] = Field(None, description="5v5 share of attempts off the forecheck (against)")
+    cycle_share_against: Optional[float] = Field(None, description="5v5 share of attempts off the cycle (against)")
+    point_shot_share_against: Optional[float] = Field(None, description="5v5 share of point shots (against)")
+    other_share_against: Optional[float] = Field(None, description="5v5 share of other-origin attempts (against)")
+    cross_ice_share_against: Optional[float] = Field(None, description="5v5 share preceded by a royal-road pass proxy (against)")
+
 
 class GameDetail(BaseModel):
     """Detailed game information."""
@@ -104,6 +121,15 @@ class PlayerGameStats(BaseModel):
     ihdcf: Optional[int] = Field(None, description="Individual high-danger chances for")
     pim: Optional[int] = Field(None, description="Penalty minutes")
     rush_attempts: Optional[int] = Field(None, description="Rush shot attempts")
+
+    # Individual unblocked-attempt counts by sequence type (Phase 2.1)
+    seq_rebound_attempts: Optional[int] = Field(None, description="Individual rebound attempts")
+    seq_rush_attempts: Optional[int] = Field(None, description="Individual rush attempts")
+    seq_forecheck_attempts: Optional[int] = Field(None, description="Individual forecheck attempts")
+    seq_cycle_attempts: Optional[int] = Field(None, description="Individual cycle attempts")
+    seq_point_shot_attempts: Optional[int] = Field(None, description="Individual point-shot attempts")
+    seq_other_attempts: Optional[int] = Field(None, description="Individual other-origin attempts")
+    seq_cross_ice_attempts: Optional[int] = Field(None, description="Individual royal-road (cross-ice) attempts")
 
 
 class GamePlayerStats(BaseModel):

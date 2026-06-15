@@ -70,6 +70,24 @@ player_penalties as (
     group by game_id, committed_by_player_id
 ),
 
+-- Individual unblocked attempts by sequence type (Phase 2.1). int_shot_sequence is
+-- unblocked-only, so these sum to <= individual_shot_attempts (which includes blocks).
+player_seq as (
+    select
+        game_id,
+        shooter_id as player_id,
+        countif(seq_type = 'rebound') as seq_rebound_attempts,
+        countif(seq_type = 'rush') as seq_rush_attempts,
+        countif(seq_type = 'forecheck') as seq_forecheck_attempts,
+        countif(seq_type = 'cycle') as seq_cycle_attempts,
+        countif(seq_type = 'point_shot') as seq_point_shot_attempts,
+        countif(seq_type = 'other') as seq_other_attempts,
+        countif(seq_cross_ice) as seq_cross_ice_attempts
+    from {{ ref('int_shot_sequence') }}
+    where shooter_id is not null
+    group by game_id, shooter_id
+),
+
 team_xg as (
     select
         game_id,
@@ -95,9 +113,15 @@ player_stats_combined as (
         coalesce(pfa.first_assists, 0) as first_assists,
         coalesce(psa.second_assists, 0) as second_assists,
         coalesce(pp.pim, 0) as pim,
-        -- rush_attempts set to 0: accurate rush classification requires event sequencing
-        -- and time-since-zone-entry data not available in current play-by-play events
-        0 as rush_attempts,
+        -- Real rush attempts now that the sequence layer (Phase 2.1) exists.
+        coalesce(pq.seq_rush_attempts, 0) as rush_attempts,
+        coalesce(pq.seq_rebound_attempts, 0) as seq_rebound_attempts,
+        coalesce(pq.seq_rush_attempts, 0) as seq_rush_attempts,
+        coalesce(pq.seq_forecheck_attempts, 0) as seq_forecheck_attempts,
+        coalesce(pq.seq_cycle_attempts, 0) as seq_cycle_attempts,
+        coalesce(pq.seq_point_shot_attempts, 0) as seq_point_shot_attempts,
+        coalesce(pq.seq_other_attempts, 0) as seq_other_attempts,
+        coalesce(pq.seq_cross_ice_attempts, 0) as seq_cross_ice_attempts,
         coalesce(tx.xgf_pct, 0.5) as team_xgf_pct,
 
         15.0 as estimated_toi_5v5_minutes
@@ -106,6 +130,9 @@ player_stats_combined as (
     left join player_shots ps
         on r.game_id = ps.game_id
         and r.player_id = ps.player_id
+    left join player_seq pq
+        on r.game_id = pq.game_id
+        and r.player_id = pq.player_id
     left join player_first_assists pfa
         on r.game_id = pfa.game_id
         and r.player_id = pfa.player_id
@@ -138,6 +165,13 @@ metrics_calculated as (
         second_assists,
         pim,
         rush_attempts,
+        seq_rebound_attempts,
+        seq_rush_attempts,
+        seq_forecheck_attempts,
+        seq_cycle_attempts,
+        seq_point_shot_attempts,
+        seq_other_attempts,
+        seq_cross_ice_attempts,
         ixg,
         team_xgf_pct,
         estimated_toi_5v5_minutes as toi_5v5,
@@ -197,6 +231,13 @@ final as (
         second_assists,
         ihdcf,
         rush_attempts,
+        seq_rebound_attempts,
+        seq_rush_attempts,
+        seq_forecheck_attempts,
+        seq_cycle_attempts,
+        seq_point_shot_attempts,
+        seq_other_attempts,
+        seq_cross_ice_attempts,
         pim,
         ixg,
         ixg_per60,

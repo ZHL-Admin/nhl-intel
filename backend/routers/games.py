@@ -250,7 +250,21 @@ async def get_game_detail(game_id: int) -> GameDetail:
             gf_p3,
             ga_p1,
             ga_p2,
-            ga_p3
+            ga_p3,
+            rebound_share_for,
+            rush_share_for,
+            forecheck_share_for,
+            cycle_share_for,
+            point_shot_share_for,
+            other_share_for,
+            cross_ice_share_for,
+            rebound_share_against,
+            rush_share_against,
+            forecheck_share_against,
+            cycle_share_against,
+            point_shot_share_against,
+            other_share_against,
+            cross_ice_share_against
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE game_id = {game_id}
         """
@@ -293,7 +307,21 @@ async def get_game_detail(game_id: int) -> GameDetail:
                 gf_p3=row.get('gf_p3'),
                 ga_p1=row.get('ga_p1'),
                 ga_p2=row.get('ga_p2'),
-                ga_p3=row.get('ga_p3')
+                ga_p3=row.get('ga_p3'),
+                rebound_share_for=row.get('rebound_share_for'),
+                rush_share_for=row.get('rush_share_for'),
+                forecheck_share_for=row.get('forecheck_share_for'),
+                cycle_share_for=row.get('cycle_share_for'),
+                point_shot_share_for=row.get('point_shot_share_for'),
+                other_share_for=row.get('other_share_for'),
+                cross_ice_share_for=row.get('cross_ice_share_for'),
+                rebound_share_against=row.get('rebound_share_against'),
+                rush_share_against=row.get('rush_share_against'),
+                forecheck_share_against=row.get('forecheck_share_against'),
+                cycle_share_against=row.get('cycle_share_against'),
+                point_shot_share_against=row.get('point_shot_share_against'),
+                other_share_against=row.get('other_share_against'),
+                cross_ice_share_against=row.get('cross_ice_share_against')
             )
             if row['home_away'] == 'home':
                 home_stats = team_stats
@@ -393,7 +421,14 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         p.second_assists,
         p.ihdcf,
         p.pim,
-        p.rush_attempts
+        p.rush_attempts,
+        p.seq_rebound_attempts,
+        p.seq_rush_attempts,
+        p.seq_forecheck_attempts,
+        p.seq_cycle_attempts,
+        p.seq_point_shot_attempts,
+        p.seq_other_attempts,
+        p.seq_cross_ice_attempts
     FROM {bq_service.get_full_table_id('mart_player_game_stats')} p
     WHERE p.game_id = {game_id}
     ORDER BY (p.individual_goals + p.first_assists + p.second_assists) DESC, p.ixg_per60 DESC
@@ -424,7 +459,14 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             second_assists=row.get('second_assists'),
             ihdcf=row.get('ihdcf'),
             pim=row.get('pim'),
-            rush_attempts=row.get('rush_attempts')
+            rush_attempts=row.get('rush_attempts'),
+            seq_rebound_attempts=row.get('seq_rebound_attempts'),
+            seq_rush_attempts=row.get('seq_rush_attempts'),
+            seq_forecheck_attempts=row.get('seq_forecheck_attempts'),
+            seq_cycle_attempts=row.get('seq_cycle_attempts'),
+            seq_point_shot_attempts=row.get('seq_point_shot_attempts'),
+            seq_other_attempts=row.get('seq_other_attempts'),
+            seq_cross_ice_attempts=row.get('seq_cross_ice_attempts')
         )
 
         if row['team_id'] == game_row['home_team_id']:
