@@ -209,3 +209,27 @@ models:
         tests: [not_null]
       - name: season_id
         tests: [not_null]
+
+  - name: mart_goalie_game_stats
+    description: >
+      Per goalie-game GSAx on the in-house xG layer (Phase 2.5). xGA over all unblocked
+      shots faced (calibrated); saves/save% on-goal only; GSAx split by danger tier and
+      strength. See docs/methodology/goaltending.md.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: goalie_id
+        tests: [not_null]
+      - name: gsax
+        description: Goals saved above expected (xGA - GA)
+
+  - name: mart_goalie_season
+    description: >
+      Goalie season GSAx aggregates + last-10 rolling GSAx + NHL Edge second opinion
+      (overall last-10 save pct; no HD split). our_hd_gsax vs edge_last10_save_pct are the
+      two distinct sources (blueprint 12.3). See docs/methodology/goaltending.md.
+    columns:
+      - name: goalie_id
+        tests: [not_null]
+      - name: season
+        tests: [not_null]

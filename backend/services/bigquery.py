@@ -871,54 +871,28 @@ class BigQueryService:
         return self.query(sql)
 
     def get_goalie_danger(self, game_id: int) -> List[Dict[str, Any]]:
-        """Per-goalie save record split by shot-danger band, plus total GSAx.
-
-        Danger bands: high = is_high_danger; medium = xg_value >= 0.04 (non-high);
-        low = everything else. GSAx = expected goals against - actual goals against.
+        """Per-goalie save record split by danger tier, plus total GSAx, from the Phase 2.5
+        goalie mart (calibrated xGA over all unblocked shots; standard low/med/high tiers).
         """
-        shots = self.get_full_table_id('int_shot_attempts_all')
+        goalie = self.get_full_table_id('mart_goalie_game_stats')
         box = self.get_full_table_id('stg_boxscores')
         rosters = self.get_full_table_id('stg_rosters')
         sql = f"""
         WITH gi AS (
             SELECT home_team_id, away_team_id, home_team_abbrev, away_team_abbrev
             FROM {box} WHERE game_id = {game_id}
-        ),
-        s AS (
-            SELECT
-                goalie_in_net_id AS goalie_id,
-                is_on_net, is_goal, xg_value,
-                CASE
-                    WHEN xg_value >= 0.10 THEN 'high'
-                    WHEN xg_value >= 0.045 THEN 'medium'
-                    ELSE 'low'
-                END AS band
-            FROM {shots}
-            WHERE game_id = {game_id} AND goalie_in_net_id IS NOT NULL AND period_type != 'SO'
-        ),
-        agg AS (
-            SELECT
-                goalie_id,
-                COUNTIF(is_on_net AND band = 'high') AS high_shots,
-                COUNTIF(is_on_net AND band = 'high') - COUNTIF(is_goal AND band = 'high') AS high_saves,
-                COUNTIF(is_on_net AND band = 'medium') AS med_shots,
-                COUNTIF(is_on_net AND band = 'medium') - COUNTIF(is_goal AND band = 'medium') AS med_saves,
-                COUNTIF(is_on_net AND band = 'low') AS low_shots,
-                COUNTIF(is_on_net AND band = 'low') - COUNTIF(is_goal AND band = 'low') AS low_saves,
-                SUM(IF(is_on_net, xg_value, 0)) - COUNTIF(is_goal) AS gsax,
-                COUNTIF(is_on_net) AS total_shots
-            FROM s GROUP BY goalie_id
         )
         SELECT
-            agg.goalie_id AS player_id,
-            agg.high_saves, agg.high_shots, agg.med_saves, agg.med_shots, agg.low_saves, agg.low_shots,
-            ROUND(agg.gsax, 2) AS gsax,
+            g.goalie_id AS player_id,
+            g.high_saves, g.high_shots, g.med_saves, g.med_shots, g.low_saves, g.low_shots,
+            ROUND(g.gsax, 2) AS gsax,
             CONCAT(COALESCE(r.first_name, ''), ' ', COALESCE(r.last_name, '')) AS goalie_name,
-            CASE WHEN r.team_id = gi.home_team_id THEN gi.home_team_abbrev ELSE gi.away_team_abbrev END AS team_abbrev
-        FROM agg
+            CASE WHEN g.team_id = gi.home_team_id THEN gi.home_team_abbrev ELSE gi.away_team_abbrev END AS team_abbrev
+        FROM {goalie} g
         CROSS JOIN gi
-        LEFT JOIN {rosters} r ON r.game_id = {game_id} AND r.player_id = agg.goalie_id
-        ORDER BY agg.total_shots DESC
+        LEFT JOIN {rosters} r ON r.game_id = {game_id} AND r.player_id = g.goalie_id
+        WHERE g.game_id = {game_id}
+        ORDER BY g.shots_faced DESC
         """
         return self.query(sql)
 

@@ -188,7 +188,28 @@ Final state (verified):
   - DAG: score_winprob step after run_dbt_marts. docs/methodology/win-probability.md.
   - **RUNNING:** full score_winprob backfill (all segment-covered seasons -> win_probability,
     ~/score_wp.log). Validate after: leverage peaks late in 1-goal games, blowout WP saturates.
-- **Next in Phase 2:** 2.5 GSAx (last prompt).
+- **2.5 Goaltending GSAx (COMPLETE, validated).** `int_goalie_shots` (all unblocked shots
+  faced, goalie=goalie_in_net_id incl. ~98.5% of misses, empty-net excluded, danger tier +
+  strength). `mart_goalie_game_stats` (xGA over ALL unblocked = calibrated; saves/save% on-goal
+  only; GSAx by danger tier + strength). `mart_goalie_season` (season + last-10 rolling GSAx +
+  NHL Edge `edge_last10_save_pct` second opinion — Edge has NO HD split, named distinctly from
+  our_hd_gsax). Danger tiers in dbt vars (low<0.05, med 0.05-0.15, high>=0.15).
+  - **KEY FIX:** xGA must sum over ALL unblocked shots (model's training population), NOT
+    on-goal only — on-goal-only undershoots (5721 vs 8083 actual goals 2024-25); all-unblocked
+    = 8294 (calibrated). League GSAx ~0 recent seasons. **Known bias:** HD GSAx league-positive
+    (+556) from the xG top-bin over-prediction — documented, comparative not absolute.
+  - Backend: new `/goalies/{id}` + `/goalies/{id}/gamelog` routers; `/games/{id}/goalie-danger`
+    repointed to mart_goalie_game_stats. Frontend: GameDetail goalie panel adds "NHL Edge"
+    column (per-goalie season last-10 save% via getGoalieSeason). docs/methodology/goaltending.md
+    (our save% vs Edge corr 0.72). Validation: top-5 GSAx 2024-25 = Hellebuyck/Thompson/
+    Shesterkin/Vasilevskiy/Montembeault (smell test ✓). dbt PASS=7.
+
+## PHASE 2 — CORE METRIC LAYER COMPLETE (all 5 prompts)
+seq mining -> in-house xG + decomposition -> rink/score/opp adjustments -> win prob + leverage
+-> GSAx. nhl_models dataset now holds shot_xg (1.76M) + win_probability (~9.4M, 2015-26).
+New model jobs: train_xg/score_xg, train_winprob/score_winprob, tune_sequence_thresholds.
+Methodology docs: sequence-mining, xg-model, scorer-bias, score-state-adjustment, win-probability,
+goaltending. **Next: Phase 3 (team products: power ratings, identity, Streak Doctor).**
 
 ## Next up (fresh-context work)
 1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds

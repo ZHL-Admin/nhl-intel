@@ -9,6 +9,7 @@ import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
 import RollingContextPanel from '../components/visualizations/RollingContextPanel'
 import { getGameDetail, getGamePlayerStats, getGameTeamStats, getGameGoals, getGameGoaltending, getGamePressure, getGameSpecialTeams, getGameGoalieDanger, getGameShotQuality, getGameSkaterImpact, getGameContext } from '../api/games'
+import { getGoalieSeason } from '../api/goalies'
 import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, TeamGameStats, TeamComparisonStats, GoalDetail, GoaltenderStat, PressurePoint, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext } from '../api/types'
 import { getTeamLogoUrl, getTeamColor, getPlayerHeadshotUrl } from '../utils/teams'
 import './GameDetail.css'
@@ -849,17 +850,29 @@ function SpecialTeamsPanel({ gameId }: { gameId: number }) {
 // "<Goalie> stole one" — goals saved above expected, by shot danger.
 function GoalieDangerPanel({ gameId }: { gameId: number }) {
   const [rows, setRows] = useState<GoalieDangerStat[]>([])
+  // NHL Edge second opinion (season last-10 save %) per goalie, fetched on demand (Phase 2.5)
+  const [edge, setEdge] = useState<Record<number, number | null>>({})
   useEffect(() => { let a = true; getGameGoalieDanger(gameId).then(d => { if (a) setRows(d) }).catch(() => {}); return () => { a = false } }, [gameId])
+  useEffect(() => {
+    let active = true
+    rows.forEach(g => {
+      getGoalieSeason(g.player_id).then(s => {
+        if (active) setEdge(prev => ({ ...prev, [g.player_id]: s.edge_last10_save_pct }))
+      }).catch(() => {})
+    })
+    return () => { active = false }
+  }, [rows])
   if (rows.length === 0) return null
   const best = [...rows].sort((x, y) => y.gsax - x.gsax)[0]
   const swing = rows.length >= 2 ? Math.abs(rows[0].gsax - rows[1].gsax) : Math.abs(best.gsax)
   const title = best.gsax > 0.5 ? `${lastNameOf(best.goalie_name)} stole one` : 'Goaltending by danger'
+  const hasEdge = Object.values(edge).some(v => v != null)
   return (
     <section className="overview-card">
       <PanelHeader title={title} subtitle="Goals saved above expected, by shot danger" isNew />
       <table className="analytics-table">
         <thead>
-          <tr><th></th><th>High</th><th>Med</th><th>Low</th><th>GSAx</th></tr>
+          <tr><th></th><th>High</th><th>Med</th><th>Low</th><th>GSAx</th>{hasEdge && <th title="NHL Edge last-10 save %, an independent measured second opinion">NHL Edge</th>}</tr>
         </thead>
         <tbody>
           {rows.map(g => (
@@ -869,6 +882,7 @@ function GoalieDangerPanel({ gameId }: { gameId: number }) {
               <td>{g.med_saves}/{g.med_shots}</td>
               <td>{g.low_saves}/{g.low_shots}</td>
               <td style={{ color: g.gsax >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>{g.gsax >= 0 ? '+' : ''}{g.gsax.toFixed(2)}</td>
+              {hasEdge && <td style={{ color: 'var(--color-text-muted)' }}>{edge[g.player_id] != null ? `.${Math.round((edge[g.player_id] as number) * 1000)}` : '—'}</td>}
             </tr>
           ))}
         </tbody>

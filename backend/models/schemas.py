@@ -499,6 +499,47 @@ class WinProbSeries(BaseModel):
     goal_swings: List[WinProbGoalSwing]
 
 
+class GoalieSeason(BaseModel):
+    """A goalie's season line on the in-house xG layer (Phase 2.5)."""
+    goalie_id: int
+    goalie_name: Optional[str] = None
+    season: str
+    team_id: Optional[int] = None
+    games_played: int
+    shots_faced: int
+    saves: int
+    goals_against: int
+    save_pct: Optional[float] = None
+    xga: float
+    gsax: float = Field(description="Goals saved above expected (xGA - GA)")
+    our_hd_gsax: Optional[float] = Field(None, description="High-danger GSAx (ours)")
+    our_hd_save_pct: Optional[float] = None
+    ev_gsax: Optional[float] = None
+    special_gsax: Optional[float] = None
+    last10_gsax: Optional[float] = None
+    last10_hd_gsax: Optional[float] = None
+    # NHL Edge independent second opinion (overall last-10 save pct; no HD split)
+    edge_last10_save_pct: Optional[float] = Field(None, description="NHL Edge last-10 save %")
+    edge_games_above_900: Optional[int] = None
+
+
+class GoalieGameLogRow(BaseModel):
+    """One game in a goalie's log."""
+    game_id: int
+    game_date: DateType
+    season: str
+    team_id: Optional[int] = None
+    shots_faced: int
+    saves: int
+    goals_against: int
+    save_pct: Optional[float] = None
+    xga: float
+    gsax: float
+    high_gsax: Optional[float] = None
+    high_shots: Optional[int] = None
+    high_saves: Optional[int] = None
+
+
 class GoaltenderStat(BaseModel):
     """A goalie's line for a game, from the goalie who was actually in net per shot."""
     player_id: int

@@ -17,6 +17,10 @@ vars:
   cross_ice_window_seconds: 2
   high_danger_x_min: 55
   high_danger_y_max: 22
+  # Goaltending danger tiers by per-shot xG (Phase 2.5). Half-open [lo, hi):
+  # low < 0.05, medium 0.05-0.15, high >= 0.15. Mirrors models_ml/config.DANGER_TIERS.
+  danger_low_max: 0.05
+  danger_high_min: 0.15
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]

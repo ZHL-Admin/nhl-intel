@@ -290,3 +290,18 @@ models:
         tests: [not_null]
       - name: team_id
         tests: [not_null]
+
+  - name: int_goalie_shots
+    description: >
+      Every unblocked shot faced by a goalie (on-goal + missed) with in-house xG and
+      danger/strength labels (Phase 2.5). xGA sums over all unblocked shots (calibrated);
+      saves use on-goal only. Empty-net shots excluded. See docs/methodology/goaltending.md.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: goalie_id
+        tests: [not_null]
+      - name: danger_tier
+        tests:
+          - accepted_values:
+              values: ['low', 'medium', 'high', 'unknown']

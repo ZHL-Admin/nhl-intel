@@ -364,6 +364,26 @@ export interface WinProbSeries {
   goal_swings: WinProbGoalSwing[]
 }
 
+// Goalie GSAx season line (Phase 2.5)
+export interface GoalieSeason {
+  goalie_id: number
+  goalie_name: string | null
+  season: string
+  team_id: number | null
+  games_played: number
+  shots_faced: number
+  saves: number
+  goals_against: number
+  save_pct: number | null
+  xga: number
+  gsax: number
+  our_hd_gsax: number | null
+  our_hd_save_pct: number | null
+  last10_gsax: number | null
+  edge_last10_save_pct: number | null
+  edge_games_above_900: number | null
+}
+
 // ============================================================================
 // Advanced Analytics Types
 // ============================================================================
