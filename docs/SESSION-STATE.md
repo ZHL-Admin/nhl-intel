@@ -1,7 +1,11 @@
 # Session state — finalization plan progress
 
-Working branch: **`finalization`** (10 commits ahead of the redesign work).
-Last updated at the end of the shift-foundation + Edge-ingestion session.
+Working branch: **`finalization`**.
+Last updated at the end of **Phase 3 (team products)** — power ratings, deserved standings,
+team identity + style map, Streak Doctor all shipped, validated, and committed (commits
+76f0c39, e845cb4, 54f1a07). Phases 0, 1, 2 complete before that. **Next: Phase 4 (player
+project).** Read the "PHASE 3" and "Next up" sections below first, then
+`nhl-intel-finalization-plan.md` for the Phase 4 prompts.
 
 ## Done & validated (committed)
 - **Phase 0** — proxy relabeling (`zone_entry_proxy_*`), model-layer conventions
@@ -215,11 +219,11 @@ goaltending. **Next: Phase 3 (team products: power ratings, identity, Streak Doc
 Compared our per-game xGF to Natural Stat Trick + MoneyPuck on one random game
 (2024020626, MTL @ COL 2025-01-04): ours COL 2.71 / MTL 2.28 (all sit.), NST 2.35/2.13,
 MoneyPuck 2.51/2.47. **Our game total (4.99) ≈ MoneyPuck (4.98); ordering agrees; MTL in
-range; COL ~0.2 hot.** Consistent with the documented top-bin over-prediction (model says
+range; COL ~0.2 hot.** There is a small, documented top-bin over-prediction (model says
 ~21% on high-danger shots; actual ~17%) — same root cause as the HD-GSAx positive bias.
-**OPEN DECISION (user-aware, not yet done):** optionally bolt an isotonic/Platt CALIBRATION
-layer onto the xG model so top-end probabilities match reality, then rescore shot_xg (fixes
-the COL-type overshoot + HD-GSAx bias). User asked to keep it noted; decide before/with Phase 3.
+**DECISION (user, 2026-06-15): the xG model is ACCEPTED AS-IS.** No top-end recalibration
+will be added; the bias is documented and comparative metrics (GSAx, ratings) are unaffected
+in ordering. Do not revisit unless the user asks.
 
 ## PHASE 3 — team products (IN PROGRESS)
 - **3.1 Power ratings + deserved standings (COMPLETE, validated).**
@@ -318,15 +322,28 @@ the COL-type overshoot + HD-GSAx bias). User asked to keep it noted; decide befo
 ## /teams/style-map, /teams/{id}/streak, /streaks/active. New shared FE: ComponentStackBar,
 ## PercentileBarList, StreakDoctorCard. RATING_SOURCE swapped to power_rating everywhere.
 
+### International teams removed from all team marts (user request, 2026-06-15)
+The data includes 2026 Olympic / 4-Nations games (game_id type codes 09/19/20) played by
+NATIONAL teams (CAN/USA/SWE/FIN/CZE/... ids 60-67, 5096, 6773, 6775, 6776, 7228). These were
+polluting team-level views (and caused a div-by-zero in get_team_detail via 0 5v5 TOI).
+**Fix:** every team mart now filters `substr(game_id,5,2) in ('01','02','03')` (NHL pre/reg/
+playoff only) at its `games`/`base` CTE — mart_team_game_stats, mart_team_rolling,
+mart_team_stats_situational, mart_team_zone_time, mart_team_faceoffs. All Phase 3 jobs already
+filtered to '02'/'03', so they were never affected. get_team_detail SAFE_DIVIDE guard kept as
+defensive code. **STILL OUTSTANDING:** player-level marts (mart_player_*) may still attribute
+Olympic games to national team_ids — clean those the same way during Phase 4 if they surface.
+
 ## Next up (fresh-context work)
 1. **Phase 4** — the player project (blueprint section 4): 4.1 RAPM isolated impact,
-   4.2 composite stack + archetypes (4.2 archetype naming = the human-in-the-loop step),
-   4.3 reconciliation (clutch/consistency/coach-trust/divergence), 4.4 trajectories+twins.
+   4.2 composite stack + archetypes (**4.2 archetype naming = the one human-in-the-loop step**:
+   the job prints a labeling report and STOPS for the user to name clusters before writing
+   ARCHETYPE_NAMES in models_ml/config.py), 4.3 reconciliation (clutch/consistency/coach-trust/
+   divergence), 4.4 trajectories+twins. RAPM design needs int_shift_segments x int_segment_context
+   (2015-16+ only — see segment-coverage note below) + nhl_models.shot_xg via int_on_ice_events.
    ComponentStackBar + PercentileBarList are built and meant for reuse here.
-2. **(Optional, before/with Phase 3) xG top-end recalibration** — see "xG external validation" above.
-3. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
+2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
-4. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
+3. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
    tied to the incremental refactor). stg_shifts (view) already covers 16 seasons; WP/segments
    currently 2015-16+ only.
 

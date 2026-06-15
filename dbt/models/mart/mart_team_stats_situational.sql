@@ -18,6 +18,9 @@ with games as (
         home_team_id,
         away_team_id
     from {{ ref('stg_boxscores') }}
+    -- NHL games only (preseason/regular/playoff); drop Olympic/exhibition so the
+    -- national teams never appear. game_id chars 5-6 = type code.
+    where substr(cast(game_id as string), 5, 2) in ('01', '02', '03')
 ),
 
 shot_attempts as (
