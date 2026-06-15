@@ -118,12 +118,23 @@ Last updated at the end of the shift-foundation + Edge-ingestion session.
     to match the 16-season core (`~/faceoffs_backfill.log`; fast).
   - 2010-2014 core (pbp/box/shifts) backfill DONE: **16 seasons (2010-11→2025-26)**, proof run.
 
+## PHASE 1 INGESTION — COMPLETE & VERIFIED (all surfaces, all backfills landed)
+Final state (verified):
+- Core pbp/box/shifts: **16 seasons** 2010-11→2025-26.
+- Edge: **5 seasons** 2021-22→2025-26; marts rebuilt — mart_edge_player_profile 4,737 rows
+  (zone pcts sum to 1.0 every season; null TOI only 0/0/0/7/15), mart_edge_team_profile 160.
+- Faceoffs: **16 seasons** (14,231 player-seasons).
+- ppt-replay: **3 seasons** 2023-24→2025-26, **25,946 goal sprites**. dbt PASS=6;
+  frame-count integrity 25,946/25,946; release-frame puck avg |x_std| = **89.0** (goal line),
+  99.9% of puck-tracked goals at the net; ~6.6% goals have an untracked puck (null, handled).
+- DB size: **20.58 GB** (raw 14.1 / staging 6.0 / mart 0.4). raw_ppt_replay 6.52 GB is the
+  biggest table. ~$0.21/mo over the 10 GB free tier.
+
 ## Next up (fresh-context work)
-1. **Finalize once the 3 running backfills complete:** rebuild Edge marts
-   (`dbt run --select mart_edge_player_profile mart_edge_team_profile`); confirm ppt-replay
-   per-season goal-sprite counts and Edge/faceoff season spans. Check BQ storage vs 10 GB
-   free tier after ppt (frames are heavy).
-2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds.
+1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
+   (only remaining ingestion gap; offseason-blocked).
+2. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
+   tied to the incremental refactor). stg_shifts (view) already covers 16 seasons.
 3. **Phase 2** — sequence mining → in-house xG → adjustments → win prob/leverage → GSAx.
 
 ## Deferred (revisit AFTER all ingestion finishes — user-confirmed, not now)
