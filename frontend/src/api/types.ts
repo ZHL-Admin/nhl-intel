@@ -669,3 +669,27 @@ export interface StyleMap {
   y_neg_desc: string
   teams: StyleMapTeam[]
 }
+
+// --- Streak Doctor (Phase 3.3) ---
+export interface StreakComponent {
+  key: string
+  label: string
+  value: number
+  share: number
+}
+export interface StreakCard {
+  team_id: number
+  team_abbrev?: string | null
+  season: string
+  window_games: number
+  games: number
+  run_word: string
+  verdict: string
+  total_deviation: number
+  sustainability: number
+  is_notable: boolean
+  points_pace: number
+  points_pace_z: number
+  streak: number
+  components: StreakComponent[]
+}

@@ -8,10 +8,11 @@ from typing import Optional, List
 from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
     TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile,
-    TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam
+    TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam, StreakCard
 )
 from services.bigquery import bq_service
 from services.cache import cache
+from routers.streaks import card_from_row
 
 router = APIRouter()
 
@@ -68,6 +69,26 @@ async def get_style_map(
         teams=[StyleMapTeam(team_id=r['team_id'], team_abbrev=r.get('team_abbrev'),
                             x=r['x'], y=r['y']) for r in rows],
     )
+
+
+@router.get("/{team_id}/streak", response_model=StreakCard)
+@cache(ttl=1800)
+async def get_team_streak(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+    window: int = Query(10, description="Last-N games window (5, 10, or 20)"),
+) -> StreakCard:
+    """Streak Doctor card for a team: last-N run decomposed with a verdict (Phase 3.3)."""
+    cards = bq_service.get_models_table_id('streak_cards')
+    if not season:
+        season = bq_service.query(f"SELECT MAX(season) AS s FROM {cards}")[0]['s']
+    rows = bq_service.query(f"""
+        SELECT * FROM {cards}
+        WHERE team_id = {team_id} AND season = '{season}' AND window_games = {window}
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Streak card not found")
+    return card_from_row(rows[0], _team_abbrev(team_id, season))
 
 
 @router.get("/{team_id}/identity", response_model=TeamIdentity)

@@ -53,6 +53,12 @@ sources:
           identity fingerprints, one row per (season, team_id) with x/y coordinates and
           the four axis description strings (repeated per row).
 
+      - name: streak_cards
+        description: >
+          Streak Doctor cards (Phase 3.3; models_ml/streak_doctor.py): one row per
+          (season, team_id, window_games) decomposing the last-N run into goal-scale
+          components with a verdict, sustainability meter, and is_notable flag.
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw

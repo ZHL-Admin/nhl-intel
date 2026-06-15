@@ -451,6 +451,14 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Streak Doctor cards (Phase 3.3): need marts + goalie GSAx + team_ratings (opponent
+    # strength), so run after compute_ratings.
+    streak_doctor = BashOperator(
+        task_id="streak_doctor",
+        bash_command="cd /opt/airflow && python -m models_ml.streak_doctor",
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -481,6 +489,8 @@ with DAG(
         >> generate_report
         >> publish_report
     )
-    # deserved standings + style map branch off the marts/ratings; report waits on them too
+    # deserved standings + streak cards branch off ratings; style map off the marts; the
+    # report waits on them all
     compute_ratings >> simulate_deserved >> generate_report
+    compute_ratings >> streak_doctor >> generate_report
     run_dbt_marts >> compute_style_map >> generate_report

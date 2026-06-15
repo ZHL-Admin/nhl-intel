@@ -3,9 +3,11 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader } from '../components/common'
 import Tabs from '../components/common/Tabs'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
-import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent } from '../api/teams'
+import TeamFormTab from '../components/teams/TeamFormTab'
+import { StreakDoctorCard } from '../components/common'
+import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent, getTeamStreak } from '../api/teams'
 import { getTeamGames } from '../api/games'
-import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent } from '../api/types'
+import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent, StreakCard } from '../api/types'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
@@ -22,6 +24,7 @@ function TeamProfile() {
   const [upcomingGame, setUpcomingGame] = useState<Game | null>(null)
   const [selectedOpponent, setSelectedOpponent] = useState<number | null>(null)
   const [opponentStats, setOpponentStats] = useState<TeamVsOpponent | null>(null)
+  const [streakCard, setStreakCard] = useState<StreakCard | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -102,6 +105,17 @@ function TeamProfile() {
     return () => {
       clearTeamPrimaryColor()
     }
+  }, [teamId])
+
+  // Streak Doctor card (window 10) for the auto-render-when-notable banner (Phase 3.3).
+  useEffect(() => {
+    if (!teamId) return
+    let active = true
+    setStreakCard(null)
+    getTeamStreak(parseInt(teamId), 10)
+      .then((c) => active && setStreakCard(c))
+      .catch(() => { /* no card (e.g. <10 games) — banner just hides */ })
+    return () => { active = false }
   }, [teamId])
 
   const handleRetryDetail = () => {
@@ -303,6 +317,7 @@ function TeamProfile() {
               options={[
                 { value: 'overview', label: 'Overview' },
                 { value: 'identity', label: 'Identity' },
+                { value: 'form', label: 'Form' },
                 { value: 'performance', label: 'Performance' },
                 { value: 'roster', label: 'Roster' },
                 { value: 'matchups', label: 'Matchups' }
@@ -329,8 +344,19 @@ function TeamProfile() {
           />
         )}
 
+        {/* Auto-surface a notable run on the Overview tab (Phase 3.3) */}
+        {currentTab === 'overview' && streakCard?.is_notable && (
+          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
+            <StreakDoctorCard card={streakCard} />
+          </div>
+        )}
+
         {currentTab === 'identity' && teamId && (
           <TeamIdentityTab teamId={parseInt(teamId)} />
+        )}
+
+        {currentTab === 'form' && teamId && (
+          <TeamFormTab teamId={parseInt(teamId)} />
         )}
 
         {currentTab === 'performance' && (

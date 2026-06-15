@@ -499,6 +499,32 @@ class WinProbSeries(BaseModel):
     goal_swings: List[WinProbGoalSwing]
 
 
+class StreakComponent(BaseModel):
+    """One Streak Doctor component: goal-scale value + share of total deviation (Phase 3.3)."""
+    key: str
+    label: str
+    value: float
+    share: float
+
+
+class StreakCard(BaseModel):
+    """Streak Doctor decomposition of a team's last-N run (Phase 3.3)."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    season: str
+    window_games: int
+    games: int
+    run_word: str
+    verdict: str
+    total_deviation: float
+    sustainability: int = Field(description="0-100; higher = more likely to persist")
+    is_notable: bool
+    points_pace: float
+    points_pace_z: float
+    streak: int = Field(description="Signed current W/L streak (+wins, -losses)")
+    components: List[StreakComponent]
+
+
 class IdentityMetric(BaseModel):
     """One fingerprint metric: raw value + league percentile (Phase 3.2)."""
     key: str

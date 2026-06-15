@@ -288,11 +288,41 @@ the COL-type overshoot + HD-GSAx bias). User asked to keep it noted; decide befo
     inverse (efficient). Fingerprints coherent: COL fast/rush/no-hits, NYR heavy forecheck,
     CAR rush+forecheck.
 
+- **3.3 Streak Doctor (COMPLETE, validated).**
+  - `models_ml/streak_doctor.py` -> **nhl_models.streak_cards** (one row per
+    season/team/**window_games** in {5,10,20}; 'window' is a BQ reserved word). Five
+    goal-scale components: shooting_luck (GF-xGF), goaltending (team GSAx), special_teams
+    (non-5v5 goals above expected), schedule (mean opp power rating × games), play_change
+    (window 5v5 score-adj xGF% − season baseline -> goals). **total_deviation = SUM of the
+    five -> shares sum to exactly 1.0** (validated max err 0.0). Sustainability 0-100 =
+    persistence-weighted (config.STREAK_PERSISTENCE: play 0.8/sched 0.5/ST 0.3/goalie 0.2/
+    shooting 0.1) avg of |component shares|. Verdict = deterministic template; driver =
+    largest component ALIGNED with sign(total_deviation) (fixed: was crediting opposing
+    components). run_word from total_deviation sign. Notable = |points-pace z|>=1.5 OR
+    streak>=4. Regular+playoff only.
+  - Backend: `GET /teams/{id}/streak?window=10` + `GET /streaks/active` (notable, |z| desc;
+    new streaks.py router + shared card_from_row helper imported by teams.py). StreakCard/
+    StreakComponent schemas.
+  - Frontend: shared **StreakDoctorCard** (components/common; verdict + ComponentStackBar
+    decomposition + sustainability gauge + depth-3 table; embeddable for Phase 6 Home).
+    TeamProfile **Form tab** (TeamFormTab, window 5/10/20 toggle) + **auto-renders on
+    Overview when is_notable**. tsc + build green. docs/methodology/streak-doctor.md.
+  - DAG: compute_ratings -> streak_doctor -> generate_report.
+  - Validation: 96 cards; OTT goaltending-dominant surge (+12.9 GSAx), DET goaltending slump
+    (-11.2); WSH/STL/COL shooting-luck surges low sustainability (15-28); NYI play-change
+    surge highest (50).
+
+## PHASE 3 — TEAM PRODUCTS COMPLETE (3.1 power ratings+deserved, 3.2 identity+style map+
+## conversion, 3.3 Streak Doctor). New nhl_models tables: team_ratings, deserved_standings,
+## style_map, streak_cards. New endpoints: /rankings/{power,deserved}, /teams/{id}/identity,
+## /teams/style-map, /teams/{id}/streak, /streaks/active. New shared FE: ComponentStackBar,
+## PercentileBarList, StreakDoctorCard. RATING_SOURCE swapped to power_rating everywhere.
+
 ## Next up (fresh-context work)
-1. **Phase 3.3** — Streak Doctor (blueprint 5.3): decompose a team's last-N run into
-   components (shooting luck / goaltending / ST variance / schedule / genuine play change),
-   verdict templates, sustainability meter, notable-run detection. nhl_models.streak_cards +
-   GET /teams/{id}/streak + /streaks/active + StreakDoctorCard. (3.1, 3.2 DONE — see above.)
+1. **Phase 4** — the player project (blueprint section 4): 4.1 RAPM isolated impact,
+   4.2 composite stack + archetypes (4.2 archetype naming = the human-in-the-loop step),
+   4.3 reconciliation (clutch/consistency/coach-trust/divergence), 4.4 trajectories+twins.
+   ComponentStackBar + PercentileBarList are built and meant for reuse here.
 2. **(Optional, before/with Phase 3) xG top-end recalibration** — see "xG external validation" above.
 3. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.

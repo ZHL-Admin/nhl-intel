@@ -2,7 +2,7 @@
  * Team API endpoints.
  */
 import { apiClient } from './client'
-import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational, TeamIdentity, StyleMap } from './types'
+import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational, TeamIdentity, StyleMap, StreakCard } from './types'
 
 /**
  * Fetch detailed information for a specific team.
@@ -89,6 +89,14 @@ export async function getTeamIdentity(teamId: number, season?: string): Promise<
 export async function getStyleMap(season?: string): Promise<StyleMap> {
   const response = await apiClient.get<StyleMap>('/teams/style-map', {
     params: season ? { season } : undefined,
+  })
+  return response.data
+}
+
+/** Streak Doctor card for a team (last-N run decomposition). Phase 3.3. */
+export async function getTeamStreak(teamId: number, window = 10, season?: string): Promise<StreakCard> {
+  const response = await apiClient.get<StreakCard>(`/teams/${teamId}/streak`, {
+    params: { window, ...(season ? { season } : {}) },
   })
   return response.data
 }

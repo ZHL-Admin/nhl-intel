@@ -47,6 +47,23 @@ DANGER_TIERS = {
 FINISHING_SHRINKAGE_K = 4000     # 5v5 shots
 GOALTENDING_SHRINKAGE_K = 4000   # EV shots faced
 
+# --- Streak Doctor ----------------------------------------------------------
+# Component persistence weights (Phase 3.3), used for the 0-100 sustainability meter:
+# how much each driver of a hot/cold run tends to carry forward. xG-share (genuine play
+# change) persists most; on-ice shooting and goaltending swings regress hardest. Rationale
+# in docs/methodology/streak-doctor.md.
+STREAK_PERSISTENCE = {
+    "play_change": 0.8,     # underlying 5v5 xG-share change
+    "schedule": 0.5,        # strength of opponents faced
+    "special_teams": 0.3,   # PP/PK variance
+    "goaltending": 0.2,     # GSAx
+    "shooting_luck": 0.1,   # on-ice shooting vs expected
+}
+STREAK_WINDOWS = [5, 10, 20]      # precomputed last-N windows
+STREAK_DEFAULT_WINDOW = 10
+STREAK_NOTABLE_Z = 1.5            # |points-pace z| threshold for a notable run
+STREAK_NOTABLE_STREAK = 4         # consecutive W or L threshold
+
 # --- Archetypes -------------------------------------------------------------
 # Cluster -> human label, filled in by hand from the Phase 4.2 labeling report
 # (the one intentional human-in-the-loop step). Empty until then.

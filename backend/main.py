@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from routers import games, teams, players, goalies, rankings
+from routers import games, teams, players, goalies, rankings, streaks
 
 app = FastAPI(
     title="NHL Analytics Dashboard API",
@@ -35,6 +35,7 @@ app.include_router(teams.router, prefix="/teams", tags=["teams"])
 app.include_router(players.router, prefix="/players", tags=["players"])
 app.include_router(goalies.router, prefix="/goalies", tags=["goalies"])
 app.include_router(rankings.router, prefix="/rankings", tags=["rankings"])
+app.include_router(streaks.router, prefix="/streaks", tags=["streaks"])
 
 
 @app.get("/")
