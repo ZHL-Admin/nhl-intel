@@ -155,7 +155,22 @@ Final state (verified):
 - **Env note:** `pip install db-dtypes` required for `.to_dataframe()` (in models_ml/requirements.txt).
   BigQuery `.to_dataframe(create_bqstorage_client=False)` is SLOW for ~1.7M rows (~10min);
   consider enabling bqstorage if it bites.
-- **Next in Phase 2:** 2.3 scorer-bias + score-state adj -> 2.4 win prob + leverage -> 2.5 GSAx.
+- **2.3 Scorer-bias + score/opponent adjustments (COMPLETE, validated).**
+  `int_rink_bias` (hits/give/take multipliers per arena, rolling 3-season, team-mix-controlled,
+  clipped 0.5-2.0; TOR hits 1.43x, CBJ 0.68x). `int_score_state_weights` (5v5 attempt rate by
+  score state -> tied/state weight; trailing 0.96, leading 1.13). `int_shot_score_adj`
+  (per-game score-weighted CF/xGF). mart_team_game_stats: raw+adj hits/give/take,
+  cf_pct_score_adj/xgf_pct_score_adj, cf_pct_opp_adj/xgf_pct_opp_adj (interim opp = season-
+  to-date opp strength, half-weighted; Phase 3 swaps source via the to_date CTE).
+  mart_player_game_stats: raw+adj hits/give/take. Backend additive fields (team+player).
+  Frontend: shared `ToggleSwitch` + `useAdjustedToggle` (localStorage nhlintel.adjusted,
+  default OFF) wired into GameDetail ControlDangerBars (Adjusted toggle swaps CF/xGF to
+  score-adj + events to rink-adj); ADJUSTMENT_GLOSSARY in metrics.ts (scorer_bias,
+  score_adjustment). docs/methodology/scorer-bias.md (+ shot-distance calibration: only Utah
+  arena 67 >2ft off) + score-state-adjustment.md. Validation: SJS/CHI move down, FLA/LAK up.
+  **Follow-up:** season/rolling adjusted aggregates (TeamProfile/RollingContextPanel) need
+  adjusted threaded through mart_team_rolling + teams router — deferred (per-game toggle works now).
+- **Next in Phase 2:** 2.4 win prob + leverage -> 2.5 GSAx.
 
 ## Next up (fresh-context work)
 1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds

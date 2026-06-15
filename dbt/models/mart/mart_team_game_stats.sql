@@ -284,6 +284,53 @@ metrics_calculated as (
     from all_teams
 ),
 
+-- Scorer-bias: raw hits/giveaways/takeaways per team-game + rink-adjusted (Phase 2.3)
+team_events as (
+    select game_id, event_owner_team_id as team_id,
+        countif(type_desc_key = 'hit') as hits,
+        countif(type_desc_key = 'giveaway') as giveaways,
+        countif(type_desc_key = 'takeaway') as takeaways
+    from {{ ref('stg_play_by_play') }}
+    where type_desc_key in ('hit', 'giveaway', 'takeaway')
+      and event_owner_team_id is not null
+    group by 1, 2
+),
+
+rink_mult as (
+    select season, arena_team_id,
+        max(if(stat = 'hits', multiplier, null)) as hits_mult,
+        max(if(stat = 'giveaways', multiplier, null)) as giveaways_mult,
+        max(if(stat = 'takeaways', multiplier, null)) as takeaways_mult
+    from {{ ref('int_rink_bias') }}
+    group by 1, 2
+),
+
+game_arena as (
+    select game_id, season, home_team_id as arena_team_id from {{ ref('stg_boxscores') }}
+),
+
+team_events_adj as (
+    select
+        te.game_id, te.team_id, te.hits, te.giveaways, te.takeaways,
+        te.hits / nullif(coalesce(rm.hits_mult, 1.0), 0) as hits_adj,
+        te.giveaways / nullif(coalesce(rm.giveaways_mult, 1.0), 0) as giveaways_adj,
+        te.takeaways / nullif(coalesce(rm.takeaways_mult, 1.0), 0) as takeaways_adj
+    from team_events te
+    join game_arena ga on te.game_id = ga.game_id
+    left join rink_mult rm on ga.season = rm.season and ga.arena_team_id = rm.arena_team_id
+),
+
+-- Opponent-adjustment input: each team's season-to-date CF%/xGF% BEFORE this game.
+-- Interim method (blueprint 3.5): Phase 3 swaps the opponent strength source in one place.
+to_date as (
+    select game_id, team_id,
+        avg(xgf_pct) over (partition by team_id, season order by game_date
+            rows between unbounded preceding and 1 preceding) as xgf_to_date,
+        avg(cf_pct) over (partition by team_id, season order by game_date
+            rows between unbounded preceding and 1 preceding) as cf_to_date
+    from metrics_calculated
+),
+
 final as (
     select
         m.game_id,
@@ -341,10 +388,32 @@ final as (
         ii.cycle_share_against,
         ii.point_shot_share_against,
         ii.other_share_against,
-        ii.cross_ice_share_against
+        ii.cross_ice_share_against,
+        -- Scorer-bias adjusted events (raw + rink-adjusted). Frontend shows adjusted by
+        -- default with a tooltip; both are exposed (Phase 2.3).
+        coalesce(tea.hits, 0) as hits,
+        coalesce(tea.giveaways, 0) as giveaways,
+        coalesce(tea.takeaways, 0) as takeaways,
+        tea.hits_adj,
+        tea.giveaways_adj,
+        tea.takeaways_adj,
+        -- Score-state-adjusted possession/xG shares (each event weighted by its score state)
+        safe_divide(ssa_f.weighted_cf, ssa_f.weighted_cf + ssa_a.weighted_cf) as cf_pct_score_adj,
+        safe_divide(ssa_f.weighted_xgf, ssa_f.weighted_xgf + ssa_a.weighted_xgf) as xgf_pct_score_adj,
+        -- Opponent-adjusted shares (interim: opponent season-to-date strength, half-weighted)
+        m.cf_pct + 0.5 * (coalesce(td_opp.cf_to_date, 0.5) - 0.5) as cf_pct_opp_adj,
+        m.xgf_pct + 0.5 * (coalesce(td_opp.xgf_to_date, 0.5) - 0.5) as xgf_pct_opp_adj
     from metrics_calculated m
     left join {{ ref('mart_team_identity_inputs') }} ii
         on m.game_id = ii.game_id and m.team_id = ii.team_id
+    left join team_events_adj tea
+        on m.game_id = tea.game_id and m.team_id = tea.team_id
+    left join {{ ref('int_shot_score_adj') }} ssa_f
+        on m.game_id = ssa_f.game_id and m.team_id = ssa_f.team_id
+    left join {{ ref('int_shot_score_adj') }} ssa_a
+        on m.game_id = ssa_a.game_id and ii.opponent_team_id = ssa_a.team_id
+    left join to_date td_opp
+        on m.game_id = td_opp.game_id and ii.opponent_team_id = td_opp.team_id
 )
 
 select * from final

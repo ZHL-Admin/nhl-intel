@@ -70,6 +70,38 @@ player_penalties as (
     group by game_id, committed_by_player_id
 ),
 
+-- Scorer-bias events per player (Phase 2.3): hits by the hitter, giveaways/takeaways by
+-- the event player. Adjusted by the arena multiplier of the game's venue.
+player_hits as (
+    select game_id, hitting_player_id as player_id, count(*) as n
+    from {{ ref('stg_play_by_play') }}
+    where type_desc_key = 'hit' and hitting_player_id is not null
+    group by 1, 2
+),
+player_give as (
+    select game_id, player_id, count(*) as n
+    from {{ ref('stg_play_by_play') }}
+    where type_desc_key = 'giveaway' and player_id is not null
+    group by 1, 2
+),
+player_take as (
+    select game_id, player_id, count(*) as n
+    from {{ ref('stg_play_by_play') }}
+    where type_desc_key = 'takeaway' and player_id is not null
+    group by 1, 2
+),
+rink_mult as (
+    select season, arena_team_id,
+        max(if(stat = 'hits', multiplier, null)) as hits_mult,
+        max(if(stat = 'giveaways', multiplier, null)) as giveaways_mult,
+        max(if(stat = 'takeaways', multiplier, null)) as takeaways_mult
+    from {{ ref('int_rink_bias') }}
+    group by 1, 2
+),
+game_arena as (
+    select game_id, season, home_team_id as arena_team_id from {{ ref('stg_boxscores') }}
+),
+
 -- Individual unblocked attempts by sequence type (Phase 2.1). int_shot_sequence is
 -- unblocked-only, so these sum to <= individual_shot_attempts (which includes blocks).
 player_seq as (
@@ -122,6 +154,13 @@ player_stats_combined as (
         coalesce(pq.seq_point_shot_attempts, 0) as seq_point_shot_attempts,
         coalesce(pq.seq_other_attempts, 0) as seq_other_attempts,
         coalesce(pq.seq_cross_ice_attempts, 0) as seq_cross_ice_attempts,
+        -- scorer-bias events: raw + rink-adjusted (raw / arena multiplier)
+        coalesce(ph.n, 0) as hits,
+        coalesce(pg.n, 0) as giveaways,
+        coalesce(pt.n, 0) as takeaways,
+        coalesce(ph.n, 0) / nullif(coalesce(rm.hits_mult, 1.0), 0) as hits_adj,
+        coalesce(pg.n, 0) / nullif(coalesce(rm.giveaways_mult, 1.0), 0) as giveaways_adj,
+        coalesce(pt.n, 0) / nullif(coalesce(rm.takeaways_mult, 1.0), 0) as takeaways_adj,
         coalesce(tx.xgf_pct, 0.5) as team_xgf_pct,
 
         15.0 as estimated_toi_5v5_minutes
@@ -133,6 +172,11 @@ player_stats_combined as (
     left join player_seq pq
         on r.game_id = pq.game_id
         and r.player_id = pq.player_id
+    left join player_hits ph on r.game_id = ph.game_id and r.player_id = ph.player_id
+    left join player_give pg on r.game_id = pg.game_id and r.player_id = pg.player_id
+    left join player_take pt on r.game_id = pt.game_id and r.player_id = pt.player_id
+    left join game_arena ga on r.game_id = ga.game_id
+    left join rink_mult rm on ga.season = rm.season and ga.arena_team_id = rm.arena_team_id
     left join player_first_assists pfa
         on r.game_id = pfa.game_id
         and r.player_id = pfa.player_id
@@ -172,6 +216,12 @@ metrics_calculated as (
         seq_point_shot_attempts,
         seq_other_attempts,
         seq_cross_ice_attempts,
+        hits,
+        giveaways,
+        takeaways,
+        hits_adj,
+        giveaways_adj,
+        takeaways_adj,
         ixg,
         team_xgf_pct,
         estimated_toi_5v5_minutes as toi_5v5,
@@ -238,6 +288,12 @@ final as (
         seq_point_shot_attempts,
         seq_other_attempts,
         seq_cross_ice_attempts,
+        hits,
+        giveaways,
+        takeaways,
+        hits_adj,
+        giveaways_adj,
+        takeaways_adj,
         pim,
         ixg,
         ixg_per60,

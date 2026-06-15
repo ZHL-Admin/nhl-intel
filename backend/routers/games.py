@@ -264,7 +264,17 @@ async def get_game_detail(game_id: int) -> GameDetail:
             cycle_share_against,
             point_shot_share_against,
             other_share_against,
-            cross_ice_share_against
+            cross_ice_share_against,
+            hits,
+            giveaways,
+            takeaways,
+            hits_adj,
+            giveaways_adj,
+            takeaways_adj,
+            cf_pct_score_adj,
+            xgf_pct_score_adj,
+            cf_pct_opp_adj,
+            xgf_pct_opp_adj
         FROM {bq_service.get_full_table_id('mart_team_game_stats')}
         WHERE game_id = {game_id}
         """
@@ -321,7 +331,17 @@ async def get_game_detail(game_id: int) -> GameDetail:
                 cycle_share_against=row.get('cycle_share_against'),
                 point_shot_share_against=row.get('point_shot_share_against'),
                 other_share_against=row.get('other_share_against'),
-                cross_ice_share_against=row.get('cross_ice_share_against')
+                cross_ice_share_against=row.get('cross_ice_share_against'),
+                hits=row.get('hits'),
+                giveaways=row.get('giveaways'),
+                takeaways=row.get('takeaways'),
+                hits_adj=row.get('hits_adj'),
+                giveaways_adj=row.get('giveaways_adj'),
+                takeaways_adj=row.get('takeaways_adj'),
+                cf_pct_score_adj=row.get('cf_pct_score_adj'),
+                xgf_pct_score_adj=row.get('xgf_pct_score_adj'),
+                cf_pct_opp_adj=row.get('cf_pct_opp_adj'),
+                xgf_pct_opp_adj=row.get('xgf_pct_opp_adj')
             )
             if row['home_away'] == 'home':
                 home_stats = team_stats
@@ -428,7 +448,13 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
         p.seq_cycle_attempts,
         p.seq_point_shot_attempts,
         p.seq_other_attempts,
-        p.seq_cross_ice_attempts
+        p.seq_cross_ice_attempts,
+        p.hits,
+        p.giveaways,
+        p.takeaways,
+        p.hits_adj,
+        p.giveaways_adj,
+        p.takeaways_adj
     FROM {bq_service.get_full_table_id('mart_player_game_stats')} p
     WHERE p.game_id = {game_id}
     ORDER BY (p.individual_goals + p.first_assists + p.second_assists) DESC, p.ixg_per60 DESC
@@ -466,7 +492,13 @@ async def get_game_players(game_id: int) -> GamePlayerStats:
             seq_cycle_attempts=row.get('seq_cycle_attempts'),
             seq_point_shot_attempts=row.get('seq_point_shot_attempts'),
             seq_other_attempts=row.get('seq_other_attempts'),
-            seq_cross_ice_attempts=row.get('seq_cross_ice_attempts')
+            seq_cross_ice_attempts=row.get('seq_cross_ice_attempts'),
+            hits=row.get('hits'),
+            giveaways=row.get('giveaways'),
+            takeaways=row.get('takeaways'),
+            hits_adj=row.get('hits_adj'),
+            giveaways_adj=row.get('giveaways_adj'),
+            takeaways_adj=row.get('takeaways_adj')
         )
 
         if row['team_id'] == game_row['home_team_id']:

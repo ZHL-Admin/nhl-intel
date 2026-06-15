@@ -70,6 +70,17 @@ export interface TeamGameStats {
   ga_p1?: number | null
   ga_p2?: number | null
   ga_p3?: number | null
+  // Scorer-bias adjusted events + score/opponent-adjusted shares (Phase 2.3)
+  hits?: number | null
+  giveaways?: number | null
+  takeaways?: number | null
+  hits_adj?: number | null
+  giveaways_adj?: number | null
+  takeaways_adj?: number | null
+  cf_pct_score_adj?: number | null
+  xgf_pct_score_adj?: number | null
+  cf_pct_opp_adj?: number | null
+  xgf_pct_opp_adj?: number | null
 }
 
 export interface GameDetail {

@@ -86,6 +86,19 @@ class TeamGameStats(BaseModel):
     other_share_against: Optional[float] = Field(None, description="5v5 share of other-origin attempts (against)")
     cross_ice_share_against: Optional[float] = Field(None, description="5v5 share preceded by a royal-road pass proxy (against)")
 
+    # Scorer-bias adjusted events (Phase 2.3): raw + rink-adjusted
+    hits: Optional[int] = Field(None, description="Hits recorded (raw)")
+    giveaways: Optional[int] = Field(None, description="Giveaways recorded (raw)")
+    takeaways: Optional[int] = Field(None, description="Takeaways recorded (raw)")
+    hits_adj: Optional[float] = Field(None, description="Hits adjusted for arena scorer bias")
+    giveaways_adj: Optional[float] = Field(None, description="Giveaways adjusted for arena scorer bias")
+    takeaways_adj: Optional[float] = Field(None, description="Takeaways adjusted for arena scorer bias")
+    # Score-state and opponent adjusted shares (Phase 2.3)
+    cf_pct_score_adj: Optional[float] = Field(None, description="Score-state-adjusted Corsi For %")
+    xgf_pct_score_adj: Optional[float] = Field(None, description="Score-state-adjusted xGF %")
+    cf_pct_opp_adj: Optional[float] = Field(None, description="Opponent-adjusted Corsi For % (interim)")
+    xgf_pct_opp_adj: Optional[float] = Field(None, description="Opponent-adjusted xGF % (interim)")
+
 
 class GameDetail(BaseModel):
     """Detailed game information."""
@@ -130,6 +143,14 @@ class PlayerGameStats(BaseModel):
     seq_point_shot_attempts: Optional[int] = Field(None, description="Individual point-shot attempts")
     seq_other_attempts: Optional[int] = Field(None, description="Individual other-origin attempts")
     seq_cross_ice_attempts: Optional[int] = Field(None, description="Individual royal-road (cross-ice) attempts")
+
+    # Scorer-bias adjusted events (Phase 2.3): raw + rink-adjusted
+    hits: Optional[int] = Field(None, description="Hits (raw)")
+    giveaways: Optional[int] = Field(None, description="Giveaways (raw)")
+    takeaways: Optional[int] = Field(None, description="Takeaways (raw)")
+    hits_adj: Optional[float] = Field(None, description="Hits adjusted for arena scorer bias")
+    giveaways_adj: Optional[float] = Field(None, description="Giveaways adjusted for arena scorer bias")
+    takeaways_adj: Optional[float] = Field(None, description="Takeaways adjusted for arena scorer bias")
 
 
 class GamePlayerStats(BaseModel):

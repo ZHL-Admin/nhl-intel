@@ -37,7 +37,34 @@ export const METRICS: Record<string, MetricMeta> = {
     proxy: true,
     glossaryKey: 'zone_entry_proxy',
   },
+  hits: { key: 'hits', label: 'Hits', format: 'count', glossaryKey: 'scorer_bias' },
+  giveaways: { key: 'giveaways', label: 'Giveaways', format: 'count', glossaryKey: 'scorer_bias' },
+  takeaways: { key: 'takeaways', label: 'Takeaways', format: 'count', glossaryKey: 'scorer_bias' },
+  cf_pct_score_adj: { key: 'cf_pct_score_adj', label: 'Corsi For % (score-adj)', format: 'percent', glossaryKey: 'score_adjustment' },
+  xgf_pct_score_adj: { key: 'xgf_pct_score_adj', label: 'Expected Goals % (score-adj)', format: 'percent', glossaryKey: 'score_adjustment' },
 }
+
+/**
+ * Glossary keys whose concept cards explain an adjustment (wired to ConceptTip in
+ * Phase 6). `scorer_bias` covers the rink (arena) adjustment for hits/giveaways/takeaways;
+ * `score_adjustment` covers the score-state weighting of possession/xG shares.
+ */
+export const ADJUSTMENT_GLOSSARY = {
+  scorer_bias: {
+    term: 'Scorer-bias adjustment',
+    shortDef:
+      'Home-arena scorekeepers record hits, giveaways, and takeaways at different rates. ' +
+      'Adjusted values divide the raw count by the arena multiplier (measured from visiting teams).',
+    methodologyHref: '/learn/methodology/scorer-bias',
+  },
+  score_adjustment: {
+    term: 'Score-state adjustment',
+    shortDef:
+      'Trailing teams shoot more, inflating raw shot shares. Score-adjusted shares weight ' +
+      'each event by the league-average rate for its score state so the score effect is removed.',
+    methodologyHref: '/learn/methodology/score-state-adjustment',
+  },
+} as const
 
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {

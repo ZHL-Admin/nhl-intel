@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow } from '../components/common'
+import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle } from '../components/common'
 import Badge from '../components/common/Badge'
 import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
@@ -878,20 +878,47 @@ function GoalieDangerPanel({ gameId }: { gameId: number }) {
   )
 }
 
-// "Control and danger" — team rate bars, away left / home right.
+// "Control and danger" — team rate bars, away left / home right. The Adjusted toggle
+// (Phase 2.3) swaps Corsi/xG shares for their score-state-adjusted variants and the
+// hits/giveaways/takeaways rows for their rink (scorer-bias) adjusted counts.
 function ControlDangerBars({ homeTeam, awayTeam, homeColor, awayColor }: { homeTeam: TeamGameStats; awayTeam: TeamGameStats; homeColor: string; awayColor: string }) {
+  const [adjusted, setAdjusted] = useAdjustedToggle()
   const homeXgf = homeTeam.xgf ?? 0
   const awayXgf = awayTeam.xgf ?? 0
   const totalXg = homeXgf + awayXgf
+
+  // Corsi share (score-adjusted when toggled on)
+  const cfA = adjusted ? awayTeam.cf_pct_score_adj : awayTeam.cf_pct
+  const cfH = adjusted ? homeTeam.cf_pct_score_adj : homeTeam.cf_pct
+  // xG share: adjusted uses the stored score-adj share; raw derives from xgf totals
+  const xgA = adjusted ? (awayTeam.xgf_pct_score_adj ?? null) : (totalXg ? awayXgf / totalXg : null)
+  const xgH = adjusted ? (homeTeam.xgf_pct_score_adj ?? null) : (totalXg ? homeXgf / totalXg : null)
+
+  const eventRow = (label: string, rawA?: number | null, rawH?: number | null, adjA?: number | null, adjH?: number | null) => {
+    const a = adjusted ? adjA : rawA
+    const h = adjusted ? adjH : rawH
+    return { label, av: (a ?? 0).toFixed(adjusted ? 1 : 0), hv: (h ?? 0).toFixed(adjusted ? 1 : 0), ar: a ?? 0, hr: h ?? 0, bar: a != null && h != null }
+  }
+
   const rows = [
-    { label: 'Corsi for %', av: (awayTeam.cf_pct ?? 0).toFixed(1), hv: (homeTeam.cf_pct ?? 0).toFixed(1), ar: awayTeam.cf_pct ?? 0, hr: homeTeam.cf_pct ?? 0, bar: awayTeam.cf_pct != null && homeTeam.cf_pct != null },
-    { label: 'Expected goals %', av: (totalXg ? (awayXgf / totalXg) * 100 : 50).toFixed(1), hv: (totalXg ? (homeXgf / totalXg) * 100 : 50).toFixed(1), ar: awayXgf, hr: homeXgf, bar: totalXg > 0 },
+    { label: adjusted ? 'Corsi for % (score-adj)' : 'Corsi for %', av: ((cfA ?? 0) * 100).toFixed(1), hv: ((cfH ?? 0) * 100).toFixed(1), ar: cfA ?? 0, hr: cfH ?? 0, bar: cfA != null && cfH != null },
+    { label: adjusted ? 'Expected goals % (score-adj)' : 'Expected goals %', av: ((xgA ?? 0.5) * 100).toFixed(1), hv: ((xgH ?? 0.5) * 100).toFixed(1), ar: xgA ?? 0, hr: xgH ?? 0, bar: xgA != null && xgH != null },
     { label: 'High-danger chances /60', av: (awayTeam.hdcf_per60 ?? 0).toFixed(1), hv: (homeTeam.hdcf_per60 ?? 0).toFixed(1), ar: awayTeam.hdcf_per60 ?? 0, hr: homeTeam.hdcf_per60 ?? 0, bar: awayTeam.hdcf_per60 != null && homeTeam.hdcf_per60 != null },
-    { label: 'Zone entry success % (proxy)', av: ((awayTeam.zone_entry_proxy_success_rate ?? 0) * 100).toFixed(1), hv: ((homeTeam.zone_entry_proxy_success_rate ?? 0) * 100).toFixed(1), ar: awayTeam.zone_entry_proxy_success_rate ?? 0, hr: homeTeam.zone_entry_proxy_success_rate ?? 0, bar: awayTeam.zone_entry_proxy_success_rate != null && homeTeam.zone_entry_proxy_success_rate != null },
+    eventRow('Hits', awayTeam.hits, homeTeam.hits, awayTeam.hits_adj, homeTeam.hits_adj),
+    eventRow('Giveaways', awayTeam.giveaways, homeTeam.giveaways, awayTeam.giveaways_adj, homeTeam.giveaways_adj),
+    eventRow('Takeaways', awayTeam.takeaways, homeTeam.takeaways, awayTeam.takeaways_adj, homeTeam.takeaways_adj),
   ]
   return (
     <section className="overview-card">
-      <PanelHeader title="Control and danger" subtitle={`Team rates, ${awayTeam.team_abbrev} left / ${homeTeam.team_abbrev} right`} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)' }}>
+        <PanelHeader title="Control and danger" subtitle={`Team rates, ${awayTeam.team_abbrev} left / ${homeTeam.team_abbrev} right`} />
+        <ToggleSwitch
+          checked={adjusted}
+          onChange={setAdjusted}
+          label="Adjusted"
+          title="Score-state adjusts Corsi/xG shares; rink (scorer-bias) adjusts hits/giveaways/takeaways for the arena."
+        />
+      </div>
       <div className="team-stats-compact" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
         {rows.map(r => (
           <ComparisonRow key={r.label} label={r.label} awayValue={r.av} homeValue={r.hv} awayRaw={r.ar} homeRaw={r.hr} awayColor={awayColor} homeColor={homeColor} showBar={r.bar} />

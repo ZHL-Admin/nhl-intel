@@ -247,3 +247,46 @@ models:
         description: Seconds since the most recent faceoff, capped 60, null if none ≤60s
       - name: time_since_turnover
         description: Seconds since the most recent giveaway/takeaway, capped 60, null if none
+
+  - name: int_rink_bias
+    description: >
+      Scorer-bias (rink) multipliers for hits/giveaways/takeaways per arena and season
+      (blueprint 3.4), measured from visiting teams over a rolling 3-season window with a
+      team-mix control, clipped to [0.5, 2.0]. adjusted = raw / multiplier. See
+      docs/methodology/scorer-bias.md.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: arena_team_id
+        tests: [not_null]
+      - name: stat
+        tests:
+          - accepted_values:
+              values: ['hits', 'giveaways', 'takeaways']
+      - name: multiplier
+        description: actual / expected rate in the arena (clipped 0.5..2.0)
+
+  - name: int_score_state_weights
+    description: >
+      League-average 5v5 shot-attempt rate by score state per season, with
+      weight = tied_rate / state_rate (blueprint 3.5). Used to score-adjust possession/xG
+      shares. See docs/methodology/score-state-adjustment.md.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: state
+        tests:
+          - accepted_values:
+              values: ['down2plus', 'down1', 'tied', 'up1', 'up2plus']
+      - name: weight
+        description: tied_rate / state_rate (1.0 at tied)
+
+  - name: int_shot_score_adj
+    description: >
+      Per (game, team) score-state-weighted 5v5 Corsi/xG aggregates feeding
+      cf_pct_score_adj / xgf_pct_score_adj on mart_team_game_stats (Phase 2.3).
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
