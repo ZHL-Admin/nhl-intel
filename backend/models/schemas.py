@@ -474,6 +474,31 @@ class PressurePoint(BaseModel):
     away_rate: float = Field(description="Away team smoothed unblocked shots per 60 minutes")
 
 
+class WinProbPoint(BaseModel):
+    """Win-probability series point (Phase 2.4)."""
+    elapsed_seconds: int = Field(description="Seconds elapsed in game")
+    home_wp: float = Field(description="Home team win probability")
+    leverage: float = Field(description="Win-probability swing of a goal at this moment")
+
+
+class WinProbGoalSwing(BaseModel):
+    """The win-probability jump caused by a goal."""
+    elapsed_seconds: int
+    team_id: Optional[int] = None
+    scorer_name: Optional[str] = None
+    wp_before: float
+    wp_after: float
+    swing: float = Field(description="home_wp after minus before (signed toward home)")
+
+
+class WinProbSeries(BaseModel):
+    """Server-side win probability + leverage series for a game (Phase 2.4)."""
+    game_id: int
+    model_version: Optional[str] = None
+    series: List[WinProbPoint]
+    goal_swings: List[WinProbGoalSwing]
+
+
 class GoaltenderStat(BaseModel):
     """A goalie's line for a game, from the goalie who was actually in net per shot."""
     player_id: int

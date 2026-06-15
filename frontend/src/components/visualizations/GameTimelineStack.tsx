@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getGameXGWorm, getGamePressure, getGameGoals } from '../../api/games'
-import { XGWormPoint, PressurePoint, GoalDetail } from '../../api/types'
-import { winProbabilitySeries } from '../../utils/winProbability'
+import { getGameXGWorm, getGamePressure, getGameGoals, getGameWinProb } from '../../api/games'
+import { XGWormPoint, PressurePoint, GoalDetail, WinProbPoint } from '../../api/types'
 import './GameTimelineStack.css'
 
 interface Props {
@@ -41,6 +40,7 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
   const [worm, setWorm] = useState<XGWormPoint[]>([])
   const [pressure, setPressure] = useState<PressurePoint[]>([])
   const [goals, setGoals] = useState<GoalDetail[]>([])
+  const [wpSeries, setWpSeries] = useState<WinProbPoint[]>([])
   const [hoverT, setHoverT] = useState<number | null>(null)
 
   useEffect(() => {
@@ -48,16 +48,22 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
     getGameXGWorm(gameId).then(d => { if (active) setWorm(d) }).catch(() => {})
     getGamePressure(gameId).then(d => { if (active) setPressure(d) }).catch(() => {})
     getGameGoals(gameId).then(d => { if (active) setGoals(d) }).catch(() => {})
+    getGameWinProb(gameId).then(d => { if (active) setWpSeries(d.series) }).catch(() => {})
     return () => { active = false }
   }, [gameId])
 
   const end = useMemo(() => {
     const lastPressure = pressure.length ? pressure[pressure.length - 1].game_time_seconds : 0
     const lastGoal = goals.length ? Math.max(...goals.map(g => g.game_time_seconds)) : 0
-    return Math.max(3600, lastPressure, lastGoal)
-  }, [pressure, goals])
+    const lastWp = wpSeries.length ? wpSeries[wpSeries.length - 1].elapsed_seconds : 0
+    return Math.max(3600, lastPressure, lastGoal, lastWp)
+  }, [pressure, goals, wpSeries])
 
-  const wp = useMemo(() => winProbabilitySeries(goals, homeTeamId, end), [goals, homeTeamId, end])
+  // Server-side win probability (Phase 2.4) replaces the old client-side Skellam toy.
+  const wp = useMemo(
+    () => wpSeries.map(p => ({ t: p.elapsed_seconds, homeWp: p.home_wp, leverage: p.leverage })),
+    [wpSeries],
+  )
 
   const xS = (t: number) => PAD_L + (t / end) * PLOT_W
 
@@ -204,6 +210,7 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
           <>
             <span className="timeline-stack__readout-time">{fmtClock(Math.round(hoverT))}</span>
             <span><strong style={{ color: wpFavHome ? homeColor : awayColor }}>{Math.round((hWp.homeWp >= 0.5 ? hWp.homeWp : 1 - hWp.homeWp) * 100)}%</strong> {hWp.homeWp >= 0.5 ? homeAbbrev : awayAbbrev} win</span>
+            {hWp.leverage != null && <span>leverage <strong>{(hWp.leverage * 100).toFixed(0)}</strong></span>}
             {hWorm && <span>xG diff <strong>{hWorm.cumulative_xg_diff >= 0 ? '+' : ''}{hWorm.cumulative_xg_diff.toFixed(2)}</strong></span>}
             {hPres && <span>pressure <strong style={{ color: homeColor }}>{hPres.home_rate.toFixed(0)}</strong> / <strong style={{ color: awayColor }}>{hPres.away_rate.toFixed(0)}</strong></span>}
           </>

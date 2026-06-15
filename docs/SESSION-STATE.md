@@ -170,7 +170,25 @@ Final state (verified):
   arena 67 >2ft off) + score-state-adjustment.md. Validation: SJS/CHI move down, FLA/LAK up.
   **Follow-up:** season/rolling adjusted aggregates (TeamProfile/RollingContextPanel) need
   adjusted threaded through mart_team_rolling + teams router — deferred (per-game toggle works now).
-- **Next in Phase 2:** 2.4 win prob + leverage -> 2.5 GSAx.
+- **2.4 Win probability + leverage (CODE COMPLETE; scoring backfill running).**
+  `models_ml/winprob_features.py` (state backbone = int_segment_context expanded to a time
+  grid; 30-bin seconds-remaining x score-diff[-3..3] INTERACTION one-hot + strength/OT/
+  goalie-pulled + pregame rating prior). `train_winprob.py` LogisticRegression(lbfgs);
+  **train logloss 0.496, holdout 2025-26 0.524** (calibration strong at extremes, mid
+  deciles over-predict home ~5-13pts — interim, Phase 3 refits with real ratings via
+  RATING_SOURCE). `score_winprob.py` -> nhl_models.win_probability (game_id, game_date,
+  elapsed_seconds, home_wp, leverage); leverage = WP(+1 home) - WP(+1 away). Incremental --since.
+  - **GOTCHAS:** (a) saga solver STALLS on 4.5M rows (I/O-bound, ~2min CPU in 25min) — use
+    lbfgs. (b) `.to_dataframe` download dominates; train pull SQL-samples 1-in-4 games
+    (GAME_SAMPLE) -> 1.23M rows in ~2.3min. (c) int_segment_context only covers **2015-16+**
+    (2010-14 segment rebuild deferred), so WP trains/scopes 2015-2025, not 2012+.
+  - Backend GET /games/{id}/winprob (series + per-goal WP swings; service get_winprob +
+    get_winprob_goal_swings). Frontend: GameTimelineStack lane-1 now uses the SERVER series
+    (getGameWinProb), added leverage to hover; **deleted utils/winProbability.ts** (client toy).
+  - DAG: score_winprob step after run_dbt_marts. docs/methodology/win-probability.md.
+  - **RUNNING:** full score_winprob backfill (all segment-covered seasons -> win_probability,
+    ~/score_wp.log). Validate after: leverage peaks late in 1-goal games, blowout WP saturates.
+- **Next in Phase 2:** 2.5 GSAx (last prompt).
 
 ## Next up (fresh-context work)
 1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds

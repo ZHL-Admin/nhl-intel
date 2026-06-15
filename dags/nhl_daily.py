@@ -426,6 +426,13 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Win probability + leverage depend on the marts (pregame rating) and segment context.
+    score_winprob = BashOperator(
+        task_id="score_winprob",
+        bash_command="cd /opt/airflow && python -m models_ml.score_winprob --since {{ macros.ds_add(ds, -3) }}",
+        env=_dbt_env,
+    )
+
     generate_report = PythonOperator(
         task_id="generate_report",
         python_callable=generate_daily_report,
@@ -444,6 +451,7 @@ with DAG(
         >> run_dbt_pre_xg
         >> score_xg
         >> run_dbt_marts
+        >> score_winprob
         >> generate_report
         >> publish_report
     )

@@ -41,7 +41,12 @@ def models(table: str) -> str:
 
 def query_df(sql: str, cli: bigquery.Client | None = None) -> pd.DataFrame:
     cli = cli or client()
-    return cli.query(sql).result().to_dataframe(create_bqstorage_client=False)
+    # Use the BigQuery Storage API when available (far faster than the REST download for
+    # the multi-million-row training/scoring pulls); fall back to REST if it is missing.
+    try:
+        return cli.query(sql).result().to_dataframe(create_bqstorage_client=True)
+    except Exception:
+        return cli.query(sql).result().to_dataframe(create_bqstorage_client=False)
 
 
 def ensure_models_dataset(cli: bigquery.Client | None = None) -> None:

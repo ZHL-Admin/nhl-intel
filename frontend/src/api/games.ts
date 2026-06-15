@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext } from './types'
+import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext, WinProbSeries } from './types'
 
 /**
  * Fetch list of dates on which games occurred or are scheduled.
@@ -88,6 +88,14 @@ export async function getGameGoals(gameId: number): Promise<GoalDetail[]> {
  */
 export async function getGamePressure(gameId: number): Promise<PressurePoint[]> {
   const response = await apiClient.get<PressurePoint[]>(`/games/${gameId}/pressure`)
+  return response.data
+}
+
+/**
+ * Fetch the server-side win-probability + leverage series for a game (Phase 2.4).
+ */
+export async function getGameWinProb(gameId: number): Promise<WinProbSeries> {
+  const response = await apiClient.get<WinProbSeries>(`/games/${gameId}/winprob`)
   return response.data
 }
 

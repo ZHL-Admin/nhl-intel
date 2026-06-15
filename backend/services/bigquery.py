@@ -241,6 +241,45 @@ class BigQueryService:
 
         return self.query(sql)
 
+    def get_winprob(self, game_id: int) -> List[Dict[str, Any]]:
+        """Win-probability + leverage series for a game (Phase 2.4)."""
+        sql = f"""
+        SELECT elapsed_seconds, home_wp, leverage, model_version
+        FROM {self.get_models_table_id('win_probability')}
+        WHERE game_id = {game_id}
+        ORDER BY elapsed_seconds
+        """
+        return self.query(sql)
+
+    def get_winprob_goal_swings(self, game_id: int) -> List[Dict[str, Any]]:
+        """Per-goal win-probability swing: home_wp just after vs just before each goal."""
+        sql = f"""
+        WITH wp AS (
+            SELECT elapsed_seconds, home_wp
+            FROM {self.get_models_table_id('win_probability')}
+            WHERE game_id = {game_id}
+        ),
+        goals AS (
+            SELECT
+                (period_number - 1) * 1200
+                  + CAST(SPLIT(time_in_period, ':')[OFFSET(0)] AS INT64) * 60
+                  + CAST(SPLIT(time_in_period, ':')[OFFSET(1)] AS INT64) AS elapsed,
+                event_owner_team_id AS team_id,
+                scoring_player_id
+            FROM {self.get_full_table_id('stg_play_by_play')}
+            WHERE game_id = {game_id} AND type_desc_key = 'goal' AND time_in_period IS NOT NULL
+        )
+        SELECT
+            g.elapsed AS elapsed_seconds,
+            g.team_id,
+            g.scoring_player_id,
+            (SELECT home_wp FROM wp WHERE wp.elapsed_seconds <= g.elapsed ORDER BY wp.elapsed_seconds DESC LIMIT 1) AS wp_before,
+            (SELECT home_wp FROM wp WHERE wp.elapsed_seconds > g.elapsed ORDER BY wp.elapsed_seconds ASC LIMIT 1) AS wp_after
+        FROM goals g
+        ORDER BY g.elapsed
+        """
+        return self.query(sql)
+
     def get_xg_worm(self, game_id: int, situation: str = "all") -> List[Dict[str, Any]]:
         """Fetch cumulative xG differential data points for the xG Worm chart.
 

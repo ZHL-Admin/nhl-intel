@@ -10,7 +10,8 @@ from datetime import date, datetime, timedelta
 from models.schemas import (
     GameDate, Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
     GameShots, ShotAttempt, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat,
-    SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext
+    SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext,
+    WinProbSeries, WinProbPoint, WinProbGoalSwing
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -623,6 +624,55 @@ async def get_game_shots_endpoint(
         game_id=game_id,
         home_shots=home_shots,
         away_shots=away_shots
+    )
+
+
+@router.get("/{game_id}/winprob", response_model=WinProbSeries)
+@cache(ttl=86400)
+async def get_win_probability(game_id: int) -> WinProbSeries:
+    """Server-side win-probability + leverage series for a game, plus per-goal WP swings."""
+    series_rows = bq_service.get_winprob(game_id)
+    if not series_rows:
+        # No stored series (preview game or not yet scored)
+        return WinProbSeries(game_id=game_id, series=[], goal_swings=[])
+
+    # Player names for goal-swing labels
+    names_rows = bq_service.query(f"""
+        SELECT DISTINCT player_id, first_name || ' ' || last_name AS name
+        FROM {bq_service.get_full_table_id('stg_rosters')}
+        WHERE game_id = {game_id}
+    """)
+    names = {r['player_id']: r['name'] for r in names_rows}
+
+    series = [
+        WinProbPoint(
+            elapsed_seconds=r['elapsed_seconds'],
+            home_wp=r['home_wp'],
+            leverage=r['leverage'],
+        )
+        for r in series_rows
+    ]
+
+    goal_swings = []
+    for r in bq_service.get_winprob_goal_swings(game_id):
+        before = r.get('wp_before')
+        after = r.get('wp_after')
+        if before is None or after is None:
+            continue
+        goal_swings.append(WinProbGoalSwing(
+            elapsed_seconds=r['elapsed_seconds'],
+            team_id=r.get('team_id'),
+            scorer_name=names.get(r.get('scoring_player_id')),
+            wp_before=before,
+            wp_after=after,
+            swing=after - before,
+        ))
+
+    return WinProbSeries(
+        game_id=game_id,
+        model_version=series_rows[0].get('model_version'),
+        series=series,
+        goal_swings=goal_swings,
     )
 
 

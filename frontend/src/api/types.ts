@@ -341,6 +341,29 @@ export interface PlayerVsOpponent {
   cf_pct: number | null
 }
 
+// Win probability + leverage (Phase 2.4)
+export interface WinProbPoint {
+  elapsed_seconds: number
+  home_wp: number
+  leverage: number
+}
+
+export interface WinProbGoalSwing {
+  elapsed_seconds: number
+  team_id: number | null
+  scorer_name: string | null
+  wp_before: number
+  wp_after: number
+  swing: number
+}
+
+export interface WinProbSeries {
+  game_id: number
+  model_version: string | null
+  series: WinProbPoint[]
+  goal_swings: WinProbGoalSwing[]
+}
+
 // ============================================================================
 // Advanced Analytics Types
 // ============================================================================
