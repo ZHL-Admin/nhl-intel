@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PageLayout } from '../components/common'
+import StyleMapChart from '../components/teams/StyleMapChart'
 import './Teams.css'
 
 function Teams() {
@@ -12,14 +13,10 @@ function Teams() {
           <h1 className="teams__title">Teams</h1>
         </div>
 
-        {/* League Landscape Placeholder */}
+        {/* League style map (Phase 3.2) */}
         <section className="teams__landscape">
           <h2 className="teams__section-title">League Landscape</h2>
-          <div className="teams__landscape-placeholder">
-            <p className="teams__placeholder-text">
-              League landscape scatter chart (xGF/60 vs xGA/60) - data not yet available
-            </p>
-          </div>
+          <StyleMapChart />
         </section>
 
         {/* League Table */}

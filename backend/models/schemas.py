@@ -499,6 +499,46 @@ class WinProbSeries(BaseModel):
     goal_swings: List[WinProbGoalSwing]
 
 
+class IdentityMetric(BaseModel):
+    """One fingerprint metric: raw value + league percentile (Phase 3.2)."""
+    key: str
+    value: Optional[float] = None
+    percentile: Optional[float] = None
+
+
+class TeamIdentityWindow(BaseModel):
+    """A team's fingerprint over one window ('season' or 'last25')."""
+    window: str
+    games: int
+    metrics: List[IdentityMetric]
+
+
+class TeamIdentity(BaseModel):
+    """Team identity fingerprint with per-window metrics + percentiles (Phase 3.2)."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    season: str
+    league_size: int = Field(description="Teams in the season, for percentile->rank")
+    windows: List[TeamIdentityWindow]
+
+
+class StyleMapTeam(BaseModel):
+    team_id: int
+    team_abbrev: Optional[str] = None
+    x: float
+    y: float
+
+
+class StyleMap(BaseModel):
+    """League style map: 2D PCA of team fingerprints + axis annotations (Phase 3.2)."""
+    season: str
+    x_pos_desc: str
+    x_neg_desc: str
+    y_pos_desc: str
+    y_neg_desc: str
+    teams: List[StyleMapTeam]
+
+
 class PowerRatingRow(BaseModel):
     """A team's current power rating with its four visible components (Phase 3.1).
 

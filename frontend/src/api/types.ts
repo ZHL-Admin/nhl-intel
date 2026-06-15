@@ -636,3 +636,36 @@ export interface DeservedStandingRow {
   deserved_p90: number
   luck_delta: number
 }
+
+// --- Team identity + style map (Phase 3.2) ---
+export interface IdentityMetric {
+  key: string
+  value?: number | null
+  percentile?: number | null
+}
+export interface TeamIdentityWindow {
+  window: string
+  games: number
+  metrics: IdentityMetric[]
+}
+export interface TeamIdentity {
+  team_id: number
+  team_abbrev?: string | null
+  season: string
+  league_size: number
+  windows: TeamIdentityWindow[]
+}
+export interface StyleMapTeam {
+  team_id: number
+  team_abbrev?: string | null
+  x: number
+  y: number
+}
+export interface StyleMap {
+  season: string
+  x_pos_desc: string
+  x_neg_desc: string
+  y_pos_desc: string
+  y_neg_desc: string
+  teams: StyleMapTeam[]
+}

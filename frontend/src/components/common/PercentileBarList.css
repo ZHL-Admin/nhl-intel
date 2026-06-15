@@ -1,0 +1,53 @@
+.pct-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pct-bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) 3fr auto auto;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  font-size: var(--font-size-sm, 0.9rem);
+}
+
+.pct-bar-label {
+  color: var(--color-text-secondary, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pct-bar-track {
+  position: relative;
+  height: 10px;
+  background: var(--color-surface-elevated, rgba(127, 127, 127, 0.12));
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.pct-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  transition: width 0.2s ease;
+}
+.pct-bar--good { background: var(--color-success, #22c55e); }
+.pct-bar--mid { background: var(--color-text-secondary, #9ca3af); }
+.pct-bar--bad { background: var(--color-danger, #ef4444); }
+
+.pct-bar-pctile {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary, #888);
+  min-width: 2.5rem;
+  text-align: right;
+}
+.pct-bar-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  text-align: right;
+  font-weight: 600;
+}

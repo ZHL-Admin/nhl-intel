@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader } from '../components/common'
 import Tabs from '../components/common/Tabs'
+import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent } from '../api/teams'
 import { getTeamGames } from '../api/games'
 import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent } from '../api/types'
@@ -301,6 +302,7 @@ function TeamProfile() {
             <Tabs
               options={[
                 { value: 'overview', label: 'Overview' },
+                { value: 'identity', label: 'Identity' },
                 { value: 'performance', label: 'Performance' },
                 { value: 'roster', label: 'Roster' },
                 { value: 'matchups', label: 'Matchups' }
@@ -325,6 +327,10 @@ function TeamProfile() {
             handleRetryOpponent={handleRetryOpponent}
             teamColor={teamColor}
           />
+        )}
+
+        {currentTab === 'identity' && teamId && (
+          <TeamIdentityTab teamId={parseInt(teamId)} />
         )}
 
         {currentTab === 'performance' && (

@@ -7,12 +7,100 @@ from typing import Optional, List
 
 from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
-    TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile
+    TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile,
+    TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+# Fingerprint metric keys exposed by /teams/{id}/identity, in display order. Labels and
+# higher-is-better direction live on the frontend (config/metrics.ts), single-sourced.
+IDENTITY_METRIC_KEYS = [
+    "rush_share_for", "forecheck_share_for", "cycle_share_for", "point_shot_share_for",
+    "rebound_share_for", "rush_share_against", "forecheck_share_against",
+    "cycle_share_against", "point_shot_share_against", "rebound_share_against",
+    "pace", "shot_quality", "shot_volume_per60", "hits_per60",
+    "penalties_taken_per60", "penalties_drawn_per60", "pp_point_shot_share",
+    "oz_time_pct", "dz_time_pct", "oz_conversion",
+]
+
+
+def _team_abbrev(team_id: int, season: str) -> Optional[str]:
+    rows = bq_service.query(f"""
+        SELECT ANY_VALUE(team_abbrev) AS a
+        FROM {bq_service.get_full_table_id('mart_team_game_stats')}
+        WHERE team_id = {team_id} AND season = '{season}'
+    """)
+    return rows[0]['a'] if rows and rows[0].get('a') else None
+
+
+@router.get("/style-map", response_model=StyleMap)
+@cache(ttl=3600)
+async def get_style_map(
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> StyleMap:
+    """League style map: 2D PCA coordinates per team + axis annotations (Phase 3.2)."""
+    sm = bq_service.get_models_table_id('style_map')
+    mart = bq_service.get_full_table_id('mart_team_game_stats')
+    if not season:
+        srows = bq_service.query(f"SELECT MAX(season) AS s FROM {sm}")
+        season = srows[0]['s']
+    rows = bq_service.query(f"""
+        WITH abbrev AS (
+            SELECT team_id, ANY_VALUE(team_abbrev) AS team_abbrev
+            FROM {mart} WHERE season = '{season}' GROUP BY team_id
+        )
+        SELECT s.team_id, a.team_abbrev, s.x, s.y,
+               s.x_pos_desc, s.x_neg_desc, s.y_pos_desc, s.y_neg_desc
+        FROM {sm} s LEFT JOIN abbrev a USING (team_id)
+        WHERE s.season = '{season}'
+        ORDER BY s.team_id
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Style map not found")
+    first = rows[0]
+    return StyleMap(
+        season=season,
+        x_pos_desc=first['x_pos_desc'], x_neg_desc=first['x_neg_desc'],
+        y_pos_desc=first['y_pos_desc'], y_neg_desc=first['y_neg_desc'],
+        teams=[StyleMapTeam(team_id=r['team_id'], team_abbrev=r.get('team_abbrev'),
+                            x=r['x'], y=r['y']) for r in rows],
+    )
+
+
+@router.get("/{team_id}/identity", response_model=TeamIdentity)
+@cache(ttl=3600)
+async def get_team_identity(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> TeamIdentity:
+    """Team identity fingerprint: per-window metrics with league percentiles (Phase 3.2)."""
+    table = bq_service.get_full_table_id('mart_team_identity')
+    if not season:
+        srows = bq_service.query(f"SELECT MAX(season) AS s FROM {table}")
+        season = srows[0]['s']
+    rows = bq_service.query(f"""
+        SELECT * FROM {table}
+        WHERE team_id = {team_id} AND season = '{season}'
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Team identity not found")
+    size_rows = bq_service.query(f"""
+        SELECT COUNT(DISTINCT team_id) AS n FROM {table}
+        WHERE season = '{season}' AND window_kind = 'season'
+    """)
+    league_size = size_rows[0]['n'] if size_rows else 32
+    windows = []
+    for r in rows:
+        metrics = [IdentityMetric(key=k, value=r.get(k), percentile=r.get(f"{k}_pctile"))
+                   for k in IDENTITY_METRIC_KEYS]
+        windows.append(TeamIdentityWindow(window=r['window_kind'], games=r['games'],
+                                          metrics=metrics))
+    windows.sort(key=lambda w: 0 if w.window == 'season' else 1)
+    return TeamIdentity(team_id=team_id, team_abbrev=_team_abbrev(team_id, season),
+                        season=season, league_size=league_size, windows=windows)
 
 
 def _season_str_to_id(season: Optional[str]) -> Optional[int]:
@@ -67,8 +155,8 @@ async def get_team_detail(
             AVG(cf_pct) as cf_pct,
             AVG(hdcf_per60) as hdcf_per60,
             AVG(hdca_per60) as hdca_per60,
-            AVG(xgf / (toi_5v5_minutes / 60.0)) as xgf_per60,
-            AVG(xga / (toi_5v5_minutes / 60.0)) as xga_per60,
+            AVG(SAFE_DIVIDE(xgf, toi_5v5_minutes / 60.0)) as xgf_per60,
+            AVG(SAFE_DIVIDE(xga, toi_5v5_minutes / 60.0)) as xga_per60,
             SUM(goals_for) as total_goals_for,
             SUM(goals_against) as total_goals_against,
             AVG(zone_entry_proxy_success_rate) as zone_entry_proxy_success_rate
@@ -80,7 +168,7 @@ async def get_team_detail(
         SELECT
             *,
             RANK() OVER (ORDER BY cf_pct DESC) as cf_pct_rank,
-            RANK() OVER (ORDER BY xgf_per60 / (xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
+            RANK() OVER (ORDER BY SAFE_DIVIDE(xgf_per60, xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
             RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
             RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
             RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,

@@ -2,7 +2,7 @@
  * Team API endpoints.
  */
 import { apiClient } from './client'
-import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational } from './types'
+import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational, TeamIdentity, StyleMap } from './types'
 
 /**
  * Fetch detailed information for a specific team.
@@ -74,5 +74,21 @@ export async function getTeamSituational(
       },
     }
   )
+  return response.data
+}
+
+/** Team identity fingerprint with per-window metric percentiles (Phase 3.2). */
+export async function getTeamIdentity(teamId: number, season?: string): Promise<TeamIdentity> {
+  const response = await apiClient.get<TeamIdentity>(`/teams/${teamId}/identity`, {
+    params: season ? { season } : undefined,
+  })
+  return response.data
+}
+
+/** League style map: 2D PCA of team fingerprints + axis annotations (Phase 3.2). */
+export async function getStyleMap(season?: string): Promise<StyleMap> {
+  const response = await apiClient.get<StyleMap>('/teams/style-map', {
+    params: season ? { season } : undefined,
+  })
   return response.data
 }

@@ -261,9 +261,38 @@ the COL-type overshoot + HD-GSAx bias). User asked to keep it noted; decide befo
   - DAG: run_dbt_marts -> **compute_ratings** -> score_winprob (winprob needs ratings now);
     compute_ratings -> **simulate_deserved** -> generate_report.
 
+- **3.2 Team identity + style map + zone-time conversion (COMPLETE, validated).**
+  - `mart_team_identity` (dbt, 988 rows) — one row per (season, team_id, **window_kind** in
+    {season, last25}), regular+playoff only. Metrics: seq-type shares for/against, pace
+    (5v5 ev/min), shot quality (5v5 xGF/attempt), shot volume/60, rink-adj hits/60,
+    penalties taken/drawn per 60 (60-min-game approx), PP point-shot share, Edge oz/dz
+    time pct (**TOI-weighted skater es zone time** — team-level Edge zone endpoint 404s,
+    documented proxy), **territory-to-danger conversion** (5v5 xGF per OZ minute). Every
+    metric has a `*_pctile` (percent_rank within season+window). 'window' is a BQ reserved
+    word -> column named `window_kind`. Edge metrics null pre-2021-22.
+  - `models_ml/compute_style_map.py` -> **nhl_models.style_map** (32 teams/season, 2D PCA of
+    the fingerprint, orientation pinned: +x=shot volume, +y=shot quality; PC1 22% / PC2 17%
+    variance; axis-end descriptions = top-3 loadings stored per row).
+  - Backend: `GET /teams/{id}/identity` (per-window metrics+percentiles+league_size) and
+    `GET /teams/style-map` (registered BEFORE /{team_id} so it isn't shadowed). **Also fixed a
+    pre-existing 500 in `get_team_detail`**: 2026 Olympic/international games have 0 5v5 TOI ->
+    `xgf/(toi/60)` divided by zero; wrapped in SAFE_DIVIDE. (NOTE: team-detail still ranks the
+    international teams into the NHL pool — separate pre-existing pollution, not fixed here.)
+  - Frontend: shared **PercentileBarList** (components/common, Phase 4 player cards reuse it);
+    TeamProfile **Identity tab** (window toggle, grouped fingerprint bars, conversion panel
+    with plain-English diagnosis from API ranks); Teams index **StyleMapChart** (SVG scatter
+    of 32 logos in ChartPanel, axis annotations, click->team). FINGERPRINT_GROUPS in metrics.ts.
+    tsc + build green. docs/methodology/team-identity.md.
+  - DAG: run_dbt_marts -> compute_style_map (run daily; cheap PCA vs plan's weekly).
+  - Validation: NYR/FLA high o-zone-time + low conversion (volume-over-quality); CBJ/WSH
+    inverse (efficient). Fingerprints coherent: COL fast/rush/no-hits, NYR heavy forecheck,
+    CAR rush+forecheck.
+
 ## Next up (fresh-context work)
-1. **Phase 3.2** — team identity fingerprints + style map + Edge zone-time conversion
-   (blueprint 5.1 + 12.1). **3.3** — Streak Doctor (5.3). (3.1 DONE — see above.)
+1. **Phase 3.3** — Streak Doctor (blueprint 5.3): decompose a team's last-N run into
+   components (shooting luck / goaltending / ST variance / schedule / genuine play change),
+   verdict templates, sustainability meter, notable-run detection. nhl_models.streak_cards +
+   GET /teams/{id}/streak + /streaks/active + StreakDoctorCard. (3.1, 3.2 DONE — see above.)
 2. **(Optional, before/with Phase 3) xG top-end recalibration** — see "xG external validation" above.
 3. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.

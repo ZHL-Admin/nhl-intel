@@ -443,6 +443,14 @@ with DAG(
         env=_dbt_env,
     )
 
+    # League style map (Phase 3.2): PCA of mart_team_identity (built in run_dbt_marts).
+    # Cheap (32-team PCA), so run daily to keep it fresh rather than the plan's weekly cadence.
+    compute_style_map = BashOperator(
+        task_id="compute_style_map",
+        bash_command="cd /opt/airflow && python -m models_ml.compute_style_map",
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -473,5 +481,6 @@ with DAG(
         >> generate_report
         >> publish_report
     )
-    # deserved standings branch off ratings; report waits on it too
+    # deserved standings + style map branch off the marts/ratings; report waits on them too
     compute_ratings >> simulate_deserved >> generate_report
+    run_dbt_marts >> compute_style_map >> generate_report

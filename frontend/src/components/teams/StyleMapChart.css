@@ -1,0 +1,27 @@
+.stylemap {
+  width: 100%;
+}
+.stylemap__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.stylemap__axis {
+  stroke: var(--color-border, rgba(127, 127, 127, 0.4));
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.stylemap__axis-label {
+  fill: var(--color-text-secondary, #888);
+  font-size: 11px;
+}
+.stylemap__logo {
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.stylemap__logo:hover {
+  transform: scale(1.25);
+  transform-origin: center;
+}
+.stylemap__error { color: var(--color-text-secondary, #888); }
+.stylemap__loading { height: 360px; }

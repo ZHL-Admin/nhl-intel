@@ -126,6 +126,60 @@ export const RATINGS_GLOSSARY = {
   },
 } as const
 
+/**
+ * Team identity fingerprint metrics (Phase 3.2), grouped for display. Each entry's `key`
+ * matches a metric from /teams/{id}/identity; `label` is the single-sourced display name.
+ * Percentiles are shown as-is (higher percentile = higher raw value); for "allowed"
+ * metrics a higher value is worse, flagged with `inverse` so the UI can note it.
+ */
+export interface FingerprintMetric {
+  key: string
+  label: string
+  inverse?: boolean // higher raw value is "worse" (e.g. chances allowed)
+}
+export const FINGERPRINT_GROUPS: { title: string; metrics: FingerprintMetric[] }[] = [
+  {
+    title: 'Offense mix',
+    metrics: [
+      { key: 'rush_share_for', label: 'Rush' },
+      { key: 'forecheck_share_for', label: 'Forecheck' },
+      { key: 'cycle_share_for', label: 'Cycle' },
+      { key: 'point_shot_share_for', label: 'Point shots' },
+      { key: 'rebound_share_for', label: 'Rebounds' },
+    ],
+  },
+  {
+    title: 'Defense (chances allowed)',
+    metrics: [
+      { key: 'rush_share_against', label: 'Rush allowed', inverse: true },
+      { key: 'forecheck_share_against', label: 'Forecheck allowed', inverse: true },
+      { key: 'cycle_share_against', label: 'Cycle allowed', inverse: true },
+      { key: 'point_shot_share_against', label: 'Point shots allowed', inverse: true },
+      { key: 'rebound_share_against', label: 'Rebounds allowed', inverse: true },
+    ],
+  },
+  {
+    title: 'Play style',
+    metrics: [
+      { key: 'pace', label: 'Pace' },
+      { key: 'shot_quality', label: 'Shot quality (xG/attempt)' },
+      { key: 'shot_volume_per60', label: 'Shot volume /60' },
+      { key: 'hits_per60', label: 'Hitting /60' },
+      { key: 'penalties_taken_per60', label: 'Penalties taken /60', inverse: true },
+      { key: 'penalties_drawn_per60', label: 'Penalties drawn /60' },
+    ],
+  },
+  {
+    title: 'Special teams & territory',
+    metrics: [
+      { key: 'pp_point_shot_share', label: 'PP point-shot structure' },
+      { key: 'oz_time_pct', label: 'O-zone time' },
+      { key: 'dz_time_pct', label: 'D-zone time', inverse: true },
+      { key: 'oz_conversion', label: 'Territory-to-danger conversion' },
+    ],
+  },
+]
+
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {
   const m = METRICS[key]

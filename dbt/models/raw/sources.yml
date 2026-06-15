@@ -47,6 +47,12 @@ sources:
           Monte-Carlo deserved points (Phase 3.1; models_ml/simulate_deserved.py),
           one row per (season, team_id).
 
+      - name: style_map
+        description: >
+          League style map (Phase 3.2; models_ml/compute_style_map.py): 2D PCA of team
+          identity fingerprints, one row per (season, team_id) with x/y coordinates and
+          the four axis description strings (repeated per row).
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw
