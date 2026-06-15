@@ -51,13 +51,7 @@ grid as (
          unnest(generate_array(segment_start_seconds,
                                greatest(segment_end_seconds - 1, segment_start_seconds), {step})) t
 ),
-rating as (
-    select game_id, team_id,
-        avg(xgf_pct_score_adj) over (
-            partition by team_id, season order by game_date
-            rows between unbounded preceding and 1 preceding) as td
-    from `{project}.nhl_mart.mart_team_game_stats`
-),
+rating as ({rating_cte}),
 games as (
     select game_id, game_date,
         case when home_team_score > away_team_score then 1 else 0 end as home_won
@@ -69,7 +63,7 @@ select
     g.home_score, g.away_score, g.home_skaters, g.away_skaters,
     g.home_goalies, g.away_goalies,
     gm.home_won,
-    coalesce(rh.td, 0.5) - coalesce(ra.td, 0.5) as pregame_rating_diff
+    coalesce(rh.td, {rdef}) - coalesce(ra.td, {rdef}) as pregame_rating_diff
 from grid g
 join games gm on g.game_id = gm.game_id
 left join rating rh on g.game_id = rh.game_id and rh.team_id = g.home_team_id
@@ -77,8 +71,33 @@ left join rating ra on g.game_id = ra.game_id and ra.team_id = g.away_team_id
 """
 
 
-def build_pull_sql(project: str, where: str = "", step: int = 10) -> str:
-    return PULL_SQL.format(project=project, where=where, step=step)
+# Pregame team-strength prior, switchable via config.RATING_SOURCE (the single swap point
+# shared with the Phase 2.3 mart opponent adjustment):
+#   interim_xgf   -> season-to-date score-adjusted xGF% (centre 0.5, default 0.5)
+#   power_rating  -> pregame total power rating from nhl_models.team_ratings (centre 0,
+#                    default 0); a richer, opponent-adjusted, goals/game prior.
+RATING_CTES = {
+    "interim_xgf": ("""
+        select game_id, team_id,
+            avg(xgf_pct_score_adj) over (
+                partition by team_id, season order by game_date
+                rows between unbounded preceding and 1 preceding) as td
+        from `{project}.nhl_mart.mart_team_game_stats`""", "0.5"),
+    "power_rating": ("""
+        select game_id, team_id,
+            lag(total_rating) over (
+                partition by team_id, season order by game_date) as td
+        from `{project}.nhl_models.team_ratings`""", "0.0"),
+}
+
+
+def build_pull_sql(project: str, where: str = "", step: int = 10,
+                   rating_source: str | None = None) -> str:
+    src = rating_source or config.RATING_SOURCE
+    cte_tmpl, rdef = RATING_CTES[src]
+    rating_cte = cte_tmpl.format(project=project)
+    return PULL_SQL.format(project=project, where=where, step=step,
+                           rating_cte=rating_cte, rdef=rdef)
 
 
 def add_state_features(df: pd.DataFrame) -> pd.DataFrame:

@@ -499,6 +499,42 @@ class WinProbSeries(BaseModel):
     goal_swings: List[WinProbGoalSwing]
 
 
+class PowerRatingRow(BaseModel):
+    """A team's current power rating with its four visible components (Phase 3.1).
+
+    All values are on a goals-per-game scale. contrib_* are the weighted component
+    contributions and sum to total_rating; the bare component fields are the raw
+    (pre-weight) goal values."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    season: str
+    games_played: int
+    total_rating: float = Field(description="Sum of the four weighted contributions")
+    rating_se: Optional[float] = Field(None, description="Game-resample standard error")
+    trajectory_15d: Optional[float] = Field(None, description="Total now minus 15 days ago")
+    play_5v5: float
+    finishing: float
+    goaltending: float
+    special_teams: float
+    contrib_play_5v5: float
+    contrib_finishing: float
+    contrib_goaltending: float
+    contrib_special_teams: float
+
+
+class DeservedStandingRow(BaseModel):
+    """Actual vs Monte-Carlo deserved points for a team-season (Phase 3.1)."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    season: str
+    games: int
+    actual_points: int
+    deserved_points: float
+    deserved_p10: float
+    deserved_p90: float
+    luck_delta: float = Field(description="Actual minus deserved points")
+
+
 class GoalieSeason(BaseModel):
     """A goalie's season line on the in-house xG layer (Phase 2.5)."""
     goalie_id: int

@@ -66,6 +66,66 @@ export const ADJUSTMENT_GLOSSARY = {
   },
 } as const
 
+/**
+ * Plain-language tooltips for the Rankings page columns (Phase 3.1). Keyed by column,
+ * rendered via the shared Tooltip on table headers. All rating values are goals/game.
+ */
+export const RATINGS_GLOSSARY = {
+  power_rating: {
+    term: 'Power rating',
+    shortDef:
+      'Overall team strength in net goals per game, the sum of four components: 5v5 play, ' +
+      'finishing, goaltending, and special teams. Component weights are fit by how well ' +
+      'they predict game results.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  play_5v5: {
+    term: '5v5 play',
+    shortDef:
+      'Score- and opponent-adjusted even-strength chance creation minus suppression, in ' +
+      'goals per game. The most repeatable component.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  finishing: {
+    term: 'Finishing',
+    shortDef:
+      'Goals scored above expected at 5v5, regressed hard toward zero because team ' +
+      'finishing is mostly noise year to year.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  goaltending: {
+    term: 'Goaltending',
+    shortDef:
+      'Even-strength goals saved above expected (GSAx), regressed toward zero by shot volume.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  special_teams: {
+    term: 'Special teams',
+    shortDef: 'Power-play plus penalty-kill goals above expected, per game.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  trajectory: {
+    term: 'Trajectory',
+    shortDef: 'Change in total rating versus 15 days ago (rising or falling form).',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  uncertainty: {
+    term: 'Uncertainty',
+    shortDef:
+      'Standard error of the rating from resampling the team’s games. Smaller late in ' +
+      'the season as the sample grows.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+  deserved_points: {
+    term: 'Deserved points',
+    shortDef:
+      'Average standings points across 10,000 replays of the season where each game’s ' +
+      'goals are random draws from the chances created (expected goals). Luck delta = ' +
+      'actual minus deserved.',
+    methodologyHref: '/learn/methodology/power-ratings',
+  },
+} as const
+
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {
   const m = METRICS[key]

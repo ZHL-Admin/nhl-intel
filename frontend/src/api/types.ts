@@ -605,3 +605,34 @@ export interface GameContext {
   away_last10?: ContextLast10 | null
   home_last10?: ContextLast10 | null
 }
+
+// --- Rankings (Phase 3.1) ---
+export interface PowerRatingRow {
+  team_id: number
+  team_abbrev?: string | null
+  season: string
+  games_played: number
+  total_rating: number
+  rating_se?: number | null
+  trajectory_15d?: number | null
+  play_5v5: number
+  finishing: number
+  goaltending: number
+  special_teams: number
+  contrib_play_5v5: number
+  contrib_finishing: number
+  contrib_goaltending: number
+  contrib_special_teams: number
+}
+
+export interface DeservedStandingRow {
+  team_id: number
+  team_abbrev?: string | null
+  season: string
+  games: number
+  actual_points: number
+  deserved_points: number
+  deserved_p10: number
+  deserved_p90: number
+  luck_delta: number
+}

@@ -1,6 +1,8 @@
 export { default as Badge } from './Badge'
 export { default as ChartPanel, useChartPanelHeight } from './ChartPanel'
 export { default as ComparisonRow } from './ComparisonRow'
+export { default as ComponentStackBar } from './ComponentStackBar'
+export type { StackSegment } from './ComponentStackBar'
 export { default as DateStrip } from './DateStrip'
 export { default as ErrorBoundary } from './ErrorBoundary'
 export { default as IdentityHeader } from './IdentityHeader'

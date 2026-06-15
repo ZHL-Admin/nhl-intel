@@ -426,6 +426,23 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Power ratings (Phase 3.1) consume the freshly built marts (score-adjusted xGF%,
+    # GSAx). They must run BEFORE score_winprob, which now reads team_ratings for its
+    # pregame prior. The mart's own opponent adjustment reads the prior run's ratings
+    # (a documented fixpoint), so ratings recompute here from the updated marts.
+    compute_ratings = BashOperator(
+        task_id="compute_ratings",
+        bash_command="cd /opt/airflow && python -m models_ml.compute_ratings",
+        env=_dbt_env,
+    )
+
+    # Deserved standings (Monte Carlo) depend only on the marts / score-adjusted xG.
+    simulate_deserved = BashOperator(
+        task_id="simulate_deserved",
+        bash_command="cd /opt/airflow && python -m models_ml.simulate_deserved",
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -451,7 +468,10 @@ with DAG(
         >> run_dbt_pre_xg
         >> score_xg
         >> run_dbt_marts
+        >> compute_ratings
         >> score_winprob
         >> generate_report
         >> publish_report
     )
+    # deserved standings branch off ratings; report waits on it too
+    compute_ratings >> simulate_deserved >> generate_report

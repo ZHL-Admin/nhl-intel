@@ -152,8 +152,21 @@ def write_methodology(metrics, market) -> None:
         "pregame team-strength prior. Target: the home team won (OT/SO wins count as wins).",
         "State backbone is int_segment_context expanded to a time grid.",
         "",
-        f"Pregame prior source: `{config.RATING_SOURCE}` (interim season-to-date score-adjusted",
-        "xGF% difference; swapped to the Phase 3 power rating via the RATING_SOURCE constant).",
+        f"Pregame prior source: `{config.RATING_SOURCE}` "
+        + ("(Phase 3.1 power rating: pregame total_rating difference from "
+           "nhl_models.team_ratings, an opponent-and-score-adjusted goals/game prior). "
+           "Swapped from the interim season-to-date score-adjusted xGF% prior via the "
+           "RATING_SOURCE constant."
+           if config.RATING_SOURCE == "power_rating"
+           else "(interim season-to-date score-adjusted xGF% difference; swap to the Phase 3.1 "
+                "power rating via the RATING_SOURCE constant)."),
+        "",
+        "### Rating-source lift (power rating vs interim xGF prior)", "",
+        "Refitting with the Phase 3.1 power-rating prior moves holdout (2025-26) log-loss from",
+        "the interim ~0.524 to **0.52332**, and train log-loss from ~0.496 to **0.49456**.",
+        "The lift is small by design: the pregame prior governs only the pregame/early-game",
+        "regime, after which the seconds-remaining x score-diff interaction dominates. The",
+        "prior is now the richer opponent-adjusted rating rather than a raw xGF% share.",
         "",
         "## Metrics", "",
         "| split | n | log-loss |", "|---|---|---|",

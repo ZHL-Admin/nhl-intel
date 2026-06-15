@@ -23,10 +23,10 @@ MODELS_DATASET = "nhl_models"
 
 # --- Rating source toggle ---------------------------------------------------
 # The opponent adjustment (Phase 2.3) and the win-probability team prior
-# (Phase 2.4) consume a single rating source. It starts as the interim
-# score-adjusted xGF% prior and is swapped to the real power rating in one place
-# once Phase 3 ships. See docs/methodology/power-ratings.md.
-RATING_SOURCE = "interim_xgf"  # one of: {"interim_xgf", "power_rating"}
+# (Phase 2.4) consume a single rating source. Swapped to the Phase 3.1 power
+# rating (nhl_models.team_ratings) here; the dbt mart mirrors this via the
+# `rating_source` var in dbt_project.yml. See docs/methodology/power-ratings.md.
+RATING_SOURCE = "power_rating"  # one of: {"interim_xgf", "power_rating"}
 
 # --- Danger tiers -----------------------------------------------------------
 # Per-shot xG bounds used by goaltending danger splits (Phase 2.5). Half-open
@@ -38,9 +38,14 @@ DANGER_TIERS = {
 }
 
 # --- Shrinkage --------------------------------------------------------------
-# Finishing/goaltending regression-to-mean shrinkage constant k (Phase 3.1),
-# tuned by season-over-season predictiveness. Placeholder until tuned.
-FINISHING_SHRINKAGE_K = None  # set in Phase 3.1
+# Finishing/goaltending regression-to-mean shrinkage constants k (Phase 3.1),
+# tuned by season-over-season predictiveness (compute_ratings.py --tune-k).
+# Both shrink a per-game component toward 0 by accumulated shot volume:
+# shrunk = raw * vol / (vol + k). Larger k => more regression.
+# Tuned 2026-06 by next-season MSE (compute_ratings.py --tune-k): both have an interior
+# optimum at 4000 (team finishing/goaltending regress hard year to year -- mostly noise).
+FINISHING_SHRINKAGE_K = 4000     # 5v5 shots
+GOALTENDING_SHRINKAGE_K = 4000   # EV shots faced
 
 # --- Archetypes -------------------------------------------------------------
 # Cluster -> human label, filled in by hand from the Phase 4.2 labeling report

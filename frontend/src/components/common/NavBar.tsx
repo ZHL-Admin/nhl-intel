@@ -36,6 +36,13 @@ function NavBar() {
             Teams
           </NavLink>
           <NavLink
+            to="/rankings"
+            className={({ isActive }) => `navbar__link ${isActive ? 'navbar__link--active' : ''}`}
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Rankings
+          </NavLink>
+          <NavLink
             to="/players"
             className={({ isActive }) => `navbar__link ${isActive ? 'navbar__link--active' : ''}`}
             onClick={() => setIsMobileMenuOpen(false)}

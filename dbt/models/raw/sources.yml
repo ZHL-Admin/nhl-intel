@@ -25,6 +25,28 @@ sources:
           - name: model_version
             description: xG model artifact version (e.g. xg_v1)
 
+      - name: team_ratings
+        description: >
+          Power ratings (Phase 3.1; models_ml/compute_ratings.py). One row per
+          (team, game_date) carrying the season-to-date rating through that game.
+          pregame_strength_share is the leak-free pregame opponent-adjusted 5v5 xGF
+          share consumed by mart_team_game_stats opponent adjustment when
+          var('rating_source')='power_rating'.
+        columns:
+          - name: game_id
+            description: Game whose pregame state this rating row precedes
+          - name: team_id
+            description: NHL team id
+          - name: pregame_strength_share
+            description: Pregame opponent-adjusted, score-adjusted 5v5 xGF share [0,1]
+          - name: total_rating
+            description: Season-to-date total rating through this game (goals/game)
+
+      - name: deserved_standings
+        description: >
+          Monte-Carlo deserved points (Phase 3.1; models_ml/simulate_deserved.py),
+          one row per (season, team_id).
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw

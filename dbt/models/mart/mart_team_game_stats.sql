@@ -321,7 +321,10 @@ team_events_adj as (
 ),
 
 -- Opponent-adjustment input: each team's season-to-date CF%/xGF% BEFORE this game.
--- Interim method (blueprint 3.5): Phase 3 swaps the opponent strength source in one place.
+-- Interim method (blueprint 3.5). Phase 3.1 swaps the xGF opponent strength source via
+-- var('rating_source'): 'power_rating' uses the opponent's pregame power-rating strength
+-- share (nhl_models.team_ratings, opponent-and-score-adjusted) in place of the season-to-
+-- date xGF% below. CF keeps the season-to-date source (the rating is an xG construct).
 to_date as (
     select game_id, team_id,
         avg(xgf_pct) over (partition by team_id, season order by game_date
@@ -330,6 +333,14 @@ to_date as (
             rows between unbounded preceding and 1 preceding) as cf_to_date
     from metrics_calculated
 ),
+
+{% if var('rating_source') == 'power_rating' %}
+-- Pregame power-rating strength share per (game, team); joined on the opponent below.
+opp_power_rating as (
+    select game_id, team_id, pregame_strength_share
+    from {{ source('nhl_models', 'team_ratings') }}
+),
+{% endif %}
 
 final as (
     select
@@ -400,9 +411,14 @@ final as (
         -- Score-state-adjusted possession/xG shares (each event weighted by its score state)
         safe_divide(ssa_f.weighted_cf, ssa_f.weighted_cf + ssa_a.weighted_cf) as cf_pct_score_adj,
         safe_divide(ssa_f.weighted_xgf, ssa_f.weighted_xgf + ssa_a.weighted_xgf) as xgf_pct_score_adj,
-        -- Opponent-adjusted shares (interim: opponent season-to-date strength, half-weighted)
+        -- Opponent-adjusted shares (half-weighted by opponent strength). CF uses the
+        -- interim season-to-date source; xGF uses var('rating_source') (Phase 3.1 swap).
         m.cf_pct + 0.5 * (coalesce(td_opp.cf_to_date, 0.5) - 0.5) as cf_pct_opp_adj,
+        {% if var('rating_source') == 'power_rating' %}
+        m.xgf_pct + 0.5 * (coalesce(tr_opp.pregame_strength_share, 0.5) - 0.5) as xgf_pct_opp_adj
+        {% else %}
         m.xgf_pct + 0.5 * (coalesce(td_opp.xgf_to_date, 0.5) - 0.5) as xgf_pct_opp_adj
+        {% endif %}
     from metrics_calculated m
     left join {{ ref('mart_team_identity_inputs') }} ii
         on m.game_id = ii.game_id and m.team_id = ii.team_id
@@ -414,6 +430,10 @@ final as (
         on m.game_id = ssa_a.game_id and ii.opponent_team_id = ssa_a.team_id
     left join to_date td_opp
         on m.game_id = td_opp.game_id and ii.opponent_team_id = td_opp.team_id
+    {% if var('rating_source') == 'power_rating' %}
+    left join opp_power_rating tr_opp
+        on m.game_id = tr_opp.game_id and ii.opponent_team_id = tr_opp.team_id
+    {% endif %}
 )
 
 select * from final

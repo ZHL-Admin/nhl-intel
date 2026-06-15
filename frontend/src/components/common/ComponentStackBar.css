@@ -1,0 +1,43 @@
+.component-stack-bar {
+  position: relative;
+  width: 100%;
+  background: var(--color-surface-elevated, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.component-stack-bar__zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border, rgba(127, 127, 127, 0.5));
+  z-index: 1;
+}
+
+.component-stack-bar__seg {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  z-index: 2;
+  transition: width 0.2s ease;
+}
+
+.component-stack-bar__whisker {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: var(--color-text-secondary, rgba(127, 127, 127, 0.8));
+  opacity: 0.6;
+  z-index: 3;
+}
+
+.component-stack-bar__total {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: var(--color-text-primary, #111);
+  z-index: 4;
+}

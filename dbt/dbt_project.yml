@@ -21,6 +21,11 @@ vars:
   # low < 0.05, medium 0.05-0.15, high >= 0.15. Mirrors models_ml/config.DANGER_TIERS.
   danger_low_max: 0.05
   danger_high_min: 0.15
+  # Opponent-adjustment rating source (Phase 3.1). Mirrors models_ml/config.RATING_SOURCE.
+  # 'power_rating' => mart_team_game_stats xgf opponent adjustment uses the opponent's
+  # pregame power-rating strength share (nhl_models.team_ratings); 'interim_xgf' => the
+  # Phase 2.3 season-to-date xGF% fallback (used before team_ratings exists).
+  rating_source: power_rating
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
