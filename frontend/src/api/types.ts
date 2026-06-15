@@ -129,6 +129,17 @@ export interface ShotAttempt {
   assist2_name?: string
   goalie_id?: number
   goalie_name?: string
+
+  // In-house xG + additive decomposition (Phase 2.2); present for unblocked,
+  // non-empty-net shots. Contributions are probability-space deltas that, with
+  // base_rate, sum to xg.
+  xg?: number | null
+  base_rate?: number | null
+  xg_contrib_location?: number | null
+  xg_contrib_shot_type?: number | null
+  xg_contrib_strength?: number | null
+  xg_contrib_sequence?: number | null
+  xg_contrib_game_state?: number | null
 }
 
 export interface GameShots {

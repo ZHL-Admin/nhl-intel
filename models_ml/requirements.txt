@@ -1,0 +1,8 @@
+# Python model-layer dependencies (models_ml/). Installed on top of the root
+# requirements.txt. Training/scoring jobs run locally and in the Airflow worker.
+lightgbm>=4.0
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.24
+db-dtypes>=1.1          # required for bigquery .to_dataframe()
+google-cloud-bigquery>=3.20

@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import { hexbin } from 'd3-hexbin'
 import './ShotMap.css'
 import { ShotAttempt } from '../../api/types'
+import { xgBreakdownHTML } from '../common/XGBreakdown'
 
 type SituationFilter = 'all' | '5v5' | 'pp' | 'pk'
 
@@ -134,12 +135,15 @@ function ShotMap(props: ShotMapProps) {
     }
   }, [props, awayAttackingShots, homeAttackingShots, isGameMode])
 
-  // Helper to show tooltip
+  // Helper to show tooltip. Goals show full detail; any unblocked shot with model xG
+  // also shows the xG decomposition (Phase 2.2).
   const showTooltip = (event: MouseEvent, shot: any) => {
-    if (!tooltipRef.current || !shot.scorer_name) return
+    if (!tooltipRef.current) return
+    if (!shot.scorer_name && shot.xg == null) return
 
     const tooltip = d3.select(tooltipRef.current)
     const assists = [shot.assist1_name, shot.assist2_name].filter(Boolean).join(', ')
+    const header = shot.scorer_name || (shot.shot_type ? `${shot.shot_type} shot` : 'Shot')
 
     tooltip
       .style('opacity', 1)
@@ -148,14 +152,15 @@ function ShotMap(props: ShotMapProps) {
       .html(`
         <div class="shot-tooltip">
           <div class="shot-tooltip__header">
-            <strong>${shot.scorer_name}</strong>
+            <strong>${header}</strong>
           </div>
           <div class="shot-tooltip__details">
-            <div>Period ${shot.period} - ${shot.time_in_period}</div>
-            ${shot.shot_type ? `<div>Shot: ${shot.shot_type}</div>` : ''}
-            ${assists ? `<div>Assists: ${assists}</div>` : '<div>Unassisted</div>'}
+            ${shot.period ? `<div>Period ${shot.period} - ${shot.time_in_period}</div>` : ''}
+            ${shot.scorer_name && shot.shot_type ? `<div>Shot: ${shot.shot_type}</div>` : ''}
+            ${shot.scorer_name ? (assists ? `<div>Assists: ${assists}</div>` : '<div>Unassisted</div>') : ''}
             ${shot.goalie_name ? `<div>Goalie: ${shot.goalie_name}</div>` : ''}
           </div>
+          ${xgBreakdownHTML(shot)}
         </div>
       `)
   }

@@ -4,6 +4,7 @@ import ChartPanel from '../common/ChartPanel';
 import SkeletonLoader from '../common/SkeletonLoader';
 import { getGameShots } from '../../api/games';
 import { ShotAttempt } from '../../api/types';
+import { xgBreakdownText } from '../common/XGBreakdown';
 import './ShotMapKDE.css';
 
 interface ShotMapKDEProps {
@@ -356,7 +357,11 @@ function drawGoalMarkers(
       .attr('stroke', teamColor)
       .attr('stroke-width', 2)
       .append('title')
-      .text(`${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`);
+      .text(() => {
+        const base = `${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`;
+        const xg = xgBreakdownText(goal);
+        return xg ? `${base}\n${xg}` : base;
+      });
   });
 }
 

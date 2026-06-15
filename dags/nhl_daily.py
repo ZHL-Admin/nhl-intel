@@ -393,16 +393,37 @@ with DAG(
         provide_context=True,
     )
 
-    run_dbt_models = BashOperator(
-        task_id="run_dbt_models",
-        bash_command="cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run --profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs --target-path /tmp/dbt_target",
-        env={
-            **os.environ,
-            "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID"),
-            "GCP_DATASET_RAW": os.getenv("GCP_DATASET_RAW", "nhl_raw"),
-            "GCP_DATASET_STAGING": os.getenv("GCP_DATASET_STAGING", "nhl_staging"),
-            "GCP_DATASET_MART": os.getenv("GCP_DATASET_MART", "nhl_mart"),
-        },
+    _dbt_env = {
+        **os.environ,
+        "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID"),
+        "GCP_DATASET_RAW": os.getenv("GCP_DATASET_RAW", "nhl_raw"),
+        "GCP_DATASET_STAGING": os.getenv("GCP_DATASET_STAGING", "nhl_staging"),
+        "GCP_DATASET_MART": os.getenv("GCP_DATASET_MART", "nhl_mart"),
+        "GCP_DATASET_MODELS": os.getenv("GCP_DATASET_MODELS", "nhl_models"),
+    }
+    _dbt = ("cd /opt/airflow/dbt && /home/airflow/.local/bin/dbt run "
+            "--profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs "
+            "--target-path /tmp/dbt_target")
+
+    # The in-house xG model (nhl_models.shot_xg) is scored BETWEEN staging/sequence and the
+    # shot-attempt intermediates + marts that join it. So dbt runs in two passes around it.
+    run_dbt_pre_xg = BashOperator(
+        task_id="run_dbt_pre_xg",
+        bash_command=f"{_dbt} --exclude path:models/mart int_shot_attempts int_shot_attempts_all int_shot_types",
+        env=_dbt_env,
+    )
+
+    # Incremental rescore of recent games (idempotent: deletes >= --since then appends).
+    score_xg = BashOperator(
+        task_id="score_xg",
+        bash_command="cd /opt/airflow && python -m models_ml.score_xg --since {{ macros.ds_add(ds, -3) }}",
+        env=_dbt_env,
+    )
+
+    run_dbt_marts = BashOperator(
+        task_id="run_dbt_marts",
+        bash_command=f"{_dbt} --select path:models/mart int_shot_attempts int_shot_attempts_all int_shot_types",
+        env=_dbt_env,
     )
 
     generate_report = PythonOperator(
@@ -417,4 +438,12 @@ with DAG(
         provide_context=True,
     )
 
-    ingest_task >> weekly_aux_task >> run_dbt_models >> generate_report >> publish_report
+    (
+        ingest_task
+        >> weekly_aux_task
+        >> run_dbt_pre_xg
+        >> score_xg
+        >> run_dbt_marts
+        >> generate_report
+        >> publish_report
+    )

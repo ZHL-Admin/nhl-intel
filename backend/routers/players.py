@@ -371,20 +371,23 @@ async def get_player_shots(
         season_result = bq_service.query(season_sql)
         season = season_result[0]['current_season'] if season_result else 20232024
 
-    # Get shot location data from int_shot_types
+    # Get shot location data from int_shot_types, joined to the in-house xG model.
     sql = f"""
     SELECT
-        x_coord,
-        y_coord,
-        is_goal,
-        is_high_danger,
+        s.x_coord,
+        s.y_coord,
+        s.is_goal,
+        s.is_high_danger,
         CASE
-            WHEN is_high_danger THEN 'high'
-            WHEN ABS(x_coord) > 50 OR ABS(y_coord) > 20 THEN 'low'
+            WHEN s.is_high_danger THEN 'high'
+            WHEN ABS(s.x_coord) > 50 OR ABS(s.y_coord) > 20 THEN 'low'
             ELSE 'medium'
-        END as danger_level
-    FROM {bq_service.get_full_table_id('int_shot_types')}
-    WHERE shooter_player_id = {player_id}
+        END as danger_level,
+        mx.xg
+    FROM {bq_service.get_full_table_id('int_shot_types')} s
+    LEFT JOIN {bq_service.get_models_table_id('shot_xg')} mx
+        ON s.game_id = mx.game_id AND s.event_id = mx.event_id
+    WHERE s.shooter_player_id = {player_id}
     LIMIT 500
     """
 
@@ -410,7 +413,8 @@ async def get_player_shots(
             x=row['x_coord'] or 0.0,
             y=row['y_coord'] or 0.0,
             is_goal=row['is_goal'],
-            danger_level=danger
+            danger_level=danger,
+            xg=row.get('xg')
         ))
 
     return PlayerShots(

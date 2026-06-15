@@ -51,7 +51,7 @@ tagged as (
             else false
         end as is_blocked,
 
-        -- Zone classification (same as in int_xg_rates)
+        -- Zone classification (legacy danger buckets; xG now from nhl_models.shot_xg)
         case
             when abs(x_coord) > 70 and abs(y_coord) < 15 then 'slot'
             when abs(x_coord) between 55 and 70 and abs(y_coord) between 15 and 30 then 'circle'
@@ -73,16 +73,17 @@ tagged as (
       and y_coord is not null
 ),
 
+-- xG now comes from the in-house model (nhl_models.shot_xg, Phase 2.2), joined per shot.
+-- shot_xg holds unblocked, non-empty-net shots only, so blocked and empty-net attempts
+-- get xg_value 0 (correctly excluded from xG totals; blueprint section 2).
 with_xg as (
     select
         t.*,
-        coalesce(xg.xg_value, 0.02) as xg_value
+        coalesce(xg.xg, 0.0) as xg_value
     from tagged t
-    left join {{ ref('int_xg_rates') }} xg
-        on t.season = xg.season
-        and t.zone = xg.zone
-        and t.is_high_danger = xg.is_high_danger
-        and t.situation = xg.situation
+    left join {{ source('nhl_models', 'shot_xg') }} xg
+        on t.game_id = xg.game_id
+        and t.event_id = xg.event_id
 ),
 
 final as (

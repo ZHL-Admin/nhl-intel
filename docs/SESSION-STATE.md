@@ -130,6 +130,33 @@ Final state (verified):
 - DB size: **20.58 GB** (raw 14.1 / staging 6.0 / mart 0.4). raw_ppt_replay 6.52 GB is the
   biggest table. ~$0.21/mo over the 10 GB free tier.
 
+## PHASE 2 — core metric layer (IN PROGRESS)
+- **2.1 Sequence mining (COMPLETE, committed 38aa7db).** `int_shot_sequence` (1.8M rows):
+  one row per unblocked attempt, seq_type precedence label + seq_cross_ice royal-road flag,
+  strength + is_empty_net from situation_code (zone_code orientation verified empirically:
+  relative to event owner). Windows TUNED (`models_ml/tune_sequence_thresholds.py`):
+  rush=4, forecheck=5, rebound=3 (kept; identical lift to 2). `mart_team_identity_inputs`
+  (canonical per-game 5v5 seq shares for/against), joined into `mart_team_game_stats`;
+  `mart_player_game_stats` gets real rush_attempts + per-seq individual counts. Backend
+  additive seq fields. Validation: rebound 18.2% / rush 9.6% goal rates vs cycle 5.7% /
+  point 2.1%; shares stable YoY; dbt PASS=21.
+- **2.2 In-house xG model + decomposition (COMPLETE, validated).** `models_ml/`:
+  `xg_features.py` (shared pull+features), `train_xg.py` (LightGBM, 1.51M train shots,
+  val 2024-25 logloss 0.2206 AUC 0.744, holdout 2025-26 AUC 0.733; calibration + per-season
+  xG-vs-goals within ~3% in `docs/methodology/xg-model.md`), `xg_decompose.py` (pred_contrib
+  -> 5 prob-space buckets: location/shot_type/strength/sequence/game_state summing to xg),
+  `score_xg.py` -> **nhl_models.shot_xg (1,755,430 rows)**, incremental `--since`. Artifact
+  `models_ml/artifacts/xg_v1.txt` + manifest. **int_xg_rates RETIRED**; int_shot_attempts/
+  _all now join shot_xg (dbt source `nhl_models`); all marts rebuilt (dbt PASS=46). Backend
+  shots endpoints expose xg + contribs (alias `mx` — `xg.xg` collides); frontend `XGBreakdown`
+  shared component + `xgBreakdownHTML/Text` consumed by ShotMap + ShotMapKDE tooltips.
+  DAG split into pre-xg dbt -> score_xg -> marts dbt. `models_ml/bq.py` helper + db-dtypes dep.
+  **Empty-net shots excluded (xg null, absent from shot_xg) by design.**
+- **Env note:** `pip install db-dtypes` required for `.to_dataframe()` (in models_ml/requirements.txt).
+  BigQuery `.to_dataframe(create_bqstorage_client=False)` is SLOW for ~1.7M rows (~10min);
+  consider enabling bqstorage if it bites.
+- **Next in Phase 2:** 2.3 scorer-bias + score-state adj -> 2.4 win prob + leverage -> 2.5 GSAx.
+
 ## Next up (fresh-context work)
 1. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked).

@@ -160,6 +160,16 @@ class ShotAttempt(BaseModel):
     goalie_id: Optional[int] = Field(None, description="Goalie who was scored on")
     goalie_name: Optional[str] = Field(None, description="Goalie name")
 
+    # In-house xG + additive decomposition (Phase 2.2). Present for unblocked,
+    # non-empty-net shots; contributions + base_rate sum to xg in probability space.
+    xg: Optional[float] = Field(None, description="In-house expected goals for this shot")
+    base_rate: Optional[float] = Field(None, description="Model base goal rate")
+    xg_contrib_location: Optional[float] = Field(None, description="xG contribution from shot location")
+    xg_contrib_shot_type: Optional[float] = Field(None, description="xG contribution from shot type")
+    xg_contrib_strength: Optional[float] = Field(None, description="xG contribution from strength state")
+    xg_contrib_sequence: Optional[float] = Field(None, description="xG contribution from the generating sequence")
+    xg_contrib_game_state: Optional[float] = Field(None, description="xG contribution from game state")
+
 
 class GameShots(BaseModel):
     """Shot attempts for both teams in a game."""
@@ -342,6 +352,7 @@ class ShotLocation(BaseModel):
     y: float
     is_goal: bool
     danger_level: str = Field(description="low, medium, or high")
+    xg: Optional[float] = Field(None, description="In-house expected goals for this shot (Phase 2.2)")
 
 
 class PlayerShots(BaseModel):

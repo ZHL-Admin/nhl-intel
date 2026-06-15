@@ -555,7 +555,15 @@ async def get_game_shots_endpoint(
             'outcome': outcome,
             'situation': row['situation_code'] or '1551',
             'team_id': row['team_id'],
-            'shot_type': row.get('shot_type')  # Always present from int_shot_types
+            'shot_type': row.get('shot_type'),  # Always present from int_shot_types
+            # In-house xG + decomposition (Phase 2.2); null for blocked/empty-net shots
+            'xg': row.get('xg'),
+            'base_rate': row.get('base_rate'),
+            'xg_contrib_location': row.get('xg_contrib_location'),
+            'xg_contrib_shot_type': row.get('xg_contrib_shot_type'),
+            'xg_contrib_strength': row.get('xg_contrib_strength'),
+            'xg_contrib_sequence': row.get('xg_contrib_sequence'),
+            'xg_contrib_game_state': row.get('xg_contrib_game_state'),
         }
 
         # Add goal-specific details if this is a goal

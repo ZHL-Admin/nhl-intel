@@ -31,6 +31,7 @@ class BigQueryService:
             self.dataset_staging = os.getenv("GCP_DATASET_STAGING", "nhl_staging")
             self.dataset_mart = os.getenv("GCP_DATASET_MART", "nhl_mart")
             self.dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+            self.dataset_models = os.getenv("GCP_DATASET_MODELS", "nhl_models")
 
             # Handle credentials path - make it absolute if relative
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -97,6 +98,10 @@ class BigQueryService:
             dataset = self.dataset_mart
 
         return f"{self.project_id}.{dataset}.{table_name}"
+
+    def get_models_table_id(self, table_name: str) -> str:
+        """Fully qualified ID for a Python model-layer output table (nhl_models)."""
+        return f"{self.project_id}.{self.dataset_models}.{table_name}"
 
     def get_player_edge(self, player_id: int, season_id: Optional[int] = None, game_type: int = 2) -> Optional[Dict[str, Any]]:
         """Fetch a skater's NHL Edge profile for a season (latest if unspecified).
@@ -207,22 +212,31 @@ class BigQueryService:
 
         sql = f"""
         SELECT
-            x_coord,
-            y_coord,
-            type_desc_key as shot_type,
-            type_desc_key as event_type,
-            situation_code,
-            event_owner_team_id as team_id,
-            period_number as period,
-            time_in_period,
-            shooting_player_id as shooter_id,
-            scoring_player_id,
-            goalie_in_net_id as goalie_id,
-            is_goal
-        FROM {self.get_full_table_id('int_shot_types')}
-        WHERE game_id = {game_id}
+            s.x_coord,
+            s.y_coord,
+            s.type_desc_key as shot_type,
+            s.type_desc_key as event_type,
+            s.situation_code,
+            s.event_owner_team_id as team_id,
+            s.period_number as period,
+            s.time_in_period,
+            s.shooting_player_id as shooter_id,
+            s.scoring_player_id,
+            s.goalie_in_net_id as goalie_id,
+            s.is_goal,
+            mx.xg,
+            mx.base_rate,
+            mx.xg_contrib_location,
+            mx.xg_contrib_shot_type,
+            mx.xg_contrib_strength,
+            mx.xg_contrib_sequence,
+            mx.xg_contrib_game_state
+        FROM {self.get_full_table_id('int_shot_types')} s
+        LEFT JOIN {self.get_models_table_id('shot_xg')} mx
+            ON s.game_id = mx.game_id AND s.event_id = mx.event_id
+        WHERE s.game_id = {game_id}
             {situation_filter}
-        ORDER BY period_number, time_in_period
+        ORDER BY s.period_number, s.time_in_period
         """
 
         return self.query(sql)

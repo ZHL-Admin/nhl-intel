@@ -1,6 +1,30 @@
 version: 2
 
 sources:
+  - name: nhl_models
+    database: nhl-intel-498216
+    schema: nhl_models
+    description: >
+      Outputs of the Python model layer (models_ml/). Written by training/scoring jobs,
+      consumed by dbt marts. See docs/methodology/ for each model.
+    tables:
+      - name: shot_xg
+        description: >
+          In-house xG per unblocked, non-empty-net, non-shootout shot with additive
+          decomposition (Phase 2.2; models_ml/score_xg.py). One row per (game_id,
+          event_id). Empty-net shots are absent by design, so xG totals exclude them.
+        columns:
+          - name: game_id
+            description: Unique NHL game identifier
+          - name: event_id
+            description: Shot event id (joins stg_play_by_play / int_shot_sequence)
+          - name: xg
+            description: Model probability the shot is a goal
+          - name: base_rate
+            description: Model base value (league shot goal rate) in probability space
+          - name: model_version
+            description: xG model artifact version (e.g. xg_v1)
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw

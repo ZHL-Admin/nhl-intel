@@ -1,0 +1,47 @@
+.xg-breakdown {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.xg-breakdown__total {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.xg-breakdown__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.xg-breakdown__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.xg-breakdown__label {
+  color: var(--text-secondary, #8a8f98);
+  text-transform: capitalize;
+}
+
+.xg-breakdown__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.xg-breakdown__value--pos {
+  color: var(--accent-positive, #34c759);
+}
+
+.xg-breakdown__value--neg {
+  color: var(--accent-negative, #ff453a);
+}
+
+/* Inline variant used inside the d3 shot-map tooltip */
+.xg-breakdown--inline {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  white-space: normal;
+  max-width: 220px;
+}
