@@ -93,6 +93,25 @@ COACH_TRUST_WEIGHTS = {
 DIVERGENCE_MIN_MINUTES = 500     # min 5v5 minutes to appear on the board
 DIVERGENCE_BOARD_SIZE = 15       # top + bottom N by |trust z - composite z|
 
+# --- Line-fit / Lineup Lab (Phase 5.1) --------------------------------------
+# Chemistry blend: a line's final projection mixes the model prediction with its own observed
+# 5v5 history, weighting the observed share by minutes / (minutes + this). 150 min ~= the point
+# where observed and model are weighted equally (tuned by holdout in train_linefit.py --tune-blend).
+LINEFIT_OBS_PRIOR_MINUTES = 150
+# A member with fewer than this many career NHL 5v5 minutes is a rookie/extrapolation: widen the
+# projection interval by the multiplier below and label it "deeper extrapolation" (blueprint 6.3).
+LINEFIT_ROOKIE_MIN_MINUTES = 500
+LINEFIT_ROOKIE_INTERVAL_MULT = 1.5
+# Letter-grade bands on projected 5v5 xGF% (descending; first band whose floor is met wins).
+LINEFIT_GRADE_BANDS = [
+    ("A", 0.560), ("B", 0.525), ("C", 0.490), ("D", 0.455), ("F", 0.0),
+]
+LINEFIT_ARTIFACT = "linefit_v1"
+
+# --- Team needs / trade fit (Phase 5.3) -------------------------------------
+# A team's need profile is measured against the average of the top-N teams by power rating.
+TEAM_NEEDS_TOP_N = 8
+
 # --- Archetypes -------------------------------------------------------------
 # Minimum 5v5 minutes for a player-season to be archetyped (Phase 4.2).
 ARCHETYPE_MIN_5V5_MIN = 300

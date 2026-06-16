@@ -549,6 +549,15 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Line-fit model (Phase 5.1): cold-start projection of a line's on-ice results from member
+    # profiles. Needs int_line_seasons (built in run_dbt_pre_xg) + archetypes + RAPM impact, so it
+    # runs weekly after those. Member features reuse archetype_features.
+    train_linefit = BashOperator(
+        task_id="train_linefit",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.train_linefit"),
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -599,3 +608,6 @@ with DAG(
     write_archetypes >> fit_aging_curves >> generate_report
     [refresh_player_bio, run_dbt_marts] >> compute_twins >> generate_report
     run_dbt_marts >> compute_physical >> generate_report
+    # Phase 5.1 line-fit: needs int_line_seasons (built upstream in run_dbt_pre_xg) plus
+    # archetypes (member archetype mix) and RAPM impact (member off/def features).
+    [write_archetypes, train_rapm] >> train_linefit >> generate_report

@@ -305,3 +305,30 @@ models:
         tests:
           - accepted_values:
               values: ['low', 'medium', 'high', 'unknown']
+
+  - name: int_line_seasons
+    description: >
+      Every forward trio (line_type 'F3') and defense pair ('D2') that shared at least
+      var('line_min_5v5_minutes') of 5v5 ice in a single season, with its on-ice 5v5 results
+      (xGF%, xGF/60, xGA/60) and for-shot seq-type mix. Training set for the Lineup Lab line-fit
+      model (Phase 5.1, blueprint 6.2). A segment belongs to a line when exactly those skaters are
+      the team's forwards (3) / defensemen (2) on the ice. Reg season + playoffs only; segments
+      exist 2015-16+. See docs/methodology/lineup-lab.md.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: line_type
+        tests:
+          - accepted_values:
+              values: ['F3', 'D2']
+      - name: line_key
+        description: Order-invariant '-'-joined sorted member player_ids (unique per line within a season)
+        tests: [not_null]
+      - name: minutes
+        description: Shared 5v5 minutes (>= var('line_min_5v5_minutes'))
+        tests: [not_null]
+      - name: xgf_pct
+        description: On-ice 5v5 xGF / (xGF + xGA) over the line's shared segments
+        tests: [not_null]

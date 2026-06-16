@@ -3,12 +3,14 @@
 Provides endpoints for team details, trends, roster, and vs-opponent stats.
 """
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from typing import Optional, List
 
 from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
     TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile,
-    TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam, StreakCard
+    TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam, StreakCard,
+    TeamLines,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -122,6 +124,21 @@ async def get_team_identity(
     windows.sort(key=lambda w: 0 if w.window == 'season' else 1)
     return TeamIdentity(team_id=team_id, team_abbrev=_team_abbrev(team_id, season),
                         season=season, league_size=league_size, windows=windows)
+
+
+@router.get("/{team_id}/lines", response_model=TeamLines)
+@cache(ttl=1800)
+async def get_team_lines(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> TeamLines:
+    """A team's current forward trios + defense pairs (last 10 games), each with a fit grade.
+
+    Powers the embedded LineSwapWidget (Phase 5.2) and the matchup preview (Phase 5.3).
+    """
+    from services import tools as tool_svc
+    payload = await run_in_threadpool(tool_svc.current_lines, team_id, season)
+    return TeamLines(**payload)
 
 
 def _season_str_to_id(season: Optional[str]) -> Optional[int]:

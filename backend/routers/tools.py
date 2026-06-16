@@ -1,0 +1,25 @@
+"""Signature-tool endpoints (Phase 5): Lineup Lab line-fit, trade fit, matchup previews."""
+
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+
+from models.schemas import LineFitRequest, LineFitProjection
+from services import tools as tool_svc
+from services.cache import cache
+
+router = APIRouter()
+
+
+@router.post("/line-fit", response_model=LineFitProjection)
+async def post_line_fit(req: LineFitRequest) -> LineFitProjection:
+    """Project a hypothetical line (2 D, 3 F, or a 5-skater unit) from member profiles."""
+    ids = req.player_ids
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=400, detail="duplicate players in the line")
+    try:
+        payload = await run_in_threadpool(tool_svc.score_line, ids, req.season)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return LineFitProjection(**payload)

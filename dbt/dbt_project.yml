@@ -37,6 +37,9 @@ vars:
   gs_block: 0.05
   gs_hit: 0.05
   gs_onice_xg: 1.0
+  # Line-fit model (Phase 5.1): minimum shared 5v5 minutes for a forward trio / defense
+  # pair to qualify as a line-season in int_line_seasons (the Lineup Lab training set).
+  line_min_5v5_minutes: 30
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]

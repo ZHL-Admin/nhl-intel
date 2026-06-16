@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -32,4 +32,9 @@ edge-refresh:
 # bootstrap SDs, into nhl_models.player_impact. Long-running (~1-2h with bootstrap).
 rapm:
 	python -m models_ml.train_rapm
+
+# Train the Lineup Lab line-fit model (Phase 5.1): predicts a line's on-ice xGF% / xGF60 / xGA60
+# from member profiles. Reads int_line_seasons + archetypes + RAPM; writes artifacts/linefit_v1.
+linefit:
+	python -m models_ml.train_linefit
 

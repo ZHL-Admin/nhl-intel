@@ -998,3 +998,146 @@ class EdgeTeamProfile(BaseModel):
     mid_danger_sog_share: Optional[float] = None
     long_danger_sog_share: Optional[float] = None
     high_danger_shooting_pct: Optional[float] = None
+
+
+# --- Phase 5: signature tools (Lineup Lab, trade fit, matchup previews) ------
+
+class PlayerSearchResult(BaseModel):
+    """A current-roster player returned by /players/search (PlayerPicker)."""
+    player_id: int
+    name: Optional[str] = None
+    team_id: Optional[int] = None
+    team_abbrev: Optional[str] = None
+    position: Optional[str] = None
+    headshot_url: Optional[str] = None
+    archetype: Optional[str] = None
+
+
+class LineMemberOut(BaseModel):
+    """A member of a scored line, with the profile values the model used."""
+    player_id: int
+    name: Optional[str] = None
+    position: Optional[str] = None
+    archetype: Optional[str] = None
+    off_impact: Optional[float] = None
+    def_impact: Optional[float] = None
+    finishing: Optional[float] = None
+    toi_5v5: Optional[float] = None
+
+
+class ObservedBlend(BaseModel):
+    """Chemistry-blend details when a line has real shared history."""
+    observed_minutes: float
+    observed_xgf_pct: float
+    model_xgf_pct: float
+    w_obs: float
+
+
+class LineFitProjection(BaseModel):
+    """A line-fit projection (Phase 5.1): one forward trio or defense pair."""
+    line_type: str
+    player_ids: List[int]
+    grade: str
+    projected_xgf_pct: float
+    interval_low: Optional[float] = None
+    interval_high: Optional[float] = None
+    xgf_per60: Optional[float] = None
+    xga_per60: Optional[float] = None
+    grade_sentence: Optional[str] = None
+    reasons: List[str] = Field(default_factory=list)
+    risk: Optional[str] = None
+    observed_blend: Optional[ObservedBlend] = None
+    deeper_extrapolation: bool = False
+    rookie_widened: bool = False
+    members: List[LineMemberOut] = Field(default_factory=list)
+    limitations: Optional[str] = None
+    # populated only for a 5-skater unit
+    forward_trio: Optional["LineFitProjection"] = None
+    defense_pair: Optional["LineFitProjection"] = None
+
+
+class LineFitRequest(BaseModel):
+    """Body for POST /tools/line-fit."""
+    player_ids: List[int] = Field(..., min_length=2, max_length=5)
+    season: Optional[str] = None
+
+
+class TeamLine(BaseModel):
+    """A team's current line (trio/pair) with observed results + projected grade."""
+    line_type: str
+    player_ids: List[int]
+    member_names: List[str] = Field(default_factory=list)
+    minutes: float
+    observed_xgf_pct: Optional[float] = None
+    projection: Optional[LineFitProjection] = None
+
+
+class TeamLines(BaseModel):
+    """A team's rolling current lines for the line-swap widget."""
+    team_id: int
+    season: str
+    forward_lines: List[TeamLine] = Field(default_factory=list)
+    defense_pairs: List[TeamLine] = Field(default_factory=list)
+
+
+class NeedComponent(BaseModel):
+    """One gap in a team's need profile (archetype or composite component)."""
+    key: str
+    label: str
+    gap: float          # how far below the top-8 average (positive = a need)
+    team_value: float
+    reference_value: float
+
+
+class TeamNeedProfile(BaseModel):
+    """A team's need profile vs the top-8 by power rating (Phase 5.3)."""
+    team_id: int
+    season: str
+    archetype_needs: List[NeedComponent] = Field(default_factory=list)
+    component_needs: List[NeedComponent] = Field(default_factory=list)
+
+
+class TradeFitRequest(BaseModel):
+    """Body for POST /tools/trade-fit."""
+    player_id: int
+    team_id: int
+    season: Optional[str] = None
+
+
+class TradeFitResult(BaseModel):
+    """How well a player addresses a team's needs (Phase 5.3)."""
+    player_id: int
+    player_name: Optional[str] = None
+    team_id: int
+    season: str
+    fit_score: float          # 0-100
+    reasons: List[str] = Field(default_factory=list)
+    player_archetypes: List["ArchetypeWeight"] = Field(default_factory=list)
+    need_profile: Optional[TeamNeedProfile] = None
+
+
+class MatchupPreviewTeam(BaseModel):
+    """One team's side of a matchup preview."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    power_rating: Optional[float] = None
+    goalie_name: Optional[str] = None
+    goalie_last10_gsax: Optional[float] = None
+    fingerprint_top: List[str] = Field(default_factory=list)
+
+
+class MatchupPreview(BaseModel):
+    """Pregame matchup preview for an unplayed game (Phase 5.3)."""
+    game_id: int
+    game_state: str
+    home: MatchupPreviewTeam
+    away: MatchupPreviewTeam
+    home_pregame_wp: Optional[float] = None
+    style_clash: List[str] = Field(default_factory=list)
+    season_series: Optional[str] = None
+    notable_streaks: List[str] = Field(default_factory=list)
+
+
+# resolve self/forward references for the Phase 5 models
+LineFitProjection.model_rebuild()
+TradeFitResult.model_rebuild()

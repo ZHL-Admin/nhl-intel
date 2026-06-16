@@ -3,6 +3,7 @@
 Provides endpoints for player details, trends, gamelog, shots, and vs-opponent stats.
 """
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from typing import Optional, List
 
 import json
@@ -16,6 +17,7 @@ from models.schemas import (
     PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
+    PlayerSearchResult,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -100,6 +102,22 @@ async def get_divergence_board(
         side=r['side'], divergence=r['divergence'], trust_z=r['trust_z'],
         composite_z=r['composite_z'], composite_total=r['composite_total'],
         explanation=r['explanation']) for r in rows]
+
+
+@router.get("/search", response_model=List[PlayerSearchResult])
+@cache(ttl=3600)
+async def search_players(
+    q: str = Query(..., min_length=1, description="Name prefix/substring"),
+    limit: int = Query(20, ge=1, le=50),
+    season: Optional[str] = Query(None, description="Roster season (default: latest)"),
+) -> List[PlayerSearchResult]:
+    """Current-roster players matching `q` for the Lineup Lab PlayerPicker (Phase 5.2).
+
+    Registered BEFORE /{player_id} so the single-segment path is not coerced to the int param.
+    """
+    from services import tools as tool_svc
+    rows = await run_in_threadpool(tool_svc.search_players, q, limit, season)
+    return [PlayerSearchResult(**r) for r in rows]
 
 
 @router.get("/{player_id}/trajectory", response_model=PlayerTrajectory)
