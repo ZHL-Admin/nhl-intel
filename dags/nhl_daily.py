@@ -409,7 +409,7 @@ with DAG(
     # shot-attempt intermediates + marts that join it. So dbt runs in two passes around it.
     run_dbt_pre_xg = BashOperator(
         task_id="run_dbt_pre_xg",
-        bash_command=f"{_dbt} --exclude path:models/mart int_shot_attempts int_shot_attempts_all int_shot_types",
+        bash_command=f"{_dbt} --exclude path:models/mart int_shot_attempts int_shot_attempts_all int_shot_types int_event_leverage",
         env=_dbt_env,
     )
 
@@ -468,6 +468,36 @@ with DAG(
             "cd /opt/airflow && python -m models_ml.train_rapm"
             "{% else %}echo 'RAPM: weekly cadence, not Monday — skipping'{% endif %}"
         ),
+        env=_dbt_env,
+    )
+
+    # --- Phase 4.3 reconciliation (weekly, Monday-gated except the cheap leverage build) ---
+    _mon = "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}{}{% else %}echo 'weekly cadence, not Monday — skipping'{% endif %}"
+
+    # int_event_leverage needs win_probability (scored above), so build it after score_winprob.
+    build_event_leverage = BashOperator(
+        task_id="build_event_leverage",
+        bash_command=f"{_dbt} --select int_event_leverage",
+        env=_dbt_env,
+    )
+    compute_clutch = BashOperator(
+        task_id="compute_clutch",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_clutch"),
+        env=_dbt_env,
+    )
+    compute_consistency = BashOperator(
+        task_id="compute_consistency",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_consistency"),
+        env=_dbt_env,
+    )
+    compute_coach_trust = BashOperator(
+        task_id="compute_coach_trust",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_coach_trust"),
+        env=_dbt_env,
+    )
+    compute_divergence = BashOperator(
+        task_id="compute_divergence",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_divergence"),
         env=_dbt_env,
     )
 
@@ -534,3 +564,9 @@ with DAG(
     # archetypes. RAPM needs shot_xg + segments + marts; composite/archetypes need RAPM.
     run_dbt_marts >> train_rapm >> compute_composite >> generate_report
     train_rapm >> write_archetypes >> generate_report
+    # Phase 4.3 reconciliation: clutch (needs leverage), consistency + coach trust (marts),
+    # divergence (needs composite + coach trust).
+    score_winprob >> build_event_leverage >> compute_clutch >> generate_report
+    run_dbt_marts >> compute_consistency >> generate_report
+    run_dbt_marts >> compute_coach_trust
+    [compute_composite, compute_coach_trust] >> compute_divergence >> generate_report

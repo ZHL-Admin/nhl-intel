@@ -299,6 +299,63 @@ class TeamVsOpponent(BaseModel):
 # Player Models
 # ============================================================================
 
+class ClutchProfile(BaseModel):
+    """Leverage-weighted production with a confidence phrase (Phase 4.3)."""
+    n_shots: int
+    raw_ixg: float
+    clutch_ixg: float
+    clutch_delta: float
+    p_value: float
+    confidence: str = Field(description="Plain-language confidence (no bare p-value at depth 1)")
+
+
+class GameScorePoint(BaseModel):
+    game_date: DateType
+    game_score: float
+
+
+class ConsistencyProfile(BaseModel):
+    """Game-score distribution summary + the series for a strip plot (Phase 4.3)."""
+    games: int
+    mean_gs: float
+    sd_gs: float
+    iqr_gs: float
+    good_game_share: float
+    no_show_share: float
+    consistency_index: float
+    game_scores: List[GameScorePoint]
+
+
+class CoachTrustProfile(BaseModel):
+    """Deployment-trust signals (Phase 4.3)."""
+    trust_score: float
+    pk_share: float
+    protect_lead_rate: float
+    road_home_ratio: float
+
+
+class PlayerReconciliation(BaseModel):
+    """Eye-test reconciliation: clutch + consistency + coach trust (Phase 4.3)."""
+    player_id: int
+    season: str
+    clutch: Optional[ClutchProfile] = None
+    consistency: Optional[ConsistencyProfile] = None
+    coach_trust: Optional[CoachTrustProfile] = None
+
+
+class DivergenceBoardRow(BaseModel):
+    """One divergence-board entry with its generated explanation (Phase 4.3)."""
+    player_id: int
+    player_name: Optional[str] = None
+    position: Optional[str] = None
+    side: str
+    divergence: float
+    trust_z: float
+    composite_z: float
+    composite_total: float
+    explanation: str
+
+
 class CompositeComponent(BaseModel):
     """One value component on the goals scale (Phase 4.2)."""
     key: str

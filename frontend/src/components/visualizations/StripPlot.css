@@ -1,0 +1,7 @@
+.strip-plot { width: 100%; }
+.strip-plot__svg { width: 100%; height: auto; display: block; }
+.strip-plot__axis { stroke: var(--color-border, rgba(127,127,127,0.4)); stroke-width: 1; }
+.strip-plot__mean { stroke: var(--color-text-primary, #111); stroke-width: 2; }
+.strip-plot__marker { stroke: var(--color-border, rgba(127,127,127,0.5)); stroke-width: 1; stroke-dasharray: 3 3; }
+.strip-plot__marker-label { fill: var(--color-text-secondary, #888); font-size: 10px; }
+.strip-plot__empty { color: var(--color-text-secondary, #888); font-size: var(--font-size-sm,0.9rem); padding: var(--space-3,12px); }

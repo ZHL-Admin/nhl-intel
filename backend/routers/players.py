@@ -13,11 +13,23 @@ from models.schemas import (
     PlayerDetail, PlayerTrends, PlayerTrendPoint, PlayerGamelog, GamelogEntry,
     PlayerShots, ShotLocation, PlayerVsOpponent, PlayerSituational, EdgePlayerProfile,
     CompositeComponent, ArchetypeWeight, ArchetypeRankRow, COMPOSITE_LABELS,
+    PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
+    GameScorePoint, DivergenceBoardRow,
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+def _confidence_phrase(p: float) -> str:
+    if p < 0.05:
+        return "strong evidence"
+    if p < 0.10:
+        return "some evidence"
+    if p < 0.20:
+        return "weak, suggestive evidence"
+    return "no clear evidence (within noise)"
 
 
 def _components_from_row(r: dict) -> List[CompositeComponent]:
@@ -58,6 +70,88 @@ def _season_str_to_id(season: Optional[str]) -> Optional[int]:
         return start * 10000 + (start + 1)
     except (ValueError, IndexError):
         return None
+
+
+# Registered before /{player_id} so "divergence-board" is not coerced to an int player id.
+@router.get("/divergence-board", response_model=List[DivergenceBoardRow])
+@cache(ttl=1800)
+async def get_divergence_board(
+    season: Optional[str] = Query(None, description="season_window (default: latest)"),
+) -> List[DivergenceBoardRow]:
+    """Players whose coach-trust deployment most diverges from isolated value (Phase 4.3)."""
+    board = bq_service.get_models_table_id('divergence_board')
+    rosters = bq_service.get_full_table_id('stg_rosters')
+    if not season:
+        season = bq_service.query(f"SELECT MAX(season_window) AS s FROM {board}")[0]['s']
+    rows = bq_service.query(f"""
+        WITH nm AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name
+            FROM {rosters} GROUP BY player_id
+        )
+        SELECT b.player_id, nm.name, b.pos_group AS position, b.side, b.divergence,
+               b.trust_z, b.composite_z, b.composite_total, b.explanation
+        FROM {board} b LEFT JOIN nm ON b.player_id = nm.player_id
+        WHERE b.season_window = '{season}'
+        ORDER BY b.divergence DESC
+    """)
+    return [DivergenceBoardRow(
+        player_id=r['player_id'], player_name=r.get('name'), position=r.get('position'),
+        side=r['side'], divergence=r['divergence'], trust_z=r['trust_z'],
+        composite_z=r['composite_z'], composite_total=r['composite_total'],
+        explanation=r['explanation']) for r in rows]
+
+
+@router.get("/{player_id}/reconciliation", response_model=PlayerReconciliation)
+@cache(ttl=1800)
+async def get_player_reconciliation(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> PlayerReconciliation:
+    """Eye-test reconciliation: clutch + consistency + coach trust (Phase 4.3)."""
+    if not season:
+        season = bq_service.query(
+            f"SELECT MAX(season) AS s FROM {bq_service.get_full_table_id('mart_player_game_score')}"
+        )[0]['s']
+
+    clutch = None
+    cl = bq_service.query(f"""SELECT * FROM {bq_service.get_models_table_id('player_clutch')}
+        WHERE player_id = {player_id} AND season_window = '{season}' LIMIT 1""")
+    if cl:
+        r = cl[0]
+        clutch = ClutchProfile(
+            n_shots=r['n_shots'], raw_ixg=r['raw_ixg'], clutch_ixg=r['clutch_ixg'],
+            clutch_delta=r['clutch_delta'], p_value=r['p_value'],
+            confidence=_confidence_phrase(r['p_value']))
+
+    consistency = None
+    co = bq_service.query(f"""SELECT * FROM {bq_service.get_models_table_id('player_consistency')}
+        WHERE player_id = {player_id} AND season_window = '{season}' LIMIT 1""")
+    if co:
+        r = co[0]
+        series = bq_service.query(f"""
+            SELECT game_date, game_score
+            FROM {bq_service.get_full_table_id('mart_player_game_score')}
+            WHERE player_id = {player_id} AND season = '{season}'
+              AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+            ORDER BY game_date""")
+        consistency = ConsistencyProfile(
+            games=r['games'], mean_gs=r['mean_gs'], sd_gs=r['sd_gs'], iqr_gs=r['iqr_gs'],
+            good_game_share=r['good_game_share'], no_show_share=r['no_show_share'],
+            consistency_index=r['consistency_index'],
+            game_scores=[GameScorePoint(game_date=s['game_date'], game_score=s['game_score'])
+                         for s in series])
+
+    coach_trust = None
+    ct = bq_service.query(f"""SELECT * FROM {bq_service.get_models_table_id('player_coach_trust')}
+        WHERE player_id = {player_id} AND season_window = '{season}' LIMIT 1""")
+    if ct:
+        r = ct[0]
+        coach_trust = CoachTrustProfile(
+            trust_score=r['trust_score'], pk_share=r['pk_share'],
+            protect_lead_rate=r['protect_lead_rate'], road_home_ratio=r['road_home_ratio'])
+
+    return PlayerReconciliation(player_id=player_id, season=season, clutch=clutch,
+                                consistency=consistency, coach_trust=coach_trust)
 
 
 @router.get("/{player_id}", response_model=PlayerDetail)

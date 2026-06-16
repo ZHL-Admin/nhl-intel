@@ -74,6 +74,21 @@ PLAYER_FINISHING_SHRINKAGE_K = 350   # individual shots
 # conversion). Penalty differential = (drawn - taken) * this.
 PP_GOAL_VALUE = 0.2
 
+# --- Coach trust (Phase 4.3) ------------------------------------------------
+# Deployment-trust signals, z-scored within position then combined. Weights reflect how
+# strongly each reflects a coach's trust. DZ-faceoff/post-icing signals from the blueprint are
+# omitted: int_segment_context.zone_start_code is not team-relative (empirically symmetric),
+# so a team-relative DZ-start share can't be computed cleanly from it.
+COACH_TRUST_WEIGHTS = {
+    "pk_share": 0.40,            # penalty-kill deployment (PK TOI / total TOI)
+    "protect_lead_rate": 0.35,   # last-2-min-of-regulation-while-leading TOI / total TOI
+    "road_home_ratio": 0.25,     # road vs home TOI per game (matchup-proof usage)
+}
+
+# --- Divergence board (Phase 4.3) -------------------------------------------
+DIVERGENCE_MIN_MINUTES = 500     # min 5v5 minutes to appear on the board
+DIVERGENCE_BOARD_SIZE = 15       # top + bottom N by |trust z - composite z|
+
 # --- Archetypes -------------------------------------------------------------
 # Minimum 5v5 minutes for a player-season to be archetyped (Phase 4.2).
 ARCHETYPE_MIN_5V5_MIN = 300

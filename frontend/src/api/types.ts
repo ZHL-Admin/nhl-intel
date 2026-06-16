@@ -719,3 +719,48 @@ export interface StreakCard {
   streak: number
   components: StreakComponent[]
 }
+
+// --- Reconciliation + divergence (Phase 4.3) ---
+export interface ClutchProfile {
+  n_shots: number
+  raw_ixg: number
+  clutch_ixg: number
+  clutch_delta: number
+  p_value: number
+  confidence: string
+}
+export interface GameScorePoint { game_date: string; game_score: number }
+export interface ConsistencyProfile {
+  games: number
+  mean_gs: number
+  sd_gs: number
+  iqr_gs: number
+  good_game_share: number
+  no_show_share: number
+  consistency_index: number
+  game_scores: GameScorePoint[]
+}
+export interface CoachTrustProfile {
+  trust_score: number
+  pk_share: number
+  protect_lead_rate: number
+  road_home_ratio: number
+}
+export interface PlayerReconciliation {
+  player_id: number
+  season: string
+  clutch?: ClutchProfile | null
+  consistency?: ConsistencyProfile | null
+  coach_trust?: CoachTrustProfile | null
+}
+export interface DivergenceBoardRow {
+  player_id: number
+  player_name?: string | null
+  position?: string | null
+  side: string
+  divergence: number
+  trust_z: number
+  composite_z: number
+  composite_total: number
+  explanation: string
+}

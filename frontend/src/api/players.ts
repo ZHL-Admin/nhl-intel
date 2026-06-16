@@ -10,6 +10,8 @@ import {
   PlayerVsOpponent,
   PlayerSituational,
   ArchetypeRankRow,
+  PlayerReconciliation,
+  DivergenceBoardRow,
 } from './types'
 
 /**
@@ -83,5 +85,21 @@ export async function getArchetypeRanking(
     `/players/archetypes/${encodeURIComponent(archetype)}`,
     { params: { limit, ...(season ? { season } : {}) } },
   )
+  return response.data
+}
+
+/** Eye-test reconciliation: clutch + consistency + coach trust (Phase 4.3). */
+export async function getPlayerReconciliation(playerId: number, season?: string): Promise<PlayerReconciliation> {
+  const response = await apiClient.get<PlayerReconciliation>(`/players/${playerId}/reconciliation`, {
+    params: season ? { season } : undefined,
+  })
+  return response.data
+}
+
+/** Divergence board: coach-trust vs isolated value, with explanations (Phase 4.3). */
+export async function getDivergenceBoard(season?: string): Promise<DivergenceBoardRow[]> {
+  const response = await apiClient.get<DivergenceBoardRow[]>('/players/divergence-board', {
+    params: season ? { season } : undefined,
+  })
   return response.data
 }

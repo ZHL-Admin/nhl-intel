@@ -205,3 +205,12 @@
 .players__legend { display: flex; flex-wrap: wrap; gap: var(--space-3,12px); margin-top: var(--space-3,12px); font-size: var(--font-size-xs,0.78rem); color: var(--color-text-secondary,#888); }
 .players__legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .players__swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* Divergence board (Phase 4.3) */
+.divergence { margin-top: var(--space-4,16px); }
+.divergence__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: var(--space-5,20px); margin-top: var(--space-3,12px); }
+.divergence__col-title { font-size: var(--font-size-base,1rem); margin: 0 0 var(--space-3,12px); }
+.divergence__card { border: 1px solid var(--color-border, rgba(127,127,127,0.2)); border-radius: var(--radius-md,10px); padding: var(--space-3,12px); margin-bottom: var(--space-3,12px); }
+.divergence__card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2,8px); }
+.divergence__score { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text-secondary,#888); }
+.divergence__explain { margin: var(--space-2,8px) 0 0; line-height: 1.45; font-size: var(--font-size-sm,0.9rem); }

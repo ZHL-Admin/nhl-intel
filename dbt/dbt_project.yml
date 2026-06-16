@@ -26,6 +26,17 @@ vars:
   # pregame power-rating strength share (nhl_models.team_ratings); 'interim_xgf' => the
   # Phase 2.3 season-to-date xGF% fallback (used before team_ratings exists).
   rating_source: power_rating
+  # Single-game "game score" weights (Phase 4.3), following the public game-score family
+  # (Dom Luszczyszyn). Individual production dominates; blocks/hits are small; the on-ice term
+  # nudges by even-strength xG share. mart_player_game_score consumes these.
+  gs_goal: 0.75
+  gs_primary_assist: 0.7
+  gs_secondary_assist: 0.55
+  gs_ixg: 0.75
+  gs_shot: 0.075
+  gs_block: 0.05
+  gs_hit: 0.05
+  gs_onice_xg: 1.0
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]

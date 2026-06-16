@@ -25,6 +25,11 @@ sources:
           - name: model_version
             description: xG model artifact version (e.g. xg_v1)
 
+      - name: win_probability
+        description: >
+          Server-side win probability + leverage per (game_id, elapsed_seconds) on a 10s grid
+          (Phase 2.4; models_ml/score_winprob.py). leverage = WP swing of a goal at that state.
+
       - name: team_ratings
         description: >
           Power ratings (Phase 3.1; models_ml/compute_ratings.py). One row per

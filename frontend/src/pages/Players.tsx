@@ -1,11 +1,52 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { PageLayout, ComponentStackBar, SkeletonLoader } from '../components/common'
+import { PageLayout, ComponentStackBar, SkeletonLoader, Tabs } from '../components/common'
 import type { StackSegment } from '../components/common'
-import { getArchetypeRanking } from '../api/players'
-import { ArchetypeRankRow } from '../api/types'
+import { getArchetypeRanking, getDivergenceBoard } from '../api/players'
+import { ArchetypeRankRow, DivergenceBoardRow } from '../api/types'
 import { ARCHETYPES, COMPOSITE_COMPONENTS } from '../config/metrics'
 import './Players.css'
+
+function DivergenceBoard() {
+  const [rows, setRows] = useState<DivergenceBoardRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    getDivergenceBoard().then((d) => active && setRows(d)).catch(() => active && setError('Could not load board.'))
+    return () => { active = false }
+  }, [])
+  if (error) return <p className="players__placeholder-text">{error}</p>
+  if (!rows) return <SkeletonLoader />
+  const over = rows.filter((r) => r.side === 'trusted_over_value')
+  const under = rows.filter((r) => r.side === 'value_over_trust')
+  const card = (r: DivergenceBoardRow) => (
+    <div key={r.player_id} className="divergence__card">
+      <div className="divergence__card-head">
+        <Link to={`/players/${r.player_id}`} className="players__name">{r.player_name ?? r.player_id}</Link>
+        <span className="divergence__score">{(r.divergence >= 0 ? '+' : '') + r.divergence.toFixed(1)}σ</span>
+      </div>
+      <p className="divergence__explain">{r.explanation}</p>
+    </div>
+  )
+  return (
+    <div className="divergence">
+      <p className="players__subtitle">
+        Where coaching deployment (trust) and isolated value (composite) most disagree, by
+        position-standardized z-scores. Explanations are generated from the underlying numbers.
+      </p>
+      <div className="divergence__cols">
+        <div>
+          <h3 className="divergence__col-title">Trusted beyond their value</h3>
+          {over.map(card)}
+        </div>
+        <div>
+          <h3 className="divergence__col-title">Value beyond their deployment</h3>
+          {under.map(card)}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function rowSegments(r: ArchetypeRankRow): StackSegment[] {
   const m = new Map(r.components.map((c) => [c.key, c.value]))
@@ -15,6 +56,7 @@ function rowSegments(r: ArchetypeRankRow): StackSegment[] {
 }
 
 function Players() {
+  const [view, setView] = useState<'archetype' | 'divergence'>('archetype')
   const [pos, setPos] = useState<'F' | 'D'>('F')
   const [archetype, setArchetype] = useState<string>(ARCHETYPES.F[0])
   const [rows, setRows] = useState<ArchetypeRankRow[] | null>(null)
@@ -47,13 +89,25 @@ function Players() {
       <div className="players">
         <div className="players__header">
           <h1 className="players__title">Players</h1>
+        </div>
+
+        <Tabs
+          options={[
+            { value: 'archetype', label: 'Rank by Archetype' },
+            { value: 'divergence', label: 'Divergence Board' },
+          ]}
+          value={view}
+          onChange={(v) => setView(v as 'archetype' | 'divergence')}
+        />
+
+        {view === 'divergence' && <DivergenceBoard />}
+
+        {view === 'archetype' && (
+        <section className="players__leaderboard">
           <p className="players__subtitle">
             Ranked within archetype by total value (goals above replacement). Each bar breaks
             the value into its components; the tick is the total, the line its uncertainty.
           </p>
-        </div>
-
-        <section className="players__leaderboard">
           <div className="players__controls">
             <div className="players__position-filter">
               {(['F', 'D'] as const).map((p) => (
@@ -112,6 +166,7 @@ function Players() {
             ))}
           </div>
         </section>
+        )}
       </div>
     </PageLayout>
   )

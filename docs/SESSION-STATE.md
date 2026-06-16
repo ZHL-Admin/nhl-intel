@@ -372,11 +372,36 @@ Olympic games to national team_ids — clean those the same way during Phase 4 i
     games (game_id type 09) attributed to national team_ids — filter to '01'/'02'/'03' like the
     team marts when convenient (low exposure: no UI path to a national-team player page).
 
+- **4.3 Reconciliation + divergence board (COMPLETE, validated).**
+  - **clutch**: dbt `int_event_leverage` (shots -> win_probability leverage; both bucketed to a
+    global 10s grid since WP grid is segment-offset; 2015+ only). `compute_clutch.py` ->
+    **nhl_models.player_clutch**: leverage-weighted ixG vs raw, permutation p (1000 shuffles).
+    p-dist ~uniform; top = Toffoli/Eriksson Ek/Matthews.
+  - **consistency**: dbt `mart_player_game_score` (game-score family, weights in dbt vars gs_*,
+    blocks from pbp). `compute_consistency.py` -> **nhl_models.player_consistency** (mean/sd/IQR,
+    good-game/no-show shares, consistency index = pctile of mean/sd within position).
+  - **coach trust**: `compute_coach_trust.py` -> **nhl_models.player_coach_trust** (z-scored
+    within position, weighted: PK share / protect-lead rate / road-home ratio;
+    config.COACH_TRUST_WEIGHTS). **DZ-faceoff & post-icing signals OMITTED** — zone_start_code
+    isn't team-relative (documented). Top trust = Glendening/Faksa/Stenlund (correct).
+  - **divergence**: `compute_divergence.py` -> **nhl_models.divergence_board** (trust_z -
+    composite_z within position, top/bottom 15, min 500 5v5 min). Deterministic explanations in
+    **insight_engine/templates/divergence.py** (Phase 6 reuses). Trusted>value: Lindgren/
+    Glendening/Goodrow; value>trust: MacKinnon/Q.Hughes/Panarin.
+  - Backend: GET /players/{id}/reconciliation + GET /players/divergence-board (registered
+    before /{player_id}). Frontend: PlayerProfile **Reconciliation section** (clutch panel w/
+    confidence phrase, **StripPlot** consistency viz [new components/visualizations], trust);
+    Players index **Divergence Board tab** (Tabs) w/ explanations. tsc+build green.
+  - DAG: score_winprob -> build_event_leverage -> compute_clutch; marts -> {consistency,
+    coach_trust}; {composite, coach_trust} -> divergence (weekly Monday). docs/methodology/
+    reconciliation.md. **NOTE bootstrap:** int_event_leverage excluded from run_dbt_pre_xg
+    (needs win_probability) and built after score_winprob.
+
 ## Next up (fresh-context work)
-1. **Phase 4.3** — reconciliation: leverage-weighted (clutch) impact, consistency profile,
-   coach-trust signals, divergence board. **4.4** — trajectories + career twins.
-   ComponentStackBar + PercentileBarList + StreakDoctorCard are built for reuse.
-   (4.1, 4.2 DONE — see above.)
+1. **Phase 4.4** — career trajectories + twins (age curves per archetype, nearest-neighbor
+   comparables, physical-aging overlay w/ burst-rate validation). Then Phase 5 (tools:
+   Lineup Lab, trade fit, matchup previews). (4.1, 4.2, 4.3 DONE — see above.)
+   ComponentStackBar + PercentileBarList + StreakDoctorCard + StripPlot built for reuse.
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
 3. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;

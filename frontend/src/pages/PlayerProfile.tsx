@@ -6,19 +6,22 @@ import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar } from '
 import type { StackSegment } from '../components/common'
 import { COMPOSITE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
+import StripPlot from '../components/visualizations/StripPlot'
 import {
   getPlayerDetail,
   getPlayerTrends,
   getPlayerShots,
   getPlayerVsOpponent,
-  getPlayerGamelog
+  getPlayerGamelog,
+  getPlayerReconciliation
 } from '../api/players'
 import {
   PlayerDetail,
   PlayerTrends,
   PlayerShots,
   PlayerVsOpponent,
-  PlayerGamelog
+  PlayerGamelog,
+  PlayerReconciliation
 } from '../api/types'
 import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
 import './PlayerProfile.css'
@@ -68,6 +71,7 @@ function PlayerProfile() {
 
   // Data states
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null)
+  const [reconciliation, setReconciliation] = useState<PlayerReconciliation | null>(null)
   const [playerTrends, setPlayerTrends] = useState<PlayerTrends | null>(null)
   const [playerShots, setPlayerShots] = useState<PlayerShots | null>(null)
   const [playerGamelog, setPlayerGamelog] = useState<PlayerGamelog | null>(null)
@@ -118,6 +122,17 @@ function PlayerProfile() {
     return () => {
       clearTeamPrimaryColor()
     }
+  }, [playerId])
+
+  // Fetch eye-test reconciliation (clutch + consistency + coach trust) — Phase 4.3
+  useEffect(() => {
+    if (!playerId) return
+    let active = true
+    setReconciliation(null)
+    getPlayerReconciliation(parseInt(playerId))
+      .then((d) => active && setReconciliation(d))
+      .catch(() => { /* reconciliation is optional (e.g. low-minute or pre-2015) */ })
+    return () => { active = false }
   }, [playerId])
 
   // Fetch player trends
@@ -418,6 +433,59 @@ function PlayerProfile() {
             )}
           </div>
         ) : null}
+
+        {/* Eye-test reconciliation (Phase 4.3) */}
+        {reconciliation && (reconciliation.clutch || reconciliation.consistency || reconciliation.coach_trust) && (
+          <div className="player-profile__section">
+            <h2 className="player-profile__section-title">Reconciliation</h2>
+            <div className="reconciliation">
+              {reconciliation.clutch && (
+                <div className="reconciliation__panel">
+                  <div className="reconciliation__panel-title">Clutch (leverage-weighted)</div>
+                  <div className="reconciliation__big">
+                    {(reconciliation.clutch.clutch_delta >= 0 ? '+' : '') + reconciliation.clutch.clutch_delta.toFixed(2)} xG
+                  </div>
+                  <p className="reconciliation__note">
+                    In the highest-leverage moments he produces {reconciliation.clutch.clutch_delta >= 0 ? 'more' : 'less'} than
+                    his overall rate — {reconciliation.clutch.confidence}.
+                  </p>
+                  <div className="reconciliation__sub">
+                    raw {reconciliation.clutch.raw_ixg.toFixed(1)} → weighted {reconciliation.clutch.clutch_ixg.toFixed(1)} xG
+                    · {reconciliation.clutch.n_shots} shots
+                  </div>
+                </div>
+              )}
+              {reconciliation.coach_trust && (
+                <div className="reconciliation__panel">
+                  <div className="reconciliation__panel-title">Coach trust (deployment)</div>
+                  <div className="reconciliation__big">
+                    {(reconciliation.coach_trust.trust_score >= 0 ? '+' : '') + reconciliation.coach_trust.trust_score.toFixed(2)}
+                  </div>
+                  <p className="reconciliation__note">Deployment trust vs position average (z-score).</p>
+                  <div className="reconciliation__sub">
+                    PK {(reconciliation.coach_trust.pk_share * 100).toFixed(0)}% of TOI ·
+                    road/home {reconciliation.coach_trust.road_home_ratio.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+            {reconciliation.consistency && (
+              <div className="reconciliation__consistency">
+                <div className="reconciliation__panel-title">
+                  Consistency · index {(reconciliation.consistency.consistency_index * 100).toFixed(0)}th pctile ·
+                  good games {(reconciliation.consistency.good_game_share * 100).toFixed(0)}% ·
+                  no-shows {(reconciliation.consistency.no_show_share * 100).toFixed(0)}%
+                </div>
+                <StripPlot
+                  values={reconciliation.consistency.game_scores.map((g) => g.game_score)}
+                  mean={reconciliation.consistency.mean_gs}
+                  color={teamColor}
+                />
+                <div className="reconciliation__sub">Each dot is one game's game score; the line is the season mean.</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Primary Trend Chart */}
         {!isGoalie && (
