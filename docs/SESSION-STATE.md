@@ -1,11 +1,68 @@
 # Session state — finalization plan progress
 
-Working branch: **`finalization`**.
-Last updated at the end of **Phase 3 (team products)** — power ratings, deserved standings,
-team identity + style map, Streak Doctor all shipped, validated, and committed (commits
-76f0c39, e845cb4, 54f1a07). Phases 0, 1, 2 complete before that. **Next: Phase 4 (player
-project).** Read the "PHASE 3" and "Next up" sections below first, then
-`nhl-intel-finalization-plan.md` for the Phase 4 prompts.
+Working branch: **`finalization`** (canonical handoff file; sometimes referred to as
+"SESSION-STATUS"). Last updated at the **end of Phase 4 (player project) — Phases 0-4 COMPLETE.
+Next: Phase 5 (signature tools).** Latest commits: 9e1326b (4.4), bb180d0/d6459ee (4.3),
+84ce8d0/4b5fccc (4.2), 106d880 (4.1). Read the **PHASE 5 KICKOFF** block immediately below,
+then the per-phase sections, then `nhl-intel-finalization-plan.md` for the Phase 5 prompts.
+
+---
+
+## ===== PHASE 5 KICKOFF — READ THIS FIRST (for the next agent) =====
+
+**Goal:** blueprint section 6 / plan Phase 5 — the signature tools:
+- **5.1 Line-fit model** (`models_ml/`): cold-start prediction of a hypothetical line's on-ice
+  results from members' individual profiles. dbt `int_line_seasons` (trios/pairs with >=30 min
+  5v5 shared, from int_shift_segments), LightGBM on xGF% + xGF/60 + xGA/60 heads, member
+  features as mean/min/max + pairwise (archetype cosine, handedness, burst spread). Must beat
+  two baselines (mean-of-members, TOI-weighted team avg) or don't ship. Chemistry blend
+  w_obs = min/(min+150). Explanations via `insight_engine/templates/line_fit.py`. Artifact
+  `models_ml/artifacts/linefit_v1`; `score_line(player_ids, season)` service.
+- **5.2 Lineup Lab UI**: POST /tools/line-fit, GET /players/search, GET /teams/{id}/lines;
+  /tools index + /tools/lineup-lab; shared **PlayerPicker** (components/common); embedded
+  **LineSwapWidget** on TeamProfile. Lazy-load Tools routes.
+- **5.3 Trade fit + matchup previews**: compute_team_needs.py -> team_needs; POST /tools/trade-fit;
+  GET /games/{id}/preview (FUT/PRE only); GameDetail Preview tab. Templates in
+  insight_engine/templates/{matchup,line_fit}.py.
+
+**Inputs Phase 5 consumes (all built, in `nhl_models` unless noted):**
+- `player_archetypes` (soft mix; F=12/D=12 names in config.ARCHETYPE_NAMES; LOCKED GMM at
+  models_ml/artifacts/archetypes_v1.joblib — load it, don't refit; non-deterministic otherwise).
+- `player_impact` (RAPM off/def/pp/pk + sd), `player_composite` (components + total + sd).
+- `team_ratings` (power), `mart_team_identity` + `style_map` (fingerprints), `team_ratings`
+  for top-8 reference in trade needs.
+- `int_shift_segments` x `int_segment_context` (5v5 stints; 2015-16+ only) for line-seasons.
+- Edge: `mart_edge_player_profile` (burst_rate_per60, oz_time — tracking era 2021+).
+- `models_ml/archetype_features.py` has the per-player feature builder if needed.
+
+**Patterns to reuse (don't reinvent):**
+- insight_engine/templates/ deterministic explanation tables (see divergence.py) — Phase 5
+  line-fit + matchup explanations follow this.
+- Frontend shared: ComponentStackBar, PercentileBarList, StreakDoctorCard, StripPlot, Tabs,
+  ChartPanel, MiniWorm. Backend: get_models_table_id() for nhl_models; routes that are 1-seg
+  under a prefix (e.g. /tools/x, /players/search) must register BEFORE param routes like
+  /{id} or they get coerced to the param type (422). PlayerProfile is section-based (no tabs).
+- Model jobs: argparse + --dry-run, write via models_ml/bq.write_df, weekly Monday-gate in DAG
+  via the `_mon` jinja helper in dags/nhl_daily.py.
+
+**Gotchas that bit this session (still live):**
+- `window` / `nulls` / `rows` are BQ reserved words (use window_kind etc.).
+- sklearn GMM is NOT reproducible here (threaded BLAS) — line-fit LightGBM is fine, but if any
+  clustering is added, persist the fitted model + run single-threaded.
+- Many marts include 2026 Olympic/intl games (game_id type '09') with national team_ids;
+  TEAM marts filter to '01'/'02'/'03', but **player marts still include them** — filter if a
+  Phase 5 surface enumerates players by team.
+- Env: `set -a && source .env && set +a && export GOOGLE_APPLICATION_CREDENTIALS=$PWD/secrets/
+  nhl-intel-sa.json`. dbt always `--target dev`. `dbt/profiles.yml` is git-tracked-but-local
+  (timeout_seconds=1800) — DO NOT commit it (the per-commit `git reset -q dbt/profiles.yml`).
+- Backend uvicorn smoke: test via python urllib with a connection-retry loop (the shell's curl
+  has been flaky in this environment); start server with run_in_background.
+
+**Open/optional items (none block Phase 5):** partner-odds de-vig (offseason-blocked); xG
+top-end recalibration (user ACCEPTED as-is, do not revisit); int_shift_segments 2010-15 rebuild
+(deferred); player-mart international-team filter (above).
+
+---
 
 ## Done & validated (committed)
 - **Phase 0** — proxy relabeling (`zone_entry_proxy_*`), model-layer conventions
