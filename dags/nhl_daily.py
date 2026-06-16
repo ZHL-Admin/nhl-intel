@@ -459,6 +459,18 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Isolated-impact RAPM (Phase 4.1): expensive (~1-2h with bootstrap), so refit weekly on
+    # Mondays. Needs shot_xg (score_xg) + segments; independent of the team marts.
+    train_rapm = BashOperator(
+        task_id="train_rapm",
+        bash_command=(
+            "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}"
+            "cd /opt/airflow && python -m models_ml.train_rapm"
+            "{% else %}echo 'RAPM: weekly cadence, not Monday — skipping'{% endif %}"
+        ),
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",

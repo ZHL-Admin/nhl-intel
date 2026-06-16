@@ -59,6 +59,12 @@ sources:
           (season, team_id, window_games) decomposing the last-N run into goal-scale
           components with a verdict, sustainability meter, and is_notable flag.
 
+      - name: player_impact
+        description: >
+          Isolated-impact RAPM (Phase 4.1; models_ml/train_rapm.py): one row per
+          (player_id, season_window) with off/def/pp/pk impact (xGF/60 units, higher =
+          better) and bootstrap SDs, for single seasons and a 3-season weighted window.
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw

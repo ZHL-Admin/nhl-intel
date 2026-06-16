@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -27,3 +27,9 @@ test:
 SEASON ?= 2025-26
 edge-refresh:
 	python -m scripts.refresh_edge --season $(SEASON)
+
+# Fit isolated-impact RAPM (Phase 4.1): 3-season window + recent single seasons, with
+# bootstrap SDs, into nhl_models.player_impact. Long-running (~1-2h with bootstrap).
+rapm:
+	python -m models_ml.train_rapm
+
