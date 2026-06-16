@@ -64,7 +64,19 @@ STREAK_DEFAULT_WINDOW = 10
 STREAK_NOTABLE_Z = 1.5            # |points-pace z| threshold for a notable run
 STREAK_NOTABLE_STREAK = 4         # consecutive W or L threshold
 
+# --- Composite (Phase 4.2) --------------------------------------------------
+# Player finishing (goals - ixG) regresses toward 0 by individual shot volume. Skater shot
+# samples are ~100-300/season, so the team-level FINISHING_SHRINKAGE_K (4000, tuned on team
+# shot volumes) would erase all player signal; shooting talent stabilises around ~350 shots
+# (public-research consensus), so we use a player-appropriate k here.
+PLAYER_FINISHING_SHRINKAGE_K = 350   # individual shots
+# Value of a drawn penalty in goals: a power play is worth ~0.2 expected goals (league PP
+# conversion). Penalty differential = (drawn - taken) * this.
+PP_GOAL_VALUE = 0.2
+
 # --- Archetypes -------------------------------------------------------------
+# Minimum 5v5 minutes for a player-season to be archetyped (Phase 4.2).
+ARCHETYPE_MIN_5V5_MIN = 300
 # Cluster -> human label, filled in by hand from the Phase 4.2 labeling report
-# (the one intentional human-in-the-loop step). Empty until then.
+# (the one intentional human-in-the-loop step). Empty until then. Keyed "F0".."Dn".
 ARCHETYPE_NAMES: dict[str, str] = {}

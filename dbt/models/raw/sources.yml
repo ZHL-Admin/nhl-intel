@@ -65,6 +65,18 @@ sources:
           (player_id, season_window) with off/def/pp/pk impact (xGF/60 units, higher =
           better) and bootstrap SDs, for single seasons and a 3-season weighted window.
 
+      - name: player_composite
+        description: >
+          Composite stack (Phase 4.2; models_ml/compute_composite.py): per
+          (player_id, season_window), value components on a goals scale (EV off/def, PP,
+          PK, finishing, penalty diff, goalie GSAx) + total + uncertainty.
+
+      - name: player_archetypes
+        description: >
+          Player archetypes (Phase 4.2; models_ml/fit_archetypes.py): per (player_id,
+          season) soft archetype memberships from per-position Gaussian mixtures. Names are
+          hand-assigned (config.ARCHETYPE_NAMES) from the labeling report.
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw
