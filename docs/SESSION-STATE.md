@@ -1,66 +1,92 @@
 # Session state — finalization plan progress
 
 Working branch: **`finalization`** (canonical handoff file; sometimes referred to as
-"SESSION-STATUS"). Last updated at the **end of Phase 4 (player project) — Phases 0-4 COMPLETE.
-Next: Phase 5 (signature tools).** Latest commits: 9e1326b (4.4), bb180d0/d6459ee (4.3),
-84ce8d0/4b5fccc (4.2), 106d880 (4.1). Read the **PHASE 5 KICKOFF** block immediately below,
-then the per-phase sections, then `nhl-intel-finalization-plan.md` for the Phase 5 prompts.
+"SESSION-STATUS"). Last updated at the **end of Phase 5 (signature tools) — Phases 0-5 COMPLETE.
+Next: Phase 6 (insight engine, education layer, site completion).** Latest commits: 956d013 (5.3),
+766cdcb (5.2), 9c03134 (5.1), 9e1326b (4.4). Read the **PHASE 6 KICKOFF** block immediately below,
+then the per-phase sections, then `nhl-intel-finalization-plan.md` for the Phase 6 prompts.
 
 ---
 
-## ===== PHASE 5 KICKOFF — READ THIS FIRST (for the next agent) =====
+## ===== PHASE 6 KICKOFF — READ THIS FIRST (for the next agent) =====
 
-**Goal:** blueprint section 6 / plan Phase 5 — the signature tools:
-- **5.1 Line-fit model** (`models_ml/`): cold-start prediction of a hypothetical line's on-ice
-  results from members' individual profiles. dbt `int_line_seasons` (trios/pairs with >=30 min
-  5v5 shared, from int_shift_segments), LightGBM on xGF% + xGF/60 + xGA/60 heads, member
-  features as mean/min/max + pairwise (archetype cosine, handedness, burst spread). Must beat
-  two baselines (mean-of-members, TOI-weighted team avg) or don't ship. Chemistry blend
-  w_obs = min/(min+150). Explanations via `insight_engine/templates/line_fit.py`. Artifact
-  `models_ml/artifacts/linefit_v1`; `score_line(player_ids, season)` service.
-- **5.2 Lineup Lab UI**: POST /tools/line-fit, GET /players/search, GET /teams/{id}/lines;
-  /tools index + /tools/lineup-lab; shared **PlayerPicker** (components/common); embedded
-  **LineSwapWidget** on TeamProfile. Lazy-load Tools routes.
-- **5.3 Trade fit + matchup previews**: compute_team_needs.py -> team_needs; POST /tools/trade-fit;
-  GET /games/{id}/preview (FUT/PRE only); GameDetail Preview tab. Templates in
-  insight_engine/templates/{matchup,line_fit}.py.
+**Goal:** blueprint sections 7/8/9 / plan Phase 6 — the deterministic insight engine, education
+layer, annotated moments, and remaining site architecture (Home, Learn, finished game tabs):
+- **6.1 Insight engine core** (`insight_engine/`): registry.py (Insight classes: detector ->
+  candidate facts, surprise 0-100, stakes 0-100, render -> {headline, body, link, numbers_used}).
+  detectors/ one module per family (goaltending_theft, xg_result_divergence, special_teams_swing,
+  comeback_leverage, streak_doctor_trigger, divergence_board_mover, breakout_player,
+  chemistry_discovery, conversion_diagnosis, milestone_watch, cold_streak_physical — note the
+  last is GATED: Phase 4.4 burst-decline validation FAILED, so do NOT ship that detector unless
+  re-validated). score = 0.6*surprise + 0.4*stakes; per-surface caps. **CONSISTENCY CHECKER**
+  (mandatory): render() declares numbers_used; checker verifies each vs the API value the target
+  page renders, drops failures. Nightly `models_ml/run_insights.py` -> nhl_models.insights.
+  Backend GET /insights/{feed,game/{id},team/{id}}.
+- **6.2 Home page + game insight integration**: `/` becomes Home (move GamesExplorer to /games,
+  update NavBar + GameCard links); insight feed (InsightCard), slate strip, style-map teaser,
+  active Streak Doctor cards, divergence teaser. GameDetail insight banner; TeamProfile storylines.
+- **6.3 Education layer**: frontend/src/config/glossary.ts (concept keys -> {term, shortDef,
+  longDef, methodologyHref}; seed from nhl_raw.raw_glossary where it exists, in-house for our
+  metrics). Shared ConceptTip wraps stat labels site-wide (shows the on-screen number as the
+  worked example). /learn route: concept index + methodology library (render docs/methodology/*.md
+  via Vite import.meta.glob + react-markdown/marked — the one new FE dep). "Why this matters"
+  threads: insight_engine/templates/concept_links.py maps template_id -> concept key.
+- **6.4 Annotated moments**: top 2-3 plays per game by (xg x leverage), goals always eligible.
+  RinkDiagram shared SVG (components/visualizations; refactor ShotMap/ShotMapKDE to consume a new
+  frontend/src/config/rink.ts geometry module). Narration from xG decomposition
+  (insight_engine/templates/moments.py). **GOAL moments render REAL tracking** from
+  int_goal_release_frame (Phase 1.4) + optional animation stepping stg_ppt_tracking_frames; gate
+  on tracking-row presence; non-goal moments fall back to event-inferred + must NOT claim tracking.
+  Backend GET /games/{id}/moments. GameDetail Analytics tab Key Moments section.
 
-**Inputs Phase 5 consumes (all built, in `nhl_models` unless noted):**
-- `player_archetypes` (soft mix; F=12/D=12 names in config.ARCHETYPE_NAMES; LOCKED GMM at
-  models_ml/artifacts/archetypes_v1.joblib — load it, don't refit; non-deterministic otherwise).
-- `player_impact` (RAPM off/def/pp/pk + sd), `player_composite` (components + total + sd).
-- `team_ratings` (power), `mart_team_identity` + `style_map` (fingerprints), `team_ratings`
-  for top-8 reference in trade needs.
-- `int_shift_segments` x `int_segment_context` (5v5 stints; 2015-16+ only) for line-seasons.
-- Edge: `mart_edge_player_profile` (burst_rate_per60, oz_time — tracking era 2021+).
-- `models_ml/archetype_features.py` has the per-player feature builder if needed.
+**Inputs Phase 6 consumes (all built):** every nhl_models table (shot_xg, win_probability,
+team_ratings, deserved_standings, style_map, streak_cards, player_impact, player_composite,
+player_archetypes, player_clutch, player_consistency, player_coach_trust, divergence_board,
+aging_curves, player_twins, player_physical, **insights** is new, **team_needs** Phase 5.3,
+**linefit** artifact for chemistry_discovery). marts + int_shot_sequence (trigger events for
+moments) + int_goal_release_frame + stg_ppt_tracking_frames + stg_game_context (highlight links).
 
 **Patterns to reuse (don't reinvent):**
-- insight_engine/templates/ deterministic explanation tables (see divergence.py) — Phase 5
-  line-fit + matchup explanations follow this.
-- Frontend shared: ComponentStackBar, PercentileBarList, StreakDoctorCard, StripPlot, Tabs,
-  ChartPanel, MiniWorm. Backend: get_models_table_id() for nhl_models; routes that are 1-seg
-  under a prefix (e.g. /tools/x, /players/search) must register BEFORE param routes like
-  /{id} or they get coerced to the param type (422). PlayerProfile is section-based (no tabs).
+- **insight_engine/templates/** deterministic explanation modules now established: divergence.py,
+  line_fit.py, team_fit.py, matchup.py. Phase 6 moments/concept_links follow the same shape
+  (pure functions, every sentence references a number in the payload — the consistency rule).
+- Frontend shared (components/common): ComponentStackBar, PercentileBarList, StreakDoctorCard,
+  StripPlot, Tabs, TabNav, ChartPanel, MiniWorm, **PlayerPicker, LineProjection, LineSwapWidget,
+  MatchupPreviewCard** (new in Phase 5). Lazy-load heavy/new routes via React.lazy + Suspense
+  (App.tsx already does this for /tools).
+- Backend: get_models_table_id() for nhl_models, get_full_table_id() routes mart_/stg_/int_ by
+  prefix (**watch this — mart_goalie_season is a MART not a model table; that bit 5.3**). 1-seg
+  routes under a prefix (/tools/x, /players/search) MUST register BEFORE /{id} param routes.
+  Heavy sync model calls in async endpoints -> `fastapi.concurrency.run_in_threadpool`. The
+  backend reaches the model layer by inserting the repo root on sys.path (see services/tools.py).
 - Model jobs: argparse + --dry-run, write via models_ml/bq.write_df, weekly Monday-gate in DAG
-  via the `_mon` jinja helper in dags/nhl_daily.py.
+  via the `_mon` jinja helper. Backend imports models_ml.score_line / score_team_fit as services.
 
 **Gotchas that bit this session (still live):**
 - `window` / `nulls` / `rows` are BQ reserved words (use window_kind etc.).
-- sklearn GMM is NOT reproducible here (threaded BLAS) — line-fit LightGBM is fine, but if any
-  clustering is added, persist the fitted model + run single-threaded.
-- Many marts include 2026 Olympic/intl games (game_id type '09') with national team_ids;
-  TEAM marts filter to '01'/'02'/'03', but **player marts still include them** — filter if a
-  Phase 5 surface enumerates players by team.
+- **International-team pollution is REAL and bit Phase 5**: stg_rosters/player marts include 2026
+  Olympic/4-Nations games whose team_id is a NATIONAL team (e.g. Kyle Connor's "latest 2024-25
+  game" was USA, team_id 67). ALWAYS filter `substr(cast(game_id as string),5,2) in ('01','02',
+  '03')` when picking a player's current team or enumerating players by team. TEAM marts already
+  filter; player-side lookups do NOT.
+- sklearn GMM is NOT reproducible here (threaded BLAS); line-fit/team-needs use deterministic
+  LightGBM/cosine, fine. The LOCKED archetype GMM stays at artifacts/archetypes_v1.joblib.
+- Artifacts dir is gitignored except .gitkeep — **force-add new model artifacts** (`git add -f
+  models_ml/artifacts/linefit_v1.joblib`) like archetypes_v1.joblib, or the backend can't load them.
+- pydantic v2 warns on `model_*` field names (protected namespace) — harmless, pre-existing.
 - Env: `set -a && source .env && set +a && export GOOGLE_APPLICATION_CREDENTIALS=$PWD/secrets/
   nhl-intel-sa.json`. dbt always `--target dev`. `dbt/profiles.yml` is git-tracked-but-local
   (timeout_seconds=1800) — DO NOT commit it (the per-commit `git reset -q dbt/profiles.yml`).
+- Working directory PERSISTS across Bash calls in this harness — a stray `cd` carries over; use
+  absolute paths or re-`cd` to repo root.
 - Backend uvicorn smoke: test via python urllib with a connection-retry loop (the shell's curl
-  has been flaky in this environment); start server with run_in_background.
+  has been flaky); start server with run_in_background. Python stdout to a file is block-buffered
+  — pass `python -u` when watching a long job's prints.
 
-**Open/optional items (none block Phase 5):** partner-odds de-vig (offseason-blocked); xG
+**Open/optional items (none block Phase 6):** partner-odds de-vig (offseason-blocked); xG
 top-end recalibration (user ACCEPTED as-is, do not revisit); int_shift_segments 2010-15 rebuild
-(deferred); player-mart international-team filter (above).
+(deferred); incremental refactor of the segment chain (deferred); player-mart international-team
+filter (cosmetic; the Phase 5 surfaces that needed it now filter at query time).
 
 ---
 
@@ -485,10 +511,68 @@ Olympic games to national team_ids — clean those the same way during Phase 4 i
 ## aging_curves, player_twins, player_physical. New ingest: player bio. New shared FE:
 ## ComponentStackBar, PercentileBarList, StreakDoctorCard, StripPlot.
 
+## PHASE 5 — signature tools (COMPLETE, validated)
+- **5.1 Line-fit model (COMPLETE, validated; commit 9c03134).**
+  - dbt `int_line_seasons` (16,119 rows): every forward trio ('F3') / defense pair ('D2') sharing
+    >= var('line_min_5v5_minutes')=30 of 5v5 ice in a season (2015-16+), from int_shift_segments x
+    int_segment_context. A segment belongs to a line when exactly those skaters are the team's
+    forwards(3)/D(2). Targets: on-ice xGF% / xGF60 / xGA60 (xGF = owning team's xG over its
+    segments via int_on_ice_events x shot_xg; xGA = opponent's) + for-shot seq-type mix.
+    reg+playoff only. dbt PASS=6.
+  - `models_ml/linefit_features.py` (shared by train + score): per-(player,season) member features
+    reuse archetype_features.build(min_5v5=1) + finishing(goals-ixg) + 24-d archetype-mix vector +
+    handedness + per-season TEAM (filtered to NHL game types — intl pollution) + headshot.
+    aggregate_line -> mean/min/max of scalar feats + pairwise (archetype cosine, shot-loc dist,
+    handedness balance, burst spread, oz-tilt mean).
+  - `models_ml/train_linefit.py`: LightGBM 3 heads, GroupKFold by season, minutes-weighted.
+    **Beats both FAIR baselines** at xGF% MAE 0.0471 vs mean-of-members-LEAVE-THIS-LINE-OUT 0.0527
+    and team-season avg 0.0485 (R2 +0.24/+0.36/+0.22). **KEY:** the naive "mean of members' on-ice
+    xGF%" baseline LEAKS the target (a high-min line dominates its members' on-ice numbers) — the
+    honest baseline subtracts the line's own xgf/xga from each member first; only then does the
+    model win. Artifact `models_ml/artifacts/linefit_v1.joblib` (FORCE-COMMITTED, gitignored dir).
+  - Chemistry blend w_obs=min/(min+150) (config.LINEFIT_OBS_PRIOR_MINUTES). Explanations
+    `insight_engine/templates/line_fit.py` (top pred_contrib per concept -> reasons + 1 risk;
+    LIMITATIONS_FOOTER verbatim). `models_ml/score_line.py(player_ids, season)` handles trio/pair/
+    5-unit (splits 3F+2D), cross-team "deeper extrapolation" + rookie interval widening, grade A-F.
+  - Backend POST /tools/line-fit, GET /players/search (before /{id}), GET /teams/{id}/lines
+    (current lines over last 10 games, each projected). DAG `train_linefit` weekly after
+    [write_archetypes, train_rapm]; Makefile `linefit`. docs/methodology/lineup-lab.md (generated).
+- **5.2 Lineup Lab UI + swap widget (COMPLETE; commit 766cdcb).** Shared **PlayerPicker**
+  (debounced /players/search, keyboard nav, headshot+team+archetype chip), **LineProjection**
+  (grade badge, xGF% confidence band, reasons/risk, observed-blend note, extrapolation/rookie
+  labels, depth-3 member table, limitations footer), **LineSwapWidget** (components/common).
+  /tools index + /tools/lineup-lab (lazy-loaded via React.lazy/Suspense in App.tsx). LineSwapWidget
+  embedded on TeamProfile **Lines tab**. NavBar Tools link. tsc + build green.
+- **5.3 Trade fit + matchup previews (COMPLETE, validated; commit 956d013).**
+  - `models_ml/compute_team_needs.py` -> **nhl_models.team_needs** (long format: team_id, season,
+    need_type archetype|component, key, label, team_value, reference_value, gap=ref-team). Team
+    archetype mix = TOI-weighted player mixes; component totals = summed composite; reference =
+    avg of top-8 teams by power rating (config.TEAM_NEEDS_TOP_N). `models_ml/score_team_fit.py`:
+    fit = 100*(0.5*cos(player_arch, need_arch+) + 0.5*cos(player_comp+, need_comp+)); reasons in
+    `insight_engine/templates/team_fit.py`. Validated: McDavid fits NJD (51.9, needs EV offense)
+    over NYR; reasons reference real gap numbers.
+  - Backend POST /tools/trade-fit; frontend /tools/trade-fit (PlayerPicker + style-map team
+    selector, fit score, reasons, need profile via PercentileBarList, archetype chips).
+  - Matchup previews: backend GET /games/{id}/preview (FUT/PRE only; 400 for played) composes
+    power ratings, starter goalie last-10 GSAx (mart_goalie_season — a MART), identity-fingerprint
+    style clash (`insight_engine/templates/matchup.py`), season series (stg_game_context), notable
+    streaks (streak_cards), pregame WP from the power-rating diff (config.PREVIEW_* logistic).
+    Frontend **MatchupPreviewCard** (components/common) on GameDetail's unplayed-game view. DAG
+    `compute_team_needs` weekly; Makefile `team-needs`.
+
+## PHASE 5 — SIGNATURE TOOLS COMPLETE (5.1 line-fit, 5.2 Lineup Lab UI + swap widget, 5.3 trade
+## fit + matchup previews). nhl_models: int_line_seasons (staging), team_needs. Artifact:
+## linefit_v1.joblib. New templates: line_fit, team_fit, matchup. New endpoints: /tools/line-fit,
+## /tools/trade-fit, /players/search, /teams/{id}/lines, /games/{id}/preview. New shared FE:
+## PlayerPicker, LineProjection, LineSwapWidget, MatchupPreviewCard.
+
 ## Next up (fresh-context work)
-1. **Phase 5** — signature tools (blueprint 6): 5.1 Lineup Lab line-fit model, 5.2 Lineup Lab UI
-   + embedded swap widget, 5.3 trade fit + matchup previews. Needs archetypes (4.2) + impact
-   (4.1) + identity/ratings (3). insight_engine/templates/ pattern established (divergence.py).
+1. **Phase 6** — insight engine + education + site completion (blueprint 7/8/9): 6.1 deterministic
+   insight engine (registry/detectors/consistency-checker -> nhl_models.insights), 6.2 Home page +
+   game insight banners, 6.3 education layer (concept cards, /learn, methodology library), 6.4
+   annotated moments (RinkDiagram + real ppt tracking for goals). insight_engine/templates/ pattern
+   established (divergence, line_fit, team_fit, matchup). NOTE the cold_streak_physical detector is
+   GATED OFF — Phase 4.4 burst-decline validation failed.
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
 3. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;
