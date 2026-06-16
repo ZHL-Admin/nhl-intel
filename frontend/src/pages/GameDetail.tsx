@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle } from '../components/common'
+import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle, MatchupPreviewCard } from '../components/common'
 import Badge from '../components/common/Badge'
 import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
@@ -208,6 +208,10 @@ function GameDetail() {
               home: homeTeamColor
             }}
           />
+
+          <div style={{ margin: 'var(--space-4) 0' }}>
+            <MatchupPreviewCard gameId={gameDetail.game_id} />
+          </div>
 
           <PreviewModeContent
             gameDetail={gameDetail}

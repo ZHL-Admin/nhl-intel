@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { PlayerSearchResult, LineFitProjection, TeamLines } from './types'
+import { PlayerSearchResult, LineFitProjection, TeamLines, TradeFitResult } from './types'
 
 /** Current-roster players matching `q` for the PlayerPicker (Phase 5.2). */
 export async function searchPlayers(q: string, limit = 12, season?: string): Promise<PlayerSearchResult[]> {
@@ -20,5 +20,11 @@ export async function getTeamLines(teamId: number, season?: string): Promise<Tea
   const response = await apiClient.get<TeamLines>(`/teams/${teamId}/lines`, {
     params: season ? { season } : undefined,
   })
+  return response.data
+}
+
+/** Score how well a player addresses a team's needs (Phase 5.3). */
+export async function tradeFit(player_id: number, team_id: number, season?: string): Promise<TradeFitResult> {
+  const response = await apiClient.post<TradeFitResult>('/tools/trade-fit', { player_id, team_id, season })
   return response.data
 }

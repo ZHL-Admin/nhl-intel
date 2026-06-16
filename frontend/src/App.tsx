@@ -12,6 +12,7 @@ import Rankings from './pages/Rankings'
 // Tools routes are lazy-loaded (Phase 5.2): they pull in the line-fit UI only when visited.
 const Tools = lazy(() => import('./pages/Tools'))
 const LineupLab = lazy(() => import('./pages/LineupLab'))
+const TradeFit = lazy(() => import('./pages/TradeFit'))
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/players/:playerId" element={<PlayerProfile />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/tools/lineup-lab" element={<LineupLab />} />
+            <Route path="/tools/trade-fit" element={<TradeFit />} />
           </Routes>
         </Suspense>
       </Router>

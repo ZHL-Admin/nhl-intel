@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit team-needs
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -37,4 +37,9 @@ rapm:
 # from member profiles. Reads int_line_seasons + archetypes + RAPM; writes artifacts/linefit_v1.
 linefit:
 	python -m models_ml.train_linefit
+
+# Compute per-team need profiles (Phase 5.3) for the trade-fit tool: archetype + component gaps
+# vs the top-8 teams by power rating. Writes nhl_models.team_needs.
+team-needs:
+	python -m models_ml.compute_team_needs
 

@@ -848,3 +848,47 @@ export interface TeamLines {
   forward_lines: TeamLine[]
   defense_pairs: TeamLine[]
 }
+
+// --- Phase 5.3: trade fit + matchup previews ---
+export interface NeedComponent {
+  key: string
+  label: string
+  gap: number
+  team_value: number
+  reference_value: number
+}
+export interface TeamNeedProfile {
+  team_id: number
+  season: string
+  archetype_needs: NeedComponent[]
+  component_needs: NeedComponent[]
+}
+export interface ArchetypeWeightLite { archetype: string; weight: number }
+export interface TradeFitResult {
+  player_id: number
+  player_name?: string | null
+  team_id: number
+  season: string
+  fit_score: number
+  reasons: string[]
+  player_archetypes: ArchetypeWeightLite[]
+  need_profile?: TeamNeedProfile | null
+}
+export interface MatchupPreviewTeam {
+  team_id: number
+  team_abbrev?: string | null
+  power_rating?: number | null
+  goalie_name?: string | null
+  goalie_last10_gsax?: number | null
+  fingerprint_top: string[]
+}
+export interface MatchupPreview {
+  game_id: number
+  game_state: string
+  home: MatchupPreviewTeam
+  away: MatchupPreviewTeam
+  home_pregame_wp?: number | null
+  style_clash: string[]
+  season_series?: string | null
+  notable_streaks: string[]
+}

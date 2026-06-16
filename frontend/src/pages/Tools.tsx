@@ -2,7 +2,7 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users } from 'lucide-react'
+import { Users, ArrowLeftRight } from 'lucide-react'
 import { PageLayout } from '../components/common'
 import './Tools.css'
 
@@ -12,6 +12,12 @@ const TOOLS = [
     icon: Users,
     title: 'Lineup Lab',
     blurb: 'Project any forward trio or defense pair from its members’ measured roles and skills — even players who have never shared the ice.',
+  },
+  {
+    to: '/tools/trade-fit',
+    icon: ArrowLeftRight,
+    title: 'Trade Fit',
+    blurb: 'Score how well a player addresses a team’s biggest archetype and component gaps versus the league’s top teams.',
   },
 ]
 

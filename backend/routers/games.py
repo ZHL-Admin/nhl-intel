@@ -11,7 +11,7 @@ from models.schemas import (
     GameDate, Game, GameDetail, GamePlayerStats, TeamGameStats, PlayerGameStats,
     GameShots, ShotAttempt, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat,
     SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext,
-    WinProbSeries, WinProbPoint, WinProbGoalSwing
+    WinProbSeries, WinProbPoint, WinProbGoalSwing, MatchupPreview
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -966,3 +966,23 @@ async def get_skater_impact(game_id: int) -> List[SkaterImpact]:
             ihdcf=int(r.get('ihdcf') or 0),
         ))
     return out
+
+
+@router.get("/{game_id}/preview", response_model=MatchupPreview)
+@cache(ttl=900)
+async def get_game_preview(game_id: int) -> MatchupPreview:
+    """Pregame matchup preview for an unplayed (FUT/PRE) game (Phase 5.3).
+
+    Composed entirely from existing tables: power ratings, identity fingerprints (style clash),
+    starter goalie last-10 GSAx, season series, notable streaks, and a pregame win probability
+    derived from the power ratings.
+    """
+    from fastapi.concurrency import run_in_threadpool
+    from services import tools as tool_svc
+    try:
+        payload = await run_in_threadpool(tool_svc.matchup_preview, game_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="game not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return MatchupPreview(**payload)

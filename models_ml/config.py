@@ -112,6 +112,13 @@ LINEFIT_ARTIFACT = "linefit_v1"
 # A team's need profile is measured against the average of the top-N teams by power rating.
 TEAM_NEEDS_TOP_N = 8
 
+# --- Matchup preview pregame WP (Phase 5.3) ---------------------------------
+# A scheduled game has no segments, so its pregame home win probability is derived from the power
+# ratings (which are on a goals/game scale, the same prior the WP model consumes): expected home
+# goal differential = home_rating - away_rating + home-ice edge, mapped through a logistic.
+PREVIEW_HOME_ICE_GOALS = 0.15   # pregame home-ice edge in expected goal differential
+PREVIEW_WP_SCALE = 0.9          # logistic scale converting expected goal diff -> home win prob
+
 # --- Archetypes -------------------------------------------------------------
 # Minimum 5v5 minutes for a player-season to be archetyped (Phase 4.2).
 ARCHETYPE_MIN_5V5_MIN = 300

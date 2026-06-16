@@ -2,7 +2,7 @@
  * Game API endpoints.
  */
 import { apiClient } from './client'
-import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext, WinProbSeries } from './types'
+import { GameDate, Game, GameDetail, GamePlayerStats, GameShots, XGWormPoint, GoalDetail, PressurePoint, TeamComparisonStats, GoaltenderStat, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext, WinProbSeries, MatchupPreview } from './types'
 
 /**
  * Fetch list of dates on which games occurred or are scheduled.
@@ -169,4 +169,10 @@ export async function getGameContext(gameId: number): Promise<GameContext | null
   } catch {
     return null
   }
+}
+
+/** Pregame matchup preview for an unplayed (FUT/PRE) game (Phase 5.3). */
+export async function getGamePreview(gameId: number | string): Promise<MatchupPreview> {
+  const response = await apiClient.get<MatchupPreview>(`/games/${gameId}/preview`)
+  return response.data
 }
