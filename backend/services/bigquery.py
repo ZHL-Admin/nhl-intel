@@ -736,21 +736,19 @@ class BigQueryService:
         Returns:
             List with single zone deployment record.
         """
+        # mart_player_zone_deployment is per-game; aggregate to a season row.
         sql = f"""
         SELECT
             player_id,
             season,
-            team_id,
-            offensive_zone_starts,
-            neutral_zone_starts,
-            defensive_zone_starts,
-            total_zone_starts,
-            ozs_pct,
-            nzs_pct,
-            dzs_pct
+            ANY_VALUE(team_id) AS team_id,
+            AVG(ozs_pct) AS ozs_pct,
+            AVG(nzs_pct) AS nzs_pct,
+            AVG(dzs_pct) AS dzs_pct
         FROM {self.get_full_table_id('mart_player_zone_deployment')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+        GROUP BY player_id, season
         """
 
         return self.query(sql)
@@ -765,20 +763,23 @@ class BigQueryService:
         Returns:
             List with single shooting luck record.
         """
+        # mart_player_shooting_luck is per-game; aggregate over the season (volume-weighted).
         sql = f"""
         SELECT
             player_id,
             season,
-            team_id,
-            total_shots,
-            total_goals,
-            total_ixg,
-            actual_shooting_pct,
-            expected_shooting_pct,
-            shooting_luck_delta
+            ANY_VALUE(team_id) AS team_id,
+            SUM(individual_shot_attempts) AS total_shots,
+            SUM(individual_goals) AS total_goals,
+            SUM(ixg) AS total_ixg,
+            SAFE_DIVIDE(SUM(individual_goals), SUM(individual_shot_attempts)) AS actual_shooting_pct,
+            SAFE_DIVIDE(SUM(ixg), SUM(individual_shot_attempts)) AS expected_shooting_pct,
+            SAFE_DIVIDE(SUM(individual_goals), SUM(individual_shot_attempts))
+                - SAFE_DIVIDE(SUM(ixg), SUM(individual_shot_attempts)) AS shooting_luck_delta
         FROM {self.get_full_table_id('mart_player_shooting_luck')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+        GROUP BY player_id, season
         """
 
         return self.query(sql)
@@ -793,20 +794,21 @@ class BigQueryService:
         Returns:
             List with single relative performance record.
         """
+        # mart_player_relative is per-game and xG-based (no Corsi); aggregate over the season.
+        # relative_cf_pct is unavailable in the current mart -> null.
         sql = f"""
         SELECT
             player_id,
             season,
-            team_id,
-            player_cf_pct,
-            team_cf_pct,
-            relative_cf_pct,
-            player_xgf_pct,
-            team_xgf_pct,
-            relative_xgf_pct
+            ANY_VALUE(team_id) AS team_id,
+            CAST(NULL AS FLOAT64) AS relative_cf_pct,
+            AVG(on_ice_xgf_pct) AS player_xgf_pct,
+            AVG(team_avg_on_ice_xgf_pct) AS team_xgf_pct,
+            AVG(on_ice_xgf_pct_rel) AS relative_xgf_pct
         FROM {self.get_full_table_id('mart_player_relative')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+        GROUP BY player_id, season
         """
 
         return self.query(sql)

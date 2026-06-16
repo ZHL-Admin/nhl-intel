@@ -5,14 +5,48 @@ Provides endpoints for player details, trends, gamelog, shots, and vs-opponent s
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 
+import json
+
+from google.cloud import bigquery
+
 from models.schemas import (
     PlayerDetail, PlayerTrends, PlayerTrendPoint, PlayerGamelog, GamelogEntry,
-    PlayerShots, ShotLocation, PlayerVsOpponent, PlayerSituational, EdgePlayerProfile
+    PlayerShots, ShotLocation, PlayerVsOpponent, PlayerSituational, EdgePlayerProfile,
+    CompositeComponent, ArchetypeWeight, ArchetypeRankRow, COMPOSITE_LABELS,
 )
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+def _components_from_row(r: dict) -> List[CompositeComponent]:
+    """Build the composite stack from a player_composite row (components always present)."""
+    return [CompositeComponent(key=k, label=lbl, value=float(r.get(k) or 0.0))
+            for k, lbl in COMPOSITE_LABELS]
+
+
+def _archetype_mix(player_id: int, season: str) -> tuple[List[ArchetypeWeight], Optional[str]]:
+    rows = bq_service.query(f"""
+        SELECT archetypes, primary_archetype
+        FROM {bq_service.get_models_table_id('player_archetypes')}
+        WHERE player_id = {player_id} AND season = '{season}'
+        LIMIT 1
+    """)
+    if not rows:
+        return [], None
+    mix = [ArchetypeWeight(archetype=a["archetype"], weight=a["weight"])
+           for a in json.loads(rows[0]["archetypes"])]
+    return mix, rows[0]["primary_archetype"]
+
+
+def _composite(player_id: int, season: str) -> Optional[dict]:
+    rows = bq_service.query(f"""
+        SELECT * FROM {bq_service.get_models_table_id('player_composite')}
+        WHERE player_id = {player_id} AND season_window = '{season}'
+        LIMIT 1
+    """)
+    return rows[0] if rows else None
 
 
 def _season_str_to_id(season: Optional[str]) -> Optional[int]:
@@ -64,7 +98,7 @@ async def get_player_detail(
         AVG(toi_5v5) as toi_per_gp,
         AVG(primary_points_per60) as points_per60,
         AVG((individual_goals / toi_5v5) * 60.0) as goals_per60,
-        AVG((primary_assists / toi_5v5) * 60.0) as assists_per60,
+        AVG((first_assists / toi_5v5) * 60.0) as assists_per60,
         AVG(on_ice_xgf_pct) as cf_pct,
         AVG(ixg_per60) as hdcf_per60
     FROM {bq_service.get_full_table_id('mart_player_game_stats')}
@@ -111,7 +145,7 @@ async def get_player_detail(
     SELECT
         SUM(first_assists) as total_first_assists,
         SUM(second_assists) as total_second_assists,
-        AVG(ihdcf_per60) as avg_ihdcf_per60
+        SAFE_DIVIDE(SUM(ihdcf), SUM(toi_5v5)) * 60 as avg_ihdcf_per60
     FROM {bq_service.get_full_table_id('mart_player_game_stats')}
     WHERE player_id = {row['player_id']}
     """
@@ -119,6 +153,10 @@ async def get_player_detail(
     first_assists = assists_result[0]['total_first_assists'] if assists_result else None
     second_assists = assists_result[0]['total_second_assists'] if assists_result else None
     ihdcf_per60 = assists_result[0]['avg_ihdcf_per60'] if assists_result else None
+
+    comp = _composite(row['player_id'], season)
+    components = _components_from_row(comp) if comp else []
+    archetypes, primary_archetype = _archetype_mix(row['player_id'], season)
 
     return PlayerDetail(
         player_id=row['player_id'],
@@ -144,8 +182,56 @@ async def get_player_detail(
         relative_xgf_pct=relative_xgf_pct,
         actual_shooting_pct=actual_shooting_pct,
         expected_shooting_pct=expected_shooting_pct,
-        shooting_luck_delta=shooting_luck_delta
+        shooting_luck_delta=shooting_luck_delta,
+        composite_total=float(comp['total']) if comp else None,
+        composite_total_sd=float(comp['total_sd']) if comp and comp.get('total_sd') is not None else None,
+        composite_components=components,
+        archetypes=archetypes,
+        primary_archetype=primary_archetype,
     )
+
+
+@router.get("/archetypes/{archetype}", response_model=List[ArchetypeRankRow])
+@cache(ttl=1800)
+async def get_archetype_ranking(
+    archetype: str,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+    limit: int = Query(50, ge=1, le=200),
+) -> List[ArchetypeRankRow]:
+    """Players whose primary archetype is `archetype`, ranked by composite total (Phase 4.2)."""
+    arch = bq_service.get_models_table_id('player_archetypes')
+    comp = bq_service.get_models_table_id('player_composite')
+    rosters = bq_service.get_full_table_id('stg_rosters')
+    if not season:
+        season = bq_service.query(f"SELECT MAX(season) AS s FROM {arch}")[0]['s']
+    rows = bq_service.query(f"""
+        WITH a AS (
+            SELECT player_id, archetypes, primary_archetype
+            FROM {arch} WHERE season = '{season}' AND primary_archetype = @archetype
+        ),
+        nm AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
+                   ANY_VALUE(position_code) AS position
+            FROM {rosters} GROUP BY player_id
+        )
+        SELECT a.player_id, a.archetypes, nm.name, nm.position, c.*
+        FROM a
+        JOIN {comp} c ON a.player_id = c.player_id AND c.season_window = '{season}'
+        LEFT JOIN nm ON a.player_id = nm.player_id
+        ORDER BY c.total DESC
+        LIMIT {limit}
+    """, params=[bigquery.ScalarQueryParameter("archetype", "STRING", archetype)])
+    out = []
+    for r in rows:
+        weight = next((a["weight"] for a in json.loads(r["archetypes"])
+                       if a["archetype"] == archetype), 0.0)
+        out.append(ArchetypeRankRow(
+            player_id=r["player_id"], player_name=r.get("name"),
+            team_abbrev=None, position=r.get("position"),
+            composite_total=float(r["total"]),
+            composite_total_sd=float(r["total_sd"]) if r.get("total_sd") is not None else None,
+            components=_components_from_row(r), archetype_weight=weight))
+    return out
 
 
 @router.get("/{player_id}/edge", response_model=EdgePlayerProfile)

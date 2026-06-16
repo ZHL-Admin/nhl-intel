@@ -471,6 +471,30 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Composite stack (Phase 4.2): per-player value on a goals scale; needs player_impact.
+    compute_composite = BashOperator(
+        task_id="compute_composite",
+        bash_command=(
+            "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}"
+            "cd /opt/airflow && python -m models_ml.compute_composite"
+            "{% else %}echo 'composite: weekly cadence, not Monday — skipping'{% endif %}"
+        ),
+        env=_dbt_env,
+    )
+
+    # Archetypes (Phase 4.2): loads the committed, canonical GMM (archetypes_v1.joblib) and
+    # writes soft memberships — deterministic, no refit. Single-threaded BLAS for safety.
+    write_archetypes = BashOperator(
+        task_id="write_archetypes",
+        bash_command=(
+            "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}"
+            "cd /opt/airflow && VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 "
+            "python -m models_ml.fit_archetypes --write"
+            "{% else %}echo 'archetypes: weekly cadence, not Monday — skipping'{% endif %}"
+        ),
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -506,3 +530,7 @@ with DAG(
     compute_ratings >> simulate_deserved >> generate_report
     compute_ratings >> streak_doctor >> generate_report
     run_dbt_marts >> compute_style_map >> generate_report
+    # Phase 4 player models (weekly, Monday-gated inside each task): RAPM -> composite +
+    # archetypes. RAPM needs shot_xg + segments + marts; composite/archetypes need RAPM.
+    run_dbt_marts >> train_rapm >> compute_composite >> generate_report
+    train_rapm >> write_archetypes >> generate_report

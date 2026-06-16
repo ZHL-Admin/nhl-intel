@@ -77,6 +77,18 @@ PP_GOAL_VALUE = 0.2
 # --- Archetypes -------------------------------------------------------------
 # Minimum 5v5 minutes for a player-season to be archetyped (Phase 4.2).
 ARCHETYPE_MIN_5V5_MIN = 300
-# Cluster -> human label, filled in by hand from the Phase 4.2 labeling report
-# (the one intentional human-in-the-loop step). Empty until then. Keyed "F0".."Dn".
-ARCHETYPE_NAMES: dict[str, str] = {}
+# Cluster -> human label, assigned by hand from the Phase 4.2 labeling report (the one
+# intentional human-in-the-loop step). Keyed to the persisted GMM components
+# (artifacts/archetypes_v1.joblib). "Bottom-Pair Defensive D" (D8) replaced the approved
+# "Sheltered Puck-Mover" after the locked fit moved its exemplar (Dougie Hamilton) into the
+# Power-Play Quarterback cluster, where he belongs.
+ARCHETYPE_NAMES: dict[str, str] = {
+    "F0": "Power-Play Specialist", "F1": "Elite Speed Driver", "F2": "Fourth-Line Grinder",
+    "F3": "Energy Forechecker", "F4": "Two-Way Shutdown Forward", "F5": "Defensive/Energy Center",
+    "F6": "Checking-Line Forward", "F7": "Two-Way Top-Six", "F8": "Top-Six Power Scorer",
+    "F9": "Perimeter Playmaker", "F10": "Inside Scorer", "F11": "Perimeter Sniper",
+    "D0": "Depth Stay-Home D", "D1": "Rush-Joining D", "D2": "Elite Offensive D",
+    "D3": "Power-Play Quarterback", "D4": "Shutdown PK D", "D5": "Two-Way Top-Pair D",
+    "D6": "Physical Mobile D", "D7": "Stay-Home Defender", "D8": "Bottom-Pair Defensive D",
+    "D9": "Point-Shot D", "D10": "Defensive Top-Four D", "D11": "PP-Leaning Puck-Mover",
+}

@@ -289,3 +289,14 @@
     max-width: 100%;
   }
 }
+
+/* Archetype mix + composite stack (Phase 4.2) */
+.player-profile__archetype { margin-top: var(--space-2,8px); color: var(--color-text-secondary,#888); font-size: var(--font-size-sm,0.9rem); font-weight: 600; }
+.player-profile__composite { margin: var(--space-4,16px) 0; padding: var(--space-4,16px); border: 1px solid var(--color-border, rgba(127,127,127,0.2)); border-radius: var(--radius-lg,12px); }
+.player-profile__composite-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--space-2,8px); }
+.player-profile__composite-title { color: var(--color-text-secondary,#888); text-transform: uppercase; font-size: var(--font-size-xs,0.78rem); letter-spacing: .03em; }
+.player-profile__composite-total { font-weight: 700; font-variant-numeric: tabular-nums; }
+.player-profile__composite-sd { color: var(--color-text-secondary,#888); font-weight: 400; }
+.player-profile__composite-legend { display: flex; flex-wrap: wrap; gap: var(--space-3,12px); margin-top: var(--space-3,12px); font-size: var(--font-size-xs,0.78rem); color: var(--color-text-secondary,#888); }
+.player-profile__composite-legitem { display: inline-flex; align-items: center; gap: 5px; }
+.player-profile__composite-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

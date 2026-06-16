@@ -333,14 +333,50 @@ filtered to '02'/'03', so they were never affected. get_team_detail SAFE_DIVIDE 
 defensive code. **STILL OUTSTANDING:** player-level marts (mart_player_*) may still attribute
 Olympic games to national team_ids — clean those the same way during Phase 4 if they surface.
 
+## PHASE 4 — player project (IN PROGRESS)
+- **4.1 RAPM isolated impact (COMPLETE, validated).** `models_ml/train_rapm.py` ->
+  **nhl_models.player_impact** (6,193 rows). Two-sided ridge on 5v5 stints
+  (int_shift_segments x int_segment_context; target = attacking xGF/60 via int_on_ice_events
+  -> shot_xg). Each skater: off + def coef; controls score-state/zone-start(shared, effect is
+  symmetric)/home/B2B/season FE. CV lambda (flat under strong reg, ~8000). Game-resample
+  bootstrap SDs. Separate PP(5v4)/PK model -> pp_impact/pk_impact. 3yr weighted window +
+  single seasons. Validation: coefs centre 0; top off (MacKinnon/Tkachuks/Matthews/Barkov)
+  + def (Pelech/Reinhart/Toews) + PP (Nugent-Hopkins/Marner) smell-test; **single-season O
+  impact YoY r=0.43** (target 0.3-0.5). Low-TOI shrunk toward 0 (uncertainty = proximity to
+  prior, documented). `make rapm`; weekly DAG. docs/methodology/isolated-impact.md.
+- **4.2 Composite + archetypes (COMPLETE, validated).**
+  - `compute_composite.py` -> **nhl_models.player_composite** (6,744 rows): goals-scale
+    components (EV off/def = RAPM x TOI, PP, PK, finishing = G-ixG shrunk by k=350, penalty
+    diff x 0.2, goalie GSAx) + total + total_sd (quadrature). Top-20 = league's best;
+    goalies Shesterkin/Thompson/Hellebuyck. docs/methodology/composite.md.
+  - `fit_archetypes.py` + `archetype_features.py` -> **nhl_models.player_archetypes** (3,299
+    rows, soft memberships). Per-position GMM (F=12, D=12). Feature set includes a
+    **pp_dependency** feature (z(PP-point share) - z(5v5 RAPM off)) that splits dual-threat
+    stars from PP-merchants (user-requested; F7 blend resolved). **GMM is NON-reproducible
+    here** (threaded BLAS, not fixed by random_state) and unstable (raw likelihood collapses a
+    giant scorer bucket) -> we fix k=12, **select best-separated seed by silhouette**, run
+    single-threaded, and **persist the model to models_ml/artifacts/archetypes_v1.joblib
+    (FORCE-COMMITTED, gitignored dir)**. report/--write/API all LOAD that joblib. Names are in
+    config.ARCHETYPE_NAMES (24, human-approved; D8 "Bottom-Pair Defensive D" replaced the
+    defunct "Sheltered Puck-Mover"). docs/methodology/archetypes.md.
+  - Backend: GET /players/{id} extended (composite_components + archetype mix); new
+    GET /players/archetypes/{archetype} (ranked by composite). **Repaired 4 pre-existing
+    stale-column breakages in get_player_detail** (primary_assists->first_assists,
+    offensive_zone_starts + the whole zone/shooting-luck/relative service methods drifted to
+    a per-game schema, ihdcf_per60->ihdcf) — /players/{id} was fully 500ing.
+  - Frontend: PlayerProfile archetype mix line + composite ComponentStackBar (uncertainty
+    whisker); Players index rank-within-archetype (position toggle + archetype select + per-row
+    stack). ARCHETYPES + COMPOSITE_COMPONENTS in metrics.ts. tsc + build green.
+  - DAG: run_dbt_marts -> train_rapm -> {compute_composite, write_archetypes} (weekly, Monday).
+  - **Still OUTSTANDING (player-mart hygiene):** player marts may include 2026 Olympic/intl
+    games (game_id type 09) attributed to national team_ids — filter to '01'/'02'/'03' like the
+    team marts when convenient (low exposure: no UI path to a national-team player page).
+
 ## Next up (fresh-context work)
-1. **Phase 4** — the player project (blueprint section 4): 4.1 RAPM isolated impact,
-   4.2 composite stack + archetypes (**4.2 archetype naming = the one human-in-the-loop step**:
-   the job prints a labeling report and STOPS for the user to name clusters before writing
-   ARCHETYPE_NAMES in models_ml/config.py), 4.3 reconciliation (clutch/consistency/coach-trust/
-   divergence), 4.4 trajectories+twins. RAPM design needs int_shift_segments x int_segment_context
-   (2015-16+ only — see segment-coverage note below) + nhl_models.shot_xg via int_on_ice_events.
-   ComponentStackBar + PercentileBarList are built and meant for reuse here.
+1. **Phase 4.3** — reconciliation: leverage-weighted (clutch) impact, consistency profile,
+   coach-trust signals, divergence board. **4.4** — trajectories + career twins.
+   ComponentStackBar + PercentileBarList + StreakDoctorCard are built for reuse.
+   (4.1, 4.2 DONE — see above.)
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
 3. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;

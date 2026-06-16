@@ -23,37 +23,75 @@ import argparse
 import json
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 from models_ml import bq, config
 from models_ml.archetype_features import build, FEATURES
 
 SEASONS = ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"]
-BIC_RANGE = range(6, 13)
+# k per position. BIC over [6,12] with a degenerate-cluster guard prefers 12 for both, but
+# that selection is boundary-sensitive to float noise (a cluster dipping under the size floor
+# flips the choice), so we FIX k for reproducibility and persist the fitted model below.
+FORCED_K = {"F": 12, "D": 12}
+REG_COVAR = 1e-2        # covariance floor: stops a component collapsing onto an outlier
+N_INIT = 3
+MIN_CLUSTER = 15        # reject a fit with any degenerate (tiny) component
+SEEDS = range(12)       # GMM has many optima; pick the best-SEPARATED reproducible one
+# Raw likelihood/BIC favours a muddy optimum with a giant catch-all scorer cluster; we instead
+# select the seed with the highest silhouette (best-separated, balanced archetypes) among fits
+# with no degenerate cluster, then persist it. Run with single-threaded BLAS
+# (VECLIB_MAXIMUM_THREADS=1 etc.) so the selected fit is bitwise reproducible.
 ARTIFACT = Path(__file__).parent / "artifacts" / "archetype_labeling_report.md"
-PARAMS = Path(__file__).parent / "artifacts" / "archetypes_v1.json"
+MODEL_PATH = Path(__file__).parent / "artifacts" / "archetypes_v1.joblib"
 FEATURE_COLS = list(FEATURES.keys())
 
 
-def fit_group(df: pd.DataFrame, pos: str):
+def fit_group(df: pd.DataFrame, pos: str, model: dict | None = None):
+    """Fit (or apply a saved) per-position GMM. Returns g, resp, hard, k, means.
+    If `model` (scaler+gmm for this pos) is given, applies it instead of refitting, so the
+    labeling report, the names, and player_archetypes share one canonical clustering."""
     g = df[df["pos_group"] == pos].reset_index(drop=True)
-    X = StandardScaler().fit_transform(g[FEATURE_COLS].to_numpy())
-    best_k, best_bic, best_gmm = None, np.inf, None
-    for k in BIC_RANGE:
-        gmm = GaussianMixture(n_components=k, covariance_type="diag",
-                              random_state=0, n_init=3, max_iter=300)
-        gmm.fit(X)
-        bic = gmm.bic(X)
-        if bic < best_bic:
-            best_k, best_bic, best_gmm = k, bic, gmm
-    resp = best_gmm.predict_proba(X)          # soft memberships (n, k)
+    if model is None:
+        scaler = StandardScaler().fit(g[FEATURE_COLS].to_numpy())
+        Xs = scaler.transform(g[FEATURE_COLS].to_numpy())
+        best = None
+        for seed in SEEDS:
+            cand = GaussianMixture(n_components=FORCED_K[pos], covariance_type="diag",
+                                   reg_covar=REG_COVAR, random_state=seed, n_init=N_INIT,
+                                   max_iter=500).fit(Xs)
+            if np.bincount(cand.predict(Xs), minlength=FORCED_K[pos]).min() < MIN_CLUSTER:
+                continue
+            sil = silhouette_score(Xs, cand.predict(Xs))
+            if best is None or sil > best[0]:
+                best = (sil, seed, cand)
+        _, seed, gmm = best
+        print(f"  {pos}: selected seed {seed} (silhouette {best[0]:.3f})")
+    else:
+        scaler, gmm = model["scaler"], model["gmm"]
+    X = scaler.transform(g[FEATURE_COLS].to_numpy())
+    resp = gmm.predict_proba(X)
     hard = resp.argmax(axis=1)
-    # standardized cluster means in feature space (cluster centroid z-scores)
-    means = pd.DataFrame(best_gmm.means_, columns=FEATURE_COLS)
-    return g, X, resp, hard, best_k, means
+    means = pd.DataFrame(gmm.means_, columns=FEATURE_COLS)
+    return g, X, resp, hard, gmm.n_components, means, scaler, gmm
+
+
+def fit_or_load(df: pd.DataFrame) -> dict:
+    """Return {pos: (g, X, resp, hard, k, means, scaler, gmm)}, loading the persisted model
+    if present (reproducible) and otherwise fitting + saving it."""
+    saved = joblib.load(MODEL_PATH) if MODEL_PATH.exists() else None
+    groups, to_save = {}, {}
+    for pos in ["F", "D"]:
+        groups[pos] = fit_group(df, pos, saved[pos] if saved else None)
+        to_save[pos] = {"scaler": groups[pos][6], "gmm": groups[pos][7]}
+    if saved is None:
+        joblib.dump(to_save, MODEL_PATH)
+        print(f"Saved canonical clustering -> {MODEL_PATH}")
+    return groups
 
 
 def names_for(ids):
@@ -72,7 +110,7 @@ def write_report(groups: dict) -> None:
              "`config.ARCHETYPE_NAMES` with a short label per cluster key, then run",
              "`python -m models_ml.fit_archetypes --write`.", ""]
     for pos in ["F", "D"]:
-        g, X, resp, hard, k, means = groups[pos]
+        g, X, resp, hard, k, means, scaler, gmm = groups[pos]
         lines.append(f"\n## {('Forwards' if pos == 'F' else 'Defensemen')} — {k} clusters\n")
         for c in range(k):
             key = f"{pos}{c}"
@@ -95,18 +133,13 @@ def write_report(groups: dict) -> None:
     print(f"Wrote {ARTIFACT}")
 
 
-def save_params(groups: dict) -> None:
-    """Persist k per group so --write reproduces the same clustering deterministically."""
-    PARAMS.write_text(json.dumps({pos: groups[pos][4] for pos in groups}, indent=2))
-
-
 def do_write(groups: dict) -> None:
     if not config.ARCHETYPE_NAMES:
         print("config.ARCHETYPE_NAMES is empty — fill it from the labeling report first.")
         return
     rows = []
     for pos in ["F", "D"]:
-        g, X, resp, hard, k, means = groups[pos]
+        g, X, resp, hard, k, means, scaler, gmm = groups[pos]
         for i, r in g.iterrows():
             mix = sorted(
                 [(config.ARCHETYPE_NAMES.get(f"{pos}{c}", f"{pos}{c}"), float(resp[i, c]))
@@ -137,10 +170,9 @@ def main() -> None:
     df = build(SEASONS)
     print(f"{len(df):,} player-seasons "
           f"(F={int((df.pos_group=='F').sum())}, D={int((df.pos_group=='D').sum())})")
-    groups = {pos: fit_group(df, pos) for pos in ["F", "D"]}
+    groups = fit_or_load(df)
     for pos in ["F", "D"]:
-        print(f"  {pos}: k={groups[pos][4]} chosen by BIC")
-    save_params(groups)
+        print(f"  {pos}: k={groups[pos][4]}")
     if args.write:
         do_write(groups)
     else:

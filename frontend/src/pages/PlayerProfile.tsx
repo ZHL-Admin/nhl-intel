@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { PageLayout, StatCard, Badge, SkeletonLoader } from '../components/common'
+import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar } from '../components/common'
+import type { StackSegment } from '../components/common'
+import { COMPOSITE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
 import {
   getPlayerDetail,
@@ -313,9 +315,50 @@ function PlayerProfile() {
                 <span className="player-profile__position">{playerDetail.position}</span>
                 {/* TODO: Add age, handedness, jersey number when available in API */}
               </div>
+              {playerDetail.archetypes && playerDetail.archetypes.length > 0 && (
+                <div className="player-profile__archetype">
+                  {playerDetail.archetypes.slice(0, 3)
+                    .map((a) => `${Math.round(a.weight * 100)}% ${a.archetype}`)
+                    .join(' · ')}
+                </div>
+              )}
             </div>
           </div>
         ) : null}
+
+        {/* Composite value stack (Phase 4.2) */}
+        {playerDetail && playerDetail.composite_components && playerDetail.composite_components.length > 0 && (() => {
+          const segs: StackSegment[] = COMPOSITE_COMPONENTS.map((c) => ({
+            key: c.key, label: c.label,
+            value: playerDetail.composite_components!.find((x) => x.key === c.key)?.value ?? 0,
+            color: c.color,
+          }))
+          const posSum = segs.filter((s) => s.value > 0).reduce((a, s) => a + s.value, 0)
+          const negSum = segs.filter((s) => s.value < 0).reduce((a, s) => a + s.value, 0)
+          const d = Math.max(2, posSum, Math.abs(negSum))
+          return (
+            <div className="player-profile__composite">
+              <div className="player-profile__composite-head">
+                <span className="player-profile__composite-title">Total value</span>
+                <span className="player-profile__composite-total">
+                  {((playerDetail.composite_total ?? 0) >= 0 ? '+' : '') + (playerDetail.composite_total ?? 0).toFixed(1)}
+                  {playerDetail.composite_total_sd != null && (
+                    <span className="player-profile__composite-sd"> ± {playerDetail.composite_total_sd.toFixed(1)}</span>
+                  )} goals
+                </span>
+              </div>
+              <ComponentStackBar segments={segs} total={playerDetail.composite_total ?? 0}
+                domain={[-d, d]} se={playerDetail.composite_total_sd} height={26} />
+              <div className="player-profile__composite-legend">
+                {COMPOSITE_COMPONENTS.map((c) => (
+                  <span key={c.key} className="player-profile__composite-legitem">
+                    <span className="player-profile__composite-swatch" style={{ background: c.color }} />{c.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Season Stat Cards */}
         {loadingDetail ? (

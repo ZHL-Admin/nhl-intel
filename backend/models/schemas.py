@@ -299,6 +299,39 @@ class TeamVsOpponent(BaseModel):
 # Player Models
 # ============================================================================
 
+class CompositeComponent(BaseModel):
+    """One value component on the goals scale (Phase 4.2)."""
+    key: str
+    label: str
+    value: float
+
+
+class ArchetypeWeight(BaseModel):
+    """A player's soft membership in one archetype (Phase 4.2)."""
+    archetype: str
+    weight: float
+
+
+class ArchetypeRankRow(BaseModel):
+    """A player ranked within an archetype, with composite stack (Phase 4.2)."""
+    player_id: int
+    player_name: Optional[str] = None
+    team_abbrev: Optional[str] = None
+    position: Optional[str] = None
+    composite_total: float
+    composite_total_sd: Optional[float] = None
+    components: List[CompositeComponent]
+    archetype_weight: float = Field(description="Membership weight in the queried archetype")
+
+
+# Composite component key -> display label (single source for the stack).
+COMPOSITE_LABELS = [
+    ("ev_offense", "EV Offense"), ("ev_defense", "EV Defense"), ("pp", "Power Play"),
+    ("pk", "Penalty Kill"), ("finishing", "Finishing"), ("penalty_diff", "Penalties"),
+    ("goalie_gsax", "Goaltending"),
+]
+
+
 class PlayerDetail(BaseModel):
     """Detailed player information."""
     player_id: int
@@ -327,6 +360,14 @@ class PlayerDetail(BaseModel):
     actual_shooting_pct: Optional[float] = Field(None, description="Actual shooting percentage")
     expected_shooting_pct: Optional[float] = Field(None, description="Expected shooting percentage from xG")
     shooting_luck_delta: Optional[float] = Field(None, description="Difference between actual and expected sh%")
+
+    # Composite stack + archetype mix (Phase 4.2). Components are ALWAYS returned (never a
+    # total-only shape); archetypes is the soft membership mix, sorted desc.
+    composite_total: Optional[float] = None
+    composite_total_sd: Optional[float] = None
+    composite_components: List[CompositeComponent] = []
+    archetypes: List[ArchetypeWeight] = []
+    primary_archetype: Optional[str] = None
 
 
 class PlayerTrendPoint(BaseModel):

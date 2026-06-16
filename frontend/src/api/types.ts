@@ -277,6 +277,32 @@ export interface PlayerDetail {
   actual_shooting_pct?: number | null
   expected_shooting_pct?: number | null
   shooting_luck_delta?: number | null
+  // Composite stack + archetype mix (Phase 4.2)
+  composite_total?: number | null
+  composite_total_sd?: number | null
+  composite_components?: CompositeComponent[]
+  archetypes?: ArchetypeWeight[]
+  primary_archetype?: string | null
+}
+
+export interface CompositeComponent {
+  key: string
+  label: string
+  value: number
+}
+export interface ArchetypeWeight {
+  archetype: string
+  weight: number
+}
+export interface ArchetypeRankRow {
+  player_id: number
+  player_name?: string | null
+  team_abbrev?: string | null
+  position?: string | null
+  composite_total: number
+  composite_total_sd?: number | null
+  components: CompositeComponent[]
+  archetype_weight: number
 }
 
 export interface PlayerTrendPoint {

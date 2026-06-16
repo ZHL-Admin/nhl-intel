@@ -9,6 +9,7 @@ import {
   PlayerShots,
   PlayerVsOpponent,
   PlayerSituational,
+  ArchetypeRankRow,
 } from './types'
 
 /**
@@ -70,6 +71,17 @@ export async function getPlayerSituational(
         season: season || 'current'
       },
     }
+  )
+  return response.data
+}
+
+/** Players whose primary archetype is `archetype`, ranked by composite total (Phase 4.2). */
+export async function getArchetypeRanking(
+  archetype: string, season?: string, limit = 50,
+): Promise<ArchetypeRankRow[]> {
+  const response = await apiClient.get<ArchetypeRankRow[]>(
+    `/players/archetypes/${encodeURIComponent(archetype)}`,
+    { params: { limit, ...(season ? { season } : {}) } },
   )
   return response.data
 }

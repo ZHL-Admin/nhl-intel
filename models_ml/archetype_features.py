@@ -31,6 +31,7 @@ FEATURES = {
     "pen_drawn_per60": "penalties drawn /60",
     "edge_burst_per60": "Edge 22+ mph bursts /60",
     "edge_oz_pct": "Edge o-zone time %",
+    "pp_dependency": "PP dependency (PP-point share vs 5v5 offence)",
 }
 
 BASE_SQL = """
@@ -85,12 +86,41 @@ edge as (
   select player_id, season_id, bursts_22_plus_per60 as edge_burst_per60,
          oz_time_pct_es as edge_oz_pct
   from `{p}.nhl_mart.mart_edge_player_profile`
+),
+-- Points by strength: credit scoring + both assists on each goal, flag whether the scoring
+-- team was on the power play (more skaters). situation_code = [awayG][awaySk][homeSk][homeG].
+goals_raw as (
+  select p.season, p.event_owner_team_id, b.home_team_id,
+         lpad(coalesce(p.situation_code, ''), 4, '0') as sit,
+         p.scoring_player_id, p.assist1_player_id, p.assist2_player_id
+  from `{p}.nhl_staging.stg_play_by_play` p
+  join `{p}.nhl_staging.stg_boxscores` b on p.game_id = b.game_id
+  where p.type_desc_key = 'goal'
+    and substr(cast(p.game_id as string), 5, 2) in ('02', '03')
+),
+goals_pp as (
+  select season, scoring_player_id, assist1_player_id, assist2_player_id,
+    case when event_owner_team_id = home_team_id
+         then cast(substr(sit, 3, 1) as int64) > cast(substr(sit, 2, 1) as int64)
+         else cast(substr(sit, 2, 1) as int64) > cast(substr(sit, 3, 1) as int64) end as is_pp
+  from goals_raw
+),
+credited as (
+  select season, pid as player_id, is_pp
+  from goals_pp,
+    unnest([scoring_player_id, assist1_player_id, assist2_player_id]) as pid
+  where pid is not null
+),
+pts as (
+  select player_id, season, countif(is_pp) as pp_points, count(*) as total_points
+  from credited group by 1, 2
 )
 select pg.*, sl.mean_shot_distance, sl.slot_share,
   coalesce(t.toi_5v5, 0) as toi_5v5, coalesce(t.pp_toi, 0) as pp_toi, coalesce(t.pk_toi, 0) as pk_toi,
   coalesce(z.oz_starts, 0) as oz_starts, coalesce(z.dz_starts, 0) as dz_starts,
   coalesce(pen.drawn, 0) as pen_drawn,
-  e.edge_burst_per60, e.edge_oz_pct
+  e.edge_burst_per60, e.edge_oz_pct,
+  coalesce(pts.pp_points, 0) as pp_points, coalesce(pts.total_points, 0) as total_points
 from pg
 left join shotloc sl on pg.player_id = sl.player_id and pg.season = sl.season
 left join toi t on pg.player_id = t.player_id and pg.season = t.season
@@ -98,6 +128,7 @@ left join zstart z on pg.player_id = z.player_id and pg.season = z.season
 left join pen on pg.player_id = pen.player_id and pg.season = pen.season
 left join edge e on pg.player_id = e.player_id
   and e.season_id = cast(substr(pg.season, 1, 4) || '20' || substr(pg.season, 6, 2) as int64)
+left join pts on pg.player_id = pts.player_id and pg.season = pts.season
 """
 
 
@@ -134,6 +165,26 @@ def build(seasons: list[str], min_5v5: float | None = None) -> pd.DataFrame:
     df = df.merge(impact, on=["player_id", "season"], how="left")
 
     df["pos_group"] = np.where(df["position"] == "D", "D", "F")
+
+    # PP dependency: how much of a player's offence comes from the man-advantage. A high
+    # PP point-share with weak 5v5 RAPM offence scores high (PP merchant); a star who drives
+    # both scores low. Both terms z-scored within position so the ratio is league-relative.
+    for c in ["pp_points", "total_points"]:
+        df[c] = pd.to_numeric(df[c]).astype("float64")
+    df["pp_points_share"] = df["pp_points"] / df["total_points"].replace(0, np.nan)
+    df["pp_points_share"] = df.groupby("pos_group")["pp_points_share"].transform(
+        lambda s: s.fillna(s.mean()))
+    df["_off_filled"] = df.groupby("pos_group")["off_impact"].transform(
+        lambda s: s.fillna(s.mean()))
+
+    def _z(col):
+        m = df.groupby("pos_group")[col].transform("mean")
+        sd = df.groupby("pos_group")[col].transform("std").replace(0, 1.0)
+        return (df[col] - m) / sd
+
+    df["pp_dependency"] = _z("pp_points_share") - _z("_off_filled")
+    df.drop(columns=["_off_filled"], inplace=True)
+
     # impute remaining NaNs by position-group mean (Edge era + missing shotloc/impact)
     for f in FEATURES:
         df[f] = df.groupby("pos_group")[f].transform(lambda s: s.fillna(s.mean()))

@@ -180,6 +180,34 @@ export const FINGERPRINT_GROUPS: { title: string; metrics: FingerprintMetric[] }
   },
 ]
 
+/**
+ * Player archetypes (Phase 4.2), grouped by position for the Players-index selector. Order
+ * roughly elite -> depth. Mirrors models_ml/config.ARCHETYPE_NAMES.
+ */
+export const ARCHETYPES: { F: string[]; D: string[] } = {
+  F: [
+    'Elite Speed Driver', 'Perimeter Sniper', 'Top-Six Power Scorer', 'Two-Way Top-Six',
+    'Perimeter Playmaker', 'Two-Way Shutdown Forward', 'Inside Scorer', 'Power-Play Specialist',
+    'Checking-Line Forward', 'Energy Forechecker', 'Defensive/Energy Center', 'Fourth-Line Grinder',
+  ],
+  D: [
+    'Elite Offensive D', 'Power-Play Quarterback', 'Two-Way Top-Pair D', 'PP-Leaning Puck-Mover',
+    'Rush-Joining D', 'Point-Shot D', 'Physical Mobile D', 'Defensive Top-Four D',
+    'Shutdown PK D', 'Stay-Home Defender', 'Depth Stay-Home D', 'Bottom-Pair Defensive D',
+  ],
+}
+
+/** Composite component key -> colour, shared by the composite ComponentStackBar everywhere. */
+export const COMPOSITE_COMPONENTS: { key: string; label: string; color: string }[] = [
+  { key: 'ev_offense', label: 'EV Offense', color: '#3b82f6' },
+  { key: 'ev_defense', label: 'EV Defense', color: '#06b6d4' },
+  { key: 'pp', label: 'Power Play', color: '#f59e0b' },
+  { key: 'pk', label: 'Penalty Kill', color: '#a855f7' },
+  { key: 'finishing', label: 'Finishing', color: '#22c55e' },
+  { key: 'penalty_diff', label: 'Penalties', color: '#64748b' },
+  { key: 'goalie_gsax', label: 'Goaltending', color: '#ec4899' },
+]
+
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {
   const m = METRICS[key]
