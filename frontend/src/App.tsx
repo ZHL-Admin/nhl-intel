@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { ErrorBoundary } from './components/common'
+import { lazy, Suspense } from 'react'
+import { ErrorBoundary, SkeletonLoader } from './components/common'
 import GamesExplorer from './pages/GamesExplorer'
 import GameDetail from './pages/GameDetail'
 import Teams from './pages/Teams'
@@ -8,19 +9,27 @@ import Players from './pages/Players'
 import PlayerProfile from './pages/PlayerProfile'
 import Rankings from './pages/Rankings'
 
+// Tools routes are lazy-loaded (Phase 5.2): they pull in the line-fit UI only when visited.
+const Tools = lazy(() => import('./pages/Tools'))
+const LineupLab = lazy(() => import('./pages/LineupLab'))
+
 function App() {
   return (
     <ErrorBoundary>
       <Router>
-        <Routes>
-          <Route path="/" element={<GamesExplorer />} />
-          <Route path="/games/:gameId" element={<GameDetail />} />
-          <Route path="/rankings" element={<Rankings />} />
-          <Route path="/teams" element={<Teams />} />
-          <Route path="/teams/:teamId" element={<TeamProfile />} />
-          <Route path="/players" element={<Players />} />
-          <Route path="/players/:playerId" element={<PlayerProfile />} />
-        </Routes>
+        <Suspense fallback={<div style={{ padding: 40 }}><SkeletonLoader /></div>}>
+          <Routes>
+            <Route path="/" element={<GamesExplorer />} />
+            <Route path="/games/:gameId" element={<GameDetail />} />
+            <Route path="/rankings" element={<Rankings />} />
+            <Route path="/teams" element={<Teams />} />
+            <Route path="/teams/:teamId" element={<TeamProfile />} />
+            <Route path="/players" element={<Players />} />
+            <Route path="/players/:playerId" element={<PlayerProfile />} />
+            <Route path="/tools" element={<Tools />} />
+            <Route path="/tools/lineup-lab" element={<LineupLab />} />
+          </Routes>
+        </Suspense>
       </Router>
     </ErrorBoundary>
   )

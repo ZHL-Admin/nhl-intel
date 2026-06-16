@@ -1,0 +1,24 @@
+import { apiClient } from './client'
+import { PlayerSearchResult, LineFitProjection, TeamLines } from './types'
+
+/** Current-roster players matching `q` for the PlayerPicker (Phase 5.2). */
+export async function searchPlayers(q: string, limit = 12, season?: string): Promise<PlayerSearchResult[]> {
+  const response = await apiClient.get<PlayerSearchResult[]>('/players/search', {
+    params: { q, limit, ...(season ? { season } : {}) },
+  })
+  return response.data
+}
+
+/** Project a hypothetical line (2 D, 3 F, or a 5-skater unit) — Phase 5.1 engine. */
+export async function lineFit(player_ids: number[], season?: string): Promise<LineFitProjection> {
+  const response = await apiClient.post<LineFitProjection>('/tools/line-fit', { player_ids, season })
+  return response.data
+}
+
+/** A team's current lines (last 10 games) with observed results + projected grades. */
+export async function getTeamLines(teamId: number, season?: string): Promise<TeamLines> {
+  const response = await apiClient.get<TeamLines>(`/teams/${teamId}/lines`, {
+    params: season ? { season } : undefined,
+  })
+  return response.data
+}

@@ -1,0 +1,26 @@
+.lab { max-width: 760px; margin: 0 auto; padding: 28px 24px 60px; }
+
+.lab__back { font-size: 0.82rem; color: var(--color-accent, #3b82f6); text-decoration: none; }
+.lab__title { font-size: 1.8rem; font-weight: 800; color: var(--color-text); margin: 8px 0 6px; }
+.lab__sub { font-size: 0.92rem; color: var(--color-text-secondary); margin: 0 0 24px; line-height: 1.5; max-width: 600px; }
+
+.lab__builder {
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 22px; border: 1px solid var(--color-border); border-radius: 14px;
+  background: var(--color-surface, var(--color-bg));
+}
+
+.lab__slots { display: flex; flex-direction: column; gap: 14px; }
+.lab__slot { display: flex; flex-direction: column; gap: 6px; }
+.lab__slot-label { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); }
+
+.lab__project {
+  align-self: flex-start;
+  padding: 10px 22px; border: none; border-radius: 9px;
+  background: var(--color-accent, #3b82f6); color: #fff;
+  font-size: 0.92rem; font-weight: 700; cursor: pointer;
+}
+.lab__project:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.lab__result { margin-top: 24px; }
+.lab__error { font-size: 0.9rem; color: #ef4444; padding: 12px 0; }

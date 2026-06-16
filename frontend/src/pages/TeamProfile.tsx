@@ -4,7 +4,7 @@ import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader } from '../
 import Tabs from '../components/common/Tabs'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
-import { StreakDoctorCard } from '../components/common'
+import { StreakDoctorCard, LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent, getTeamStreak } from '../api/teams'
 import { getTeamGames } from '../api/games'
 import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent, StreakCard } from '../api/types'
@@ -318,6 +318,7 @@ function TeamProfile() {
                 { value: 'overview', label: 'Overview' },
                 { value: 'identity', label: 'Identity' },
                 { value: 'form', label: 'Form' },
+                { value: 'lines', label: 'Lines' },
                 { value: 'performance', label: 'Performance' },
                 { value: 'roster', label: 'Roster' },
                 { value: 'matchups', label: 'Matchups' }
@@ -357,6 +358,13 @@ function TeamProfile() {
 
         {currentTab === 'form' && teamId && (
           <TeamFormTab teamId={parseInt(teamId)} />
+        )}
+
+        {currentTab === 'lines' && teamId && (
+          <div className="team-profile__section">
+            <h2 className="team-profile__section-title">Line Lab</h2>
+            <LineSwapWidget teamId={parseInt(teamId)} />
+          </div>
         )}
 
         {currentTab === 'performance' && (

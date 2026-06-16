@@ -49,6 +49,13 @@ function NavBar() {
           >
             Players
           </NavLink>
+          <NavLink
+            to="/tools"
+            className={({ isActive }) => `navbar__link ${isActive ? 'navbar__link--active' : ''}`}
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Tools
+          </NavLink>
         </div>
 
         <div className="navbar__actions">

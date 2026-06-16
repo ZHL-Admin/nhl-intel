@@ -787,3 +787,64 @@ export interface PlayerTrajectory {
   physical: PhysicalPoint[]
   burst_flag_enabled: boolean
 }
+
+// --- Phase 5: signature tools (Lineup Lab) ---
+export interface PlayerSearchResult {
+  player_id: number
+  name?: string | null
+  team_id?: number | null
+  team_abbrev?: string | null
+  position?: string | null
+  headshot_url?: string | null
+  archetype?: string | null
+}
+export interface LineMemberOut {
+  player_id: number
+  name?: string | null
+  position?: string | null
+  archetype?: string | null
+  off_impact?: number | null
+  def_impact?: number | null
+  finishing?: number | null
+  toi_5v5?: number | null
+}
+export interface ObservedBlend {
+  observed_minutes: number
+  observed_xgf_pct: number
+  model_xgf_pct: number
+  w_obs: number
+}
+export interface LineFitProjection {
+  line_type: string
+  player_ids: number[]
+  grade: string
+  projected_xgf_pct: number
+  interval_low?: number | null
+  interval_high?: number | null
+  xgf_per60?: number | null
+  xga_per60?: number | null
+  grade_sentence?: string | null
+  reasons: string[]
+  risk?: string | null
+  observed_blend?: ObservedBlend | null
+  deeper_extrapolation: boolean
+  rookie_widened: boolean
+  members: LineMemberOut[]
+  limitations?: string | null
+  forward_trio?: LineFitProjection | null
+  defense_pair?: LineFitProjection | null
+}
+export interface TeamLine {
+  line_type: string
+  player_ids: number[]
+  member_names: string[]
+  minutes: number
+  observed_xgf_pct?: number | null
+  projection?: LineFitProjection | null
+}
+export interface TeamLines {
+  team_id: number
+  season: string
+  forward_lines: TeamLine[]
+  defense_pairs: TeamLine[]
+}
