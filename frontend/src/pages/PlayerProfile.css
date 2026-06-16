@@ -309,3 +309,13 @@
 .reconciliation__note { margin: var(--space-2,8px) 0 0; line-height: 1.4; }
 .reconciliation__sub { color: var(--color-text-secondary,#888); font-size: var(--font-size-sm,0.85rem); margin-top: var(--space-2,8px); }
 .reconciliation__consistency { margin-top: var(--space-4,16px); }
+
+/* Career trajectory (Phase 4.4) */
+.trajectory__cap { color: var(--color-text-secondary,#888); margin: 0 0 var(--space-3,12px); font-size: var(--font-size-sm,0.9rem); }
+.trajectory__twins { margin-top: var(--space-4,16px); }
+.trajectory__sub { color: var(--color-text-secondary,#888); font-size: var(--font-size-sm,0.85rem); margin: var(--space-3,12px) 0 var(--space-2,8px); }
+.trajectory__twin { display: flex; align-items: center; gap: var(--space-3,12px); padding: var(--space-2,8px) 0; border-bottom: 1px solid var(--color-border, rgba(127,127,127,0.15)); flex-wrap: wrap; }
+.trajectory__twin-name { font-weight: 600; min-width: 11rem; }
+.trajectory__twin-sim { font-variant-numeric: tabular-nums; color: var(--color-text-secondary,#888); }
+.trajectory__twin-out { color: var(--color-text-secondary,#888); font-size: var(--font-size-sm,0.85rem); }
+.trajectory__tag { font-size: var(--font-size-xs,0.72rem); padding: 1px 7px; border-radius: 999px; background: var(--color-surface-elevated, rgba(127,127,127,0.12)); color: var(--color-text-secondary,#888); }

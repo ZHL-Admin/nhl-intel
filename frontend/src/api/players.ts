@@ -12,6 +12,7 @@ import {
   ArchetypeRankRow,
   PlayerReconciliation,
   DivergenceBoardRow,
+  PlayerTrajectory,
 } from './types'
 
 /**
@@ -101,5 +102,11 @@ export async function getDivergenceBoard(season?: string): Promise<DivergenceBoa
   const response = await apiClient.get<DivergenceBoardRow[]>('/players/divergence-board', {
     params: season ? { season } : undefined,
   })
+  return response.data
+}
+
+/** Career trajectory: aging-curve band, player path, twins, physical overlay (Phase 4.4). */
+export async function getPlayerTrajectory(playerId: number): Promise<PlayerTrajectory> {
+  const response = await apiClient.get<PlayerTrajectory>(`/players/${playerId}/trajectory`)
   return response.data
 }

@@ -399,11 +399,39 @@ Olympic games to national team_ids — clean those the same way during Phase 4 i
     reconciliation.md. **NOTE bootstrap:** int_event_leverage excluded from run_dbt_pre_xg
     (needs win_probability) and built after score_winprob.
 
+- **4.4 Trajectories + twins (COMPLETE, validated).**
+  - **Prereq ingested:** player bio (birthDate/height/weight) — was MISSING everywhere.
+    `ingestion.get_player_landing` + `scripts/ingest_player_bio.py` -> raw_player_bio (3,745
+    players) -> `stg_player_bio` (view). Age = years to season Oct 1.
+  - **Historical archetypes**: `fit_archetypes --write` now also scores 2015-16..2020-21 via the
+    locked GMM with Edge+RAPM neutralized to scaler means (reduced-feature), flagged
+    edge_imputed. player_archetypes now 7,119 rows (3299 tracking + 3820 historical). **Burst-
+    defined clusters collapse** pre-tracking (Elite Speed Driver 63->8, Elite Offensive D 40->2)
+    — documented. (No archetypes pre-2015: segments start 2015-16.)
+  - `fit_aging_curves.py` -> **nhl_models.aging_curves** (15 keys: 13 archetypes + All Forwards/
+    All Defensemen fallback). Production = **points/82** (composite is tracking-era only).
+    Delta method, **each delta attributed to season-t archetype** (no scramble). Peaks 23-25 (F).
+  - `compute_twins.py` -> **nhl_models.player_twins** (age-aligned cosine kNN through age A,
+    >=2 seasons; cross-tracking-boundary -> reduced_features tag; +twin next-3-yr pts/82).
+    McDavid twins = MacKinnon/Crosby/Eichel/Backstrom/Draisaitl.
+  - `compute_physical.py` -> **nhl_models.player_physical**. **Burst-decline flag VALIDATION
+    FAILED**: corr(burst_change_t, prod_change_t+1) = 0.064 (p=0.01, n=1588) — negligible,
+    below 0.10 bar -> **flag WITHHELD**, negative result published (blueprint-anticipated).
+  - Backend GET /players/{id}/trajectory (curve band w/ position fallback + label, path, twins,
+    physical). Frontend PlayerProfile **Career Trajectory section** (recharts path-over-band,
+    twins list w/ pre-tracking tag, burst trend). docs/methodology/trajectories.md. DAG: weekly
+    bio refresh + aging/twins/physical after archetypes/marts.
+
+## PHASE 4 — PLAYER PROJECT COMPLETE (4.1 RAPM, 4.2 composite+archetypes, 4.3 reconciliation+
+## divergence, 4.4 trajectories+twins). nhl_models: player_impact, player_composite,
+## player_archetypes, player_clutch, player_consistency, player_coach_trust, divergence_board,
+## aging_curves, player_twins, player_physical. New ingest: player bio. New shared FE:
+## ComponentStackBar, PercentileBarList, StreakDoctorCard, StripPlot.
+
 ## Next up (fresh-context work)
-1. **Phase 4.4** — career trajectories + twins (age curves per archetype, nearest-neighbor
-   comparables, physical-aging overlay w/ burst-rate validation). Then Phase 5 (tools:
-   Lineup Lab, trade fit, matchup previews). (4.1, 4.2, 4.3 DONE — see above.)
-   ComponentStackBar + PercentileBarList + StreakDoctorCard + StripPlot built for reuse.
+1. **Phase 5** — signature tools (blueprint 6): 5.1 Lineup Lab line-fit model, 5.2 Lineup Lab UI
+   + embedded swap widget, 5.3 trade fit + matchup previews. Needs archetypes (4.2) + impact
+   (4.1) + identity/ratings (3). insight_engine/templates/ pattern established (divergence.py).
 2. **Partner-odds**: once in-season, confirm the american-odds JSON path in stg_partner_odds
    (only remaining ingestion gap; offseason-blocked). Unblocks the WP-vs-market calibration line.
 3. **(Optional) rebuild int_shift_segments chain** to include 2010-15 shifts (heavy ~17min;

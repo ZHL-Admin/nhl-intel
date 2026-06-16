@@ -247,6 +247,16 @@ sources:
             description: Serialized JSON {default, fr}
           - name: ingestion_date
 
+      - name: raw_player_bio
+        description: >
+          Player bio (birth_date, height_in, weight_lb, shoots, position) from
+          /v1/player/{id}/landing (Phase 4.4; scripts/ingest_player_bio.py). One row per
+          player per ingestion; stg_player_bio keeps the latest.
+        columns:
+          - name: player_id
+          - name: birth_date
+          - name: ingestion_date
+
       - name: raw_ppt_replay
         description: >
           ppt-replay goal tracking, one row per (game_id, event_id) goal. Real per-frame

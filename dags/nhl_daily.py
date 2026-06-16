@@ -501,6 +501,30 @@ with DAG(
         env=_dbt_env,
     )
 
+    # --- Phase 4.4 trajectories (weekly) ---
+    # Player bio (age/height/weight) is slow-changing reference; refresh weekly before the jobs
+    # that need it (stg_player_bio is a view rebuilt in run_dbt_pre_xg).
+    refresh_player_bio = BashOperator(
+        task_id="refresh_player_bio",
+        bash_command=_mon.format("cd /opt/airflow && python -m scripts.ingest_player_bio"),
+        env=_dbt_env,
+    )
+    fit_aging_curves = BashOperator(
+        task_id="fit_aging_curves",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.fit_aging_curves"),
+        env=_dbt_env,
+    )
+    compute_twins = BashOperator(
+        task_id="compute_twins",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_twins"),
+        env=_dbt_env,
+    )
+    compute_physical = BashOperator(
+        task_id="compute_physical",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_physical"),
+        env=_dbt_env,
+    )
+
     # Composite stack (Phase 4.2): per-player value on a goals scale; needs player_impact.
     compute_composite = BashOperator(
         task_id="compute_composite",
@@ -570,3 +594,8 @@ with DAG(
     run_dbt_marts >> compute_consistency >> generate_report
     run_dbt_marts >> compute_coach_trust
     [compute_composite, compute_coach_trust] >> compute_divergence >> generate_report
+    # Phase 4.4 trajectories: aging curves need archetypes (write_archetypes); twins/physical
+    # need bio + marts. Bio refresh feeds them via the stg_player_bio view.
+    write_archetypes >> fit_aging_curves >> generate_report
+    [refresh_player_bio, run_dbt_marts] >> compute_twins >> generate_report
+    run_dbt_marts >> compute_physical >> generate_report

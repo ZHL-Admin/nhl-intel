@@ -13,7 +13,8 @@ import {
   getPlayerShots,
   getPlayerVsOpponent,
   getPlayerGamelog,
-  getPlayerReconciliation
+  getPlayerReconciliation,
+  getPlayerTrajectory
 } from '../api/players'
 import {
   PlayerDetail,
@@ -21,7 +22,8 @@ import {
   PlayerShots,
   PlayerVsOpponent,
   PlayerGamelog,
-  PlayerReconciliation
+  PlayerReconciliation,
+  PlayerTrajectory
 } from '../api/types'
 import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
 import './PlayerProfile.css'
@@ -72,6 +74,7 @@ function PlayerProfile() {
   // Data states
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null)
   const [reconciliation, setReconciliation] = useState<PlayerReconciliation | null>(null)
+  const [trajectory, setTrajectory] = useState<PlayerTrajectory | null>(null)
   const [playerTrends, setPlayerTrends] = useState<PlayerTrends | null>(null)
   const [playerShots, setPlayerShots] = useState<PlayerShots | null>(null)
   const [playerGamelog, setPlayerGamelog] = useState<PlayerGamelog | null>(null)
@@ -132,6 +135,17 @@ function PlayerProfile() {
     getPlayerReconciliation(parseInt(playerId))
       .then((d) => active && setReconciliation(d))
       .catch(() => { /* reconciliation is optional (e.g. low-minute or pre-2015) */ })
+    return () => { active = false }
+  }, [playerId])
+
+  // Fetch career trajectory (aging curve + twins + physical overlay) — Phase 4.4
+  useEffect(() => {
+    if (!playerId) return
+    let active = true
+    setTrajectory(null)
+    getPlayerTrajectory(parseInt(playerId))
+      .then((d) => active && setTrajectory(d))
+      .catch(() => { /* optional */ })
     return () => { active = false }
   }, [playerId])
 
@@ -486,6 +500,68 @@ function PlayerProfile() {
             )}
           </div>
         )}
+
+        {/* Career trajectory (Phase 4.4) */}
+        {trajectory && (trajectory.curve.length > 0 || trajectory.twins.length > 0) && (() => {
+          const byAge = new Map<number, { age: number; curve?: number; player?: number }>()
+          for (const c of trajectory.curve) byAge.set(c.age, { age: c.age, curve: c.curve_value })
+          for (const pt of trajectory.path) {
+            const e = byAge.get(pt.age) ?? { age: pt.age }
+            e.player = pt.points82; byAge.set(pt.age, e)
+          }
+          const data = Array.from(byAge.values()).sort((a, b) => a.age - b.age)
+          return (
+            <div className="player-profile__section">
+              <h2 className="player-profile__section-title">Career Trajectory</h2>
+              {trajectory.curve.length > 0 && (
+                <>
+                  <p className="trajectory__cap">
+                    Points/82 by age vs the {trajectory.curve_label} aging curve
+                    {trajectory.curve_label !== trajectory.archetype && trajectory.archetype
+                      ? ` (position fallback — ${trajectory.archetype} has too little pre-tracking history)` : ''}.
+                  </p>
+                  <div className="player-profile__chart">
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                        <XAxis dataKey="age" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <RechartsTooltip />
+                        <Line type="monotone" dataKey="curve" name="Archetype curve" stroke="#94a3b8"
+                          strokeDasharray="5 4" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="player" name="This player" stroke={teamColor}
+                          strokeWidth={2} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
+              {trajectory.twins.length > 0 && (
+                <div className="trajectory__twins">
+                  <div className="trajectory__sub">
+                    Career twins through age {trajectory.twins[0].through_age} (most similar paths)
+                  </div>
+                  {trajectory.twins.map((t) => (
+                    <div key={t.twin_id} className="trajectory__twin">
+                      <span className="trajectory__twin-name">{t.twin_name ?? t.twin_id}</span>
+                      <span className="trajectory__twin-sim">{(t.similarity * 100).toFixed(0)}% match</span>
+                      {t.reduced_features && <span className="trajectory__tag">pre-tracking comparable</span>}
+                      {t.next3_points82 != null && (
+                        <span className="trajectory__twin-out">→ {t.next3_points82.toFixed(0)} pts/82 next 3 yrs</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {trajectory.physical.length > 0 && (
+                <p className="trajectory__sub">
+                  Skating: bursts/60 {trajectory.physical.map((p) => (p.burst_rate ?? 0).toFixed(1)).join(' → ')}
+                  {!trajectory.burst_flag_enabled && ' (burst-decline early-warning not shown — it did not predict production decline in our data)'}
+                </p>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Primary Trend Chart */}
         {!isGoalie && (

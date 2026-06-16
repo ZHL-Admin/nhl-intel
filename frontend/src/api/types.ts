@@ -764,3 +764,26 @@ export interface DivergenceBoardRow {
   composite_total: number
   explanation: string
 }
+
+// --- Trajectory (Phase 4.4) ---
+export interface TrajectoryCurvePoint { age: number; curve_value: number }
+export interface TrajectoryPathPoint { age: number; season: string; points82: number }
+export interface TwinEntry {
+  twin_id: number
+  twin_name?: string | null
+  similarity: number
+  through_age: number
+  reduced_features: boolean
+  next3_points82?: number | null
+}
+export interface PhysicalPoint { season: string; burst_rate?: number | null; max_speed?: number | null }
+export interface PlayerTrajectory {
+  player_id: number
+  archetype?: string | null
+  curve_label?: string | null
+  curve: TrajectoryCurvePoint[]
+  path: TrajectoryPathPoint[]
+  twins: TwinEntry[]
+  physical: PhysicalPoint[]
+  burst_flag_enabled: boolean
+}

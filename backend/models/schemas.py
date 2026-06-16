@@ -299,6 +299,45 @@ class TeamVsOpponent(BaseModel):
 # Player Models
 # ============================================================================
 
+class TrajectoryCurvePoint(BaseModel):
+    age: int
+    curve_value: float
+
+
+class TrajectoryPathPoint(BaseModel):
+    age: int
+    season: str
+    points82: float
+
+
+class TwinEntry(BaseModel):
+    twin_id: int
+    twin_name: Optional[str] = None
+    similarity: float
+    through_age: int
+    reduced_features: bool
+    next3_points82: Optional[float] = None
+
+
+class PhysicalPoint(BaseModel):
+    season: str
+    burst_rate: Optional[float] = None
+    max_speed: Optional[float] = None
+
+
+class PlayerTrajectory(BaseModel):
+    """Career trajectory: aging-curve band, player path, twins, physical overlay (Phase 4.4)."""
+    player_id: int
+    archetype: Optional[str] = None
+    curve_label: Optional[str] = Field(None, description="What the curve band represents (archetype or position fallback)")
+    curve: List[TrajectoryCurvePoint]
+    path: List[TrajectoryPathPoint]
+    twins: List[TwinEntry]
+    physical: List[PhysicalPoint]
+    burst_flag_enabled: bool = Field(
+        False, description="Whether the burst-decline early-warning flag passed validation")
+
+
 class ClutchProfile(BaseModel):
     """Leverage-weighted production with a confidence phrase (Phase 4.3)."""
     n_shots: int

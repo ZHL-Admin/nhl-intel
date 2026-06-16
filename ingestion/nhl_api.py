@@ -248,6 +248,20 @@ def get_game_landing(game_id: str) -> dict:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_player_landing(player_id: str) -> dict:
+    """Fetch a player's bio/landing payload (Phase 4.4).
+
+    Source: api-web.nhle.com/v1/player/{id}/landing. Carries birthDate,
+    heightInInches, weightInPounds, shootsCatches, position — the bio needed for
+    age curves and career twins (not present in boxscore rosterSpots).
+    """
+    url = f"{BASE_URL}/v1/player/{player_id}/landing"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_game_right_rail(game_id: str) -> dict:
     """Fetch the gamecenter right-rail payload for a game.
 

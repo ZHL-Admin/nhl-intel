@@ -34,6 +34,9 @@ from models_ml import bq, config
 from models_ml.archetype_features import build, FEATURES
 
 SEASONS = ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"]
+# Pre-tracking seasons assigned by reduced-feature projection (segment data starts 2015-16;
+# Edge starts 2021-22). 2010-2014 has no segments, so no archetype there.
+HISTORICAL_SEASONS = ["2015-16", "2016-17", "2017-18", "2018-19", "2019-20", "2020-21"]
 # k per position. BIC over [6,12] with a degenerate-cluster guard prefers 12 for both, but
 # that selection is boundary-sensitive to float noise (a cluster dipping under the size floor
 # flips the choice), so we FIX k for reproducibility and persist the fitted model below.
@@ -133,6 +136,51 @@ def write_report(groups: dict) -> None:
     print(f"Wrote {ARTIFACT}")
 
 
+def _rows_from_resp(g, resp, pos, edge_imputed):
+    """Build player_archetypes rows from a soft-membership matrix."""
+    k = resp.shape[1]
+    g = g.reset_index(drop=True)
+    out = []
+    for i in range(len(g)):
+        mix = sorted(
+            [(config.ARCHETYPE_NAMES.get(f"{pos}{c}", f"{pos}{c}"), float(resp[i, c]))
+             for c in range(k) if resp[i, c] >= 0.10],
+            key=lambda t: t[1], reverse=True)
+        if not mix:
+            c = int(resp[i].argmax())
+            mix = [(config.ARCHETYPE_NAMES.get(f"{pos}{c}", f"{pos}{c}"), 1.0)]
+        out.append({"player_id": int(g.loc[i, "player_id"]), "season": g.loc[i, "season"],
+                    "pos_group": pos, "edge_imputed": edge_imputed,
+                    "archetypes": json.dumps([{"archetype": a, "weight": round(w, 3)}
+                                              for a, w in mix]),
+                    "primary_archetype": mix[0][0]})
+    return out
+
+
+def _score_historical(groups: dict) -> list:
+    """Assign 2015-16..2020-21 player-seasons with the LOCKED model, but with the Edge (and
+    RAPM, absent pre-2021) features NEUTRALISED to the scaler means — a reduced-feature
+    projection. The burst-defined clusters (F1 Elite Speed Driver, D2 Elite Offensive D)
+    cannot be identified without burst speed, so those players collapse into their nearest
+    non-burst cluster; rows are flagged edge_imputed=true."""
+    df = build(HISTORICAL_SEASONS)
+    rows = []
+    for pos in ["F", "D"]:
+        scaler, gmm = groups[pos][6], groups[pos][7]
+        g = df[df["pos_group"] == pos].reset_index(drop=True)
+        if g.empty:
+            continue
+        X = g[FEATURE_COLS].to_numpy(dtype="float64").copy()
+        means = scaler.mean_
+        for j in range(X.shape[1]):                       # neutralise any NaN to the train mean
+            col = X[:, j]
+            col[np.isnan(col)] = means[j]
+            X[:, j] = col
+        resp = gmm.predict_proba(scaler.transform(X))
+        rows += _rows_from_resp(g, resp, pos, edge_imputed=True)
+    return rows
+
+
 def do_write(groups: dict) -> None:
     if not config.ARCHETYPE_NAMES:
         print("config.ARCHETYPE_NAMES is empty — fill it from the labeling report first.")
@@ -140,27 +188,14 @@ def do_write(groups: dict) -> None:
     rows = []
     for pos in ["F", "D"]:
         g, X, resp, hard, k, means, scaler, gmm = groups[pos]
-        for i, r in g.iterrows():
-            mix = sorted(
-                [(config.ARCHETYPE_NAMES.get(f"{pos}{c}", f"{pos}{c}"), float(resp[i, c]))
-                 for c in range(k) if resp[i, c] >= 0.10],
-                key=lambda t: t[1], reverse=True)
-            if not mix:
-                c = int(hard[i])
-                mix = [(config.ARCHETYPE_NAMES.get(f"{pos}{c}", f"{pos}{c}"), 1.0)]
-            rows.append({"player_id": int(r["player_id"]), "season": r["season"],
-                         "pos_group": pos,
-                         "archetypes": json.dumps([{"archetype": a, "weight": round(w, 3)}
-                                                   for a, w in mix]),
-                         "primary_archetype": mix[0][0]})
+        rows += _rows_from_resp(g, resp, pos, edge_imputed=False)
+    rows += _score_historical(groups)            # pre-tracking seasons, reduced-feature
     out = pd.DataFrame(rows)
     out["model_version"] = "archetypes_v1"
     bq.write_df(out, "player_archetypes", write_disposition="WRITE_TRUNCATE",
                 clustering_fields=["season", "player_id"])
-    print(f"Wrote {len(out):,} rows to nhl_models.player_archetypes.")
-    dist = out.groupby("primary_archetype").size().sort_values(ascending=False)
-    print("\nArchetype distribution (primary):")
-    print(dist.to_string())
+    print(f"Wrote {len(out):,} rows to nhl_models.player_archetypes "
+          f"({int((~out.edge_imputed).sum())} tracking, {int(out.edge_imputed.sum())} historical).")
 
 
 def main() -> None:

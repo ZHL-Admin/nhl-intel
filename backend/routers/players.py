@@ -15,6 +15,7 @@ from models.schemas import (
     CompositeComponent, ArchetypeWeight, ArchetypeRankRow, COMPOSITE_LABELS,
     PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
     GameScorePoint, DivergenceBoardRow,
+    PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -99,6 +100,72 @@ async def get_divergence_board(
         side=r['side'], divergence=r['divergence'], trust_z=r['trust_z'],
         composite_z=r['composite_z'], composite_total=r['composite_total'],
         explanation=r['explanation']) for r in rows]
+
+
+@router.get("/{player_id}/trajectory", response_model=PlayerTrajectory)
+@cache(ttl=1800)
+async def get_player_trajectory(player_id: int) -> PlayerTrajectory:
+    """Career trajectory: aging-curve band for the player's archetype, his points/82 path by
+    age, career twins + outcomes, and the physical-aging overlay (Phase 4.4)."""
+    p = bq_service
+    arch_rows = p.query(f"""
+        SELECT primary_archetype, pos_group FROM {p.get_models_table_id('player_archetypes')}
+        WHERE player_id = {player_id} ORDER BY season DESC LIMIT 1""")
+    archetype = arch_rows[0]['primary_archetype'] if arch_rows else None
+    pos_group = arch_rows[0]['pos_group'] if arch_rows else None
+
+    def _curve(name):
+        cr = p.query(f"""SELECT age, curve_value FROM {p.get_models_table_id('aging_curves')}
+            WHERE archetype = @a ORDER BY age""",
+            params=[bigquery.ScalarQueryParameter("a", "STRING", name)])
+        return [TrajectoryCurvePoint(age=r['age'], curve_value=r['curve_value']) for r in cr]
+
+    curve = _curve(archetype) if archetype else []
+    curve_label = archetype
+    if not curve:  # burst-defined / sparse archetype -> position-group fallback band
+        fallback = "All Defensemen" if pos_group == "D" else "All Forwards"
+        curve = _curve(fallback)
+        curve_label = fallback
+
+    # player's points/82 path by age
+    pr = p.query(f"""
+        WITH pg AS (
+          SELECT season,
+            SUM(individual_goals + first_assists + second_assists) / COUNT(*) * 82 AS points82
+          FROM {p.get_full_table_id('mart_player_game_stats')}
+          WHERE player_id = {player_id}
+            AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+          GROUP BY season HAVING COUNT(*) >= 20
+        ),
+        b AS (SELECT birth_date FROM {p.get_full_table_id('stg_player_bio')} WHERE player_id = {player_id})
+        SELECT pg.season, pg.points82,
+          CAST(FLOOR(DATE_DIFF(DATE(CAST(SUBSTR(pg.season,1,4) AS INT64),10,1),
+               (SELECT birth_date FROM b), DAY)/365.25) AS INT64) AS age
+        FROM pg ORDER BY season""")
+    path = [TrajectoryPathPoint(age=r['age'], season=r['season'], points82=r['points82'])
+            for r in pr if r['age'] is not None]
+
+    tw = p.query(f"""
+        WITH nm AS (SELECT player_id, ANY_VALUE(first_name||' '||last_name) AS name
+                    FROM {p.get_full_table_id('stg_rosters')} GROUP BY player_id)
+        SELECT t.twin_id, nm.name, t.similarity, t.through_age, t.reduced_features,
+               t.twin_next3_points82
+        FROM {p.get_models_table_id('player_twins')} t LEFT JOIN nm ON t.twin_id = nm.player_id
+        WHERE t.player_id = {player_id} ORDER BY t.similarity DESC""")
+    twins = [TwinEntry(twin_id=r['twin_id'], twin_name=r.get('name'), similarity=r['similarity'],
+                       through_age=r['through_age'], reduced_features=r['reduced_features'],
+                       next3_points82=r.get('twin_next3_points82')) for r in tw]
+
+    ph = p.query(f"""SELECT season, burst_rate, max_speed, early_warning
+        FROM {p.get_models_table_id('player_physical')}
+        WHERE player_id = {player_id} ORDER BY season""")
+    physical = [PhysicalPoint(season=r['season'], burst_rate=r.get('burst_rate'),
+                              max_speed=r.get('max_speed')) for r in ph]
+    flag_enabled = any(r.get('early_warning') for r in ph)
+
+    return PlayerTrajectory(player_id=player_id, archetype=archetype, curve_label=curve_label,
+                            curve=curve, path=path, twins=twins, physical=physical,
+                            burst_flag_enabled=flag_enabled)
 
 
 @router.get("/{player_id}/reconciliation", response_model=PlayerReconciliation)
