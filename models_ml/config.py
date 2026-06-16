@@ -76,13 +76,17 @@ PP_GOAL_VALUE = 0.2
 
 # --- Coach trust (Phase 4.3) ------------------------------------------------
 # Deployment-trust signals, z-scored within position then combined. Weights reflect how
-# strongly each reflects a coach's trust. DZ-faceoff/post-icing signals from the blueprint are
-# omitted: int_segment_context.zone_start_code is not team-relative (empirically symmetric),
-# so a team-relative DZ-start share can't be computed cleanly from it.
+# strongly each reflects a coach's trust. dz_faceoff_share = share of a player's on-ice
+# faceoffs that are DEFENSIVE-zone draws for his team (recovered from pbp zone_code, which is
+# owner-relative: D = the faceoff winner's d-zone, flipped for the loser, joined to
+# int_on_ice_events). Post-icing draws are a future refinement. (Earlier note that this was
+# blocked by zone-code symmetry was wrong — outcome symmetry is irrelevant to who the coach
+# deploys for the draw.)
 COACH_TRUST_WEIGHTS = {
-    "pk_share": 0.40,            # penalty-kill deployment (PK TOI / total TOI)
-    "protect_lead_rate": 0.35,   # last-2-min-of-regulation-while-leading TOI / total TOI
-    "road_home_ratio": 0.25,     # road vs home TOI per game (matchup-proof usage)
+    "pk_share": 0.30,            # penalty-kill deployment (PK TOI / total TOI)
+    "dz_faceoff_share": 0.30,    # share of on-ice faceoffs that are own-team d-zone draws
+    "protect_lead_rate": 0.20,   # last-2-min-of-regulation-while-leading TOI / total TOI
+    "road_home_ratio": 0.20,     # road vs home TOI per game (matchup-proof usage)
 }
 
 # --- Divergence board (Phase 4.3) -------------------------------------------

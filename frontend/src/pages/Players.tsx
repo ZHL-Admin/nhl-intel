@@ -34,16 +34,21 @@ function DivergenceBoard() {
         Where coaching deployment (trust) and isolated value (composite) most disagree, by
         position-standardized z-scores. Explanations are generated from the underlying numbers.
       </p>
-      <div className="divergence__cols">
-        <div>
-          <h3 className="divergence__col-title">Trusted beyond their value</h3>
-          {over.map(card)}
-        </div>
-        <div>
-          <h3 className="divergence__col-title">Value beyond their deployment</h3>
-          {under.map(card)}
-        </div>
-      </div>
+
+      {/* The high-signal side: players a coach leans on more than the models support. */}
+      <h3 className="divergence__col-title">Trusted beyond their value</h3>
+      <p className="divergence__caption">
+        The eye-test-vs-analytics tension lives here — heavy defensive deployment the isolated
+        numbers don't reward.
+      </p>
+      <div className="divergence__grid">{over.map(card)}</div>
+
+      {/* The reverse side is largely mechanical (trust is defense-weighted, so offensive */}
+      {/* stars sit here), so it is presented compactly as secondary. */}
+      <details className="divergence__secondary">
+        <summary>Value beyond their deployment ({under.length}) — mostly offensive stars not used in defensive roles</summary>
+        <div className="divergence__grid">{under.map(card)}</div>
+      </details>
     </div>
   )
 }

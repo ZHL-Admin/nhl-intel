@@ -381,9 +381,11 @@ Olympic games to national team_ids — clean those the same way during Phase 4 i
     blocks from pbp). `compute_consistency.py` -> **nhl_models.player_consistency** (mean/sd/IQR,
     good-game/no-show shares, consistency index = pctile of mean/sd within position).
   - **coach trust**: `compute_coach_trust.py` -> **nhl_models.player_coach_trust** (z-scored
-    within position, weighted: PK share / protect-lead rate / road-home ratio;
-    config.COACH_TRUST_WEIGHTS). **DZ-faceoff & post-icing signals OMITTED** — zone_start_code
-    isn't team-relative (documented). Top trust = Glendening/Faksa/Stenlund (correct).
+    within position, weighted: PK share / **DZ-faceoff deployment** / protect-lead rate /
+    road-home ratio; config.COACH_TRUST_WEIGHTS). DZ-faceoff recovered via owner-relative
+    pbp zone_code (D=winner's d-zone, flip for loser) + int_on_ice_events on-ice skaters
+    (the earlier "symmetry blocks it" reasoning was wrong — outcome symmetry ≠ deployment).
+    Post-icing draws = future refinement. Top trust = Glendening/Stenlund/Jake Evans.
   - **divergence**: `compute_divergence.py` -> **nhl_models.divergence_board** (trust_z -
     composite_z within position, top/bottom 15, min 500 5v5 min). Deterministic explanations in
     **insight_engine/templates/divergence.py** (Phase 6 reuses). Trusted>value: Lindgren/

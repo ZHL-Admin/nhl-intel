@@ -55,12 +55,43 @@ group by 1, 2
 """
 
 
+# Defensive-zone faceoff deployment. pbp zone_code is owner-relative (D = the faceoff
+# winner's defensive zone), so a player is taking a d-zone draw when his team won the draw
+# and zone_code='D', or lost it and zone_code='O'. on_ice_for = winner's skaters.
+FACEOFF_SQL = """
+with fo as (
+  select e.game_id, e.on_ice_for, e.on_ice_against, p.zone_code
+  from `{p}.nhl_staging.int_on_ice_events` e
+  join `{p}.nhl_staging.stg_play_by_play` p
+    on e.game_id = p.game_id and e.event_id = p.event_id
+  where e.type_desc_key = 'faceoff' and p.zone_code in ('O', 'D', 'N')
+    and substr(cast(e.game_id as string), 5, 2) in ('02', '03')
+),
+g as (select game_id, season from `{p}.nhl_staging.stg_games`
+      where season in ({seasons})),
+winner as (
+  select g.season, pid as player_id, fo.zone_code = 'D' as is_dz
+  from fo join g using (game_id), unnest(fo.on_ice_for) as pid
+),
+loser as (
+  select g.season, pid as player_id, fo.zone_code = 'O' as is_dz
+  from fo join g using (game_id), unnest(fo.on_ice_against) as pid
+)
+select player_id, season, count(*) as total_fo, countif(is_dz) as dz_fo
+from (select * from winner union all select * from loser)
+group by 1, 2
+"""
+
+
 def pull(seasons: list[str]) -> pd.DataFrame:
     df = bq.query_df(PULL_SQL.format(p=bq.project(), seasons=", ".join(f"'{s}'" for s in seasons)))
     for c in ["total_toi", "pk_toi", "protect_lead_toi", "road_toi", "home_toi",
               "road_gp", "home_gp"]:
         df[c] = pd.to_numeric(df[c]).astype("float64")
-    return df
+    fo = bq.query_df(FACEOFF_SQL.format(p=bq.project(), seasons=", ".join(f"'{s}'" for s in seasons)))
+    for c in ["total_fo", "dz_fo"]:
+        fo[c] = pd.to_numeric(fo[c]).astype("float64")
+    return df.merge(fo, on=["player_id", "season"], how="left")
 
 
 def compute(df: pd.DataFrame, label: str) -> pd.DataFrame:
@@ -71,11 +102,13 @@ def compute(df: pd.DataFrame, label: str) -> pd.DataFrame:
                total_toi=("total_toi", "sum"), pk_toi=("pk_toi", "sum"),
                protect_lead_toi=("protect_lead_toi", "sum"), road_toi=("road_toi", "sum"),
                home_toi=("home_toi", "sum"), road_gp=("road_gp", "sum"),
-               home_gp=("home_gp", "sum"))
+               home_gp=("home_gp", "sum"),
+               total_fo=("total_fo", "sum"), dz_fo=("dz_fo", "sum"))
           .reset_index())
     df = df[df["total_toi"] >= MIN_TOI].copy()
     df["pos_group"] = np.where(df["position"] == "D", "D", "F")
     df["pk_share"] = df["pk_toi"] / df["total_toi"]
+    df["dz_faceoff_share"] = (df["dz_fo"] / df["total_fo"].replace(0, np.nan)).fillna(0.0)
     df["protect_lead_rate"] = df["protect_lead_toi"] / df["total_toi"]
     road_pg = df["road_toi"] / df["road_gp"].replace(0, np.nan)
     home_pg = df["home_toi"] / df["home_gp"].replace(0, np.nan)
@@ -104,13 +137,14 @@ def main() -> None:
     print("Most coach-trusted forwards (window):")
     for _, r in w[w.pos_group == "F"].sort_values("trust_score", ascending=False).head(8).iterrows():
         print(f"  {names.get(r['player_id'], r['player_id']):22s} trust {r['trust_score']:+.2f} "
-              f"(PK {r['pk_share']:.0%}, protectLead {r['protect_lead_rate']:.1%}, road/home {r['road_home_ratio']:.2f})")
+              f"(PK {r['pk_share']:.0%}, DZdraw {r['dz_faceoff_share']:.0%}, "
+              f"protectLead {r['protect_lead_rate']:.1%}, road/home {r['road_home_ratio']:.2f})")
 
     if args.dry_run:
         print(f"\n[dry-run] {len(out):,} rows not written")
         return
     cols = ["player_id", "season_window", "pos_group", "trust_score", "pk_share",
-            "protect_lead_rate", "road_home_ratio", "total_toi"]
+            "dz_faceoff_share", "protect_lead_rate", "road_home_ratio", "total_toi"]
     out = out[cols].copy()
     out["player_id"] = out["player_id"].astype("int64")
     out["model_version"] = "coach_trust_v1"
