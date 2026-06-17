@@ -192,7 +192,7 @@ export const ARCHETYPES: { F: string[]; D: string[] } = {
   ],
   D: [
     'Elite Offensive D', 'Power-Play Quarterback', 'Two-Way Top-Pair D', 'PP-Leaning Puck-Mover',
-    'Attacking D', 'Point-Shot D', 'Physical Mobile D', 'Defensive Top-Four D',
+    'Attacking D', 'Point-Shot D', 'Depth Defenseman', 'Defensive Top-Four D',
     'Defensive Defenseman', 'Stay-Home Defender', 'Depth Stay-Home D', 'Bottom-Pair Defensive D',
   ],
 }

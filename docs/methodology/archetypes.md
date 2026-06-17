@@ -59,6 +59,7 @@ renamed to fit every member:
 | Two-Way Top-Six (F7) | defense 48% (coin flip); only PP usage is universal | **Top Six Scorer** |
 | Rush-Joining D (D1) | rush only 55%; they shoot from in tight, not the point | **Attacking D** |
 | Shutdown PK D (D4) | defensive impact 50%; low-offense/slow PK deployment | **Defensive Defenseman** |
+| Physical Mobile D (D6) | "mobile" only 62%; "physical" unmeasured (no hits feature) | **Depth Defenseman** |
 
 Systemic finding: RAPM `def_impact` does not cleanly separate "defensive" players, so any label
 asserting *measured* defensive shutdown impact reads weak. The reliable defensive signals are

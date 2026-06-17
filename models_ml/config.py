@@ -134,6 +134,6 @@ ARCHETYPE_NAMES: dict[str, str] = {
     "F9": "Perimeter Playmaker", "F10": "Inside Scorer", "F11": "Perimeter Sniper",
     "D0": "Depth Stay-Home D", "D1": "Attacking D", "D2": "Elite Offensive D",
     "D3": "Power-Play Quarterback", "D4": "Defensive Defenseman", "D5": "Two-Way Top-Pair D",
-    "D6": "Physical Mobile D", "D7": "Stay-Home Defender", "D8": "Bottom-Pair Defensive D",
+    "D6": "Depth Defenseman", "D7": "Stay-Home Defender", "D8": "Bottom-Pair Defensive D",
     "D9": "Point-Shot D", "D10": "Defensive Top-Four D", "D11": "PP-Leaning Puck-Mover",
 }
