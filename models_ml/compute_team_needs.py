@@ -24,7 +24,7 @@ import pandas as pd
 
 from models_ml import bq, config
 
-ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES.values()))
+ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
 COMPONENTS = ["ev_offense", "ev_defense", "pp", "pk", "finishing"]
 COMPONENT_LABEL = {
     "ev_offense": "Even-strength offense", "ev_defense": "Even-strength defense",

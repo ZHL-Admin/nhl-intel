@@ -543,7 +543,7 @@ with DAG(
         bash_command=(
             "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}"
             "cd /opt/airflow && VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 "
-            "python -m models_ml.fit_archetypes --write"
+            "python -m models_ml.fit_archetypes_v2 --write"
             "{% else %}echo 'archetypes: weekly cadence, not Monday — skipping'{% endif %}"
         ),
         env=_dbt_env,

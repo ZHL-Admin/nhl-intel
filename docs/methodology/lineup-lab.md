@@ -30,7 +30,7 @@ burst-rate spread (pace compatibility), combined o-zone-tilt mean.
 |---|---|---|---|
 | xgf_pct | +0.242 | 0.0471 | 0.0640 |
 | xgf_per60 | +0.355 | 0.3299 | 0.4469 |
-| xga_per60 | +0.221 | 0.3298 | 0.4499 |
+| xga_per60 | +0.223 | 0.3289 | 0.4492 |
 
 ## Baselines (xGF% MAE, lower is better)
 

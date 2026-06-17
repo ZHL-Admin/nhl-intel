@@ -76,14 +76,36 @@ def _select_fit(Xs: np.ndarray):
     return per_k[0], per_k
 
 
-def fit_group(df: pd.DataFrame, pos: str, model: dict | None = None):
+def _fit_at_k(Xs: np.ndarray, k: int):
+    """Best-silhouette non-degenerate fit at a FIXED k (used when k is decided by hand)."""
+    from sklearn.metrics import silhouette_score
+    best = None
+    for seed in SEEDS:
+        gm = GaussianMixture(n_components=k, covariance_type="diag", reg_covar=REG_COVAR,
+                             random_state=seed, n_init=N_INIT, max_iter=500).fit(Xs)
+        lab = gm.predict(Xs)
+        if np.bincount(lab, minlength=k).min() < MIN_CLUSTER:
+            continue
+        sil = silhouette_score(Xs, lab)
+        if best is None or sil > best[0]:
+            best = (sil, seed, gm)
+    if best is None:
+        raise RuntimeError(f"no non-degenerate fit at k={k}")
+    return best
+
+
+def fit_group(df: pd.DataFrame, pos: str, model: dict | None = None, force_k: int | None = None):
     g = df[df["pos_group"] == pos].reset_index(drop=True)
     if model is None:
         scaler = StandardScaler().fit(g[FEATURE_COLS].to_numpy())
         Xs = scaler.transform(g[FEATURE_COLS].to_numpy())
-        (k, bic, sil, seed, gmm), per_k = _select_fit(Xs)
-        print(f"  {pos}: BIC-selected k={k} (sil {sil:.3f}, seed {seed}). "
-              f"Per-k BIC: " + ", ".join(f"k{kk}:{bb:.0f}" for kk, bb, *_ in per_k))
+        if force_k is not None:
+            sil, seed, gmm = _fit_at_k(Xs, force_k)
+            print(f"  {pos}: forced k={force_k} (sil {sil:.3f}, seed {seed})")
+        else:
+            (k, bic, sil, seed, gmm), per_k = _select_fit(Xs)
+            print(f"  {pos}: BIC-selected k={k} (sil {sil:.3f}, seed {seed}). "
+                  f"Per-k BIC: " + ", ".join(f"k{kk}:{bb:.0f}" for kk, bb, *_ in per_k))
     else:
         scaler, gmm = model["scaler"], model["gmm"]
     X = scaler.transform(g[FEATURE_COLS].to_numpy())
@@ -214,12 +236,27 @@ def crosswalk(groups: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true", help="emit player_archetypes (needs names)")
+    ap.add_argument("--refit-d-k", type=int, default=None,
+                    help="refit ONLY defensemen at this forced k, keeping the saved F fit")
     args = ap.parse_args()
 
     df = build_v2(SEASONS)
     df = df[df["toi_5v5"] >= config.ARCHETYPE_MIN_5V5_MIN].copy()
     print(f"{len(df)} tracking-era player-seasons (F={int((df.pos_group=='F').sum())}, "
           f"D={int((df.pos_group=='D').sum())})")
+
+    if args.refit_d_k is not None:
+        saved = joblib.load(MODEL_PATH)
+        gF = fit_group(df, "F", saved["F"])                     # keep accepted F fit
+        gD = fit_group(df, "D", None, force_k=args.refit_d_k)    # refit D at forced k
+        joblib.dump({"F": {"scaler": gF[6], "gmm": gF[7]},
+                     "D": {"scaler": gD[6], "gmm": gD[7]}}, MODEL_PATH)
+        print(f"Refit D at k={args.refit_d_k}, kept F; saved -> {MODEL_PATH}")
+        write_audit({"F": gF, "D": gD})
+        crosswalk({"F": gF, "D": gD})
+        print("\nSTOP: D re-clustered. Re-confirm D names before --write.")
+        return
+
     groups = fit_or_load(df)
 
     if not args.write:
@@ -232,9 +269,62 @@ def main() -> None:
     _do_write(groups)
 
 
+def _rows_from_resp(g, resp, pos, edge_imputed):
+    """player_archetypes rows from soft memberships, using ARCHETYPE_NAMES_V2 and MERGING any
+    clusters that share a display name (D3 + D4 both -> 'Depth Defenseman': sum their weights)."""
+    k = resp.shape[1]
+    g = g.reset_index(drop=True)
+    out = []
+    for i in range(len(g)):
+        agg: dict[str, float] = {}
+        for c in range(k):
+            name = config.ARCHETYPE_NAMES_V2.get(f"{pos}{c}", f"{pos}{c}")
+            agg[name] = agg.get(name, 0.0) + float(resp[i, c])
+        mix = sorted([(a, w) for a, w in agg.items() if w >= 0.10], key=lambda t: t[1], reverse=True)
+        if not mix:
+            top = max(agg.items(), key=lambda t: t[1])
+            mix = [(top[0], 1.0)]
+        out.append({"player_id": int(g.loc[i, "player_id"]), "season": g.loc[i, "season"],
+                    "pos_group": pos, "edge_imputed": edge_imputed,
+                    "archetypes": json.dumps([{"archetype": a, "weight": round(w, 3)}
+                                              for a, w in mix]),
+                    "primary_archetype": mix[0][0]})
+    return out
+
+
+def _score_historical(groups: dict) -> list:
+    """Pre-tracking seasons via reduced-feature projection: Edge + coach-trust + RAPM are absent
+    before 2021-22, so those feature columns are neutralised to the scaler mean (the burst- and
+    deployment-defined clusters collapse). Flagged edge_imputed=true."""
+    df = build_v2(HISTORICAL_SEASONS)
+    rows = []
+    for pos in ["F", "D"]:
+        scaler, gmm = groups[pos][6], groups[pos][7]
+        g = df[df["pos_group"] == pos].reset_index(drop=True)
+        if g.empty:
+            continue
+        X = g[FEATURE_COLS].to_numpy(dtype="float64").copy()
+        for j in range(X.shape[1]):
+            col = X[:, j]
+            col[np.isnan(col)] = scaler.mean_[j]
+            X[:, j] = col
+        resp = gmm.predict_proba(scaler.transform(X))
+        rows += _rows_from_resp(g, resp, pos, edge_imputed=True)
+    return rows
+
+
 def _do_write(groups: dict) -> None:
-    from models_ml.fit_archetypes import _rows_from_resp  # reuse v1 row builder
-    raise SystemExit("A3 not yet wired — see fit_archetypes_v2._do_write")
+    rows = []
+    for pos in ["F", "D"]:
+        g, X, resp, hard, k, means, scaler, gmm = groups[pos]
+        rows += _rows_from_resp(g, resp, pos, edge_imputed=False)
+    rows += _score_historical(groups)
+    out = pd.DataFrame(rows)
+    out["model_version"] = "archetypes_v2"
+    bq.write_df(out, "player_archetypes", write_disposition="WRITE_TRUNCATE",
+                clustering_fields=["season", "player_id"])
+    print(f"Wrote {len(out):,} rows to nhl_models.player_archetypes "
+          f"({int((~out.edge_imputed).sum())} tracking, {int(out.edge_imputed.sum())} historical).")
 
 
 if __name__ == "__main__":

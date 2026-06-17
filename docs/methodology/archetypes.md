@@ -1,9 +1,44 @@
-# Player archetypes (Phase 4.2)
+# Player archetypes — v2 (current)
 
 Per-position Gaussian-mixture clustering of player-season feature vectors
-(`models_ml/fit_archetypes.py` + `archetype_features.py` -> `nhl_models.player_archetypes`),
-producing soft archetype memberships. Forwards and defensemen are clustered separately, k=12
-each.
+(`models_ml/fit_archetypes_v2.py` + `archetype_features_v2.py` -> `nhl_models.player_archetypes`,
+model_version `archetypes_v2`), producing soft memberships. F and D clustered separately, k=12
+each (BIC-selected over [6,12] with a degenerate-cluster guard). Persisted, single-threaded fit at
+`artifacts/archetypes_v2.joblib`.
+
+**Why v2 (enriched feature vector).** v1 clustered on offense/sequence/shot-location/PP/penalty/
+deployment/Edge features; defense entered only as low-variance RAPM `def_impact`, so it barely
+separated clusters — defensive roles were a *display* afterthought. v2 ADDS the stronger
+defensive/style signals that postdate v1 and were never used to classify: the **coach-trust
+composite + its components** (PK role, DZ-faceoff-start share, lead-protection usage, road/home
+matchup usage), **rink-adjusted hits /60** (never raw), **penalty differential (drawn−taken) /60**,
+and **on-ice xGA /60 at 5v5** (defensive suppression, computed from `int_on_ice_events × shot_xg`).
+These now drive separation: coach-trust, PK, DZ-faceoff, hits, and xGA-suppression are *universal*
+traits across many clusters. The radar (`player-radar.md`) and the labels are therefore coherent —
+the same information drives both.
+
+**Trait-audit governs naming** (`artifacts/archetype_trait_audit_v2.md`). For each cluster:
+a **universal** trait = ≥80% of members on one side of the position median; a name may assert ONLY
+universal traits. **Distinctive** traits (centroid |z|) drive the per-cluster DESCRIPTOR
+(`config.ARCHETYPE_DESCRIPTORS_V2`), not the name. A **near-twin** check flags merge candidates.
+Systemic finding (carried from v1): RAPM `def_impact` does not separate defensive players, so
+"shutdown/two-way" *skill* claims read weak — surviving defensive labels are **deployment-based**.
+
+**Two-cluster display merge (footnote).** Defensemen clusters **D3 and D4 are distinct GMM
+components at the model layer** but were merged at DISPLAY into one label, **"Depth Defenseman"**:
+their union (n≈193) is universally low power-play TOI (83%) and low penalty-kill share (90–92%) —
+i.e. depth D with no special-teams role — which is principle-1-legal. `config.ARCHETYPE_NAMES_V2`
+maps both `D3` and `D4` to "Depth Defenseman"; the row builder sums their membership weights so a
+player's mix carries a single "Depth Defenseman" entry. Net: 12 forward + 11 defense labels.
+`F4` "North-South Forward" is named for its universal/distinctive speed; its descriptor carries the
+honest conceding detail (on-ice xGF ~31st / xGA ~84th pctl). The naming review was human-confirmed.
+
+---
+
+# Player archetypes v1 (superseded — retained for history)
+
+Per-position Gaussian-mixture clustering of player-season feature vectors
+(`models_ml/fit_archetypes.py` + `archetype_features.py`), k=12 each.
 
 ## Features (per player-season, >= 300 5v5 minutes, 2021-22..2025-26)
 

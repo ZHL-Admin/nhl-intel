@@ -137,3 +137,50 @@ ARCHETYPE_NAMES: dict[str, str] = {
     "D6": "Depth Defenseman", "D7": "Stay-Home Defender", "D8": "Bottom-Pair Defensive D",
     "D9": "Point-Shot D", "D10": "Defensive Top-Four D", "D11": "PP-Leaning Puck-Mover",
 }
+
+# --- Archetypes v2 (enriched refit; supersedes v1) --------------------------
+# v2 clusters on the ENRICHED vector (archetype_features_v2) so defensive/style signals drive
+# classification. Names assert ONLY traits that are universal (>=80% one-sided) in the cluster's
+# membership (governed by artifacts/archetype_trait_audit_v2.md); the descriptor below carries the
+# distinctive (centroid) traits. Keyed to artifacts/archetypes_v2.joblib (F k=12, D k=12).
+# NOTE the two-cluster mapping: D3 and D4 are distinct GMM components at the MODEL layer but were
+# merged at DISPLAY into one "Depth Defenseman" label (their union is universally low-PP + low-PK
+# = depth; see archetypes.md footnote). All consumers read these names.
+ARCHETYPE_NAMES_V2: dict[str, str] = {
+    "F0": "Elite Offensive Driver", "F1": "Penalty-Kill Forward", "F2": "Middle-Six Forward",
+    "F3": "Physical Energy Forward", "F4": "North-South Forward", "F5": "Two-Way Forward",
+    "F6": "Inside Scorer", "F7": "Checking Forward", "F8": "Perimeter Scorer",
+    "F9": "Top-Six Playmaker", "F10": "Fourth-Line Forward", "F11": "Secondary Scorer",
+    "D0": "Elite Offensive D", "D1": "Physical Defenseman", "D2": "Puck-Moving D",
+    "D3": "Depth Defenseman", "D4": "Depth Defenseman",     # merged label, distinct model IDs
+    "D5": "Penalty-Kill D", "D6": "Power-Play Quarterback", "D7": "Stay-Home Defenseman",
+    "D8": "Sheltered Offensive D", "D9": "Attacking D", "D10": "Two-Way Top-Four D",
+    "D11": "Point-Shot D",
+}
+# Per-cluster descriptor (distinctive traits, plain language) shown under the label in the UI.
+ARCHETYPE_DESCRIPTORS_V2: dict[str, str] = {
+    "F0": "drives play from the offensive zone with a heavy power-play role and elite shot generation",
+    "F1": "penalty-kill regular with defensive-zone starts and lead-protection usage; little power-play time",
+    "F2": "even-strength forward with little special-teams role; physical, draws penalties",
+    "F3": "high rink-adjusted hit rate and defensive-zone deployment; little power-play time",
+    "F4": "fast, low offensive-zone time; on-ice results lean conceding (xGF ~31st / xGA ~84th pctl)",
+    "F5": "suppresses on-ice xGA and kills penalties; drives 5v5 offense without leaning on the power play",
+    "F6": "shoots from the slot and in tight, with few point shots",
+    "F7": "penalty-kill and defensive-zone deployment with low offensive-zone time",
+    "F8": "perimeter shot diet with a power-play role; low physicality",
+    "F9": "power-play playmaker with offensive-zone starts; low physicality",
+    "F10": "heavy defensive deployment, perimeter shots, low individual offensive impact",
+    "F11": "power-play role, shoots in tight; a secondary offensive forward",
+    "D0": "elite skater with a heavy power-play role who drives offense from the back end",
+    "D1": "very high rink-adjusted hit rate, draws penalties; little power-play time",
+    "D2": "offensive-zone deployment; a mobile, transition-driving top-four puck-mover",
+    "D3": "depth role with little power-play or penalty-kill time (bottom-pair usage)",
+    "D4": "depth role with little power-play or penalty-kill time (bottom-pair usage)",
+    "D5": "penalty-kill regular with defensive-zone starts and trusted defensive deployment",
+    "D6": "quarterbacks the power play and drives offense from offensive-zone deployment",
+    "D7": "stay-home: perimeter shots and a penalty-kill role; low power-play time",
+    "D8": "shoots from in tight with no penalty-kill role; sheltered offensive usage",
+    "D9": "activates into the offense, shooting from the slot/in tight rather than the point",
+    "D10": "penalty-kill role and trusted top-four usage; shoots in tight",
+    "D11": "point-shot volume, an offensive puck-mover with no penalty-kill role",
+}

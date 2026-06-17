@@ -20,7 +20,7 @@ import numpy as np
 from models_ml import bq, config
 from insight_engine.templates import team_fit as tmpl
 
-ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES.values()))
+ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
 COMPONENTS = ["ev_offense", "ev_defense", "pp", "pk", "finishing"]
 
 
@@ -31,6 +31,36 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
 
 def _latest_season(p: str) -> str:
     return bq.query_df(f"select max(season) as s from `{p}.nhl_models.team_needs`").iloc[0]["s"]
+
+
+def _player_profile(p: str, player_id: int, season: str) -> dict:
+    """Build a player's archetype vector + component vector + mix once (shared by both scorers)."""
+    arch_row = bq.query_df(f"""select archetypes, primary_archetype
+        from `{p}.nhl_models.player_archetypes`
+        where player_id = {int(player_id)} and season = '{season}'""")
+    comp_row = bq.query_df(f"""select {', '.join(COMPONENTS)}
+        from `{p}.nhl_models.player_composite`
+        where player_id = {int(player_id)} and season_window = '{season}'""")
+    if arch_row.empty and comp_row.empty:
+        raise ValueError(f"no {season} profile for player {player_id}")
+
+    p_arch = np.zeros(len(ARCH_LIST))
+    primary, primary_w, mix = None, 0.0, []
+    if not arch_row.empty and isinstance(arch_row.iloc[0]["archetypes"], str):
+        idx = {a: i for i, a in enumerate(ARCH_LIST)}
+        for item in json.loads(arch_row.iloc[0]["archetypes"]):
+            mix.append({"archetype": item["archetype"], "weight": round(float(item["weight"]), 3)})
+            if item["archetype"] in idx:
+                p_arch[idx[item["archetype"]]] = float(item["weight"])
+        primary = arch_row.iloc[0]["primary_archetype"]
+        primary_w = next((m["weight"] for m in mix if m["archetype"] == primary), 0.0)
+
+    p_comp = {c: (float(comp_row.iloc[0][c]) if not comp_row.empty
+                  and comp_row.iloc[0][c] is not None else 0.0) for c in COMPONENTS}
+    top_comp = max(p_comp, key=p_comp.get)
+    pc_vec = np.array([max(0.0, p_comp[c]) for c in COMPONENTS])
+    return {"p_arch": p_arch, "pc_vec": pc_vec, "p_comp": p_comp, "mix": mix,
+            "primary": primary, "primary_w": primary_w, "top_comp": top_comp}
 
 
 def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> dict:
@@ -46,35 +76,13 @@ def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> d
     arch_need = {r.key: float(r.gap) for r in needs[needs.need_type == "archetype"].itertuples()}
     comp_need = {r.key: float(r.gap) for r in needs[needs.need_type == "component"].itertuples()}
 
-    arch_row = bq.query_df(f"""select archetypes, primary_archetype
-        from `{p}.nhl_models.player_archetypes`
-        where player_id = {int(player_id)} and season = '{season}'""")
-    comp_row = bq.query_df(f"""select {', '.join(COMPONENTS)}
-        from `{p}.nhl_models.player_composite`
-        where player_id = {int(player_id)} and season_window = '{season}'""")
-    if arch_row.empty and comp_row.empty:
-        raise ValueError(f"no {season} profile for player {player_id}")
-
-    # player vectors
-    p_arch = np.zeros(len(ARCH_LIST))
-    primary, primary_w, mix = None, 0.0, []
-    if not arch_row.empty and isinstance(arch_row.iloc[0]["archetypes"], str):
-        idx = {a: i for i, a in enumerate(ARCH_LIST)}
-        for item in json.loads(arch_row.iloc[0]["archetypes"]):
-            mix.append({"archetype": item["archetype"], "weight": round(float(item["weight"]), 3)})
-            if item["archetype"] in idx:
-                p_arch[idx[item["archetype"]]] = float(item["weight"])
-        primary = arch_row.iloc[0]["primary_archetype"]
-        primary_w = next((m["weight"] for m in mix if m["archetype"] == primary), 0.0)
-
-    p_comp = {c: (float(comp_row.iloc[0][c]) if not comp_row.empty
-                  and comp_row.iloc[0][c] is not None else 0.0) for c in COMPONENTS}
-    top_comp = max(p_comp, key=p_comp.get)
+    prof = _player_profile(p, player_id, season)
+    p_arch, pc_vec, p_comp = prof["p_arch"], prof["pc_vec"], prof["p_comp"]
+    primary, primary_w, mix, top_comp = prof["primary"], prof["primary_w"], prof["mix"], prof["top_comp"]
 
     # need vectors (positive gaps only)
     n_arch = np.array([max(0.0, arch_need.get(a, 0.0)) for a in ARCH_LIST])
     n_comp = np.array([max(0.0, comp_need.get(c, 0.0)) for c in COMPONENTS])
-    pc_vec = np.array([max(0.0, p_comp[c]) for c in COMPONENTS])
 
     arch_fit = _cosine(p_arch, n_arch)
     comp_fit = _cosine(pc_vec, n_comp)
@@ -102,3 +110,45 @@ def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> d
             "component_needs": top_needs("component", 5),
         },
     }
+
+
+def best_team_fits(player_id: int, season: str | None = None, top_n: int = 3,
+                   exclude_team_id: int | None = None) -> list[dict]:
+    """The teams whose gaps a player best fills — the player's profile scored against every
+    team's need vector (same cosine as score_team_fit), ranked. One player profile, all teams'
+    needs in a single query, so this is cheap."""
+    p = bq.project()
+    season = season or _latest_season(p)
+    prof = _player_profile(p, player_id, season)
+
+    allneeds = bq.query_df(f"""select team_id, need_type, key, label, gap
+        from `{p}.nhl_models.team_needs` where season = '{season}'""")
+    if allneeds.empty:
+        return []
+
+    out = []
+    for tid, g in allneeds.groupby("team_id"):
+        tid = int(tid)
+        if exclude_team_id is not None and tid == int(exclude_team_id):
+            continue
+        arch_need = {r.key: float(r.gap) for r in g[g.need_type == "archetype"].itertuples()}
+        comp_need = {r.key: float(r.gap) for r in g[g.need_type == "component"].itertuples()}
+        n_arch = np.array([max(0.0, arch_need.get(a, 0.0)) for a in ARCH_LIST])
+        n_comp = np.array([max(0.0, comp_need.get(c, 0.0)) for c in COMPONENTS])
+        fit = round(100.0 * (0.5 * _cosine(prof["p_arch"], n_arch)
+                             + 0.5 * _cosine(prof["pc_vec"], n_comp)), 1)
+        rs = tmpl.reasons(
+            player_primary_arch=prof["primary"], player_arch_weight=prof["primary_w"],
+            team_arch_needs=arch_need, player_top_component=prof["top_comp"],
+            player_top_component_value=prof["p_comp"][prof["top_comp"]], team_component_needs=comp_need)
+        comp_sub = g[(g.need_type == "component") & (g.gap > 0)].sort_values("gap", ascending=False)
+        # prefer the sentence that explains the gap this player fills; else the leading reason
+        reason = next((s for s in rs if "address" in s.lower()), rs[0] if rs else None)
+        out.append({
+            "team_id": tid, "fit_score": fit,
+            "reason": reason,
+            "top_need_label": comp_sub.iloc[0]["label"] if not comp_sub.empty else None,
+            "top_need_gap": round(float(comp_sub.iloc[0]["gap"]), 1) if not comp_sub.empty else None,
+        })
+    out.sort(key=lambda x: -x["fit_score"])
+    return out[:top_n]

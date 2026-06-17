@@ -36,7 +36,7 @@ SCALAR_FEATS = [
 ]
 
 # canonical, stable ordering of the 24 archetype labels for the mix vector
-ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES.values()))
+ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
 
 
 def _arch_vector(arch_json: str | None) -> np.ndarray:

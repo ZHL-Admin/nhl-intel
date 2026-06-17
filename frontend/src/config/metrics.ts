@@ -186,14 +186,14 @@ export const FINGERPRINT_GROUPS: { title: string; metrics: FingerprintMetric[] }
  */
 export const ARCHETYPES: { F: string[]; D: string[] } = {
   F: [
-    'High-Danger Driver', 'Perimeter Sniper', 'Top-Six Power Scorer', 'Top Six Scorer',
-    'Perimeter Playmaker', 'Middle-Six Driver', 'Inside Scorer', 'Power-Play Specialist',
-    'Checking-Line Forward', 'Bottom-Six Forward', 'Energy Forward', 'Fourth-Line Grinder',
+    'Elite Offensive Driver', 'Top-Six Playmaker', 'Perimeter Scorer', 'Secondary Scorer',
+    'Inside Scorer', 'North-South Forward', 'Two-Way Forward', 'Middle-Six Forward',
+    'Physical Energy Forward', 'Checking Forward', 'Penalty-Kill Forward', 'Fourth-Line Forward',
   ],
   D: [
-    'Elite Offensive D', 'Power-Play Quarterback', 'Two-Way Top-Pair D', 'PP-Leaning Puck-Mover',
-    'Attacking D', 'Point-Shot D', 'Depth Defenseman', 'Defensive Top-Four D',
-    'Defensive Defenseman', 'Stay-Home Defender', 'Depth Stay-Home D', 'Bottom-Pair Defensive D',
+    'Elite Offensive D', 'Power-Play Quarterback', 'Puck-Moving D', 'Attacking D',
+    'Two-Way Top-Four D', 'Point-Shot D', 'Sheltered Offensive D', 'Penalty-Kill D',
+    'Stay-Home Defenseman', 'Physical Defenseman', 'Depth Defenseman',
   ],
 }
 
