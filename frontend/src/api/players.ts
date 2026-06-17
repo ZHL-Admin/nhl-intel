@@ -18,8 +18,10 @@ import {
 /**
  * Fetch detailed information for a specific player.
  */
-export async function getPlayerDetail(playerId: number): Promise<PlayerDetail> {
-  const response = await apiClient.get<PlayerDetail>(`/players/${playerId}`)
+export async function getPlayerDetail(playerId: number, season?: string): Promise<PlayerDetail> {
+  const response = await apiClient.get<PlayerDetail>(`/players/${playerId}`, {
+    params: season ? { season } : undefined,
+  })
   return response.data
 }
 

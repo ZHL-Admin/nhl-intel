@@ -108,7 +108,7 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
   useEffect(() => {
     let active = true
     setLoading(true); setRadar(null); setDetail(null)
-    Promise.allSettled([getPlayerRadar(row.player_id, season), getPlayerDetail(row.player_id)])
+    Promise.allSettled([getPlayerRadar(row.player_id, season), getPlayerDetail(row.player_id, season)])
       .then(([r, d]) => {
         if (!active) return
         if (r.status === 'fulfilled') setRadar(r.value)
@@ -260,7 +260,8 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
 
           <div className="players__podium">
             {top.map((r, i) => (
-              <button key={r.player_id} className="ptop" onClick={() => navigate(`/players/${r.player_id}`)}>
+              <button key={r.player_id} className={`ptop${expandedId === r.player_id ? ' ptop--active' : ''}`}
+                onClick={() => toggle(r.player_id)} aria-expanded={expandedId === r.player_id}>
                 <span className={`ptop__rank ptop__rank--${i + 1}`}>{i + 1}</span>
                 <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
                 <span className="ptop__name">{r.player_name ?? r.player_id}</span>
@@ -272,23 +273,32 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
               </button>
             ))}
           </div>
+          {/* podium expansion renders full-width below the 3-col grid */}
+          {(() => {
+            const er = top.find((r) => r.player_id === expandedId)
+            return er ? <PlayerExpansion row={er} season={season} /> : null
+          })()}
 
           {rest.length > 0 && (
             <>
               <div className="players__rows">
                 {rest.map((r, i) => (
-                  <button key={r.player_id} className="prow" onClick={() => navigate(`/players/${r.player_id}`)}>
-                    <span className="prow__rank">{i + 4}</span>
-                    <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={38} />
-                    <span className="prow__id">
-                      <span className="prow__name">{r.player_name ?? r.player_id}</span>
-                      <span className="prow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
-                    </span>
-                    <span className="prow__bar">
-                      <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={listDomain} se={r.composite_total_sd ?? undefined} gridlines={listTicks} />
-                    </span>
-                    <span className="prow__total">{fmt(r.composite_total)}</span>
-                  </button>
+                  <Fragment key={r.player_id}>
+                    <button className={`prow${expandedId === r.player_id ? ' prow--active' : ''}`}
+                      onClick={() => toggle(r.player_id)} aria-expanded={expandedId === r.player_id}>
+                      <span className="prow__rank">{i + 4}</span>
+                      <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={38} />
+                      <span className="prow__id">
+                        <span className="prow__name">{r.player_name ?? r.player_id}</span>
+                        <span className="prow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+                      </span>
+                      <span className="prow__bar">
+                        <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={listDomain} se={r.composite_total_sd ?? undefined} gridlines={listTicks} />
+                      </span>
+                      <span className="prow__total">{fmt(r.composite_total)}</span>
+                    </button>
+                    {expandedId === r.player_id && <PlayerExpansion row={r} season={season} />}
+                  </Fragment>
                 ))}
               </div>
               <div className="players__axis" aria-hidden="true">
