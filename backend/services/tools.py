@@ -73,6 +73,151 @@ def score_line(player_ids: list[int], season: Optional[str] = None) -> dict:
     return _score(player_ids, season)
 
 
+# --- Better fits: per-slot same-caliber swap suggestions (Phase 5.2) ----------
+def _positions(ids: list[int], season: str) -> dict[int, Optional[str]]:
+    comp = bq_service.get_models_table_id("player_composite")
+    idlist = ", ".join(str(int(i)) for i in ids) or "0"
+    rows = bq_service.query(
+        f"SELECT player_id, position FROM {comp} "
+        f"WHERE season_window = @season AND player_id IN ({idlist})",
+        params=[bigquery.ScalarQueryParameter("season", "STRING", season)])
+    return {r["player_id"]: r.get("position") for r in rows}
+
+
+def get_same_tier_candidates(player_id: int, line_ids: list[int], season: str, kind: str,
+                             caliber_sd: float = 1.5, min_toi: float = 200.0,
+                             limit: int = 12) -> list[dict]:
+    """Skaters in the same archetype + composite-caliber band as `player_id`, same position
+    group (`kind`='F' -> C/L/R, 'D' -> D), excluding anyone already in `line_ids`."""
+    arch_t = bq_service.get_models_table_id("player_archetypes")
+    comp_t = bq_service.get_models_table_id("player_composite")
+    rost = bq_service.get_full_table_id("stg_rosters")
+
+    ref = bq_service.query(
+        f"""SELECT a.primary_archetype AS arch, c.total AS total, c.total_sd AS sd
+            FROM {arch_t} a
+            JOIN {comp_t} c ON a.player_id = c.player_id AND a.season = c.season_window
+            WHERE a.player_id = {int(player_id)} AND a.season = @season""",
+        params=[bigquery.ScalarQueryParameter("season", "STRING", season)])
+    if not ref or ref[0].get("arch") is None:
+        return []
+    arch = ref[0]["arch"]
+    total = float(ref[0]["total"])
+    sd = float(ref[0]["sd"]) if ref[0].get("sd") else 3.0
+    lo, hi = total - caliber_sd * sd, total + caliber_sd * sd
+    positions = FWD_POS if kind == "F" else ("D",)
+    pos_list = ", ".join(f"'{p}'" for p in positions)
+    exclude = ", ".join(str(int(i)) for i in line_ids) or "0"
+
+    rows = bq_service.query(
+        f"""
+        WITH latest AS (
+            SELECT player_id,
+                   ARRAY_AGG(STRUCT(team_id, headshot_url, first_name, last_name, position_code)
+                             ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS r
+            FROM {rost}
+            WHERE season = @season AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        )
+        SELECT l.player_id, l.r.first_name AS fn, l.r.last_name AS ln, l.r.team_id AS team_id,
+               l.r.position_code AS position, l.r.headshot_url AS headshot_url,
+               c.total AS total, c.toi_5v5 AS toi
+        FROM latest l
+        JOIN {arch_t} a ON a.player_id = l.player_id AND a.season = @season
+        JOIN {comp_t} c ON c.player_id = l.player_id AND c.season_window = @season
+        WHERE a.primary_archetype = @arch
+          AND l.r.position_code IN ({pos_list})
+          AND c.total BETWEEN @lo AND @hi
+          AND c.toi_5v5 >= @min_toi
+          AND l.player_id NOT IN ({exclude})
+        ORDER BY c.total DESC
+        LIMIT {int(limit)}
+        """,
+        params=[
+            bigquery.ScalarQueryParameter("season", "STRING", season),
+            bigquery.ScalarQueryParameter("arch", "STRING", arch),
+            bigquery.ScalarQueryParameter("lo", "FLOAT64", lo),
+            bigquery.ScalarQueryParameter("hi", "FLOAT64", hi),
+            bigquery.ScalarQueryParameter("min_toi", "FLOAT64", min_toi),
+        ])
+    out = []
+    for r in rows:
+        out.append({
+            "player_id": r["player_id"],
+            "name": " ".join(p for p in [r.get("fn"), r.get("ln")] if p),
+            "team_id": r.get("team_id"), "team_abbrev": _abbrev(r.get("team_id")),
+            "position": r.get("position"), "headshot_url": r.get("headshot_url"),
+            "archetype": arch,
+            "composite_total": round(float(r["total"]), 2) if r.get("total") is not None else None,
+        })
+    return out
+
+
+def line_fit_suggestions(player_ids: list[int], season: Optional[str] = None,
+                         pool_limit: int = 8, top_n: int = 5) -> dict:
+    """Per-slot 'better fit' suggestions: same-caliber candidates ranked by the projected
+    xGF% gain from swapping them in for the current member."""
+    from models_ml.score_line import score_line as _score
+    from insight_engine.templates.line_fit import swap_reasons
+
+    season = season or latest_roster_season()
+    ids = [int(i) for i in player_ids]
+    if len(ids) == 3:
+        sublines = [("F3", ids)]
+    elif len(ids) == 2:
+        sublines = [("D2", ids)]
+    elif len(ids) == 5:
+        pos = _positions(ids, season)
+        fwds = [i for i in ids if pos.get(i) in FWD_POS]
+        defs = [i for i in ids if pos.get(i) == "D"]
+        if len(fwds) != 3 or len(defs) != 2:
+            raise ValueError("a 5-skater unit must be 3 forwards + 2 defensemen")
+        sublines = [("F3", fwds), ("D2", defs)]
+    else:
+        raise ValueError("line must be 2, 3, or 5 skaters")
+
+    slots: list[dict] = []
+    for line_type, sub in sublines:
+        base = _score(sub, season, blend=False)
+        base_xgf = base["projected_xgf_pct"]
+        base_contribs = base.get("contribs", {})
+        members = {m["player_id"]: m for m in base["members"]}
+        kind = "F" if line_type == "F3" else "D"
+        for idx, pid in enumerate(sub):
+            pool = get_same_tier_candidates(pid, sub, season, kind, limit=pool_limit)
+            cands = []
+            for c in pool:
+                swap_ids = [c["player_id"] if j == idx else x for j, x in enumerate(sub)]
+                try:
+                    sp = _score(swap_ids, season, blend=False)
+                except Exception:
+                    continue
+                gain = sp["projected_xgf_pct"] - base_xgf
+                if gain <= 0:
+                    continue
+                cands.append({
+                    "player_id": c["player_id"], "name": c["name"],
+                    "team_id": c["team_id"], "team_abbrev": c["team_abbrev"],
+                    "position": c["position"], "headshot_url": c["headshot_url"],
+                    "archetype": c["archetype"], "composite_total": c["composite_total"],
+                    "swap_xgf_pct": round(sp["projected_xgf_pct"], 4),
+                    "swap_grade": sp["grade"], "xgf_gain": round(gain, 4),
+                    "reasons": swap_reasons(base_contribs, sp.get("contribs", {})),
+                })
+            cands.sort(key=lambda x: -x["xgf_gain"])
+            mem = members.get(pid, {})
+            slots.append({
+                "slot_index": len(slots),
+                "position": mem.get("position"),
+                "current_player_id": pid,
+                "current_player_name": mem.get("name"),
+                "candidates": cands[:top_n],
+            })
+    return {"season": season,
+            "line_type": "UNIT5" if len(ids) == 5 else sublines[0][0],
+            "slots": slots}
+
+
 # current trios/pairs over a team's last 10 games (the swap-widget / preview source)
 _CURRENT_LINES_SQL = """
 WITH g AS (

@@ -425,21 +425,39 @@ async def get_team_roster(
         season_result = bq_service.query(season_sql)
         season = season_result[0]['current_season'] if season_result else "2025-26"
 
-    # Get player stats aggregated by season
+    # Roster comes from stg_rosters (per-season roster spots: correct positions and
+    # season-scoped), with per-game stats left-joined from the player game-stats mart.
     sql = f"""
+    WITH roster AS (
+        SELECT
+            player_id,
+            ANY_VALUE(CONCAT(first_name, ' ', last_name)) AS player_name,
+            ANY_VALUE(position_code) AS position,
+            COUNT(DISTINCT game_id) AS games_played
+        FROM {bq_service.get_full_table_id('stg_rosters')}
+        WHERE team_id = {team_id} AND season = '{season}'
+        GROUP BY player_id
+    ),
+    stats AS (
+        SELECT
+            player_id,
+            AVG(toi_5v5) AS toi_per_gp,
+            AVG(primary_points_per60) AS points_per60
+        FROM {bq_service.get_full_table_id('mart_player_game_stats')}
+        WHERE team_id = {team_id} AND season = '{season}'
+        GROUP BY player_id
+    )
     SELECT
-        player_id,
-        CONCAT(first_name, ' ', last_name) as player_name,
-        position_code as position,
-        COUNT(DISTINCT game_id) as games_played,
-        AVG(toi_5v5) as toi_per_gp,
-        AVG(primary_points_per60) as points_per60,
-        0.5 as cf_pct  -- TODO: Calculate player CF% when on-ice data available
-    FROM {bq_service.get_full_table_id('mart_player_game_stats')}
-    WHERE team_id = {team_id}
-    GROUP BY player_id, first_name, last_name, position_code
-    HAVING games_played >= 3
-    ORDER BY position_code, points_per60 DESC
+        r.player_id,
+        r.player_name,
+        r.position,
+        r.games_played,
+        COALESCE(s.toi_per_gp, 0) AS toi_per_gp,
+        COALESCE(s.points_per60, 0) AS points_per60,
+        0.5 AS cf_pct  -- TODO: Calculate player CF% when on-ice data available
+    FROM roster r
+    LEFT JOIN stats s USING (player_id)
+    ORDER BY r.position, points_per60 DESC
     """
 
     results = bq_service.query(sql)

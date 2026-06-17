@@ -59,7 +59,7 @@ def _observed(line_key: str, season: str) -> dict | None:
             "xgf_per60": float(r["xgf_per60"]), "xga_per60": float(r["xga_per60"])}
 
 
-def _score_one(player_ids: list[int], season: str, line_type: str) -> dict:
+def _score_one(player_ids: list[int], season: str, line_type: str, blend: bool = True) -> dict:
     art = _load()
     members = _members(season)
     keys = [(int(i), season) for i in player_ids]
@@ -86,17 +86,17 @@ def _score_one(player_ids: list[int], season: str, line_type: str) -> dict:
     half = mult * art["resid_sd"]["xgf_pct"]
 
     line_key = "-".join(str(i) for i in sorted(int(x) for x in player_ids))
-    obs = _observed(line_key, season)
+    obs = _observed(line_key, season) if blend else None
     model_xgf = pred["xgf_pct"]
     final_xgf = model_xgf
-    blend = None
+    blend_info = None
     if obs is not None:
         w_obs = obs["minutes"] / (obs["minutes"] + config.LINEFIT_OBS_PRIOR_MINUTES)
         final_xgf = model_xgf * (1 - w_obs) + obs["xgf_pct"] * w_obs
-        blend = {"observed_minutes": round(obs["minutes"], 1),
-                 "observed_xgf_pct": round(obs["xgf_pct"], 4),
-                 "model_xgf_pct": round(model_xgf, 4),
-                 "w_obs": round(w_obs, 3)}
+        blend_info = {"observed_minutes": round(obs["minutes"], 1),
+                      "observed_xgf_pct": round(obs["xgf_pct"], 4),
+                      "model_xgf_pct": round(model_xgf, 4),
+                      "w_obs": round(w_obs, 3)}
 
     grade = _grade(final_xgf)
     explanation = tmpl.explain(grade=grade, xgf_pct=final_xgf, line_type=line_type,
@@ -127,11 +127,14 @@ def _score_one(player_ids: list[int], season: str, line_type: str) -> dict:
         "grade_sentence": explanation["grade_sentence"],
         "reasons": explanation["reasons"],
         "risk": explanation["risk"],
-        "observed_blend": blend,
+        "observed_blend": blend_info,
         "deeper_extrapolation": _cross_team(mem),
         "rookie_widened": is_rookie,
         "members": members_out,
         "limitations": tmpl.LIMITATIONS_FOOTER,
+        # per-concept aggregated contributions for swap-comparison reasons (dropped by the
+        # LineFitProjection response model; consumed by line_fit_suggestions).
+        "contribs": contribs,
     }
 
 
@@ -151,14 +154,18 @@ def _f(v):
         return None
 
 
-def score_line(player_ids: list[int], season: str) -> dict:
-    """Score a line. 3 ids -> forward trio, 2 -> defense pair, 5 -> split into trio + pair."""
+def score_line(player_ids: list[int], season: str, blend: bool = True) -> dict:
+    """Score a line. 3 ids -> forward trio, 2 -> defense pair, 5 -> split into trio + pair.
+
+    blend=False skips the observed shared-history lookup (a BigQuery round-trip per call) —
+    used when scoring many candidate swaps where the pure model projection is what's compared.
+    """
     ids = [int(i) for i in player_ids]
     members = _members(season)
     if len(ids) == 3:
-        return _score_one(ids, season, "F3")
+        return _score_one(ids, season, "F3", blend=blend)
     if len(ids) == 2:
-        return _score_one(ids, season, "D2")
+        return _score_one(ids, season, "D2", blend=blend)
     if len(ids) == 5:
         pos = {}
         for i in ids:
@@ -169,8 +176,8 @@ def score_line(player_ids: list[int], season: str) -> dict:
         if len(fwds) != 3 or len(defs) != 2:
             raise ValueError(f"a 5-skater unit must be 3 forwards + 2 defensemen; "
                              f"got {len(fwds)}F/{len(defs)}D")
-        trio = _score_one(fwds, season, "F3")
-        pair = _score_one(defs, season, "D2")
+        trio = _score_one(fwds, season, "F3", blend=blend)
+        pair = _score_one(defs, season, "D2", blend=blend)
         combined = round(0.6 * trio["projected_xgf_pct"] + 0.4 * pair["projected_xgf_pct"], 4)
         return {
             "line_type": "UNIT5",

@@ -23,8 +23,10 @@ export async function getTeamTrends(teamId: number): Promise<TeamTrends> {
 /**
  * Fetch roster for a specific team.
  */
-export async function getTeamRoster(teamId: number): Promise<TeamRoster> {
-  const response = await apiClient.get<TeamRoster>(`/teams/${teamId}/roster`)
+export async function getTeamRoster(teamId: number, season?: string): Promise<TeamRoster> {
+  const response = await apiClient.get<TeamRoster>(`/teams/${teamId}/roster`, {
+    params: season ? { season } : undefined,
+  })
   return response.data
 }
 

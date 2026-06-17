@@ -1062,6 +1062,38 @@ class LineFitRequest(BaseModel):
     season: Optional[str] = None
 
 
+class BetterFitSwap(BaseModel):
+    """A same-caliber candidate who would raise a line's projected xGF% (Phase 5.2)."""
+    player_id: int
+    name: Optional[str] = None
+    team_id: Optional[int] = None
+    team_abbrev: Optional[str] = None
+    position: Optional[str] = None
+    headshot_url: Optional[str] = None
+    archetype: Optional[str] = None
+    composite_total: Optional[float] = None
+    swap_xgf_pct: float
+    swap_grade: str
+    xgf_gain: float
+    reasons: List[str] = Field(default_factory=list)
+
+
+class SlotSuggestions(BaseModel):
+    """Better-fit candidates for one slot (the current member is being compared against)."""
+    slot_index: int
+    position: Optional[str] = None
+    current_player_id: int
+    current_player_name: Optional[str] = None
+    candidates: List[BetterFitSwap] = Field(default_factory=list)
+
+
+class LineSuggestionsResponse(BaseModel):
+    """Per-slot 'better fits' for a line (POST /tools/line-fit/suggestions)."""
+    season: str
+    line_type: str
+    slots: List[SlotSuggestions] = Field(default_factory=list)
+
+
 class TeamLine(BaseModel):
     """A team's current line (trio/pair) with observed results + projected grade."""
     line_type: str

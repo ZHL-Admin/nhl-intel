@@ -834,6 +834,33 @@ export interface LineFitProjection {
   forward_trio?: LineFitProjection | null
   defense_pair?: LineFitProjection | null
 }
+export interface BetterFitSwap {
+  player_id: number
+  name?: string | null
+  team_id?: number | null
+  team_abbrev?: string | null
+  position?: string | null
+  headshot_url?: string | null
+  archetype?: string | null
+  composite_total?: number | null
+  swap_xgf_pct: number
+  swap_grade: string
+  xgf_gain: number
+  reasons: string[]
+}
+export interface SlotSuggestions {
+  slot_index: number
+  position?: string | null
+  current_player_id: number
+  current_player_name?: string | null
+  candidates: BetterFitSwap[]
+}
+export interface LineSuggestions {
+  season: string
+  line_type: string
+  slots: SlotSuggestions[]
+}
+
 export interface TeamLine {
   line_type: string
   player_ids: number[]

@@ -10,7 +10,7 @@ averaged by age within an archetype, integrated into a curve. Decisions:
   pair) — the blueprint's per-season hard-max, with a single well-defined owner per delta so
   per-season reassignment can't scramble the paired deltas. Archetypes exist 2015-16+ only;
   pre-2015 seasons have no archetype and don't contribute to per-archetype curves. The
-  burst-defined archetypes (Elite Speed Driver, Elite Offensive D) are sparse before 2021 (see
+  burst-defined archetypes (High-Danger Driver, Elite Offensive D) are sparse before 2021 (see
   archetypes.md collapse note), so their curves are tracking-era-dominated.
 
 Output: nhl_models.aging_curves (archetype, age, n_deltas, expected_delta, curve_value) where
@@ -124,7 +124,7 @@ def main() -> None:
         return
 
     # validation: a forward archetype curve should peak in the mid-20s
-    for arch in ["Two-Way Top-Six", "Inside Scorer", "Perimeter Playmaker"]:
+    for arch in ["Top Six Scorer", "Inside Scorer", "Perimeter Playmaker"]:
         c = curves[curves["archetype"] == arch]
         if len(c):
             peak = int(c.loc[c["curve_value"].idxmax(), "age"])

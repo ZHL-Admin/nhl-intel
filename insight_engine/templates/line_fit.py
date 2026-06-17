@@ -81,6 +81,36 @@ def reasons_and_risk(contribs: dict[str, float], *, max_reasons: int = 3,
     return reasons, risk
 
 
+def _aggregate_concepts(contribs: dict[str, float]) -> dict[str, float]:
+    """Collapse per-column contributions (xGF% space) to per-concept totals."""
+    agg: dict[str, float] = {}
+    for col, val in contribs.items():
+        base = _base(col)
+        if base in _SKIP or base not in FRAGMENT:
+            continue
+        agg[base] = agg.get(base, 0.0) + float(val)
+    return agg
+
+
+def swap_reasons(original_contribs: dict[str, float], swapped_contribs: dict[str, float],
+                 *, max_reasons: int = 2, min_magnitude: float = 0.003) -> list[str]:
+    """Why a candidate fits a line better than the current member.
+
+    Compares per-concept contributions of the swapped line vs the original and surfaces the
+    concept(s) the swap improves most, phrased with the positive FRAGMENT for that concept.
+    """
+    before = _aggregate_concepts(original_contribs)
+    after = _aggregate_concepts(swapped_contribs)
+    deltas = {k: after.get(k, 0.0) - before.get(k, 0.0) for k in set(before) | set(after)}
+    ranked = sorted(deltas.items(), key=lambda kv: kv[1], reverse=True)
+    out: list[str] = []
+    for base, d in ranked:
+        if d <= min_magnitude or len(out) >= max_reasons:
+            break
+        out.append(FRAGMENT[base][0])
+    return out
+
+
 def explain(*, grade: str, xgf_pct: float, line_type: str,
             contribs: dict[str, float]) -> dict:
     """Compose the full explanation payload for a projection."""

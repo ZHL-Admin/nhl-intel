@@ -19,13 +19,13 @@ averaged by age within an archetype, integrated and loess-smoothed, then anchore
 archetype's mean level at age 24. **Each age t->t+1 delta is attributed to the player's archetype
 in season t** (the blueprint's per-season hard-max) — one well-defined owner per delta, so
 per-season archetype reassignment can't scramble the paired deltas. Validation: forward
-archetypes peak in the **mid-20s** (Inside Scorer 23, Perimeter Playmaker 24, Two-Way Top-Six 25).
+archetypes peak in the **mid-20s** (Inside Scorer 23, Perimeter Playmaker 24, Top Six Scorer 25).
 
-**Position-fallback bands.** The burst-defined archetypes (Elite Speed Driver, Elite Offensive D)
+**Position-fallback bands.** The burst-defined archetypes (High-Danger Driver, Elite Offensive D)
 are sparse before the tracking era (see below), so their per-age delta counts are thin and no
 stable archetype curve is produced. The model also emits `All Forwards` / `All Defensemen`
 curves; the trajectory endpoint falls back to the position band (and labels it) when a player's
-archetype curve is missing — e.g. McDavid (Elite Speed Driver) shows the All-Forwards band.
+archetype curve is missing — e.g. McDavid (High-Danger Driver) shows the All-Forwards band.
 
 ## Historical archetypes & the burst collapse
 
@@ -33,7 +33,7 @@ Pre-tracking (2015-16…2020-21) player-seasons are archetyped by **projecting o
 GMM with the Edge (and pre-2021 RAPM) features neutralised to the scaler means** — a
 reduced-feature assignment (`fit_archetypes.py --write`, flagged `edge_imputed=true`; segments
 start 2015-16, so there are no archetypes before that). Because burst speed defines them, the
-**Elite Speed Driver and Elite Offensive D clusters collapse** pre-tracking (63->8 and 40->2
+**High-Danger Driver and Elite Offensive D clusters collapse** pre-tracking (63->8 and 40->2
 primary assignments tracking vs historical); those players fall into their nearest non-burst
 cluster. This is expected and visible, not silent.
 

@@ -160,7 +160,7 @@ def _rows_from_resp(g, resp, pos, edge_imputed):
 def _score_historical(groups: dict) -> list:
     """Assign 2015-16..2020-21 player-seasons with the LOCKED model, but with the Edge (and
     RAPM, absent pre-2021) features NEUTRALISED to the scaler means — a reduced-feature
-    projection. The burst-defined clusters (F1 Elite Speed Driver, D2 Elite Offensive D)
+    projection. The burst-defined clusters (F1 High-Danger Driver, D2 Elite Offensive D)
     cannot be identified without burst speed, so those players collapse into their nearest
     non-burst cluster; rows are flagged edge_imputed=true."""
     df = build(HISTORICAL_SEASONS)

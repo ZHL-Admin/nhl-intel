@@ -31,20 +31,43 @@ and the API all load this one canonical model, so the clustering is locked.
 `fit_archetypes.py` (no `--write`) prints per-cluster standardised feature means and exemplars
 to `artifacts/archetype_labeling_report.md` and stops. A human fills
 `config.ARCHETYPE_NAMES`; `--write` then emits `player_archetypes`. The 24 names span elite
-drivers (Elite Speed Driver, Elite Offensive D) through depth roles (Fourth-Line Grinder,
+drivers (High-Danger Driver, Elite Offensive D) through depth roles (Fourth-Line Grinder,
 Bottom-Pair Defensive D). A player-season's mix lists archetypes with membership ≥ 0.10,
 sorted desc; the top one is `primary_archetype`.
 
 ## Validation
 
-Memberships are crisp for distinctive players (McDavid 1.00 Elite Speed Driver, MacKinnon 1.00
+Memberships are crisp for distinctive players (McDavid 1.00 High-Danger Driver, MacKinnon 1.00
 Perimeter Sniper, Makar 1.00 Elite Offensive D). PP-QB (Hedman/Josi/Hamilton) vs Elite
 Offensive D (Makar/Karlsson) is separated by Edge burst speed (+2.9 SD vs ~0). Silhouette is
 low (~0.02–0.03), reflecting that player style is a continuum — archetypes are descriptive
 regions, not crisp partitions, which is why memberships are soft.
 
+## Label membership audit (2026-06)
+
+The hand-applied labels were audited against their membership: for each cluster we checked
+whether the trait the *name* asserts actually holds for ≥80% of the cluster's members (not just
+the exemplars that inspired it). Seven names leaned on a trait that wasn't universal and were
+renamed to fit every member:
+
+| Was | Failing claim | Now |
+|---|---|---|
+| Elite Speed Driver (F1) | only 17% are fast; it's a slot/in-tight shooting cluster | **High-Danger Driver** |
+| Energy Forechecker (F3) | only 39% forecheck above avg; 52% are wingers | **Bottom-Six Forward** |
+| Two-Way Shutdown Forward (F4) | defense only 71%; it's a 5v5 *offense* cluster | **Middle-Six Driver** |
+| Defensive/Energy Center (F5) | defense only 59%; 41% are wingers | **Energy Forward** |
+| Two-Way Top-Six (F7) | defense 48% (coin flip); only PP usage is universal | **Top Six Scorer** |
+| Rush-Joining D (D1) | rush only 55%; they shoot from in tight, not the point | **Attacking D** |
+| Shutdown PK D (D4) | defensive impact 50%; low-offense/slow PK deployment | **Defensive Defenseman** |
+
+Systemic finding: RAPM `def_impact` does not cleanly separate "defensive" players, so any label
+asserting *measured* defensive shutdown impact reads weak. The reliable defensive signals are
+**low offense + deployment** (no PP, PK minutes, slow, low-event), not `def_impact` — so the
+surviving defensive labels are deployment-based. The labels are membership-audited; renaming is a
+pure relabel of the locked GMM's clusters (no refit), re-emitted by `fit_archetypes --write`.
+
 ## Surfaces
 
 `GET /players/{id}` returns the archetype mix; `GET /players/archetypes/{archetype}` lists
 players whose primary archetype is that one, ranked by composite total. PlayerProfile shows the
-mix line ("100% Elite Speed Driver"); the Players index ranks within a selected archetype.
+mix line ("100% High-Danger Driver"); the Players index ranks within a selected archetype.
