@@ -5,6 +5,7 @@
  * glossary key exactly once. Components reference these helpers instead of
  * hardcoding stat strings, so renames and proxy labelling happen in one place.
  */
+import type { PowerRatingRow } from '../api/types'
 
 export type MetricFormat =
   | 'percent' // 0..1 or 0..100 rendered as %
@@ -127,6 +128,23 @@ export const RATINGS_GLOSSARY = {
 } as const
 
 /**
+ * Power-rating component palette (Phase 3.1) — key -> glossary key, response field, label,
+ * colour. Single source shared by the Rankings power stack bars and their legend, mirroring
+ * how COMPOSITE_COMPONENTS / VALUE_COMPONENTS drive the player stacks.
+ */
+export const RATINGS_COMPONENTS: {
+  key: keyof typeof RATINGS_GLOSSARY
+  contrib: keyof PowerRatingRow
+  label: string
+  color: string
+}[] = [
+  { key: 'play_5v5', contrib: 'contrib_play_5v5', label: '5v5 play', color: '#3b82f6' },
+  { key: 'finishing', contrib: 'contrib_finishing', label: 'Finishing', color: '#22c55e' },
+  { key: 'goaltending', contrib: 'contrib_goaltending', label: 'Goaltending', color: '#a855f7' },
+  { key: 'special_teams', contrib: 'contrib_special_teams', label: 'Special teams', color: '#f59e0b' },
+]
+
+/**
  * Team identity fingerprint metrics (Phase 3.2), grouped for display. Each entry's `key`
  * matches a metric from /teams/{id}/identity; `label` is the single-sourced display name.
  * Percentiles are shown as-is (higher percentile = higher raw value); for "allowed"
@@ -217,6 +235,16 @@ export const VALUE_COMPONENTS: { key: string; label: string; color: string }[] =
   { key: 'pk', label: 'Penalty Kill', color: '#a855f7' },
   { key: 'penalty', label: 'Penalties', color: '#64748b' },
   { key: 'faceoff', label: 'Faceoffs', color: '#ec4899' },
+]
+
+/** Goalie GAR value-component key -> colour (goals saved above a backup). A DISTINCT save-tier
+ * palette (green ramp + indigo PK) so goalie rows on the mixed leaderboard read as a different
+ * vocabulary from skaters; matches schemas.GOALIE_GAR_LABELS / config.GOALIE_GAR_COMPONENTS. */
+export const GOALIE_VALUE_COMPONENTS: { key: string; label: string; color: string }[] = [
+  { key: 'hd_saves', label: 'High-Danger Saves', color: '#16a34a' },
+  { key: 'md_saves', label: 'Mid-Danger Saves', color: '#34d399' },
+  { key: 'ld_saves', label: 'Low-Danger Saves', color: '#a7f3d0' },
+  { key: 'pk_goaltending', label: 'Penalty-Kill', color: '#6366f1' },
 ]
 
 /** Display label for a metric, appending "(proxy)" for derived metrics. */

@@ -117,7 +117,65 @@ thing visually.
 - `other`-strength offense (4v4/3v3/EN/shorthanded goals) is excluded from the actual-offense
   components — a small omission, documented.
 
+## Goalie GAR / WAR — the cross-position currency
+
+Goalies get their own value model (`models_ml/compute_goalie_gar.py` → `nhl_models.goalie_gar`),
+the goaltending entry in the same actual-vs-expected family. It is **read-only** over the GSAx
+layer (`int_goalie_shots` / `mart_goalie_*`, see [goaltending.md](goaltending.md)); the xG model,
+RAPM, and the skater GAR model above are all untouched.
+
+**Goalie GAR = goals saved above a replacement (backup) goalie**, decomposed into the stacked-bar
+components (each is `goalie tier GSAx − replacement_GSAx_per_shot × goalie tier shots`):
+
+| component | basis | definition |
+|---|---|---|
+| `hd_saves` | GSAx | even-strength **high-danger** goals saved above replacement — the difference-maker |
+| `md_saves` | GSAx | even-strength mid-danger goals saved above replacement |
+| `ld_saves` | GSAx | even-strength low-danger (incl. unknown-coords) goals saved above replacement |
+| `pk_goaltending` | GSAx | shorthanded / special-teams save value above replacement |
+
+The four buckets partition **every** faced unblocked shot (EV/other split by danger; special = PK),
+so they sum exactly to goalie GAR. `WAR = GAR / GOALS_PER_WIN`.
+
+### Why WAR is the cross-position unit (and GAR is not)
+
+`GOALS_PER_WIN` is the **same 6.0** as skaters (asserted at import in `config.py`). That shared
+divisor is the *entire reason* a goalie's WAR is comparable to a skater's: a goal saved and a goal
+created are both ~1/6 of a win. **Skater GAR and goalie GAR are different units** (within-position
+goals above their own replacement) and are never sorted together — the mixed leaderboard
+(`/rankings/value?scope=all`) sorts by **WAR only**, asserted by a test.
+
+### Replacement level (config.GOALIE_GAR_CONFIG)
+
+A replacement goalie is a freely-available **backup**: per season-window, the goalies ranked
+**outside the top-32 by games** (32 = one starter per NHL team) who cleared a 150-shot floor. The
+replacement save rate is measured **per danger tier and per strength**, so GSAx-above-replacement
+decomposes into the components above. As with skaters, absolute levels move with this choice while
+**rankings do not** — replacement sensitivity (window): rank Spearman **0.996** (tighter, rank>40)
+and **0.999** (looser, rank>24); the UI leads with WAR/ranking.
+
+### Wider bands, on purpose (principle 6)
+
+Goaltending is genuinely less stable than skater production. Measured year-over-year correlation of
+goalie GAR is **r ≈ 0.24** (2021-22 … 2025-26), well below skater production (r=0.66). So the goalie
+uncertainty band is the binomial save-outcome sd (`sqrt(Σ xg·(1−xg))` in goals) **× an instability
+inflation (1.6)** — visibly wider than skaters' by construction. Goalie rankings are presented at
+**tier-level confidence**; the mixed leaderboard renders the wider band so a reader sees the
+cross-position order within a cluster is *soft*, not precise.
+
+### Validation (`models_ml/validate_goalie_gar.py`)
+
+- **Smell test** — top GAR is elite starters (2024-25: Hellebuyck, Thompson, Shesterkin,
+  Montembeault, Oettinger; 2025-26: Thompson, Swayman, Sorokin, Vasilevskiy); backups near 0.
+- **Distribution** replacement-centred (qualified median +3.5 … +6.9 by season) with a long
+  positive tail (elite starters).
+- **Cross-position sanity** — #1 goalie WAR ≈ **1.6×** the #1 skater WAR (2024-25 Hellebuyck +8.0 vs
+  Draisaitl +5.0); same neighbourhood, not 3× off. A workhorse starter genuinely influences more
+  goal outcomes than all but the very best skaters — hence goalies can top the mixed list, and the
+  wide band is the honest signal that the edge over the top skaters is within noise.
+
 ## RAPM is untouched
 
 This model only *reads* `player_impact`; it never retrains, re-weights, or modifies it or its
-artifact. GAR sits beside RAPM as the second lens.
+artifact. GAR sits beside RAPM as the second lens. The goalie model likewise only *reads* the GSAx
+marts.

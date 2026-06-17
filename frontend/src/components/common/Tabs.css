@@ -27,3 +27,20 @@
   background: var(--color-accent);
   color: var(--color-text-inverse);
 }
+
+/* concept-first label with a small method/unit tag underneath */
+.tabs__option-label { display: block; }
+.tabs__option-tag {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-top: 1px;
+}
+.tabs__option--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.tabs__option--disabled:hover { color: var(--color-text-secondary); }

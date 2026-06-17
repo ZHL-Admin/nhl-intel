@@ -291,6 +291,20 @@ export interface ValueGapRead {
   headline: string
   body: string
 }
+/** One within-position percentile that feeds the Overall summary (0..1). */
+export interface OverallComponent {
+  key: string
+  label: string
+  percentile?: number | null
+}
+/** Per-player Overall — a within-position percentile SUMMARY (card-only, never a sort key).
+ * Always rendered WITH its `components` (the percentiles it averaged). */
+export interface OverallSummary {
+  overall_percentile: number          // 0..1, within position group (F/D) or within goalies
+  pos_group?: string | null           // F | D | G
+  components: OverallComponent[]
+  weights?: Record<string, number>
+}
 export interface PlayerValue {
   gar: number
   war: number
@@ -305,15 +319,30 @@ export interface PlayerValue {
   production_r: number
   rapm_r: number
   finishing_r: number
+  overall?: OverallSummary | null
 }
+/** A goalie's GAR/WAR block (goals saved above a backup) on the cross-position WAR scale. */
+export interface GoalieValue {
+  gar: number
+  war: number
+  gar_sd: number
+  war_sd: number
+  components: CompositeComponent[]    // goalie save-tier components
+  war_percentile?: number | null      // 0..1, within goalies
+}
+/** A row on the value leaderboard — skater OR goalie. The mixed (`all`) list sorts by WAR, the
+ * only cross-position-comparable unit. `component_kind` selects the bar colour vocabulary. */
 export interface ValueRankingRow {
   player_id: number
   player_name?: string | null
   team_abbrev?: string | null
   position?: string | null
+  entity_kind?: 'skater' | 'goalie'
+  component_kind?: 'skater' | 'goalie'
   gar: number
   war: number
   gar_sd?: number | null
+  war_sd?: number | null
   components: CompositeComponent[]
 }
 
@@ -441,6 +470,8 @@ export interface GoalieSeason {
   last10_gsax: number | null
   edge_last10_save_pct: number | null
   edge_games_above_900: number | null
+  value?: GoalieValue | null
+  overall?: OverallSummary | null
 }
 
 // ============================================================================

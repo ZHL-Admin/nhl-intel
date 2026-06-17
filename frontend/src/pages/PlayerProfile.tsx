@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel } from '../components/common'
+import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel, OverallSummary } from '../components/common'
 import type { StackSegment } from '../components/common'
-import { COMPOSITE_COMPONENTS } from '../config/metrics'
+import { COMPOSITE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
 import StripPlot from '../components/visualizations/StripPlot'
 import SkillRadar from '../components/visualizations/SkillRadar'
@@ -19,7 +19,7 @@ import {
   getPlayerTrajectory,
   getPlayerRadar
 } from '../api/players'
-import { getGoalieRadar } from '../api/goalies'
+import { getGoalieRadar, getGoalieSeason } from '../api/goalies'
 import {
   PlayerDetail,
   PlayerTrends,
@@ -29,7 +29,8 @@ import {
   PlayerReconciliation,
   PlayerTrajectory,
   PlayerRadar,
-  GoalieRadar
+  GoalieRadar,
+  GoalieSeason
 } from '../api/types'
 import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
 import './PlayerProfile.css'
@@ -81,6 +82,7 @@ function PlayerProfile() {
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null)
   const [radar, setRadar] = useState<PlayerRadar | null>(null)
   const [goalieRadar, setGoalieRadar] = useState<GoalieRadar | null>(null)
+  const [goalieSeason, setGoalieSeason] = useState<GoalieSeason | null>(null)
   const [reconciliation, setReconciliation] = useState<PlayerReconciliation | null>(null)
   const [trajectory, setTrajectory] = useState<PlayerTrajectory | null>(null)
   const [playerTrends, setPlayerTrends] = useState<PlayerTrends | null>(null)
@@ -139,10 +141,12 @@ function PlayerProfile() {
   useEffect(() => {
     if (!playerId || !playerDetail) return
     let active = true
-    setRadar(null); setGoalieRadar(null)
+    setRadar(null); setGoalieRadar(null); setGoalieSeason(null)
     const pid = parseInt(playerId)
     if (playerDetail.position === 'G') {
       getGoalieRadar(pid).then(r => active && setGoalieRadar(r)).catch(() => {})
+      // goalie value (GAR/WAR) + within-goalie Overall live on the goalie endpoint
+      getGoalieSeason(pid).then(s => active && setGoalieSeason(s)).catch(() => {})
     } else {
       getPlayerRadar(pid).then(r => active && setRadar(r)).catch(() => {})
     }
@@ -416,8 +420,51 @@ function PlayerProfile() {
         {playerDetail?.value && (
           <div className="player-profile__impact-value">
             <ImpactValuePanel value={playerDetail.value} name={playerDetail.player_name} />
+            {/* Per-player Overall — within-position summary, shown WITH its component percentiles
+                (the same lenses as the panel above) and the reused Impact-vs-Value read. */}
+            {playerDetail.value.overall && (
+              <OverallSummary overall={playerDetail.value.overall} read={playerDetail.value.read} />
+            )}
           </div>
         )}
+
+        {/* Goalie value (GAR/WAR, cross-position scale) + within-goalie Overall (Phase 6 GAR) */}
+        {isGoalie && goalieSeason?.value && (() => {
+          const gv = goalieSeason.value!
+          const segs: StackSegment[] = GOALIE_VALUE_COMPONENTS.map((c) => ({
+            key: c.key, label: c.label,
+            value: gv.components.find((x) => x.key === c.key)?.value ?? 0, color: c.color,
+          }))
+          const posSum = segs.filter((s) => s.value > 0).reduce((a, s) => a + s.value, 0)
+          const negSum = segs.filter((s) => s.value < 0).reduce((a, s) => a + s.value, 0)
+          const d = Math.max(2, posSum, Math.abs(negSum))
+          return (
+            <div className="player-profile__impact-value">
+              <div className="player-profile__composite">
+                <div className="player-profile__composite-head">
+                  <span className="player-profile__composite-title">Goalie value (goals saved above a backup)</span>
+                  <span className="player-profile__composite-total">
+                    {(gv.war >= 0 ? '+' : '') + gv.war.toFixed(1)}
+                    <span className="player-profile__composite-sd"> ± {gv.war_sd.toFixed(1)}</span> WAR
+                  </span>
+                </div>
+                <ComponentStackBar segments={segs} total={gv.gar} domain={[-d, d]} se={gv.gar_sd ?? undefined} height={26} />
+                <div className="player-profile__composite-legend">
+                  {GOALIE_VALUE_COMPONENTS.map((c) => (
+                    <span key={c.key} className="player-profile__composite-legitem">
+                      <span className="player-profile__composite-swatch" style={{ background: c.color }} />{c.label}
+                    </span>
+                  ))}
+                </div>
+                <p className="ovr__note" style={{ marginTop: 'var(--space-3)' }}>
+                  On the same goals-per-win scale as skater WAR, so the two share one cross-position
+                  leaderboard. Goaltending is less stable year to year — the band is wide by design.
+                </p>
+              </div>
+              {goalieSeason.overall && <OverallSummary overall={goalieSeason.overall} />}
+            </div>
+          )
+        })()}
 
         {/* Composite value stack (Phase 4.2) — depth 2 */}
         {playerDetail && playerDetail.composite_components && playerDetail.composite_components.length > 0 && (() => {

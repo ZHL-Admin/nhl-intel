@@ -17,10 +17,19 @@ export async function getDeservedStandings(season?: string): Promise<DeservedSta
   return response.data
 }
 
-/** GAR/WAR leaderboard — actual goals above replacement (the Value lens, Phase 6 GAR). */
-export async function getValueRankings(position: 'ALL' | 'F' | 'D' = 'ALL', season?: string): Promise<ValueRankingRow[]> {
+export type ValueScope = 'skaters' | 'goalies' | 'all'
+
+/** Value leaderboard — goals/wins above replacement (Phase 6 GAR + cross-position WAR).
+ * scope=skaters|goalies sort by their native GAR; scope=all is a mixed skater+goalie list sorted
+ * by WAR (the only cross-position-comparable unit). `position` applies to the skaters scope only. */
+export async function getValueRankings(
+  scope: ValueScope = 'skaters',
+  position: 'ALL' | 'F' | 'D' = 'ALL',
+  season?: string,
+  limit = 50,
+): Promise<ValueRankingRow[]> {
   const response = await apiClient.get<ValueRankingRow[]>('/rankings/value', {
-    params: { position, ...(season ? { season } : {}) },
+    params: { scope, position, limit, ...(season ? { season } : {}) },
   })
   return response.data
 }
