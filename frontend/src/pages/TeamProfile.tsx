@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader } from '../components/common'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, ComponentStackBar } from '../components/common'
+import type { StackSegment } from '../components/common'
 import Tabs from '../components/common/Tabs'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
 import { StreakDoctorCard, LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent, getTeamStreak } from '../api/teams'
+import { getPowerRankings } from '../api/rankings'
 import { getTeamGames } from '../api/games'
-import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent, StreakCard } from '../api/types'
+import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent, StreakCard, PowerRatingRow } from '../api/types'
+import { RATINGS_COMPONENTS } from '../config/metrics'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
@@ -345,6 +348,13 @@ function TeamProfile() {
           />
         )}
 
+        {/* Power-rating component breakdown — the full four-part split lives here (Phase 3.1) */}
+        {currentTab === 'overview' && teamId && (
+          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
+            <TeamPowerCard teamId={parseInt(teamId)} />
+          </div>
+        )}
+
         {/* Auto-surface a notable run on the Overview tab (Phase 3.3) */}
         {currentTab === 'overview' && streakCard?.is_notable && (
           <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
@@ -388,6 +398,75 @@ function TeamProfile() {
         )}
       </div>
     </PageLayout>
+  )
+}
+
+/**
+ * Power-rating breakdown for one team (Phase 3.1). The four-component ComponentStackBar with
+ * labels lives HERE (off the Rankings list, which shows a single magnitude bar). Reuses the
+ * existing /rankings/power endpoint and finds this team's row — no new backend surface.
+ */
+function TeamPowerCard({ teamId }: { teamId: number }) {
+  const [rows, setRows] = useState<PowerRatingRow[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    getPowerRankings()
+      .then((d) => { if (active) setRows(d) })
+      .catch(() => { if (active) setFailed(true) })
+    return () => { active = false }
+  }, [teamId])
+
+  if (failed || !rows) return null
+  const idx = rows.findIndex((r) => r.team_id === teamId)
+  if (idx === -1) return null // e.g. a national team with no NHL rating
+  const r = rows[idx]
+
+  const segments: StackSegment[] = RATINGS_COMPONENTS.map((c) => ({
+    key: c.key, label: c.label, value: r[c.contrib] as number, color: c.color,
+  }))
+  let pos = 0, neg = 0
+  for (const c of RATINGS_COMPONENTS) { const v = r[c.contrib] as number; if (v >= 0) pos += v; else neg += v }
+  const m = Math.max(0.2, pos, Math.abs(neg), Math.abs(r.total_rating) + (r.rating_se ?? 0))
+  const fmt = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
+
+  return (
+    <div className="team-profile__section">
+      <h2 className="team-profile__section-title">Power Rating</h2>
+      <div style={{
+        border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)',
+        background: 'var(--color-bg-surface)', boxShadow: 'var(--shadow-sm)',
+        padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 'var(--text-2xl)', color: 'var(--color-text-primary)' }}>{fmt(r.total_rating)}</span>
+            <span style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>net goals / game</span>
+            {r.rating_se != null && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>± {r.rating_se.toFixed(2)}</span>}
+          </div>
+          <Link to="/rankings" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            #{idx + 1} of {rows.length} · full rankings →
+          </Link>
+        </div>
+
+        <ComponentStackBar segments={segments} total={r.total_rating} domain={[-m, m]} se={r.rating_se} height={26} />
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2) var(--space-4)' }}>
+          {RATINGS_COMPONENTS.map((c) => (
+            <span key={c.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: c.color, display: 'inline-block' }} />
+              {c.label}
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>{fmt(r[c.contrib] as number)}</span>
+            </span>
+          ))}
+        </div>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+          Net goals per game versus a league-average opponent, split into the four sources that produce it.
+          Bar centred at league average; the tick is the total, the line its uncertainty.
+        </p>
+      </div>
+    </div>
   )
 }
 

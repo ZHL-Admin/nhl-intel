@@ -30,6 +30,14 @@ interface ComponentStackBarProps {
   formatValue?: (v: number) => string
   /** Optional faint reference lines at these domain values (a scale for the eye). */
   gridlines?: number[]
+  /**
+   * 'stacked' (default) draws every component segment; 'total' draws ONE single-tone bar
+   * spanning zero→total. The breakdown tooltip is identical in both, so 'total' gives a
+   * scannable magnitude bar on a list while the full component split stays on hover.
+   */
+  variant?: 'stacked' | 'total'
+  /** Fill colour for the 'total' variant. */
+  totalColor?: string
 }
 
 const fmtDefault = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
@@ -42,6 +50,8 @@ export default function ComponentStackBar({
   height = 22,
   formatValue = fmtDefault,
   gridlines,
+  variant = 'stacked',
+  totalColor = 'var(--color-data-1)',
 }: ComponentStackBarProps) {
   const [min, max] = domain
   const span = max - min || 1
@@ -95,13 +105,24 @@ export default function ComponentStackBar({
           style={{ left: `${seLeft}%`, width: `${seRight - seLeft}%` }}
         />
       )}
-      {bars.map(({ left, width, seg }) => (
+      {variant === 'total' ? (
         <div
-          key={seg.key}
           className="component-stack-bar__seg"
-          style={{ left: `${left}%`, width: `${Math.max(width, 0)}%`, background: seg.color }}
+          style={{
+            left: `${pct(Math.min(0, total))}%`,
+            width: `${Math.max(pct(Math.max(0, total)) - pct(Math.min(0, total)), 0)}%`,
+            background: totalColor,
+          }}
         />
-      ))}
+      ) : (
+        bars.map(({ left, width, seg }) => (
+          <div
+            key={seg.key}
+            className="component-stack-bar__seg"
+            style={{ left: `${left}%`, width: `${Math.max(width, 0)}%`, background: seg.color }}
+          />
+        ))
+      )}
       <div className="component-stack-bar__total" style={{ left: `${totalX}%` }} />
 
       {tip && createPortal(
