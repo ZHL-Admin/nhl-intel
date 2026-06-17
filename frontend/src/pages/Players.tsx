@@ -329,9 +329,21 @@ export default function Players() {
   const [season, setSeason] = useState<string>(SEASONS[0])
   const [methodOpen, setMethodOpen] = useState(false)
 
-  // which lens actually applies (RAPM only for skater scopes; All is always WAR)
-  const rapmOk = show === 'F' || show === 'D'
-  const garOk = show !== 'all'
+  // Show and Rank-by are interdependent (only WAR is cross-position-comparable; RAPM is skater-only;
+  // GAR isn't comparable across positions). Rather than disable buttons, keep every button clickable
+  // and gently coerce the OTHER control to a valid combination, so the two always stay consistent.
+  const changeShow = (s: Show) => {
+    setShow(s)
+    if (s === 'all') setRankBy('war')              // mixed list -> WAR is the only valid unit
+    else if (s === 'G' && rankBy === 'rapm') setRankBy('war')  // goalies have no play-driving lens
+  }
+  const changeRankBy = (v: RankBy) => {
+    setRankBy(v)
+    // a position-specific lens can't apply to the mixed (or, for RAPM, goalie) scope — narrow to
+    // a scope where it's meaningful instead of being inert.
+    if (v === 'rapm' && !(show === 'F' || show === 'D')) setShow('F')
+    else if (v === 'gar' && show === 'all') setShow('F')
+  }
 
   return (
     <PageLayout>
@@ -368,7 +380,7 @@ export default function Players() {
                     { value: 'D', label: 'Defense' }, { value: 'G', label: 'Goalies' },
                   ]}
                   value={show}
-                  onChange={(v) => setShow(v as Show)}
+                  onChange={(v) => changeShow(v as Show)}
                 />
               </span>
               <span className="players__divider" />
@@ -377,11 +389,11 @@ export default function Players() {
                 <Tabs
                   options={[
                     { value: 'war', label: 'Total value', tag: 'WAR' },
-                    { value: 'rapm', label: 'Play-driving', tag: 'RAPM', disabled: !rapmOk },
-                    { value: 'gar', label: 'Production', tag: 'GAR', disabled: !garOk },
+                    { value: 'rapm', label: 'Play-driving', tag: 'RAPM' },
+                    { value: 'gar', label: 'Production', tag: 'GAR' },
                   ]}
                   value={show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)}
-                  onChange={(v) => setRankBy(v as RankBy)}
+                  onChange={(v) => changeRankBy(v as RankBy)}
                 />
               </span>
               <span className="players__controls-spacer" />
