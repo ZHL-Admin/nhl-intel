@@ -297,6 +297,13 @@ def trade_fit(player_id: int, team_id: int, season: Optional[str] = None) -> dic
     return _fit(player_id, team_id, season)
 
 
+def best_team_fits(player_id: int, season: Optional[str] = None,
+                   exclude_team_id: Optional[int] = None) -> list[dict]:
+    """The teams whose gaps a player best fills, ranked (Phase 5.3)."""
+    from models_ml.score_team_fit import best_team_fits as _best
+    return _best(player_id, season, exclude_team_id=exclude_team_id)
+
+
 # --- Matchup preview (Phase 5.3) --------------------------------------------
 _IDENTITY_METRICS = ["pace", "forecheck_share_for", "rush_share_for", "shot_quality",
                      "shot_volume_per60", "hits_per60"]

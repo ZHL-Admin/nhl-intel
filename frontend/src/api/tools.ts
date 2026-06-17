@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { PlayerSearchResult, LineFitProjection, TeamLines, TradeFitResult, LineSuggestions } from './types'
+import { PlayerSearchResult, LineFitProjection, TeamLines, TradeFitResult, LineSuggestions, BestTeamFit } from './types'
 
 /** Current-roster players matching `q` for the PlayerPicker (Phase 5.2). */
 export async function searchPlayers(q: string, limit = 12, season?: string): Promise<PlayerSearchResult[]> {
@@ -32,5 +32,13 @@ export async function getTeamLines(teamId: number, season?: string): Promise<Tea
 /** Score how well a player addresses a team's needs (Phase 5.3). */
 export async function tradeFit(player_id: number, team_id: number, season?: string): Promise<TradeFitResult> {
   const response = await apiClient.post<TradeFitResult>('/tools/trade-fit', { player_id, team_id, season })
+  return response.data
+}
+
+/** The teams whose gaps a player fills best, ranked (Phase 5.3). */
+export async function bestTeamFits(player_id: number, excludeTeam?: number, season?: string): Promise<BestTeamFit[]> {
+  const response = await apiClient.get<BestTeamFit[]>('/tools/trade-fit/best-teams', {
+    params: { player_id, ...(excludeTeam ? { exclude_team: excludeTeam } : {}), ...(season ? { season } : {}) },
+  })
   return response.data
 }

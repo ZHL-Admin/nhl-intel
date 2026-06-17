@@ -1,13 +1,13 @@
 """Signature-tool endpoints (Phase 5): Lineup Lab line-fit, trade fit, matchup previews."""
 
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
 from models.schemas import (
     LineFitRequest, LineFitProjection, LineSuggestionsResponse,
-    TradeFitRequest, TradeFitResult,
+    TradeFitRequest, TradeFitResult, BestTeamFit,
 )
 from services import tools as tool_svc
 from services.cache import cache
@@ -52,6 +52,20 @@ async def post_trade_fit(req: TradeFitRequest) -> TradeFitResult:
     name = await run_in_threadpool(_player_name, req.player_id)
     payload["player_name"] = name
     return TradeFitResult(**payload)
+
+
+@router.get("/trade-fit/best-teams", response_model=List[BestTeamFit])
+async def get_best_team_fits(
+    player_id: int = Query(...),
+    exclude_team: Optional[int] = Query(None),
+    season: Optional[str] = Query(None),
+) -> List[BestTeamFit]:
+    """The teams whose gaps this player fills best, ranked (Phase 5.3)."""
+    try:
+        payload = await run_in_threadpool(tool_svc.best_team_fits, player_id, season, exclude_team)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return [BestTeamFit(**t) for t in payload]
 
 
 def _player_name(player_id: int):

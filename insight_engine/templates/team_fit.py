@@ -11,7 +11,7 @@ from __future__ import annotations
 
 COMPONENT_PHRASE = {
     "ev_offense": "even-strength offense", "ev_defense": "even-strength defense",
-    "pp": "the power play", "pk": "penalty killing", "finishing": "finishing",
+    "pp": "power-play offense", "pk": "penalty killing", "finishing": "finishing",
 }
 
 # a team "needs" an archetype when its mix trails the top teams by at least this (mix-share units)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PageLayout } from '../components/common'
+import { PageLayout, PageHeader } from '../components/common'
 import StyleMapChart from '../components/teams/StyleMapChart'
 import './Teams.css'
 
@@ -9,9 +9,10 @@ function Teams() {
   return (
     <PageLayout>
       <div className="teams">
-        <div className="teams__header">
-          <h1 className="teams__title">Teams</h1>
-        </div>
+        <PageHeader
+          title="Teams"
+          subtitle="Compare team styles on the league landscape, then dive into any club."
+        />
 
         {/* League style map (Phase 3.2) */}
         <section className="teams__landscape">

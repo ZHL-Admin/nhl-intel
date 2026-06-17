@@ -12,14 +12,13 @@
  * The projection itself is rendered by the shared <LineProjection> (drives entirely off the API).
  */
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Search, X, Zap, RotateCcw, ChevronDown, ArrowLeft, Share2, Check, Sparkles } from 'lucide-react'
-import { PageLayout, Tabs, PlayerCard, LineProjection, SkeletonLoader } from '../components/common'
+import { useSearchParams } from 'react-router-dom'
+import { Plus, Zap, RotateCcw, Share2, Check, Sparkles } from 'lucide-react'
+import { PageLayout, PageHeader, Tabs, PlayerCard, PlayerExplorer, LineProjection, SkeletonLoader } from '../components/common'
 import { PlayerCardData } from '../components/common/PlayerCard'
-import { lineFit, lineFitSuggestions, searchPlayers } from '../api/tools'
-import { getStyleMap, getTeamRoster } from '../api/teams'
-import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl, getCurrentSeasonId } from '../utils/teams'
-import { LineFitProjection, PlayerSearchResult, RosterPlayer, LineMemberOut, LineSuggestions, BetterFitSwap } from '../api/types'
+import { lineFit, lineFitSuggestions } from '../api/tools'
+import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
+import { LineFitProjection, PlayerSearchResult, LineMemberOut, LineSuggestions, BetterFitSwap } from '../api/types'
 import './LineupLab.css'
 
 type LineType = 'F3' | 'D2' | 'UNIT5'
@@ -46,8 +45,6 @@ const FULL: Record<SlotPos, string> = {
 const kindOf = (pos?: string | null): Kind => (pos === 'D' ? 'D' : 'F')
 const makeSlots = (lt: LineType): Slot[] =>
   LAYOUTS[lt].map((pos) => ({ pos, kind: KIND[pos], player: null }))
-
-interface TeamOpt { team_id: number; abbrev: string; name: string }
 
 /* ---- shareable line encoding (id.ABBREV pairs in slot order + line type) ---- */
 const lineParam = (players: PlayerSearchResult[], type: LineType): Record<string, string> => ({
@@ -336,14 +333,11 @@ export default function LineupLab() {
   return (
     <PageLayout>
       <div className="lab">
-        <div className="lab__header">
-          <Link to="/tools" className="lab__back">← Tools</Link>
-          <h1 className="lab__title">Lineup Lab</h1>
-          <p className="lab__sub">
-            Build a line and project its 5v5 results from each member’s measured profile —
-            no two players need to have ever shared the ice.
-          </p>
-        </div>
+        <PageHeader
+          back={{ to: '/tools', label: 'Tools' }}
+          title="Lineup Lab"
+          subtitle="Build a line and project its 5v5 results from each member’s measured profile — no two players need to have ever shared the ice."
+        />
 
         {showResult ? (
           /* ---- the champion: projection result ---- */
@@ -411,233 +405,11 @@ export default function LineupLab() {
               </section>
 
               {/* ---- explorer ---- */}
-              <Explorer onPick={placeAuto} takenIds={takenIds} dragged={dragged} />
+              <PlayerExplorer onPick={placeAuto} takenIds={takenIds} dragged={dragged} sticky />
             </div>
           </>
         )}
       </div>
     </PageLayout>
-  )
-}
-
-/* ============================================================================
-   Roster + search explorer
-   ============================================================================ */
-const SEASONS: string[] = (() => {
-  const startNow = parseInt(getCurrentSeasonId().slice(0, 4), 10)
-  const out: string[] = []
-  for (let y = startNow; y >= 2010; y--) out.push(`${y}-${String((y + 1) % 100).padStart(2, '0')}`)
-  return out
-})()
-const season8 = (label: string): string => {
-  const y = parseInt(label.slice(0, 4), 10)
-  return `${y}${y + 1}`
-}
-
-function rosterToCard(rp: RosterPlayer, team: TeamOpt, s8: string): PlayerSearchResult {
-  return {
-    player_id: rp.player_id,
-    name: rp.player_name,
-    team_id: team.team_id,
-    team_abbrev: team.abbrev,
-    position: rp.position,
-    headshot_url: getPlayerHeadshotUrl(rp.player_id, team.abbrev, s8),
-    archetype: null,
-  }
-}
-
-/** Season picker styled to match the line-type Tabs (pill button + dropdown menu). */
-function SeasonSelect({ value, onChange }: { value: string; onChange: (s: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-  return (
-    <div className="lab-season" ref={ref}>
-      <button className="lab-season__btn" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open}>
-        {value}
-        <ChevronDown size={13} className={open ? 'lab-season__chev lab-season__chev--open' : 'lab-season__chev'} />
-      </button>
-      {open && (
-        <ul className="lab-season__menu" role="listbox">
-          {SEASONS.map((s) => (
-            <li key={s}>
-              <button
-                role="option"
-                aria-selected={s === value}
-                className={`lab-season__opt${s === value ? ' lab-season__opt--active' : ''}`}
-                onClick={() => { onChange(s); setOpen(false) }}
-              >
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function Explorer({ onPick, takenIds, dragged }: {
-  onPick: (p: PlayerSearchResult) => void
-  takenIds: Set<number>
-  dragged: React.MutableRefObject<{ player: PlayerSearchResult; kind: Kind } | null>
-}) {
-  const [teams, setTeams] = useState<TeamOpt[]>([])
-  const [active, setActive] = useState<TeamOpt | null>(null)
-  const [season, setSeason] = useState<string>(SEASONS[0])
-  const [roster, setRoster] = useState<{ forwards: RosterPlayer[]; defensemen: RosterPlayer[] } | null>(null)
-  const [rosterLoading, setRosterLoading] = useState(false)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<PlayerSearchResult[]>([])
-  const [searching, setSearching] = useState(false)
-
-  // team list (from the league style map — gives all 32 with abbreviations)
-  useEffect(() => {
-    let on = true
-    getStyleMap()
-      .then((sm) => {
-        if (!on) return
-        const opts = sm.teams
-          .filter((t) => t.team_abbrev)
-          .map((t) => ({ team_id: t.team_id, abbrev: t.team_abbrev as string, name: getTeamName(t.team_abbrev as string) }))
-          .sort((a, b) => a.name.localeCompare(b.name))
-        setTeams(opts)
-      })
-      .catch(() => on && setTeams([]))
-    return () => { on = false }
-  }, [])
-
-  // roster for the active team + season
-  useEffect(() => {
-    if (!active) { setRoster(null); return }
-    let on = true
-    setRosterLoading(true); setRoster(null)
-    getTeamRoster(active.team_id, season)
-      .then((r) => { if (on) setRoster({ forwards: r.forwards ?? [], defensemen: r.defensemen ?? [] }) })
-      .catch(() => on && setRoster({ forwards: [], defensemen: [] }))
-      .finally(() => on && setRosterLoading(false))
-    return () => { on = false }
-  }, [active, season])
-
-  // league-wide search (debounced)
-  useEffect(() => {
-    const q = query.trim()
-    if (q.length < 2) { setResults([]); setSearching(false); return }
-    let on = true
-    setSearching(true)
-    const t = setTimeout(async () => {
-      try {
-        const data = await searchPlayers(q, 24)
-        if (on) setResults(data.filter((p) => p.position !== 'G'))
-      } catch { if (on) setResults([]) }
-      finally { if (on) setSearching(false) }
-    }, 220)
-    return () => { on = false; clearTimeout(t) }
-  }, [query])
-
-  const startDrag = (player: PlayerSearchResult) => {
-    dragged.current = { player, kind: kindOf(player.position) }
-  }
-
-  const searchMode = query.trim().length >= 2
-  const s8 = season8(season)
-
-  const card = (p: PlayerSearchResult) => (
-    <PlayerCard
-      key={p.player_id}
-      player={p as PlayerCardData}
-      size="md"
-      onClick={() => onPick(p)}
-      draggable
-      onDragStart={() => startDrag(p)}
-      onDragEnd={() => { dragged.current = null }}
-      disabled={takenIds.has(p.player_id)}
-    />
-  )
-
-  return (
-    <section className="lab__explorer">
-      <div className="lab-explorer__search">
-        <Search size={15} className="lab-explorer__search-icon" />
-        <input
-          className="lab-explorer__input"
-          placeholder="Search any player in the league…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {query && (
-          <button className="lab-explorer__search-clear" onClick={() => setQuery('')} aria-label="Clear search">
-            <X size={15} />
-          </button>
-        )}
-      </div>
-
-      <div className="lab-explorer__body">
-        {searchMode ? (
-          /* ---- league-wide search results ---- */
-          searching && results.length === 0 ? (
-            <SkeletonLoader />
-          ) : results.length === 0 ? (
-            <p className="lab-explorer__empty">No players match “{query.trim()}”.</p>
-          ) : (
-            <div className="lab-explorer__grid">{results.map(card)}</div>
-          )
-        ) : active ? (
-          /* ---- a single team's roster ---- */
-          <div className="lab-roster">
-            <div className="lab-roster__head">
-              <button className="lab-roster__back" onClick={() => setActive(null)}>
-                <ArrowLeft size={14} /> Teams
-              </button>
-              <div className="lab-roster__team">
-                <img src={getTeamLogoUrl(active.abbrev)} alt="" className="lab-roster__logo"
-                     onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-                <span>{active.name}</span>
-              </div>
-              <SeasonSelect value={season} onChange={setSeason} />
-            </div>
-
-            {rosterLoading ? (
-              <SkeletonLoader />
-            ) : roster && (roster.forwards.length || roster.defensemen.length) ? (
-              <>
-                <h3 className="lab-explorer__group"><span>Forwards</span></h3>
-                <div className="lab-explorer__grid">
-                  {roster.forwards.map((rp) => card(rosterToCard(rp, active, s8)))}
-                </div>
-                <h3 className="lab-explorer__group"><span>Defense</span></h3>
-                <div className="lab-explorer__grid">
-                  {roster.defensemen.map((rp) => card(rosterToCard(rp, active, s8)))}
-                </div>
-              </>
-            ) : (
-              <p className="lab-explorer__empty">No roster data for {active.name} in {season}.</p>
-            )}
-          </div>
-        ) : (
-          /* ---- the team grid (default landing) ---- */
-          <>
-            <h3 className="lab-explorer__group"><span>Browse by team</span></h3>
-            {teams.length === 0 ? (
-              <SkeletonLoader />
-            ) : (
-              <div className="lab-explorer__team-grid">
-                {teams.map((t) => (
-                  <button key={t.team_id} className="lab-team-card" onClick={() => setActive(t)} title={t.name}>
-                    <img src={getTeamLogoUrl(t.abbrev)} alt="" draggable={false}
-                         onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-                    <span className="lab-team-card__name">{t.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </section>
   )
 }

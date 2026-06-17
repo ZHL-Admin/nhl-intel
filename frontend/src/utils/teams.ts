@@ -97,6 +97,34 @@ const TEAM_COLORS: Record<string, string> = {
  * Get team primary color.
  * Falls back to accent color if team not found.
  */
+/**
+ * NHL division alignment (2025-26) for the Teams nav mega-menu. Team ids are the stable
+ * franchise ids; names come from getTeamName. Teams are alphabetical within each division.
+ */
+export interface DivisionTeam { id: number; abbrev: string }
+export const DIVISIONS: { name: string; teams: DivisionTeam[] }[] = [
+  { name: 'Atlantic', teams: [
+    { id: 6, abbrev: 'BOS' }, { id: 7, abbrev: 'BUF' }, { id: 17, abbrev: 'DET' },
+    { id: 13, abbrev: 'FLA' }, { id: 8, abbrev: 'MTL' }, { id: 9, abbrev: 'OTT' },
+    { id: 14, abbrev: 'TBL' }, { id: 10, abbrev: 'TOR' },
+  ] },
+  { name: 'Metropolitan', teams: [
+    { id: 12, abbrev: 'CAR' }, { id: 29, abbrev: 'CBJ' }, { id: 1, abbrev: 'NJD' },
+    { id: 2, abbrev: 'NYI' }, { id: 3, abbrev: 'NYR' }, { id: 4, abbrev: 'PHI' },
+    { id: 5, abbrev: 'PIT' }, { id: 15, abbrev: 'WSH' },
+  ] },
+  { name: 'Central', teams: [
+    { id: 16, abbrev: 'CHI' }, { id: 21, abbrev: 'COL' }, { id: 25, abbrev: 'DAL' },
+    { id: 30, abbrev: 'MIN' }, { id: 18, abbrev: 'NSH' }, { id: 19, abbrev: 'STL' },
+    { id: 68, abbrev: 'UTA' }, { id: 52, abbrev: 'WPG' },
+  ] },
+  { name: 'Pacific', teams: [
+    { id: 24, abbrev: 'ANA' }, { id: 20, abbrev: 'CGY' }, { id: 22, abbrev: 'EDM' },
+    { id: 26, abbrev: 'LAK' }, { id: 28, abbrev: 'SJS' }, { id: 55, abbrev: 'SEA' },
+    { id: 23, abbrev: 'VAN' }, { id: 54, abbrev: 'VGK' },
+  ] },
+]
+
 export function getTeamColor(teamAbbrev: string): string {
   return TEAM_COLORS[teamAbbrev] || 'var(--color-accent)'
 }

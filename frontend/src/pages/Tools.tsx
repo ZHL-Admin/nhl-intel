@@ -3,7 +3,7 @@
  */
 import { Link } from 'react-router-dom'
 import { Users, ArrowLeftRight } from 'lucide-react'
-import { PageLayout } from '../components/common'
+import { PageLayout, PageHeader } from '../components/common'
 import './Tools.css'
 
 const TOOLS = [
@@ -25,11 +25,10 @@ export default function Tools() {
   return (
     <PageLayout>
       <div className="tools-index">
-        <h1 className="tools-index__title">Tools</h1>
-        <p className="tools-index__sub">
-          Interactive models built on the same engine as the rest of the site. Every output is
-          explained from the numbers that produced it.
-        </p>
+        <PageHeader
+          title="Tools"
+          subtitle="Interactive models built on the same engine as the rest of the site. Every output is explained from the numbers that produced it."
+        />
         <div className="tools-index__grid">
           {TOOLS.map(({ to, icon: Icon, title, blurb }) => (
             <Link key={to} to={to} className="tools-index__card">

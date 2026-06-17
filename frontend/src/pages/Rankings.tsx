@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
-import { PageLayout, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
+import { PageLayout, PageHeader, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
 import type { StackSegment } from '../components/common'
 import { getPowerRankings, getDeservedStandings } from '../api/rankings'
 import { PowerRatingRow, DeservedStandingRow } from '../api/types'
@@ -159,13 +159,10 @@ export default function Rankings() {
   return (
     <PageLayout>
       <div className="rankings">
-        <div className="rankings__header">
-          <h1 className="rankings__title">Rankings</h1>
-          <p className="rankings__subtitle">
-            Power ratings show where each team’s edge comes from. Deserved standings replay
-            the season from the chances created.
-          </p>
-        </div>
+        <PageHeader
+          title="Rankings"
+          subtitle="Power ratings show where each team’s edge comes from. Deserved standings replay the season from the chances created."
+        />
         <Tabs
           options={[{ value: 'power', label: 'Power Ratings' }, { value: 'deserved', label: 'Deserved Standings' }]}
           value={tab}

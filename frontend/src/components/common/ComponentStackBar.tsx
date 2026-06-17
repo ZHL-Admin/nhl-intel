@@ -5,7 +5,12 @@
  * centre zero line, negative segments stack leftward. A tick marks the net total, with an
  * optional uncertainty whisker (+/- se). Built generic so Phase 4 reuses it for player
  * composite stacks. The `domain` is passed in so every row in a table shares one scale.
+ *
+ * Hovering the bar opens a custom breakdown tooltip (portal-rendered so it isn't clipped) — a
+ * faster, richer replacement for the native title, and a built-in "what am I looking at" key.
  */
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import './ComponentStackBar.css'
 
 export interface StackSegment {
@@ -23,6 +28,8 @@ interface ComponentStackBarProps {
   se?: number | null
   height?: number
   formatValue?: (v: number) => string
+  /** Optional faint reference lines at these domain values (a scale for the eye). */
+  gridlines?: number[]
 }
 
 const fmtDefault = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
@@ -34,11 +41,19 @@ export default function ComponentStackBar({
   se,
   height = 22,
   formatValue = fmtDefault,
+  gridlines,
 }: ComponentStackBarProps) {
   const [min, max] = domain
   const span = max - min || 1
   const pct = (v: number) => ((v - min) / span) * 100
   const zero = pct(0)
+
+  const barRef = useRef<HTMLDivElement>(null)
+  const [tip, setTip] = useState<{ top: number; left: number } | null>(null)
+  const showTip = () => {
+    const r = barRef.current?.getBoundingClientRect()
+    if (r) setTip({ top: r.top - 8, left: r.left + r.width / 2 })
+  }
 
   // stack positives rightward and negatives leftward from zero
   const bars: { left: number; width: number; seg: StackSegment }[] = []
@@ -63,7 +78,16 @@ export default function ComponentStackBar({
   const seRight = se ? pct(total + se) : null
 
   return (
-    <div className="component-stack-bar" style={{ height }}>
+    <div
+      ref={barRef}
+      className="component-stack-bar"
+      style={{ height }}
+      onMouseEnter={showTip}
+      onMouseLeave={() => setTip(null)}
+    >
+      {gridlines?.filter((v) => v !== 0).map((v) => (
+        <div key={`g${v}`} className="component-stack-bar__grid" style={{ left: `${pct(v)}%` }} />
+      ))}
       <div className="component-stack-bar__zero" style={{ left: `${zero}%` }} />
       {se != null && seLeft != null && seRight != null && (
         <div
@@ -76,14 +100,28 @@ export default function ComponentStackBar({
           key={seg.key}
           className="component-stack-bar__seg"
           style={{ left: `${left}%`, width: `${Math.max(width, 0)}%`, background: seg.color }}
-          title={`${seg.label}: ${formatValue(seg.value)}`}
         />
       ))}
-      <div
-        className="component-stack-bar__total"
-        style={{ left: `${totalX}%` }}
-        title={`Total: ${formatValue(total)}${se != null ? ` ± ${se.toFixed(2)}` : ''}`}
-      />
+      <div className="component-stack-bar__total" style={{ left: `${totalX}%` }} />
+
+      {tip && createPortal(
+        <div className="csb-tip" style={{ top: tip.top, left: tip.left }}>
+          <div className="csb-tip__rows">
+            {segments.map((s) => (
+              <div key={s.key} className="csb-tip__row">
+                <span className="csb-tip__swatch" style={{ background: s.color }} />
+                <span className="csb-tip__label">{s.label}</span>
+                <span className="csb-tip__val">{formatValue(s.value)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="csb-tip__total">
+            <span>Total value</span>
+            <span className="csb-tip__val">{formatValue(total)}{se != null ? ` ± ${se.toFixed(1)}` : ''}</span>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

@@ -15,6 +15,16 @@
   z-index: 1;
 }
 
+.component-stack-bar__grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border-strong, rgba(127, 127, 127, 0.4));
+  opacity: 0.45;
+  z-index: 0;
+}
+
 .component-stack-bar__seg {
   position: absolute;
   top: 3px;
@@ -40,4 +50,29 @@
   width: 2px;
   background: var(--color-text-primary, #111);
   z-index: 4;
+}
+
+/* custom breakdown tooltip (portal-rendered, anchored above the bar) */
+.csb-tip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  z-index: 1000;
+  min-width: 190px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-overlay);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+.csb-tip__rows { display: flex; flex-direction: column; gap: 5px; }
+.csb-tip__row { display: grid; grid-template-columns: 11px 1fr auto; align-items: center; gap: var(--space-2); font-size: var(--text-xs); }
+.csb-tip__swatch { width: 10px; height: 10px; border-radius: 2px; }
+.csb-tip__label { color: var(--color-text-secondary); white-space: nowrap; }
+.csb-tip__val { font-family: var(--font-mono); font-weight: 600; color: var(--color-text-primary); }
+.csb-tip__total {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  margin-top: var(--space-2); padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-xs); font-weight: 700; color: var(--color-text-primary);
 }

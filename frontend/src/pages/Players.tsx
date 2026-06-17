@@ -1,11 +1,376 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { PageLayout, ComponentStackBar, SkeletonLoader, Tabs } from '../components/common'
-import type { StackSegment } from '../components/common'
-import { getArchetypeRanking, getDivergenceBoard } from '../api/players'
-import { ArchetypeRankRow, DivergenceBoardRow } from '../api/types'
+/**
+ * Players index (Phase 4.2 / 4.3). Leaderboard ranks skaters by total value — overall by default,
+ * filterable by position and archetype — with a top-3 hero and ranked list (composite breakdown).
+ * The Divergence Board visualises where coaching trust and isolated value most disagree. A search
+ * jumps to any player's profile. Controls live in one contained toolbar.
+ */
+import { useState, useEffect, useMemo, Fragment } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, ArrowRight } from 'lucide-react'
+import {
+  PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker,
+} from '../components/common'
+import type { StackSegment, SelectOption } from '../components/common'
+import { getOverallLeaders, getArchetypeRanking, getDivergenceBoard,
+  getPlayerRadar, getPlayerDetail } from '../api/players'
+import { ArchetypeRankRow, DivergenceBoardRow, PlayerRadar, PlayerDetail } from '../api/types'
+import { playerLabelsFromRadar } from '../api/labels'
+import SkillRadar from '../components/visualizations/SkillRadar'
 import { ARCHETYPES, COMPOSITE_COMPONENTS } from '../config/metrics'
+import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import './Players.css'
+
+type Pos = 'ALL' | 'F' | 'D'
+const archGroup = (a: string): 'F' | 'D' => (ARCHETYPES.F.includes(a) ? 'F' : 'D')
+// seasons with composite + archetype data (newest first)
+const SEASONS = ['2025-26', '2024-25', '2023-24', '2022-23', '2021-22']
+
+/** Round value-axis ticks across a domain (a scale for the leaderboard bars). */
+function niceTicks([lo, hi]: [number, number]): number[] {
+  const range = hi - lo
+  const step = range > 40 ? 10 : range > 16 ? 5 : range > 6 ? 2 : 1
+  const out: number[] = []
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) out.push(Math.round(v))
+  return out
+}
+const tickPct = (v: number, [lo, hi]: [number, number]) => ((v - lo) / ((hi - lo) || 1)) * 100
+
+function initials(name?: string | null): string {
+  if (!name) return '—'
+  const p = name.trim().split(/\s+/)
+  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '—'
+}
+
+/** Round headshot with a team-logo badge and initials fallback. */
+function Avatar({ id, team, name, size = 40 }: { id: number; team?: string | null; name?: string | null; size?: number }) {
+  const [err, setErr] = useState(false)
+  const src = !err && team ? getPlayerHeadshotUrl(id, team) : ''
+  return (
+    <span className="pav" style={{ ['--pav' as string]: `${size}px` } as React.CSSProperties}>
+      {src
+        ? <img className="pav__img" src={src} alt="" onError={() => setErr(true)} />
+        : <span className="pav__ini">{initials(name)}</span>}
+      {team && (
+        <img className="pav__logo" src={getTeamLogoUrl(team)} alt=""
+          onError={(e) => ((e.currentTarget.style.display = 'none'))} />
+      )}
+    </span>
+  )
+}
+
+const fmt = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
+const meta = (r: ArchetypeRankRow, overall: boolean) => {
+  const base = `${r.position ?? ''}${r.team_abbrev ? ` · ${r.team_abbrev}` : ''}`
+  if (overall) return r.primary_archetype ? `${base} · ${r.primary_archetype}` : base
+  return `${base} · ${(r.archetype_weight * 100).toFixed(0)}% match`
+}
+
+function rowSegments(r: ArchetypeRankRow): StackSegment[] {
+  const m = new Map(r.components.map((c) => [c.key, c.value]))
+  return COMPOSITE_COMPONENTS.map((c) => ({ key: c.key, label: c.label, value: m.get(c.key) ?? 0, color: c.color }))
+}
+
+/* ============================================================================
+   Expandable player card — middle-ground overview between the row and the full page
+   ============================================================================ */
+
+/** One RAPM impact bar (per-60, centred at 0) with an uncertainty whisker + percentile. */
+function RapmBar({ label, value, sd, pctl }: { label: string; value: number; sd?: number | null; pctl?: number | null }) {
+  const D = 0.6                                    // ± domain for EV impact /60
+  const x = (v: number) => ((Math.max(-D, Math.min(D, v)) + D) / (2 * D)) * 100
+  const zero = x(0)
+  return (
+    <div className="pexp-rapm__row">
+      <span className="pexp-rapm__label">{label}</span>
+      <span className="pexp-rapm__track">
+        <span className="pexp-rapm__zero" style={{ left: `${zero}%` }} />
+        {sd != null && (
+          <span className="pexp-rapm__sd" style={{ left: `${x(value - sd)}%`, width: `${Math.max(0, x(value + sd) - x(value - sd))}%` }} />
+        )}
+        <span className={`pexp-rapm__bar ${value >= 0 ? 'pexp-rapm__bar--pos' : 'pexp-rapm__bar--neg'}`}
+          style={{ left: `${Math.min(zero, x(value))}%`, width: `${Math.abs(x(value) - zero)}%` }} />
+      </span>
+      <span className="pexp-rapm__val">{value >= 0 ? '+' : ''}{value.toFixed(2)}{pctl != null && <small> · {Math.round(pctl)}th</small>}</span>
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div className="pexp-stat"><span className="pexp-stat__v">{value}</span><span className="pexp-stat__l">{label}</span></div>
+}
+
+/** Inline expansion: basics + stats + RAPM + value breakdown + skill radar + link to full page. */
+function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: string }) {
+  const [radar, setRadar] = useState<PlayerRadar | null>(null)
+  const [detail, setDetail] = useState<PlayerDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true); setRadar(null); setDetail(null)
+    Promise.allSettled([getPlayerRadar(row.player_id, season), getPlayerDetail(row.player_id)])
+      .then(([r, d]) => {
+        if (!active) return
+        if (r.status === 'fulfilled') setRadar(r.value)
+        if (d.status === 'fulfilled') setDetail(d.value)
+        setLoading(false)
+      })
+    return () => { active = false }
+  }, [row.player_id, season])
+
+  const labels = radar ? playerLabelsFromRadar(radar) : null
+  const offSpoke = radar?.spokes.find((s) => s.key === 'ev_off_impact')
+  const defSpoke = radar?.spokes.find((s) => s.key === 'ev_def_impact')
+  const d = Math.max(2, ...rowSegments(row).map((s) => Math.abs(s.value)))
+
+  return (
+    <div className="pexp">
+      <div className="pexp__main">
+        {/* basics + stats + RAPM + value */}
+        <div className="pexp__col">
+          <div className="pexp__head">
+            <Avatar id={row.player_id} team={row.team_abbrev} name={row.player_name} size={56} />
+            <div className="pexp__id">
+              <span className="pexp__name">{row.player_name ?? row.player_id}</span>
+              <span className="pexp__meta">{row.position}{row.team_abbrev ? ` · ${row.team_abbrev}` : ''}{labels?.overall ? ` · ${labels.overall}` : ''}</span>
+              {labels && (
+                <div className="pexp__chips">
+                  {labels.offensive && <span className="pexp__chip">{labels.offensive}</span>}
+                  {labels.defensive && <span className="pexp__chip pexp__chip--def">{labels.defensive}</span>}
+                </div>
+              )}
+            </div>
+          </div>
+          {labels?.descriptor && <p className="pexp__descriptor">{labels.descriptor}</p>}
+
+          {detail && (
+            <div className="pexp__stats">
+              <Stat label="GP" value={`${detail.games_played}`} />
+              <Stat label="TOI/GP" value={detail.toi_per_gp != null ? detail.toi_per_gp.toFixed(1) : '—'} />
+              <Stat label="G/60" value={detail.goals_per60 != null ? detail.goals_per60.toFixed(2) : '—'} />
+              <Stat label="A/60" value={detail.assists_per60 != null ? detail.assists_per60.toFixed(2) : '—'} />
+              <Stat label="P/60" value={detail.points_per60 != null ? detail.points_per60.toFixed(2) : '—'} />
+              <Stat label="CF%" value={detail.cf_pct != null ? detail.cf_pct.toFixed(1) : '—'} />
+            </div>
+          )}
+
+          {(offSpoke || defSpoke) && (
+            <div className="pexp__block">
+              <div className="pexp__block-title">Isolated impact (RAPM, xG/60)</div>
+              {offSpoke && <RapmBar label="EV Offense" value={offSpoke.value} sd={offSpoke.sd} pctl={offSpoke.percentile} />}
+              {defSpoke && <RapmBar label="EV Defense" value={defSpoke.value} sd={defSpoke.sd} pctl={defSpoke.percentile} />}
+            </div>
+          )}
+
+          <div className="pexp__block">
+            <div className="pexp__block-title">Value breakdown (goals above replacement)</div>
+            <ComponentStackBar segments={rowSegments(row)} total={row.composite_total}
+              domain={[-d, d]} se={row.composite_total_sd ?? undefined} height={24} />
+          </div>
+
+          <Link className="pexp__link" to={`/players/${row.player_id}`}>
+            View full profile <ArrowRight size={15} />
+          </Link>
+        </div>
+
+        {/* skill radar */}
+        <div className="pexp__radar">
+          {loading && !radar ? <SkeletonLoader />
+            : radar ? <SkillRadar spokes={radar.spokes} baseline={radar.baseline} size={360} />
+            : <p className="players__msg">No radar for this player.</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ============================================================================
+   Leaderboard content (driven by toolbar position/archetype)
+   ============================================================================ */
+function Leaderboard({ position, archetype, season }: { position: Pos; archetype: string; season: string }) {
+  const [rows, setRows] = useState<ArchetypeRankRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const overall = archetype === 'ALL'
+  const toggle = (id: number) => setExpandedId((cur) => (cur === id ? null : id))
+
+  useEffect(() => {
+    let active = true
+    setRows(null); setError(null); setExpandedId(null)
+    const req = overall ? getOverallLeaders(position, season, 50) : getArchetypeRanking(archetype, season, 50)
+    req.then((d) => active && setRows(d)).catch(() => active && setError('Could not load rankings.'))
+    return () => { active = false }
+  }, [position, archetype, overall, season])
+
+  const top = rows?.slice(0, 3) ?? []
+  const rest = rows?.slice(3) ?? []
+
+  // Asymmetric scale from the actual data (incl. whisker) so bars fill rightward. The podium
+  // and the list get SEPARATE scales — otherwise the list is squashed against the #1 outlier
+  // and wastes the right half. Each group's bars fill its own range.
+  const [podiumDomain, listDomain] = useMemo<[[number, number], [number, number]]>(() => {
+    const calc = (rs: ArchetypeRankRow[]): [number, number] => {
+      let lo = 0, hi = 1
+      for (const r of rs) {
+        let posSum = 0, negSum = 0
+        for (const c of r.components) (c.value >= 0 ? (posSum += c.value) : (negSum += c.value))
+        const sd = r.composite_total_sd ?? 0
+        hi = Math.max(hi, posSum, r.composite_total + sd)
+        lo = Math.min(lo, negSum, r.composite_total - sd)
+      }
+      return [lo, hi * 1.03]
+    }
+    const all = rows ?? []
+    const restRows = all.slice(3)
+    return [calc(all.slice(0, 3)), calc(restRows.length ? restRows : all.slice(0, 3))]
+  }, [rows])
+  const listTicks = niceTicks(listDomain)
+
+  return (
+    <section className="players__board">
+      <div className="players__board-head">
+        <p className="players__subtitle">
+          {overall
+            ? 'The league’s highest-value skaters by total value (goals above replacement). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'
+            : 'Ranked within archetype by total value (goals above replacement). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'}
+        </p>
+        {rows && <span className="players__count">{rows.length} {rows.length === 1 ? 'player' : 'players'}</span>}
+      </div>
+
+      {error && <p className="players__msg">{error}</p>}
+      {!rows && !error && <SkeletonLoader />}
+      {rows && rows.length === 0 && <p className="players__msg">No qualifying players here.</p>}
+
+      {rows && rows.length > 0 && (
+        <>
+          <div className="players__key">
+            <div className="players__key-components">
+              {COMPOSITE_COMPONENTS.map((c) => (
+                <span key={c.key} className="players__legend-item">
+                  <span className="players__swatch" style={{ background: c.color }} />{c.label}
+                </span>
+              ))}
+            </div>
+            <div className="players__key-marks">
+              <span className="players__legend-item"><span className="key-mark key-mark--tick" />total value</span>
+              <span className="players__legend-item"><span className="key-mark key-mark--whisker" />uncertainty</span>
+              <span className="players__key-hint">Bars stack each component’s value (negatives extend left). Hover a bar for the full breakdown.</span>
+            </div>
+          </div>
+
+          <div className="players__podium">
+            {top.map((r, i) => (
+              <button key={r.player_id} className="ptop" onClick={() => navigate(`/players/${r.player_id}`)}>
+                <span className={`ptop__rank ptop__rank--${i + 1}`}>{i + 1}</span>
+                <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
+                <span className="ptop__name">{r.player_name ?? r.player_id}</span>
+                <span className="ptop__meta">{meta(r, overall)}</span>
+                <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
+                <div className="ptop__bar">
+                  <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={podiumDomain} se={r.composite_total_sd ?? undefined} />
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {rest.length > 0 && (
+            <>
+              <div className="players__rows">
+                {rest.map((r, i) => (
+                  <button key={r.player_id} className="prow" onClick={() => navigate(`/players/${r.player_id}`)}>
+                    <span className="prow__rank">{i + 4}</span>
+                    <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={38} />
+                    <span className="prow__id">
+                      <span className="prow__name">{r.player_name ?? r.player_id}</span>
+                      <span className="prow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+                    </span>
+                    <span className="prow__bar">
+                      <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={listDomain} se={r.composite_total_sd ?? undefined} gridlines={listTicks} />
+                    </span>
+                    <span className="prow__total">{fmt(r.composite_total)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="players__axis" aria-hidden="true">
+                <div className="players__axis-track">
+                  {listTicks.map((v) => (
+                    <span key={v} className="players__axis-tick" style={{ left: `${tickPct(v, listDomain)}%` }}>
+                      {v > 0 ? `+${v}` : v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/* ============================================================================
+   Divergence board
+   ============================================================================ */
+function DivBar({ label, z, tone }: { label: string; z: number; tone: 'trust' | 'value' }) {
+  const clamped = Math.max(-3, Math.min(3, z))
+  const pct = ((clamped + 3) / 6) * 100
+  const left = Math.min(pct, 50)
+  const width = Math.abs(pct - 50)
+  return (
+    <div className={`dbar dbar--${tone}`}>
+      <span className="dbar__label">{label}</span>
+      <span className="dbar__track">
+        <span className="dbar__zero" />
+        <span className="dbar__fill" style={{ left: `${left}%`, width: `${width}%` }} />
+        <span className="dbar__dot" style={{ left: `${pct}%` }} />
+      </span>
+      <span className="dbar__val">{z >= 0 ? '+' : ''}{z.toFixed(1)}σ</span>
+    </div>
+  )
+}
+
+/** One expandable divergence entry: compact rank row, opens to the trust/value bars + explanation. */
+function DivRow({ rank, r, defaultOpen }: { rank: number; r: DivergenceBoardRow; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen)
+  return (
+    <div className={`divrow${open ? ' divrow--open' : ''}`}>
+      <button className="divrow__head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="divrow__rank">{rank}</span>
+        <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={34} />
+        <span className="divrow__id">
+          <span className="divrow__name">{r.player_name ?? r.player_id}</span>
+          <span className="divrow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+        </span>
+        <span className="divrow__sigma">{Math.abs(r.divergence).toFixed(1)}σ</span>
+        <ChevronDown size={15} className={`divrow__chev${open ? ' divrow__chev--open' : ''}`} />
+      </button>
+      {open && (
+        <div className="divrow__detail">
+          <DivBar label="Coach trust" z={r.trust_z} tone="trust" />
+          <DivBar label="Isolated value" z={r.composite_z} tone="value" />
+          <p className="divrow__explain">{r.explanation}</p>
+          <Link to={`/players/${r.player_id}`} className="divrow__link">View player →</Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DivColumn({ title, caption, rows }: { title: string; caption: string; rows: DivergenceBoardRow[] }) {
+  return (
+    <div className="divcol">
+      <div className="divcol__head">
+        <h3 className="divcol__title">{title}</h3>
+        <p className="divcol__caption">{caption}</p>
+      </div>
+      <div className="divcol__list">
+        {rows.length === 0
+          ? <p className="players__msg" style={{ padding: 'var(--space-5)' }}>No qualifying players.</p>
+          : rows.map((r, i) => <DivRow key={r.player_id} rank={i + 1} r={r} defaultOpen={i === 0} />)}
+      </div>
+    </div>
+  )
+}
 
 function DivergenceBoard() {
   const [rows, setRows] = useState<DivergenceBoardRow[] | null>(null)
@@ -15,166 +380,99 @@ function DivergenceBoard() {
     getDivergenceBoard().then((d) => active && setRows(d)).catch(() => active && setError('Could not load board.'))
     return () => { active = false }
   }, [])
-  if (error) return <p className="players__placeholder-text">{error}</p>
+  if (error) return <p className="players__msg">{error}</p>
   if (!rows) return <SkeletonLoader />
-  const over = rows.filter((r) => r.side === 'trusted_over_value')
-  const under = rows.filter((r) => r.side === 'value_over_trust')
-  const card = (r: DivergenceBoardRow) => (
-    <div key={r.player_id} className="divergence__card">
-      <div className="divergence__card-head">
-        <Link to={`/players/${r.player_id}`} className="players__name">{r.player_name ?? r.player_id}</Link>
-        <span className="divergence__score">{(r.divergence >= 0 ? '+' : '') + r.divergence.toFixed(1)}σ</span>
-      </div>
-      <p className="divergence__explain">{r.explanation}</p>
-    </div>
-  )
+  // each side ranked by the size of the disagreement
+  const over = rows.filter((r) => r.side === 'trusted_over_value').sort((a, b) => b.divergence - a.divergence)
+  const under = rows.filter((r) => r.side === 'value_over_trust').sort((a, b) => a.divergence - b.divergence)
   return (
-    <div className="divergence">
+    <section className="players__divergence">
       <p className="players__subtitle">
         Where coaching deployment (trust) and isolated value (composite) most disagree, by
-        position-standardized z-scores. Explanations are generated from the underlying numbers.
+        position-standardized z-scores. Each side is ranked by the size of the gap; expand a row
+        for the breakdown. Explanations are generated from the underlying numbers.
       </p>
 
-      {/* The high-signal side: players a coach leans on more than the models support. */}
-      <h3 className="divergence__col-title">Trusted beyond their value</h3>
-      <p className="divergence__caption">
-        The eye-test-vs-analytics tension lives here — heavy defensive deployment the isolated
-        numbers don't reward.
-      </p>
-      <div className="divergence__grid">{over.map(card)}</div>
-
-      {/* The reverse side is largely mechanical (trust is defense-weighted, so offensive */}
-      {/* stars sit here), so it is presented compactly as secondary. */}
-      <details className="divergence__secondary">
-        <summary>Value beyond their deployment ({under.length}) — mostly offensive stars not used in defensive roles</summary>
-        <div className="divergence__grid">{under.map(card)}</div>
-      </details>
-    </div>
+      <div className="div2col">
+        <DivColumn
+          title="Trusted beyond their value"
+          caption="Heavy deployment the isolated numbers don’t reward — the eye-test-vs-analytics tension."
+          rows={over}
+        />
+        <DivColumn
+          title="Value beyond their deployment"
+          caption="Strong isolated value in limited or sheltered roles — often offense not trusted defensively."
+          rows={under}
+        />
+      </div>
+    </section>
   )
 }
 
-function rowSegments(r: ArchetypeRankRow): StackSegment[] {
-  const m = new Map(r.components.map((c) => [c.key, c.value]))
-  return COMPOSITE_COMPONENTS.map((c) => ({
-    key: c.key, label: c.label, value: m.get(c.key) ?? 0, color: c.color,
-  }))
-}
+/* ============================================================================
+   Page
+   ============================================================================ */
+export default function Players() {
+  const navigate = useNavigate()
+  const [view, setView] = useState<'leaderboard' | 'divergence'>('leaderboard')
+  const [position, setPosition] = useState<Pos>('ALL')
+  const [archetype, setArchetype] = useState<string>('ALL')
+  const [season, setSeason] = useState<string>(SEASONS[0])
 
-function Players() {
-  const [view, setView] = useState<'archetype' | 'divergence'>('archetype')
-  const [pos, setPos] = useState<'F' | 'D'>('F')
-  const [archetype, setArchetype] = useState<string>(ARCHETYPES.F[0])
-  const [rows, setRows] = useState<ArchetypeRankRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const changePosition = (p: Pos) => { setPosition(p); setArchetype('ALL') }
+  const changeArchetype = (a: string) => {
+    if (a !== 'ALL' && position === 'ALL') setPosition(archGroup(a))
+    setArchetype(a)
+  }
 
-  // keep the selected archetype valid when switching position group
-  useEffect(() => { setArchetype(ARCHETYPES[pos][0]) }, [pos])
-
-  useEffect(() => {
-    let active = true
-    setRows(null); setError(null)
-    getArchetypeRanking(archetype, undefined, 50)
-      .then((d) => active && setRows(d))
-      .catch(() => active && setError('Could not load rankings.'))
-    return () => { active = false }
-  }, [archetype])
-
-  const domain = useMemo<[number, number]>(() => {
-    let m = 1
-    for (const r of rows ?? []) {
-      let posSum = 0, negSum = 0
-      for (const c of r.components) (c.value >= 0 ? (posSum += c.value) : (negSum += c.value))
-      m = Math.max(m, posSum, Math.abs(negSum))
-    }
-    return [-m, m]
-  }, [rows])
+  const archOptions = useMemo<SelectOption[]>(() => {
+    const list = position === 'F' ? ARCHETYPES.F : position === 'D' ? ARCHETYPES.D : [...ARCHETYPES.F, ...ARCHETYPES.D]
+    return [{ value: 'ALL', label: 'All archetypes' }, ...list.map((a) => ({ value: a, label: a }))]
+  }, [position])
 
   return (
     <PageLayout>
       <div className="players">
-        <div className="players__header">
-          <h1 className="players__title">Players</h1>
-        </div>
-
-        <Tabs
-          options={[
-            { value: 'archetype', label: 'Rank by Archetype' },
-            { value: 'divergence', label: 'Divergence Board' },
-          ]}
-          value={view}
-          onChange={(v) => setView(v as 'archetype' | 'divergence')}
+        <PageHeader
+          title="Players"
+          subtitle="Rank the league’s skaters by value, see where coaches and the models disagree, or jump straight to anyone."
         />
 
-        {view === 'divergence' && <DivergenceBoard />}
-
-        {view === 'archetype' && (
-        <section className="players__leaderboard">
-          <p className="players__subtitle">
-            Ranked within archetype by total value (goals above replacement). Each bar breaks
-            the value into its components; the tick is the total, the line its uncertainty.
-          </p>
-          <div className="players__controls">
-            <div className="players__position-filter">
-              {(['F', 'D'] as const).map((p) => (
-                <button key={p}
-                  className={`players__filter-button ${pos === p ? 'players__filter-button--active' : ''}`}
-                  onClick={() => setPos(p)}>
-                  {p === 'F' ? 'Forwards' : 'Defense'}
-                </button>
-              ))}
+        <div className="players__toolbar">
+          <div className="players__toolbar-top">
+            <Tabs
+              options={[
+                { value: 'leaderboard', label: 'Leaderboard' },
+                { value: 'divergence', label: 'Divergence Board' },
+              ]}
+              value={view}
+              onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
+            />
+            <div className="players__toolbar-search">
+              <PlayerPicker placeholder="Find any player…" onSelect={(p) => navigate(`/players/${p.player_id}`)} />
             </div>
-            <select className="players__sort-select" value={archetype}
-              onChange={(e) => setArchetype(e.target.value)}>
-              {ARCHETYPES[pos].map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
           </div>
 
-          {error && <p className="players__placeholder-text">{error}</p>}
-          {!rows && !error && <SkeletonLoader />}
-          {rows && rows.length === 0 && (
-            <p className="players__placeholder-text">No qualifying players in this archetype.</p>
-          )}
-          {rows && rows.length > 0 && (
-            <table className="players__table">
-              <thead>
-                <tr><th>#</th><th>Player</th><th className="players__num">Total</th>
-                  <th className="players__bar-col">Value breakdown (goals)</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.player_id}>
-                    <td className="players__rank">{i + 1}</td>
-                    <td>
-                      <Link to={`/players/${r.player_id}`} className="players__name">
-                        {r.player_name ?? r.player_id}
-                      </Link>
-                      <span className="players__pos">{r.position}</span>
-                    </td>
-                    <td className="players__num players__total">
-                      {(r.composite_total >= 0 ? '+' : '') + r.composite_total.toFixed(1)}
-                    </td>
-                    <td className="players__bar-col">
-                      <ComponentStackBar segments={rowSegments(r)} total={r.composite_total}
-                        domain={domain} se={r.composite_total_sd} />
-                    </td>
-                  </tr>
+          {view === 'leaderboard' && (
+            <div className="players__toolbar-filters">
+              <div className="seg">
+                {(['ALL', 'F', 'D'] as const).map((p) => (
+                  <button key={p} className={`seg__btn${position === p ? ' seg__btn--active' : ''}`} onClick={() => changePosition(p)}>
+                    {p === 'ALL' ? 'All skaters' : p === 'F' ? 'Forwards' : 'Defense'}
+                  </button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+              <Select value={archetype} ariaLabel="Archetype" options={archOptions} onChange={changeArchetype} />
+              <Select value={season} ariaLabel="Season"
+                options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
+            </div>
           )}
+        </div>
 
-          <div className="players__legend">
-            {COMPOSITE_COMPONENTS.map((c) => (
-              <span key={c.key} className="players__legend-item">
-                <span className="players__swatch" style={{ background: c.color }} />{c.label}
-              </span>
-            ))}
-          </div>
-        </section>
-        )}
+        {view === 'leaderboard'
+          ? <Leaderboard position={position} archetype={archetype} season={season} />
+          : <DivergenceBoard />}
       </div>
     </PageLayout>
   )
 }
-
-export default Players
