@@ -436,6 +436,14 @@ GAR_LABELS = [
     ("pk", "Penalty Kill"), ("penalty", "Penalties"), ("faceoff", "Faceoffs"),
 ]
 
+# Goalie GAR component key -> label (the goalie value stack; a DISTINCT vocabulary from skaters,
+# so the mixed leaderboard renders the right bar per row's component_kind). Matches
+# models_ml.config.GOALIE_GAR_COMPONENTS order.
+GOALIE_GAR_LABELS = [
+    ("hd_saves", "High-Danger Saves"), ("md_saves", "Mid-Danger Saves"),
+    ("ld_saves", "Low-Danger Saves"), ("pk_goaltending", "Penalty-Kill"),
+]
+
 
 class PlayerDetail(BaseModel):
     """Detailed player information."""
@@ -504,18 +512,64 @@ class PlayerValue(BaseModel):
     production_r: float
     rapm_r: float
     finishing_r: float
+    # Per-player Overall (card-only): a within-position percentile SUMMARY of the two lenses above,
+    # always rendered WITH its components. Never a sort key (no /rankings/overall).
+    overall: Optional["OverallSummary"] = None
 
 
 class ValueRankingRow(BaseModel):
-    """A skater on the GAR/WAR leaderboard, with components for the stacked bar (Phase 6 GAR)."""
-    player_id: int
+    """A row on the value leaderboard — skater OR goalie (Phase 6 GAR + cross-position WAR).
+
+    WAR (= GAR / GOALS_PER_WIN) is the ONLY cross-position-comparable unit, so the mixed (`all`)
+    leaderboard sorts by WAR; skater GAR and goalie GAR are different units and are never sorted
+    together. `entity_kind` says which table the row came from; `component_kind` tells the frontend
+    which component-colour vocabulary to render (skater vs goalie save-tier components).
+    """
+    player_id: int                       # player_id for skaters, goalie_id for goalies
     player_name: Optional[str] = None
     team_abbrev: Optional[str] = None
     position: Optional[str] = None
+    entity_kind: str = "skater"          # skater | goalie
+    component_kind: str = "skater"       # skater | goalie  (which bar vocabulary to render)
     gar: float
     war: float
     gar_sd: Optional[float] = None
+    war_sd: Optional[float] = None       # goalies render a VISIBLY wider band (principle 6)
     components: List[CompositeComponent] = []
+
+
+class OverallComponent(BaseModel):
+    """One within-position percentile that feeds the per-player Overall (0-1)."""
+    key: str
+    label: str
+    percentile: Optional[float] = None
+
+
+class OverallSummary(BaseModel):
+    """Per-player Overall — a within-position percentile SUMMARY for the player card only.
+
+    `overall_percentile` is itself a within-position percentile (averaged-and-re-percentiled);
+    `components` are the within-position percentiles it averaged and MUST always be shown with it
+    (the FE enforces this). It is never a leaderboard sort key — there is no /rankings/overall.
+    """
+    overall_percentile: float            # 0-1, within position group (skaters) or within goalies
+    pos_group: Optional[str] = None      # F | D | G
+    components: List[OverallComponent] = []
+    weights: dict = {}
+
+
+class GoalieValue(BaseModel):
+    """Goalie GAR/WAR + components on the cross-position WAR scale (goals saved above a backup).
+
+    Goalies have no RAPM play-driving lens, so (unlike the skater PlayerValue) there is no
+    Impact-vs-Value gap read — the goalie's actual-vs-expected motif is GSAx-vs-Edge on the radar.
+    The band is wide by construction; goalie value is presented at tier-level confidence."""
+    gar: float
+    war: float
+    gar_sd: float
+    war_sd: float
+    components: List[CompositeComponent] = []   # goalie save-tier components (GOALIE_GAR_LABELS)
+    war_percentile: Optional[float] = None      # WAR percentile within goalies (0-1), for context
 
 
 class PlayerTrendPoint(BaseModel):
@@ -812,6 +866,9 @@ class GoalieSeason(BaseModel):
     # NHL Edge independent second opinion (overall last-10 save pct; no HD split)
     edge_last10_save_pct: Optional[float] = Field(None, description="NHL Edge last-10 save %")
     edge_games_above_900: Optional[int] = None
+    # Goalie Value (GAR/WAR on the cross-position scale) + within-goalie Overall (card-only).
+    value: Optional["GoalieValue"] = None
+    overall: Optional["OverallSummary"] = None
 
 
 class GoalieGameLogRow(BaseModel):
@@ -1234,6 +1291,8 @@ class MatchupPreview(BaseModel):
 # resolve self/forward references for the Phase 5 models
 LineFitProjection.model_rebuild()
 TradeFitResult.model_rebuild()
+PlayerValue.model_rebuild()    # resolves the forward ref to OverallSummary
+GoalieSeason.model_rebuild()   # resolves forward refs to GoalieValue + OverallSummary
 
 
 # --- Skills radar (Part B) ---------------------------------------------------

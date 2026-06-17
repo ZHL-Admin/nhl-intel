@@ -5,11 +5,68 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
-from models.schemas import GoalieSeason, GoalieGameLogRow, GoalieRadar
+from models.schemas import (
+    GoalieSeason, GoalieGameLogRow, GoalieRadar, GoalieValue, CompositeComponent,
+    OverallSummary, OverallComponent, GOALIE_GAR_LABELS,
+)
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+# Goalie Overall axis key -> label (mirrors the goalie radar spokes the components match on-card).
+_GOALIE_OVERALL_LABELS = [
+    ("gsax", "Overall GSAx"), ("hd_gsax", "High-Danger GSAx"),
+    ("workload", "Workload"), ("consistency", "Consistency"),
+]
+
+
+def _goalie_value(goalie_id: int, season: str):
+    """Goalie GAR/WAR block on the cross-position scale (goals saved above a backup), with a
+    within-goalie WAR percentile for context. Wide band by construction (principle 6)."""
+    gg = bq_service.get_models_table_id('goalie_gar')
+    from models_ml import config as mlcfg
+    min_games = mlcfg.GOALIE_GAR_CONFIG["MIN_GAMES_FOR_RANKING"]
+    keys = ", ".join(k for k, _ in GOALIE_GAR_LABELS)
+    rows = bq_service.query(f"""
+        WITH ranked AS (
+            SELECT goalie_id, gar, war, gar_sd, war_sd, {keys},
+                   PERCENT_RANK() OVER (ORDER BY war) AS war_percentile
+            FROM {gg}
+            WHERE season_window = '{season}' AND games_played >= {min_games}
+        )
+        SELECT * FROM ranked WHERE goalie_id = {goalie_id} LIMIT 1""")
+    if not rows:
+        raw = bq_service.query(f"""SELECT goalie_id, gar, war, gar_sd, war_sd, {keys}
+            FROM {gg} WHERE goalie_id = {goalie_id} AND season_window = '{season}' LIMIT 1""")
+        if not raw:
+            return None
+        rows = raw
+    r = rows[0]
+    comps = [CompositeComponent(key=k, label=lbl, value=float(r.get(k) or 0.0))
+             for k, lbl in GOALIE_GAR_LABELS]
+    return GoalieValue(
+        gar=float(r["gar"]), war=float(r["war"]),
+        gar_sd=float(r.get("gar_sd") or 0.0), war_sd=float(r.get("war_sd") or 0.0),
+        components=comps,
+        war_percentile=float(r["war_percentile"]) if r.get("war_percentile") is not None else None)
+
+
+def _goalie_overall(goalie_id: int, season: str):
+    """Within-goalie Overall summary (card-only). Components are the goalie radar-axis percentiles
+    so they match the radar on the card; always shown together (the FE enforces it)."""
+    rows = bq_service.query(f"""
+        SELECT * FROM {bq_service.get_models_table_id('goalie_overall')}
+        WHERE goalie_id = {goalie_id} AND season_window = '{season}' LIMIT 1""")
+    if not rows:
+        return None
+    r = rows[0]
+    return OverallSummary(
+        overall_percentile=float(r["overall_percentile"]), pos_group="G",
+        components=[OverallComponent(key=k, label=lbl,
+                    percentile=float(r[f"{k}_percentile"]) if r.get(f"{k}_percentile") is not None else None)
+                    for k, lbl in _GOALIE_OVERALL_LABELS],
+        weights={k: float(r[f"w_{k}"]) for k, _ in _GOALIE_OVERALL_LABELS if r.get(f"w_{k}") is not None})
 
 
 @router.get("/{goalie_id}/radar", response_model=GoalieRadar)
@@ -53,7 +110,11 @@ async def get_goalie_season(
     if not rows:
         raise HTTPException(status_code=404, detail="Goalie season not found")
     r = rows[0]
-    return GoalieSeason(goalie_name=_goalie_name(goalie_id), **{k: r.get(k) for k in GoalieSeason.model_fields if k != 'goalie_name'})
+    resolved = r['season']
+    base = {k: r.get(k) for k in GoalieSeason.model_fields if k not in ('goalie_name', 'value', 'overall')}
+    return GoalieSeason(goalie_name=_goalie_name(goalie_id),
+                        value=_goalie_value(goalie_id, resolved),
+                        overall=_goalie_overall(goalie_id, resolved), **base)
 
 
 @router.get("/{goalie_id}/gamelog", response_model=List[GoalieGameLogRow])

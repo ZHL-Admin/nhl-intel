@@ -18,6 +18,7 @@ from models.schemas import (
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
+    OverallSummary, OverallComponent,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -133,7 +134,36 @@ def _value_block(player_id: int, season: str):
                    impact_goals=float(r.get("impact_goals") or 0.0),
                    gap_percentile_points=round((vp - ip) * 100, 1),
                    read=ValueGapRead(case=read["case"], headline=read["headline"], body=read["body"]))
+    out["overall"] = _skater_overall(player_id, season)
     return PlayerValue(**out)
+
+
+def _skater_overall(player_id: int, season: str) -> Optional[OverallSummary]:
+    """The within-position Overall summary for the player card (Phase 6 Overall). Card-only —
+    never a sort key. Its component percentiles are the SAME within-position percent_ranks the
+    value block surfaces (production = GAR, play-driving = RAPM-based composite), so the number
+    matches the lenses shown beside it (consistency rule)."""
+    rows = bq_service.query(f"""
+        SELECT overall_percentile, production_percentile, play_driving_percentile,
+               pos_group, w_production, w_play_driving
+        FROM {bq_service.get_models_table_id('player_overall')}
+        WHERE player_id = {player_id} AND season_window = '{season}' LIMIT 1""")
+    if not rows:
+        return None
+    r = rows[0]
+    return OverallSummary(
+        overall_percentile=float(r["overall_percentile"]), pos_group=r.get("pos_group"),
+        components=[
+            OverallComponent(key="production", label="Production (GAR)",
+                             percentile=_f(r.get("production_percentile"))),
+            OverallComponent(key="play_driving", label="Play-Driving (RAPM)",
+                             percentile=_f(r.get("play_driving_percentile"))),
+        ],
+        weights={"production": _f(r.get("w_production")), "play_driving": _f(r.get("w_play_driving"))})
+
+
+def _f(v):
+    return float(v) if v is not None else None
 
 
 def _player_short_name(player_id: int) -> str:

@@ -585,6 +585,24 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Goalie Value GAR/WAR (cross-position currency): goals saved above a replacement backup, on the
+    # SAME goals-per-win scale as skater GAR. Read-only over the GSAx layer (int_goalie_shots /
+    # mart_goalie_*), so it runs after the marts. Weekly. Feeds the mixed WAR leaderboard + overall.
+    compute_goalie_gar = BashOperator(
+        task_id="compute_goalie_gar",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_goalie_gar"),
+        env=_dbt_env,
+    )
+
+    # Per-player Overall (card-only summary): within-position percentile, averaged-and-re-percentiled
+    # from a player's component percentiles. Needs both value lenses (skater: GAR + composite;
+    # goalie: goalie_gar + goalie_radar). Never a leaderboard sort key. Weekly.
+    compute_overall = BashOperator(
+        task_id="compute_overall",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_overall"),
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -645,3 +663,6 @@ with DAG(
     # + the v2 archetype. Needs archetypes + the player models.
     [write_archetypes, compute_composite] >> compute_player_radar >> generate_report
     run_dbt_marts >> compute_goalie_radar >> generate_report
+    # Goalie GAR off the marts; per-player Overall needs both value lenses for skaters and goalies.
+    run_dbt_marts >> compute_goalie_gar >> generate_report
+    [compute_gar, compute_composite, compute_goalie_gar, compute_goalie_radar] >> compute_overall >> generate_report

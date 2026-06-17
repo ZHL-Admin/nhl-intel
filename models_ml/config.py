@@ -241,6 +241,65 @@ GAR_CONFIG = {
 }
 
 
+# --- Value: Goalie GAR / WAR (cross-position currency) ----------------------
+# The goalie companion to skater GAR. Goalie value = GOALS SAVED above a freely-available
+# replacement (backup) goalie, on the SAME goals scale as skaters, so WAR = GAR / GOALS_PER_WIN
+# uses the SAME divisor — that shared 6.0 is exactly what makes a skater and a goalie comparable
+# on one WAR list (the only cross-position-comparable unit). Read-only over the GSAx layer
+# (mart_goalie_* / int_goalie_shots); the xG model and RAPM are untouched. See value-gar.md.
+GOALIE_GAR_CONFIG = {
+    # SAME goals-per-win as skaters (config.GAR_CONFIG['GOALS_PER_WIN']); restated here so the
+    # goalie job is self-contained, but it MUST equal the skater value — asserted at import below.
+    "GOALS_PER_WIN": 6.0,
+
+    # Replacement-level goalie = a freely-available backup / AHL call-up. Defined per
+    # (season-window) as the bottom band by workload: goalies ranked OUTSIDE the top-32 by games
+    # (32 = one starter per NHL team) who still cleared a minimum shot floor (rate stability).
+    # The replacement SAVE performance is measured per danger tier and per strength (GSAx per shot
+    # in each bucket) so GSAx-above-replacement decomposes cleanly into the stacked-bar components.
+    # Absolute GAR levels move with this choice; RANKINGS are stable (validated, value-gar.md), so
+    # the UI leads with WAR/ranking and presents goalie order at tier-level confidence.
+    "REPLACEMENT_GAMES_RANK": 32,        # ranked > this by window games = replacement pool
+    "REPLACEMENT_MIN_SHOTS": 150,        # min shots faced to enter the pool (rate stability)
+    "REPLACEMENT_MIN_POOL": 15,          # min pool size per window; else widen (drop the shot floor)
+
+    # Season-to-season INSTABILITY inflation on the uncertainty band. Goaltending regresses hard
+    # year to year (goalie GSAx YoY r is low — measured in validate_goalie_gar.py and cited in
+    # value-gar.md), so a single window's band understates true uncertainty about the goalie's
+    # level. The band = binomial save-outcome sd (sqrt(Σ xg·(1−xg)) in goals) × this multiplier.
+    # > 1 by construction so goalie WAR bands render VISIBLY wider than skaters' (principle 6:
+    # never imply false precision for goalies).
+    "INSTABILITY_INFLATION": 1.6,
+
+    "MIN_GAMES_FOR_RANKING": 15,         # display/validation floor (matches the goalie radar)
+}
+# Goalie GAR component keys (the stacked-bar vocabulary) -> label. EV save value is split by
+# danger tier (the high-danger component is the difference-maker); PK is the shorthanded save
+# value above replacement. These four partition every faced shot, so they sum to goalie GAR.
+GOALIE_GAR_COMPONENTS = [
+    ("hd_saves", "High-Danger Saves"), ("md_saves", "Mid-Danger Saves"),
+    ("ld_saves", "Low-Danger Saves"), ("pk_goaltending", "Penalty-Kill"),
+]
+
+# --- Per-player Overall (player detail card ONLY; never a leaderboard sort key) ---
+# Overall is a WITHIN-POSITION percentile summary: a weighted average of a player's component
+# percentiles, RE-PERCENTILED within position so "Overall" is itself a 0-100 within-position
+# percentile (this corrects the thinning-at-the-top effect of averaging percentiles). It
+# SUMMARIZES; it must never hide the divergence, so it is always shown beside its components and
+# there is no /rankings/overall endpoint. See docs/methodology/overall-rating.md.
+#
+# Skater weights: Production (GAR) is weighted slightly above Play-Driving (RAPM) because actual
+# production is the MORE stable lens year to year (production r=0.66 vs RAPM isolated rate r=0.38;
+# config.GAR_STABILITY_YOY) — a documented, tunable choice, deliberately NOT a hidden 50/50.
+OVERALL_WEIGHTS = {"production": 0.55, "play_driving": 0.45}
+
+# Goalie Overall has no play-driving axis; it averages the goalie's within-goalie percentiles
+# across its own skill axes (from the goalie radar). Save value (overall + high-danger) leads;
+# workload and consistency are lighter (usage / steadiness, not pure quality). Re-percentiled
+# within goalies. Keys match the goalie_radar spoke keys.
+OVERALL_WEIGHTS_GOALIE = {"gsax": 0.40, "hd_gsax": 0.30, "workload": 0.10, "consistency": 0.20}
+
+
 # Year-over-year stability of the offensive lenses, MEASURED in models_ml/validate_gar.py
 # (single-season pairs 2021-22..2025-26, qualified skaters). These are a genuine finding, not
 # tuning: the folk ordering ("actual goals = noisy, advanced impact = stable") is half-backwards
@@ -252,3 +311,8 @@ GAR_STABILITY_YOY = {
     "rapm_r": 0.38,         # RAPM isolated offensive rate (regularized -> measurement noise)
     "finishing_r": 0.35,    # finishing residual (goals - xG) -- the least repeatable piece
 }
+
+# Cross-position WAR is only valid if skaters and goalies share the goals-per-win divisor.
+# Fail loudly at import if the two ever drift apart (principle 2).
+assert GOALIE_GAR_CONFIG["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
+    "Goalie and skater GOALS_PER_WIN must match for cross-position WAR to be comparable.")

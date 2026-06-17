@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate linefit team-needs archetypes-v2 radar
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs archetypes-v2 radar
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -40,6 +40,19 @@ gar:
 	python -m models_ml.compute_gar
 gar-validate:
 	python -m models_ml.validate_gar
+
+# Goalie Value GAR/WAR: goals SAVED above a replacement (backup) goalie, on the SAME goals-per-win
+# scale as skaters so goalie + skater WAR share one cross-position list. Read-only over the GSAx
+# layer. `make goalie-gar-validate` runs the smell-test / distribution / YoY / sensitivity checks.
+goalie-gar:
+	python -m models_ml.compute_goalie_gar
+goalie-gar-validate:
+	python -m models_ml.validate_goalie_gar
+
+# Per-player Overall (card-only summary): within-position percentile, averaged-and-re-percentiled
+# from a player's component percentiles. Writes nhl_models.player_overall + goalie_overall.
+overall:
+	python -m models_ml.compute_overall
 
 # Train the Lineup Lab line-fit model (Phase 5.1): predicts a line's on-ice xGF% / xGF60 / xGA60
 # from member profiles. Reads int_line_seasons + archetypes + RAPM; writes artifacts/linefit_v1.
