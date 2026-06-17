@@ -5,7 +5,7 @@ import { PageLayout, PageHeader, Tabs, Tooltip, ComponentStackBar, SkeletonLoade
 import type { StackSegment } from '../components/common'
 import { getPowerRankings, getDeservedStandings, getValueRankings } from '../api/rankings'
 import { PowerRatingRow, DeservedStandingRow, ValueRankingRow } from '../api/types'
-import { RATINGS_GLOSSARY } from '../config/metrics'
+import { RATINGS_GLOSSARY, VALUE_COMPONENTS } from '../config/metrics'
 import { getTeamLogoUrl } from '../utils/teams'
 import './Rankings.css'
 
@@ -140,15 +140,8 @@ function DeservedTable({ rows }: { rows: DeservedStandingRow[] }) {
   )
 }
 
-// GAR value-component colours (shared with the composite/Players stacks where keys overlap).
-const GAR_COMPONENTS = [
-  { key: 'ev_offense', label: 'EV Offense', color: '#3b82f6' },
-  { key: 'pp', label: 'Power Play', color: '#f59e0b' },
-  { key: 'ev_defense', label: 'EV Defense', color: '#06b6d4' },
-  { key: 'pk', label: 'Penalty Kill', color: '#a855f7' },
-  { key: 'penalty', label: 'Penalties', color: '#64748b' },
-  { key: 'faceoff', label: 'Faceoffs', color: '#ec4899' },
-]
+// GAR value-component palette — single source in config/metrics.ts (shared with Players).
+const GAR_COMPONENTS = VALUE_COMPONENTS
 
 function ValueTable({ rows }: { rows: ValueRankingRow[] }) {
   const domain = useMemo<[number, number]>(() => {

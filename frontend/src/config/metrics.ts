@@ -208,6 +208,17 @@ export const COMPOSITE_COMPONENTS: { key: string; label: string; color: string }
   { key: 'goalie_gsax', label: 'Goaltending', color: '#ec4899' },
 ]
 
+/** GAR value-component key -> colour (the Value/GAR stack). Shares colours with COMPOSITE_*
+ * where keys overlap, so the two lenses read consistently. */
+export const VALUE_COMPONENTS: { key: string; label: string; color: string }[] = [
+  { key: 'ev_offense', label: 'EV Offense', color: '#3b82f6' },
+  { key: 'pp', label: 'Power Play', color: '#f59e0b' },
+  { key: 'ev_defense', label: 'EV Defense', color: '#06b6d4' },
+  { key: 'pk', label: 'Penalty Kill', color: '#a855f7' },
+  { key: 'penalty', label: 'Penalties', color: '#64748b' },
+  { key: 'faceoff', label: 'Faceoffs', color: '#ec4899' },
+]
+
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {
   const m = METRICS[key]

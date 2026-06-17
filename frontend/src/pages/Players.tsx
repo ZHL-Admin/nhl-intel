@@ -13,10 +13,11 @@ import {
 import type { StackSegment, SelectOption } from '../components/common'
 import { getOverallLeaders, getArchetypeRanking, getDivergenceBoard,
   getPlayerRadar, getPlayerSummary } from '../api/players'
-import { ArchetypeRankRow, DivergenceBoardRow, PlayerRadar, PlayerSummary } from '../api/types'
+import { getValueRankings } from '../api/rankings'
+import { ArchetypeRankRow, DivergenceBoardRow, PlayerRadar, PlayerSummary, ValueRankingRow } from '../api/types'
 import { playerLabelsFromRadar } from '../api/labels'
 import SkillRadar from '../components/visualizations/SkillRadar'
-import { ARCHETYPES, COMPOSITE_COMPONENTS } from '../config/metrics'
+import { ARCHETYPES, COMPOSITE_COMPONENTS, VALUE_COMPONENTS } from '../config/metrics'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import './Players.css'
 
@@ -59,15 +60,42 @@ function Avatar({ id, team, name, size = 40 }: { id: number; team?: string | nul
 }
 
 const fmt = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
-const meta = (r: ArchetypeRankRow, overall: boolean) => {
-  const base = `${r.position ?? ''}${r.team_abbrev ? ` · ${r.team_abbrev}` : ''}`
-  if (overall) return r.primary_archetype ? `${base} · ${r.primary_archetype}` : base
-  return `${base} · ${(r.archetype_weight * 100).toFixed(0)}% match`
+
+// The leaderboard shows two lenses on the same UI: Impact (RAPM-based composite value — "what
+// repeats") and Value (GAR — actual goals above replacement, "what happened"). Both normalize
+// to LeaderRow so the podium / rows / expansion are shared.
+type Metric = 'impact' | 'value'
+type Palette = { key: string; label: string; color: string }[]
+const paletteFor = (m: Metric): Palette => (m === 'value' ? VALUE_COMPONENTS : COMPOSITE_COMPONENTS)
+
+interface LeaderRow {
+  player_id: number; player_name?: string | null; team_abbrev?: string | null; position?: string | null
+  total: number; total_sd?: number | null; war?: number | null
+  components: { key: string; value: number }[]
+  sublabel: string
 }
 
-function rowSegments(r: ArchetypeRankRow): StackSegment[] {
-  const m = new Map(r.components.map((c) => [c.key, c.value]))
-  return COMPOSITE_COMPONENTS.map((c) => ({ key: c.key, label: c.label, value: m.get(c.key) ?? 0, color: c.color }))
+function mapImpact(r: ArchetypeRankRow, overall: boolean): LeaderRow {
+  const base = `${r.position ?? ''}${r.team_abbrev ? ` · ${r.team_abbrev}` : ''}`
+  const sublabel = overall
+    ? (r.primary_archetype ? `${base} · ${r.primary_archetype}` : base)
+    : `${base} · ${(r.archetype_weight * 100).toFixed(0)}% match`
+  return {
+    player_id: r.player_id, player_name: r.player_name, team_abbrev: r.team_abbrev, position: r.position,
+    total: r.composite_total, total_sd: r.composite_total_sd ?? null, components: r.components, sublabel,
+  }
+}
+function mapValue(r: ValueRankingRow): LeaderRow {
+  const base = `${r.position ?? ''}${r.team_abbrev ? ` · ${r.team_abbrev}` : ''}`
+  return {
+    player_id: r.player_id, player_name: r.player_name, team_abbrev: r.team_abbrev, position: r.position,
+    total: r.gar, total_sd: r.gar_sd ?? null, war: r.war, components: r.components,
+    sublabel: `${base} · ${r.war >= 0 ? '+' : ''}${r.war.toFixed(1)} WAR`,
+  }
+}
+function segmentsFor(row: LeaderRow, palette: Palette): StackSegment[] {
+  const m = new Map(row.components.map((c) => [c.key, c.value]))
+  return palette.map((c) => ({ key: c.key, label: c.label, value: m.get(c.key) ?? 0, color: c.color }))
 }
 
 /* ============================================================================
@@ -100,7 +128,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /** Inline expansion: basics + stats + RAPM + skill radar + link to full page. */
-function PlayerExpansion({ row, season, onCollapse }: { row: ArchetypeRankRow; season: string; onCollapse?: () => void }) {
+function PlayerExpansion({ row, season, onCollapse }: { row: LeaderRow; season: string; onCollapse?: () => void }) {
   const [radar, setRadar] = useState<PlayerRadar | null>(null)
   const [summary, setSummary] = useState<PlayerSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -188,9 +216,9 @@ function PlayerExpansion({ row, season, onCollapse }: { row: ArchetypeRankRow; s
 }
 
 /** Compact podium (top-3) card. */
-function PodiumCard({ r, rank, expanded, overall, domain, onToggle }: {
-  r: ArchetypeRankRow; rank: number; expanded: boolean; overall: boolean;
-  domain: [number, number]; onToggle: (id: number) => void
+function PodiumCard({ r, rank, expanded, domain, palette, unit, onToggle }: {
+  r: LeaderRow; rank: number; expanded: boolean; domain: [number, number];
+  palette: Palette; unit: string; onToggle: (id: number) => void
 }) {
   return (
     <button className={`ptop${expanded ? ' ptop--active' : ''}`}
@@ -198,10 +226,10 @@ function PodiumCard({ r, rank, expanded, overall, domain, onToggle }: {
       <span className={`ptop__rank ptop__rank--${rank}`}>{rank}</span>
       <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
       <span className="ptop__name">{r.player_name ?? r.player_id}</span>
-      <span className="ptop__meta">{meta(r, overall)}</span>
-      <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
+      <span className="ptop__meta">{r.sublabel}</span>
+      <span className="ptop__total">{fmt(r.total)}<small> {unit}</small></span>
       <div className="ptop__bar">
-        <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={domain} se={r.composite_total_sd ?? undefined} />
+        <ComponentStackBar segments={segmentsFor(r, palette)} total={r.total} domain={domain} se={r.total_sd ?? undefined} />
       </div>
     </button>
   )
@@ -210,20 +238,25 @@ function PodiumCard({ r, rank, expanded, overall, domain, onToggle }: {
 /* ============================================================================
    Leaderboard content (driven by toolbar position/archetype)
    ============================================================================ */
-function Leaderboard({ position, archetype, season }: { position: Pos; archetype: string; season: string }) {
-  const [rows, setRows] = useState<ArchetypeRankRow[] | null>(null)
+function Leaderboard({ metric, position, archetype, season }: { metric: Metric; position: Pos; archetype: string; season: string }) {
+  const [rows, setRows] = useState<LeaderRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
-  const overall = archetype === 'ALL'
+  const overall = archetype === 'ALL' || metric === 'value'  // GAR has no archetype ranking
+  const palette = paletteFor(metric)
+  const unit = metric === 'value' ? 'GAR' : 'value'
   const toggle = (id: number) => setExpandedId((cur) => (cur === id ? null : id))
 
   useEffect(() => {
     let active = true
     setRows(null); setError(null); setExpandedId(null)
-    const req = overall ? getOverallLeaders(position, season, 50) : getArchetypeRanking(archetype, season, 50)
+    const req: Promise<LeaderRow[]> = metric === 'value'
+      ? getValueRankings(position, season).then((rs) => rs.map(mapValue))
+      : (overall ? getOverallLeaders(position, season, 50) : getArchetypeRanking(archetype, season, 50))
+          .then((rs) => rs.map((r) => mapImpact(r, overall)))
     req.then((d) => active && setRows(d)).catch(() => active && setError('Could not load rankings.'))
     return () => { active = false }
-  }, [position, archetype, overall, season])
+  }, [metric, position, archetype, overall, season])
 
   const top = rows?.slice(0, 3) ?? []
   const rest = rows?.slice(3) ?? []
@@ -232,14 +265,14 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
   // and the list get SEPARATE scales — otherwise the list is squashed against the #1 outlier
   // and wastes the right half. Each group's bars fill its own range.
   const [podiumDomain, listDomain] = useMemo<[[number, number], [number, number]]>(() => {
-    const calc = (rs: ArchetypeRankRow[]): [number, number] => {
+    const calc = (rs: LeaderRow[]): [number, number] => {
       let lo = 0, hi = 1
       for (const r of rs) {
         let posSum = 0, negSum = 0
         for (const c of r.components) (c.value >= 0 ? (posSum += c.value) : (negSum += c.value))
-        const sd = r.composite_total_sd ?? 0
-        hi = Math.max(hi, posSum, r.composite_total + sd)
-        lo = Math.min(lo, negSum, r.composite_total - sd)
+        const sd = r.total_sd ?? 0
+        hi = Math.max(hi, posSum, r.total + sd)
+        lo = Math.min(lo, negSum, r.total - sd)
       }
       return [lo, hi * 1.03]
     }
@@ -249,14 +282,16 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
   }, [rows])
   const listTicks = niceTicks(listDomain)
 
+  const subtitle = metric === 'value'
+    ? 'Ranked by GAR — actual goals above replacement (“what happened”). Goals-based, so it includes shooting luck by design; the bar breaks GAR into components.'
+    : overall
+      ? 'Ranked by Impact — RAPM-based value above replacement (“what tends to repeat”). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'
+      : 'Ranked within archetype by Impact (RAPM-based value). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'
+
   return (
     <section className="players__board">
       <div className="players__board-head">
-        <p className="players__subtitle">
-          {overall
-            ? 'The league’s highest-value skaters by total value (goals above replacement). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'
-            : 'Ranked within archetype by total value (goals above replacement). Each bar breaks the value into its components; the tick is the total, the line its uncertainty.'}
-        </p>
+        <p className="players__subtitle">{subtitle}</p>
         {rows && <span className="players__count">{rows.length} {rows.length === 1 ? 'player' : 'players'}</span>}
       </div>
 
@@ -268,14 +303,14 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
         <>
           <div className="players__key">
             <div className="players__key-components">
-              {COMPOSITE_COMPONENTS.map((c) => (
+              {palette.map((c) => (
                 <span key={c.key} className="players__legend-item">
                   <span className="players__swatch" style={{ background: c.color }} />{c.label}
                 </span>
               ))}
             </div>
             <div className="players__key-marks">
-              <span className="players__legend-item"><span className="key-mark key-mark--tick" />total value</span>
+              <span className="players__legend-item"><span className="key-mark key-mark--tick" />total {unit}</span>
               <span className="players__legend-item"><span className="key-mark key-mark--whisker" />uncertainty</span>
               <span className="players__key-hint">Bars stack each component’s value (negatives extend left). Hover a bar for the full breakdown.</span>
             </div>
@@ -284,17 +319,15 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
           {(() => {
             const expIdx = top.findIndex((r) => r.player_id === expandedId)
             if (expIdx === -1) {
-              // default: 3-up podium grid
               return (
                 <div className="players__podium">
                   {top.map((r, i) => (
                     <PodiumCard key={r.player_id} r={r} rank={i + 1} expanded={false}
-                      overall={overall} domain={podiumDomain} onToggle={toggle} />
+                      domain={podiumDomain} palette={palette} unit={unit} onToggle={toggle} />
                   ))}
                 </div>
               )
             }
-            // one expanded: full-width expansion on top, the other two below
             const exp = top[expIdx]
             const others = top.map((r, i) => ({ r, rank: i + 1 })).filter((x) => x.r.player_id !== exp.player_id)
             return (
@@ -303,7 +336,7 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
                 <div className="players__podium-others">
                   {others.map(({ r, rank }) => (
                     <PodiumCard key={r.player_id} r={r} rank={rank} expanded={false}
-                      overall={overall} domain={podiumDomain} onToggle={toggle} />
+                      domain={podiumDomain} palette={palette} unit={unit} onToggle={toggle} />
                   ))}
                 </div>
               </div>
@@ -324,9 +357,9 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
                         <span className="prow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
                       </span>
                       <span className="prow__bar">
-                        <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={listDomain} se={r.composite_total_sd ?? undefined} gridlines={listTicks} />
+                        <ComponentStackBar segments={segmentsFor(r, palette)} total={r.total} domain={listDomain} se={r.total_sd ?? undefined} gridlines={listTicks} />
                       </span>
-                      <span className="prow__total">{fmt(r.composite_total)}</span>
+                      <span className="prow__total">{fmt(r.total)}</span>
                     </button>
                     {expandedId === r.player_id && <PlayerExpansion row={r} season={season} />}
                   </Fragment>
@@ -456,6 +489,7 @@ function DivergenceBoard() {
 export default function Players() {
   const navigate = useNavigate()
   const [view, setView] = useState<'leaderboard' | 'divergence'>('leaderboard')
+  const [metric, setMetric] = useState<Metric>('impact')
   const [position, setPosition] = useState<Pos>('ALL')
   const [archetype, setArchetype] = useState<string>('ALL')
   const [season, setSeason] = useState<string>(SEASONS[0])
@@ -496,6 +530,15 @@ export default function Players() {
 
           {view === 'leaderboard' && (
             <div className="players__toolbar-filters">
+              <div className="seg seg--metric" role="group" aria-label="Rating lens">
+                <button className={`seg__btn${metric === 'impact' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('impact')}>
+                  Impact <small>RAPM · repeats</small>
+                </button>
+                <button className={`seg__btn${metric === 'value' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('value')}>
+                  Value <small>GAR · happened</small>
+                </button>
+              </div>
+              <span className="players__toolbar-div" aria-hidden="true" />
               <div className="seg">
                 {(['ALL', 'F', 'D'] as const).map((p) => (
                   <button key={p} className={`seg__btn${position === p ? ' seg__btn--active' : ''}`} onClick={() => changePosition(p)}>
@@ -503,7 +546,9 @@ export default function Players() {
                   </button>
                 ))}
               </div>
-              <Select value={archetype} ariaLabel="Archetype" options={archOptions} onChange={changeArchetype} />
+              {metric === 'impact' && (
+                <Select value={archetype} ariaLabel="Archetype" options={archOptions} onChange={changeArchetype} />
+              )}
               <Select value={season} ariaLabel="Season"
                 options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
             </div>
@@ -511,7 +556,7 @@ export default function Players() {
         </div>
 
         {view === 'leaderboard'
-          ? <Leaderboard position={position} archetype={archetype} season={season} />
+          ? <Leaderboard metric={metric} position={position} archetype={archetype} season={season} />
           : <DivergenceBoard />}
       </div>
     </PageLayout>
