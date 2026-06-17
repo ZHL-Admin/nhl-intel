@@ -239,3 +239,16 @@ GAR_CONFIG = {
 
     "MIN_TOI_5V5_FOR_RANKING": 200.0,             # display/validation floor (not a model cutoff)
 }
+
+
+# Year-over-year stability of the offensive lenses, MEASURED in models_ml/validate_gar.py
+# (single-season pairs 2021-22..2025-26, qualified skaters). These are a genuine finding, not
+# tuning: the folk ordering ("actual goals = noisy, advanced impact = stable") is half-backwards
+# here. Production is sticky; RAPM's isolated rate is the noisier MEASUREMENT; only the finishing
+# residual is truly luck-flavored. The Impact-vs-Value read + value-gar.md cite these verbatim so
+# "least repeatable" traces to a number (consistency rule).
+GAR_STABILITY_YOY = {
+    "production_r": 0.66,   # actual 5v5 goal-rate, year over year
+    "rapm_r": 0.38,         # RAPM isolated offensive rate (regularized -> measurement noise)
+    "finishing_r": 0.35,    # finishing residual (goals - xG) -- the least repeatable piece
+}

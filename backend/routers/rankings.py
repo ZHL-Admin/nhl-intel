@@ -4,7 +4,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Query
 
-from models.schemas import PowerRatingRow, DeservedStandingRow
+from models.schemas import (
+    PowerRatingRow, DeservedStandingRow, ValueRankingRow, CompositeComponent, GAR_LABELS,
+)
 from services.bigquery import bq_service
 from services.cache import cache
 
@@ -79,3 +81,48 @@ async def get_deserved_standings(
     rows = bq_service.query(sql)
     return [DeservedStandingRow(**{k: r.get(k) for k in DeservedStandingRow.model_fields})
             for r in rows]
+
+
+@router.get("/value", response_model=List[ValueRankingRow])
+@cache(ttl=1800)
+async def get_value_rankings(
+    position: str = Query("ALL", description="ALL | F | D"),
+    season: Optional[str] = Query(None, description="Season (default: latest single season)"),
+    limit: int = Query(50, ge=1, le=200),
+) -> List[ValueRankingRow]:
+    """GAR/WAR leaderboard — actual goals above replacement ('what happened'). Companion to the
+    composite/power rankings; GAR includes shooting luck by design (see value-gar.md)."""
+    gar = bq_service.get_models_table_id('player_gar')
+    rosters = bq_service.get_full_table_id('stg_rosters')
+    mart = bq_service.get_full_table_id('mart_team_game_stats')
+    if not season:
+        season = bq_service.query(
+            f"SELECT MAX(season_window) AS s FROM {gar} WHERE season_window LIKE '____-__'")[0]['s']
+    groups = {"F": "('C','L','R')", "D": "('D')"}.get(position.upper(), "('C','L','R','D')")
+    rows = bq_service.query(f"""
+        WITH nm AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
+                   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS team_id
+            FROM {rosters}
+            WHERE SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        ),
+        tm AS (SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev FROM {mart} GROUP BY team_id)
+        SELECT g.player_id, nm.name, tm.abbrev AS team_abbrev, g.position,
+               g.gar, g.war, g.gar_sd, g.ev_offense, g.pp, g.ev_defense, g.pk, g.penalty, g.faceoff
+        FROM {gar} g
+        LEFT JOIN nm ON g.player_id = nm.player_id
+        LEFT JOIN tm ON nm.team_id = tm.team_id
+        WHERE g.season_window = '{season}' AND g.position IN {groups}
+        ORDER BY g.gar DESC
+        LIMIT {int(limit)}
+    """)
+    out = []
+    for r in rows:
+        comps = [CompositeComponent(key=k, label=lbl, value=float(r.get(k) or 0.0))
+                 for k, lbl in GAR_LABELS]
+        out.append(ValueRankingRow(
+            player_id=r["player_id"], player_name=r.get("name"), team_abbrev=r.get("team_abbrev"),
+            position=r.get("position"), gar=float(r["gar"]), war=float(r["war"]),
+            gar_sd=float(r["gar_sd"]) if r.get("gar_sd") is not None else None, components=comps))
+    return out
