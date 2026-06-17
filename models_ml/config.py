@@ -197,3 +197,45 @@ ARCHETYPE_FAMILY_V2: dict[str, str] = {
     "D5": "Defensive", "D6": "Offensive", "D7": "Defensive", "D8": "Offensive",
     "D9": "Offensive", "D10": "Two-Way", "D11": "Offensive",
 }
+
+
+# --- Value: GAR / WAR (companion to RAPM impact) ----------------------------
+# GAR is the goals-REALITY counterpart to RAPM. RAPM (player_impact) measures repeatable
+# play-driving on the xG layer and is UNTOUCHED by this model. GAR measures ACTUAL goals
+# contributed above a freely-available replacement player, across all situations, on the goals
+# scale — so it inherits shooting luck BY DESIGN (a labeled feature: GAR = "what happened",
+# RAPM = "what tends to repeat"). Every modeling decision lives here, each sourced.
+GAR_CONFIG = {
+    # Goals per standings win. ~6 GF ≈ 1 win in the modern NHL; the standard GAR->WAR divisor
+    # (Evolving-Hockey GAR, Hockey-Reference point shares). WAR = GAR / GOALS_PER_WIN.
+    "GOALS_PER_WIN": 6.0,
+
+    # Assist values relative to a goal (1.0). A goal is worth more than the assists on it; public
+    # GAR / point-share models weight the primary assist ~0.7 and the secondary ~0.5 of a goal.
+    # ADOPTED from that literature (cited) rather than re-derived; a league regression of
+    # goals/primary/secondary on team scoring is a documented future refinement (value-gar.md).
+    "PRIMARY_ASSIST_VALUE": 0.70,
+    "SECONDARY_ASSIST_VALUE": 0.50,
+
+    # Marginal goals per drawn penalty (a drawn penalty gives the team a power play; a taken one
+    # gives it to the opponent). League PP conversion is ~17-20% of opportunities, so a drawn
+    # penalty is worth ~0.17 goals. (composite.py uses 0.2 flat for penalty_diff; GAR uses the
+    # slightly conservative league-conversion figure. Per-season computed conversion is a
+    # documented refinement — the term is minor.) Drawn = +value, taken = -value.
+    "PENALTY_VALUE_GOALS": 0.17,
+
+    # Marginal goals per NET faceoff win, centers only. A single faceoff win is worth ~0.001
+    # goals (public faceoff-value research); a tiny term included for completeness, not a driver.
+    "FACEOFF_VALUE_GOALS": 0.001,
+
+    # Replacement level = a freely-available player (waiver / AHL call-up / 13th-14th F, 7th-8th
+    # D). Defined per (position, strength, season) as the mean per-60 production of the DEPTH
+    # pool: skaters ranked below their team's depth threshold by season 5v5 TOI. Absolute GAR
+    # levels are sensitive to this choice; RANKINGS are stable (validated in value-gar.md), so
+    # the UI leads with ranking, not the raw number.
+    "REPLACEMENT_DEPTH_RANK": {"F": 9, "D": 6},   # F ranked >9 / D >6 on their team = replacement
+    "REPLACEMENT_MIN_TOI_5V5": 50.0,              # min 5v5 min to enter the pool (rate stability)
+    "REPLACEMENT_MIN_POOL": 40,                   # min pool size per (pos,season); else pool all seasons
+
+    "MIN_TOI_5V5_FOR_RANKING": 200.0,             # display/validation floor (not a model cutoff)
+}
