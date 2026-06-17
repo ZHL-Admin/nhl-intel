@@ -538,19 +538,22 @@ export default function Players() {
                 value={metric}
                 onChange={(v) => setMetric(v as Metric)}
               />
-              <span className="players__toolbar-div" aria-hidden="true" />
-              <div className="seg">
-                {(['ALL', 'F', 'D'] as const).map((p) => (
-                  <button key={p} className={`seg__btn${position === p ? ' seg__btn--active' : ''}`} onClick={() => changePosition(p)}>
-                    {p === 'ALL' ? 'All skaters' : p === 'F' ? 'Forwards' : 'Defense'}
-                  </button>
-                ))}
+              <Tabs
+                options={[
+                  { value: 'ALL', label: 'All skaters' },
+                  { value: 'F', label: 'Forwards' },
+                  { value: 'D', label: 'Defense' },
+                ]}
+                value={position}
+                onChange={(v) => changePosition(v as Pos)}
+              />
+              <div className="players__toolbar-right">
+                {metric === 'impact' && (
+                  <Select value={archetype} ariaLabel="Archetype" options={archOptions} onChange={changeArchetype} />
+                )}
+                <Select value={season} ariaLabel="Season"
+                  options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
               </div>
-              {metric === 'impact' && (
-                <Select value={archetype} ariaLabel="Archetype" options={archOptions} onChange={changeArchetype} />
-              )}
-              <Select value={season} ariaLabel="Season"
-                options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
             </div>
           )}
         </div>

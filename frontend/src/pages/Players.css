@@ -70,8 +70,8 @@
 .seg__btn:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
 .seg__btn--active, .seg__btn--active:hover { background: var(--color-accent); color: var(--color-text-inverse); }
 
-/* divider between the metric lens (Tabs) and the position/season filters */
-.players__toolbar-div { width: 1px; align-self: stretch; min-height: 28px; background: var(--color-border); }
+/* dropdowns (archetype + season) pushed to the far right, leaving a gap after the tab groups */
+.players__toolbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
 
 /* ============================================================================
    Avatar (headshot + team-logo badge)
