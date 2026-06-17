@@ -128,3 +128,9 @@ export async function getPlayerRadar(playerId: number | string, season?: string)
   const r = await apiClient.get(`/players/${playerId}/radar`, { params: season ? { season } : undefined })
   return r.data
 }
+
+/** Fast single-query season stat line for the Players-card expansion. */
+export async function getPlayerSummary(playerId: number | string, season?: string): Promise<import('./types').PlayerSummary> {
+  const r = await apiClient.get(`/players/${playerId}/summary`, { params: season ? { season } : undefined })
+  return r.data
+}

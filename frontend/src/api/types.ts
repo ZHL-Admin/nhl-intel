@@ -957,3 +957,14 @@ export interface GoalieRadar {
   spokes: RadarSpoke[]
   baseline?: string | null
 }
+
+export interface PlayerSummary {
+  player_id: number
+  season: string
+  games_played: number
+  toi_per_gp?: number | null
+  goals_per60?: number | null
+  assists_per60?: number | null
+  points_per60?: number | null
+  xgf_pct?: number | null
+}

@@ -17,7 +17,7 @@ from models.schemas import (
     PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
-    PlayerSearchResult, PlayerRadar,
+    PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -75,6 +75,74 @@ def _season_str_to_id(season: Optional[str]) -> Optional[int]:
         return None
 
 
+def _value_block(player_id: int, season: str):
+    """Build the Value (GAR/WAR) block + Impact-vs-Value percentile gap read.
+
+    GAR (actual goals above replacement, 'what happened') vs impact_goals (the RAPM-based value
+    from composite, 'what tends to repeat'). Percentiles are within position group; the read is
+    deterministic + asymmetric and cites the MEASURED stability r-values (consistency rule)."""
+    from models_ml import config as mlcfg
+    from insight_engine.templates import value_gap
+    floor = mlcfg.GAR_CONFIG["MIN_TOI_5V5_FOR_RANKING"]
+    stab = mlcfg.GAR_STABILITY_YOY
+    gar_t = bq_service.get_models_table_id("player_gar")
+    comp_t = bq_service.get_models_table_id("player_composite")
+
+    rows = bq_service.query(f"""
+        WITH base AS (
+            SELECT g.player_id, g.position, g.gar, g.war, g.gar_sd, g.war_sd,
+                   g.ev_offense, g.pp, g.ev_defense, g.pk, g.penalty, g.faceoff,
+                   (coalesce(c.ev_offense, 0) + coalesce(c.ev_defense, 0)
+                    + coalesce(c.pp, 0) + coalesce(c.pk, 0)) AS impact_goals,
+                   case when g.position = 'D' then 'D' else 'F' end AS pg
+            FROM {gar_t} g
+            LEFT JOIN {comp_t} c
+              ON g.player_id = c.player_id AND g.season_window = c.season_window
+            WHERE g.season_window = '{season}' AND g.toi_5v5 >= {floor}
+        ),
+        ranked AS (
+            SELECT *, percent_rank() OVER (PARTITION BY pg ORDER BY gar) AS value_pct,
+                      percent_rank() OVER (PARTITION BY pg ORDER BY impact_goals) AS impact_pct
+            FROM base
+        )
+        SELECT * FROM ranked WHERE player_id = {player_id} LIMIT 1
+    """)
+    qualified = bool(rows)
+    if not rows:  # below the ranking floor — still surface GAR, without percentile/read
+        raw = bq_service.query(f"""SELECT player_id, position, gar, war, gar_sd, war_sd,
+            ev_offense, pp, ev_defense, pk, penalty, faceoff
+            FROM {gar_t} WHERE player_id = {player_id} AND season_window = '{season}' LIMIT 1""")
+        if not raw:
+            return None
+        rows = raw
+
+    r = rows[0]
+    comps = [CompositeComponent(key=k, label=lbl, value=float(r.get(k) or 0.0))
+             for k, lbl in GAR_LABELS]
+    out = dict(gar=float(r["gar"]), war=float(r["war"]),
+               gar_sd=float(r.get("gar_sd") or 0.0), war_sd=float(r.get("war_sd") or 0.0),
+               components=comps,
+               production_r=stab["production_r"], rapm_r=stab["rapm_r"],
+               finishing_r=stab["finishing_r"])
+    if qualified and r.get("value_pct") is not None:
+        vp, ip = float(r["value_pct"]), float(r["impact_pct"])
+        read = value_gap.read(
+            name=_player_short_name(player_id), value_pct=vp, impact_pct=ip,
+            production_r=stab["production_r"], rapm_r=stab["rapm_r"], finishing_r=stab["finishing_r"])
+        out.update(value_percentile=vp, impact_percentile=ip,
+                   impact_goals=float(r.get("impact_goals") or 0.0),
+                   gap_percentile_points=round((vp - ip) * 100, 1),
+                   read=ValueGapRead(case=read["case"], headline=read["headline"], body=read["body"]))
+    return PlayerValue(**out)
+
+
+def _player_short_name(player_id: int) -> str:
+    rows = bq_service.query(
+        f"SELECT ANY_VALUE(last_name) AS n FROM {bq_service.get_full_table_id('stg_rosters')} "
+        f"WHERE player_id = {player_id}")
+    return (rows[0]["n"] if rows and rows[0].get("n") else "This player")
+
+
 # Registered before /{player_id} so "divergence-board" is not coerced to an int player id.
 @router.get("/divergence-board", response_model=List[DivergenceBoardRow])
 @cache(ttl=1800)
@@ -128,6 +196,39 @@ async def search_players(
     from services import tools as tool_svc
     rows = await run_in_threadpool(tool_svc.search_players, q, limit, season)
     return [PlayerSearchResult(**r) for r in rows]
+
+
+@router.get("/{player_id}/summary", response_model=PlayerSummary)
+@cache(ttl=1800)
+async def get_player_summary(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> PlayerSummary:
+    """Fast single-query season stat line for the Players-card expansion (Part B usability)."""
+    if not season:
+        r = bq_service.query(
+            f"SELECT MAX(season) AS s FROM {bq_service.get_full_table_id('mart_player_game_stats')} "
+            f"WHERE player_id = {player_id}")
+        season = r[0]['s'] if r and r[0]['s'] else None
+    rows = bq_service.query(f"""
+        SELECT COUNT(DISTINCT game_id) AS games_played,
+               AVG(toi_5v5) AS toi_per_gp,
+               AVG((individual_goals / toi_5v5) * 60.0) AS goals_per60,
+               AVG((first_assists / toi_5v5) * 60.0) AS assists_per60,
+               AVG(primary_points_per60) AS points_per60,
+               AVG(on_ice_xgf_pct) AS xgf_pct
+        FROM {bq_service.get_full_table_id('mart_player_game_stats')}
+        WHERE player_id = {player_id} AND season = '{season}'
+          AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+    """)
+    if not rows or rows[0]['games_played'] == 0:
+        raise HTTPException(status_code=404, detail="No season stats for this player")
+    r = rows[0]
+    return PlayerSummary(player_id=player_id, season=season,
+        games_played=int(r['games_played']),
+        toi_per_gp=r.get('toi_per_gp'), goals_per60=r.get('goals_per60'),
+        assists_per60=r.get('assists_per60'), points_per60=r.get('points_per60'),
+        xgf_pct=r.get('xgf_pct'))
 
 
 @router.get("/{player_id}/radar", response_model=PlayerRadar)
@@ -453,6 +554,7 @@ async def get_player_detail(
         composite_components=components,
         archetypes=archetypes,
         primary_archetype=primary_archetype,
+        value=_value_block(row['player_id'], season),
     )
 
 

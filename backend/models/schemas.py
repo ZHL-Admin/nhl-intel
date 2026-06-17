@@ -429,6 +429,13 @@ COMPOSITE_LABELS = [
     ("goalie_gsax", "Goaltending"),
 ]
 
+# GAR value-component key -> label (single source for the value stack everywhere; matches
+# compute_gar.COMPONENTS order).
+GAR_LABELS = [
+    ("ev_offense", "EV Offense"), ("pp", "Power Play"), ("ev_defense", "EV Defense"),
+    ("pk", "Penalty Kill"), ("penalty", "Penalties"), ("faceoff", "Faceoffs"),
+]
+
 
 class PlayerDetail(BaseModel):
     """Detailed player information."""
@@ -466,6 +473,49 @@ class PlayerDetail(BaseModel):
     composite_components: List[CompositeComponent] = []
     archetypes: List[ArchetypeWeight] = []
     primary_archetype: Optional[str] = None
+    # Value (GAR/WAR) block — the goals-reality companion to RAPM impact (Phase 6 GAR).
+    value: Optional["PlayerValue"] = None
+
+
+class ValueGapRead(BaseModel):
+    """Deterministic, asymmetric plain-language read of the Impact-vs-Value gap."""
+    case: str                  # value_over_impact | impact_over_value | aligned
+    headline: str
+    body: str
+
+
+class PlayerValue(BaseModel):
+    """GAR/WAR + components, percentiles within position, and the Impact-vs-Value gap read.
+
+    impact_goals is the RAPM-based value (composite EV+ST, finishing excluded) — "what tends to
+    repeat"; gar is actual goals above replacement — "what happened". The gap is finishing/luck/
+    usage. production_r/rapm_r/finishing_r are the MEASURED year-over-year stabilities, carried so
+    the read's "least repeatable" claim traces to a number (consistency rule)."""
+    gar: float
+    war: float
+    gar_sd: float
+    war_sd: float
+    components: List[CompositeComponent] = []
+    value_percentile: Optional[float] = None     # GAR percentile within position (0-1)
+    impact_goals: Optional[float] = None
+    impact_percentile: Optional[float] = None     # RAPM-value percentile within position (0-1)
+    gap_percentile_points: Optional[float] = None  # (value_pct - impact_pct) * 100
+    read: Optional[ValueGapRead] = None
+    production_r: float
+    rapm_r: float
+    finishing_r: float
+
+
+class ValueRankingRow(BaseModel):
+    """A skater on the GAR/WAR leaderboard, with components for the stacked bar (Phase 6 GAR)."""
+    player_id: int
+    player_name: Optional[str] = None
+    team_abbrev: Optional[str] = None
+    position: Optional[str] = None
+    gar: float
+    war: float
+    gar_sd: Optional[float] = None
+    components: List[CompositeComponent] = []
 
 
 class PlayerTrendPoint(BaseModel):
@@ -1219,3 +1269,15 @@ class GoalieRadar(BaseModel):
     games_played: Optional[int] = None
     spokes: List[RadarSpoke] = Field(default_factory=list)
     baseline: Optional[str] = None
+
+
+class PlayerSummary(BaseModel):
+    """Lightweight season stat line for the Players-card expansion (one query)."""
+    player_id: int
+    season: str
+    games_played: int
+    toi_per_gp: Optional[float] = None
+    goals_per60: Optional[float] = None
+    assists_per60: Optional[float] = None
+    points_per60: Optional[float] = None
+    xgf_pct: Optional[float] = None

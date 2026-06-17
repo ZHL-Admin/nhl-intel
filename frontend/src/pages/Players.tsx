@@ -12,8 +12,8 @@ import {
 } from '../components/common'
 import type { StackSegment, SelectOption } from '../components/common'
 import { getOverallLeaders, getArchetypeRanking, getDivergenceBoard,
-  getPlayerRadar, getPlayerDetail } from '../api/players'
-import { ArchetypeRankRow, DivergenceBoardRow, PlayerRadar, PlayerDetail } from '../api/types'
+  getPlayerRadar, getPlayerSummary } from '../api/players'
+import { ArchetypeRankRow, DivergenceBoardRow, PlayerRadar, PlayerSummary } from '../api/types'
 import { playerLabelsFromRadar } from '../api/labels'
 import SkillRadar from '../components/visualizations/SkillRadar'
 import { ARCHETYPES, COMPOSITE_COMPONENTS } from '../config/metrics'
@@ -102,17 +102,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 /** Inline expansion: basics + stats + RAPM + value breakdown + skill radar + link to full page. */
 function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: string }) {
   const [radar, setRadar] = useState<PlayerRadar | null>(null)
-  const [detail, setDetail] = useState<PlayerDetail | null>(null)
+  const [summary, setSummary] = useState<PlayerSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
-    setLoading(true); setRadar(null); setDetail(null)
-    Promise.allSettled([getPlayerRadar(row.player_id, season), getPlayerDetail(row.player_id, season)])
-      .then(([r, d]) => {
+    setLoading(true); setRadar(null); setSummary(null)
+    Promise.allSettled([getPlayerRadar(row.player_id, season), getPlayerSummary(row.player_id, season)])
+      .then(([r, s]) => {
         if (!active) return
         if (r.status === 'fulfilled') setRadar(r.value)
-        if (d.status === 'fulfilled') setDetail(d.value)
+        if (s.status === 'fulfilled') setSummary(s.value)
         setLoading(false)
       })
     return () => { active = false }
@@ -121,12 +121,11 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
   const labels = radar ? playerLabelsFromRadar(radar) : null
   const offSpoke = radar?.spokes.find((s) => s.key === 'ev_off_impact')
   const defSpoke = radar?.spokes.find((s) => s.key === 'ev_def_impact')
-  const d = Math.max(2, ...rowSegments(row).map((s) => Math.abs(s.value)))
 
   return (
     <div className="pexp">
       <div className="pexp__main">
-        {/* basics + stats + RAPM + value */}
+        {/* basics + stats + RAPM */}
         <div className="pexp__col">
           <div className="pexp__head">
             <Avatar id={row.player_id} team={row.team_abbrev} name={row.player_name} size={56} />
@@ -143,15 +142,15 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
           </div>
           {labels?.descriptor && <p className="pexp__descriptor">{labels.descriptor}</p>}
 
-          {detail && (
+          {loading && !summary ? <SkeletonLoader /> : summary && (
             <div className="pexp__statwrap">
             <div className="pexp__stats">
-              <Stat label="GP" value={`${detail.games_played}`} />
-              <Stat label="5v5 TOI" value={detail.toi_per_gp != null ? detail.toi_per_gp.toFixed(1) : '—'} />
-              <Stat label="G/60" value={detail.goals_per60 != null ? detail.goals_per60.toFixed(2) : '—'} />
-              <Stat label="A/60" value={detail.assists_per60 != null ? detail.assists_per60.toFixed(2) : '—'} />
-              <Stat label="P/60" value={detail.points_per60 != null ? detail.points_per60.toFixed(2) : '—'} />
-              <Stat label="xGF%" value={detail.cf_pct != null ? (detail.cf_pct * 100).toFixed(1) : '—'} />
+              <Stat label="GP" value={`${summary.games_played}`} />
+              <Stat label="5v5 TOI" value={summary.toi_per_gp != null ? summary.toi_per_gp.toFixed(1) : '—'} />
+              <Stat label="G/60" value={summary.goals_per60 != null ? summary.goals_per60.toFixed(2) : '—'} />
+              <Stat label="A/60" value={summary.assists_per60 != null ? summary.assists_per60.toFixed(2) : '—'} />
+              <Stat label="P/60" value={summary.points_per60 != null ? summary.points_per60.toFixed(2) : '—'} />
+              <Stat label="xGF%" value={summary.xgf_pct != null ? (summary.xgf_pct * 100).toFixed(1) : '—'} />
             </div>
             <div className="pexp__stats-note">Season totals · 5v5 rates</div>
             </div>
@@ -164,12 +163,6 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
               {defSpoke && <RapmBar label="EV Defense" value={defSpoke.value} sd={defSpoke.sd} pctl={defSpoke.percentile} />}
             </div>
           )}
-
-          <div className="pexp__block">
-            <div className="pexp__block-title">Value breakdown (goals above replacement)</div>
-            <ComponentStackBar segments={rowSegments(row)} total={row.composite_total}
-              domain={[-d, d]} se={row.composite_total_sd ?? undefined} height={24} />
-          </div>
 
           <Link className="pexp__link" to={`/players/${row.player_id}`}>
             View full profile <ArrowRight size={15} />
@@ -263,24 +256,22 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
 
           <div className="players__podium">
             {top.map((r, i) => (
-              <button key={r.player_id} className={`ptop${expandedId === r.player_id ? ' ptop--active' : ''}`}
-                onClick={() => toggle(r.player_id)} aria-expanded={expandedId === r.player_id}>
-                <span className={`ptop__rank ptop__rank--${i + 1}`}>{i + 1}</span>
-                <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
-                <span className="ptop__name">{r.player_name ?? r.player_id}</span>
-                <span className="ptop__meta">{meta(r, overall)}</span>
-                <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
-                <div className="ptop__bar">
-                  <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={podiumDomain} se={r.composite_total_sd ?? undefined} />
-                </div>
-              </button>
+              <div key={r.player_id} className={`ptop-cell${expandedId === r.player_id ? ' ptop-cell--expanded' : ''}`}>
+                <button className={`ptop${expandedId === r.player_id ? ' ptop--active' : ''}`}
+                  onClick={() => toggle(r.player_id)} aria-expanded={expandedId === r.player_id}>
+                  <span className={`ptop__rank ptop__rank--${i + 1}`}>{i + 1}</span>
+                  <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
+                  <span className="ptop__name">{r.player_name ?? r.player_id}</span>
+                  <span className="ptop__meta">{meta(r, overall)}</span>
+                  <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
+                  <div className="ptop__bar">
+                    <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={podiumDomain} se={r.composite_total_sd ?? undefined} />
+                  </div>
+                </button>
+                {expandedId === r.player_id && <PlayerExpansion row={r} season={season} />}
+              </div>
             ))}
           </div>
-          {/* podium expansion renders full-width below the 3-col grid */}
-          {(() => {
-            const er = top.find((r) => r.player_id === expandedId)
-            return er ? <PlayerExpansion row={er} season={season} /> : null
-          })()}
 
           {rest.length > 0 && (
             <>
