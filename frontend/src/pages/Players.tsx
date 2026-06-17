@@ -99,8 +99,8 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <div className="pexp-stat"><span className="pexp-stat__v">{value}</span><span className="pexp-stat__l">{label}</span></div>
 }
 
-/** Inline expansion: basics + stats + RAPM + value breakdown + skill radar + link to full page. */
-function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: string }) {
+/** Inline expansion: basics + stats + RAPM + skill radar + link to full page. */
+function PlayerExpansion({ row, season, onCollapse }: { row: ArchetypeRankRow; season: string; onCollapse?: () => void }) {
   const [radar, setRadar] = useState<PlayerRadar | null>(null)
   const [summary, setSummary] = useState<PlayerSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -124,23 +124,30 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
 
   return (
     <div className="pexp">
+      {onCollapse && (
+        <button className="pexp__collapse" onClick={onCollapse} aria-label="Collapse">
+          <ChevronDown size={16} /> Collapse
+        </button>
+      )}
       <div className="pexp__main">
         {/* basics + stats + RAPM */}
         <div className="pexp__col">
-          <div className="pexp__head">
-            <Avatar id={row.player_id} team={row.team_abbrev} name={row.player_name} size={56} />
-            <div className="pexp__id">
-              <span className="pexp__name">{row.player_name ?? row.player_id}</span>
-              <span className="pexp__meta">{row.position}{row.team_abbrev ? ` · ${row.team_abbrev}` : ''}{labels?.overall ? ` · ${labels.overall}` : ''}</span>
-              {labels && (
-                <div className="pexp__chips">
-                  {labels.offensive && <span className="pexp__chip">{labels.offensive}</span>}
-                  {labels.defensive && <span className="pexp__chip pexp__chip--def">{labels.defensive}</span>}
-                </div>
-              )}
+          <div className="pexp__header">
+            <div className="pexp__head">
+              <Avatar id={row.player_id} team={row.team_abbrev} name={row.player_name} size={56} />
+              <div className="pexp__id">
+                <span className="pexp__name">{row.player_name ?? row.player_id}</span>
+                <span className="pexp__meta">{row.position}{row.team_abbrev ? ` · ${row.team_abbrev}` : ''}{labels?.overall ? ` · ${labels.overall}` : ''}</span>
+                {labels && (
+                  <div className="pexp__chips">
+                    {labels.offensive && <span className="pexp__chip">{labels.offensive}</span>}
+                    {labels.defensive && <span className="pexp__chip pexp__chip--def">{labels.defensive}</span>}
+                  </div>
+                )}
+              </div>
             </div>
+            {labels?.descriptor && <p className="pexp__descriptor">{labels.descriptor}</p>}
           </div>
-          {labels?.descriptor && <p className="pexp__descriptor">{labels.descriptor}</p>}
 
           {loading && !summary ? <SkeletonLoader /> : summary && (
             <div className="pexp__statwrap">
@@ -177,6 +184,26 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
         </div>
       </div>
     </div>
+  )
+}
+
+/** Compact podium (top-3) card. */
+function PodiumCard({ r, rank, expanded, overall, domain, onToggle }: {
+  r: ArchetypeRankRow; rank: number; expanded: boolean; overall: boolean;
+  domain: [number, number]; onToggle: (id: number) => void
+}) {
+  return (
+    <button className={`ptop${expanded ? ' ptop--active' : ''}`}
+      onClick={() => onToggle(r.player_id)} aria-expanded={expanded}>
+      <span className={`ptop__rank ptop__rank--${rank}`}>{rank}</span>
+      <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
+      <span className="ptop__name">{r.player_name ?? r.player_id}</span>
+      <span className="ptop__meta">{meta(r, overall)}</span>
+      <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
+      <div className="ptop__bar">
+        <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={domain} se={r.composite_total_sd ?? undefined} />
+      </div>
+    </button>
   )
 }
 
@@ -254,24 +281,34 @@ function Leaderboard({ position, archetype, season }: { position: Pos; archetype
             </div>
           </div>
 
-          <div className="players__podium">
-            {top.map((r, i) => (
-              <div key={r.player_id} className={`ptop-cell${expandedId === r.player_id ? ' ptop-cell--expanded' : ''}`}>
-                <button className={`ptop${expandedId === r.player_id ? ' ptop--active' : ''}`}
-                  onClick={() => toggle(r.player_id)} aria-expanded={expandedId === r.player_id}>
-                  <span className={`ptop__rank ptop__rank--${i + 1}`}>{i + 1}</span>
-                  <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={72} />
-                  <span className="ptop__name">{r.player_name ?? r.player_id}</span>
-                  <span className="ptop__meta">{meta(r, overall)}</span>
-                  <span className="ptop__total">{fmt(r.composite_total)}<small> value</small></span>
-                  <div className="ptop__bar">
-                    <ComponentStackBar segments={rowSegments(r)} total={r.composite_total} domain={podiumDomain} se={r.composite_total_sd ?? undefined} />
-                  </div>
-                </button>
-                {expandedId === r.player_id && <PlayerExpansion row={r} season={season} />}
+          {(() => {
+            const expIdx = top.findIndex((r) => r.player_id === expandedId)
+            if (expIdx === -1) {
+              // default: 3-up podium grid
+              return (
+                <div className="players__podium">
+                  {top.map((r, i) => (
+                    <PodiumCard key={r.player_id} r={r} rank={i + 1} expanded={false}
+                      overall={overall} domain={podiumDomain} onToggle={toggle} />
+                  ))}
+                </div>
+              )
+            }
+            // one expanded: full-width expansion on top, the other two below
+            const exp = top[expIdx]
+            const others = top.map((r, i) => ({ r, rank: i + 1 })).filter((x) => x.r.player_id !== exp.player_id)
+            return (
+              <div className="players__podium-expanded">
+                <PlayerExpansion row={exp} season={season} onCollapse={() => toggle(exp.player_id)} />
+                <div className="players__podium-others">
+                  {others.map(({ r, rank }) => (
+                    <PodiumCard key={r.player_id} r={r} rank={rank} expanded={false}
+                      overall={overall} domain={podiumDomain} onToggle={toggle} />
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            )
+          })()}
 
           {rest.length > 0 && (
             <>

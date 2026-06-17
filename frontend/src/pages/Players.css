@@ -293,9 +293,10 @@
 .players__rows .pexp { margin: 0; border-radius: 0; border-left: none; border-right: none;
   border-top: 1px solid var(--color-accent); border-bottom: 1px solid var(--color-accent); }
 
-.pexp__main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--space-6); align-items: start; }
+.pexp__main { display: grid; grid-template-columns: 60% 1fr; gap: var(--space-6); align-items: start; }
 .pexp__col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 
+.pexp__header { display: flex; flex-direction: column; gap: var(--space-3); }
 .pexp__head { display: flex; align-items: center; gap: var(--space-3); }
 .pexp__id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pexp__name { font-size: var(--text-xl); font-weight: 800; color: var(--color-text-primary); }
@@ -312,7 +313,7 @@
 .pexp-stat__v { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
 .pexp-stat__l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted, var(--color-text-secondary)); }
 
-.pexp__block { display: flex; flex-direction: column; gap: var(--space-2); }
+.pexp__block { display: flex; flex-direction: column; gap: var(--space-3); }
 .pexp__block-title { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
 
 .pexp-rapm__row { display: grid; grid-template-columns: 80px 1fr 76px; align-items: center; gap: var(--space-2); }
@@ -336,28 +337,28 @@
   .pexp__main { grid-template-columns: 1fr; }
   .pexp__stats { grid-template-columns: repeat(3, 1fr); }
 }
-.pexp__stats-note { font-size: 10px; color: var(--color-text-muted, var(--color-text-secondary)); margin-top: -6px; }
-.pexp__statwrap { display: flex; flex-direction: column; gap: 4px; }
+.pexp__stats-note { font-size: var(--text-xs); color: var(--color-text-muted, var(--color-text-secondary)); margin-top: -6px; }
+.pexp__statwrap { display: flex; flex-direction: column; gap: var(--space-2); }
 
-/* ---- podium in-place expansion: the clicked card fills the row, others reflow below ---- */
-.ptop-cell { display: flex; flex-direction: column; min-width: 0; }
-.ptop-cell--expanded {
-  grid-column: 1 / -1;
+/* ---- podium expansion: clicked card fills the full row on top, other two drop below ---- */
+.players__podium-expanded {
+  display: flex; flex-direction: column; gap: var(--space-4);
+  margin-bottom: var(--space-6);
   animation: ptop-grow 200ms ease;
 }
-@keyframes ptop-grow { from { opacity: 0.6; transform: scale(0.99); } to { opacity: 1; transform: none; } }
-/* compact podium card morphs into a horizontal header strip when its cell is expanded */
-.ptop-cell--expanded .ptop {
-  flex-direction: row; align-items: center; justify-content: flex-start;
-  gap: var(--space-3); text-align: left;
-  padding: var(--space-3) var(--space-4);
-  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+@keyframes ptop-grow { from { opacity: 0.5; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.players__podium-expanded .pexp { margin: 0; }      /* expansion is the full-width hero */
+.players__podium-others {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4);
 }
-.ptop-cell--expanded .ptop__rank { position: static; }
-.ptop-cell--expanded .ptop__meta,
-.ptop-cell--expanded .ptop__bar { display: none; }
-.ptop-cell--expanded .ptop__total { margin-top: 0; margin-left: auto; font-size: var(--text-xl); }
-.ptop-cell--expanded .pexp {
-  margin: 0; border-top: none;
-  border-top-left-radius: 0; border-top-right-radius: 0;
+.pexp { position: relative; }
+.pexp__collapse {
+  position: absolute; top: var(--space-3); right: var(--space-3);
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary);
+  padding: 4px 9px; border-radius: var(--radius-md); background: var(--color-bg-elevated);
 }
+.pexp__collapse:hover { color: var(--color-text-primary); }
+.pexp__collapse svg { transform: rotate(180deg); }
