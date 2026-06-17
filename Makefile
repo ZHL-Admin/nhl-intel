@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit team-needs archetypes-v2 radar
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate linefit team-needs archetypes-v2 radar
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -32,6 +32,14 @@ edge-refresh:
 # bootstrap SDs, into nhl_models.player_impact. Long-running (~1-2h with bootstrap).
 rapm:
 	python -m models_ml.train_rapm
+
+# Compute Value GAR/WAR (Phase 6): actual goals above replacement, the goals-reality companion
+# to RAPM (which is read, never modified). Writes nhl_models.player_gar. `make gar-validate` runs
+# the Kucherov/Panarin divergence + stability + replacement-sensitivity checks.
+gar:
+	python -m models_ml.compute_gar
+gar-validate:
+	python -m models_ml.validate_gar
 
 # Train the Lineup Lab line-fit model (Phase 5.1): predicts a line's on-ice xGF% / xGF60 / xGA60
 # from member profiles. Reads int_line_seasons + archetypes + RAPM; writes artifacts/linefit_v1.

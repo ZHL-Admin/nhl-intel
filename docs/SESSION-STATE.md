@@ -662,3 +662,24 @@ I write code + `scripts/smoke_ingest_*` per surface; long backfills/training run
 background (I have network + BigQuery access here). Model jobs get `--dry-run/--sample/--resume`
 + a pasteable report. Archetype naming (Phase 4.2) is the one human-in-the-loop step.
 No placeholders/mock data — features die or are labeled proxies when the API can't support them.
+
+## VALUE — GAR/WAR companion model (post-Phase-5 add)
+- `models_ml/compute_gar.py` -> **nhl_models.player_gar** (5,944 rows): goals-reality companion
+  to RAPM (**RAPM untouched** — only read). ev_offense/pp = ACTUAL goals + weighted assists
+  (0.7/0.5) above a depth-replacement rate, normalized to league goals (no triple-count);
+  ev_defense/pk borrow RAPM x TOI (xG) -> "mostly actual"; penalty/faceoff minor. WAR=GAR/6.
+  All constants in `config.GAR_CONFIG`. Strength from pbp situation_code ('1551'=5v5);
+  replacement = team-depth pool (F>9/D>6 by 5v5 TOI). `make gar` / `make gar-validate`; DAG
+  `train_rapm >> compute_gar` (Monday-gated).
+- **Stability FINDING (validate_gar.py, genuine result):** folk wisdom is half-backwards —
+  production sticky r=0.66, RAPM isolated rate noisier r=0.38, only finishing residual r=0.35 is
+  luck-flavored. Reads are ASYMMETRIC: Impact>>Value is the better-grounded buy-low case.
+  Constants in `config.GAR_STABILITY_YOY`; cited verbatim in the UI + doc (consistency rule).
+- Backend: `/players/{id}` gains a `value` block (GAR/WAR + components + value/impact percentiles
+  + asymmetric read via `insight_engine/templates/value_gap.py`); `/rankings/value` leaderboard.
+- Frontend: shared **ImpactValuePanel** (two percentile lenses + gap + read + prominent Value
+  uncertainty band + r-value footer) under SkillRadar on PlayerProfile; Rankings **Value (GAR/WAR)**
+  tab. docs/methodology/value-gar.md (+ cross-link from isolated-impact.md).
+- Validated: Kucherov GAR #4 / RAPM-off #11, Panarin #11 / #40 (intended value>impact gap);
+  distribution right-skewed; replacement sensitivity spearman 0.998. tsc+build+pytest green;
+  no dbt models added.

@@ -536,6 +536,14 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Value GAR/WAR (Phase 6): actual goals above replacement — the goals-reality companion to
+    # RAPM. Reads player_impact (so it runs after train_rapm) + marts; RAPM is untouched. Weekly.
+    compute_gar = BashOperator(
+        task_id="compute_gar",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_gar"),
+        env=_dbt_env,
+    )
+
     # Archetypes (Phase 4.2): loads the committed, canonical GMM (archetypes_v1.joblib) and
     # writes soft memberships — deterministic, no refit. Single-threaded BLAS for safety.
     write_archetypes = BashOperator(
@@ -615,6 +623,7 @@ with DAG(
     # Phase 4 player models (weekly, Monday-gated inside each task): RAPM -> composite +
     # archetypes. RAPM needs shot_xg + segments + marts; composite/archetypes need RAPM.
     run_dbt_marts >> train_rapm >> compute_composite >> generate_report
+    train_rapm >> compute_gar >> generate_report
     train_rapm >> write_archetypes >> generate_report
     # Phase 4.3 reconciliation: clutch (needs leverage), consistency + coach trust (marts),
     # divergence (needs composite + coach trust).

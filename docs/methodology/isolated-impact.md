@@ -71,6 +71,16 @@ Low-TOI players show visibly wider SD — never read a point estimate without it
   SD tracks impact magnitude (median off_sd ≈ 0.12 for >1000-min players vs ≈ 0.08 for
   <150-min). Relative uncertainty (sd/|impact|) is lowest for high-minute players (~0.84).
 
+## Companion: Value (GAR)
+
+RAPM is the **Impact** lens — repeatable play-driving on the xG layer ("what tends to repeat").
+Its goals-reality companion is **Value (GAR)** ([value-gar.md](value-gar.md)): actual goals above
+replacement ("what happened"), which inherits shooting luck by design. The skater
+[Impact-vs-Value panel](value-gar.md) is the actual-vs-expected motif applied to players, beside
+deserved standings (team) and GSAx-vs-Edge (goalie). Notably, year-over-year, RAPM's *isolated*
+rate is the noisier measurement (r≈0.38) while actual production is sticky (r≈0.66) — only the
+finishing residual (r≈0.35) is truly luck-flavored. RAPM is never modified by the GAR job.
+
 ## Known limitations
 
 - RAPM attributes on-ice xG, not micro-skill; it cannot separate, say, zone exits from
