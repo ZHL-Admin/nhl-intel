@@ -349,12 +349,14 @@ async def get_player_detail(
         season = season_result[0]['current_season'] if season_result else 20232024
 
     # Get aggregated player stats
+    # Headline stats are for the resolved SEASON (NHL games only) — not career aggregates.
+    # ARRAY_AGG picks the player's latest team that season so a mid-season trade yields one row.
     sql = f"""
     SELECT
         player_id,
-        CONCAT(first_name, ' ', last_name) as player_name,
-        position_code as position,
-        team_id,
+        ANY_VALUE(CONCAT(first_name, ' ', last_name)) as player_name,
+        ANY_VALUE(position_code) as position,
+        ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] as team_id,
         COUNT(DISTINCT game_id) as games_played,
         AVG(toi_5v5) as toi_per_gp,
         AVG(primary_points_per60) as points_per60,
@@ -364,7 +366,9 @@ async def get_player_detail(
         AVG(ixg_per60) as hdcf_per60
     FROM {bq_service.get_full_table_id('mart_player_game_stats')}
     WHERE player_id = {player_id}
-    GROUP BY player_id, first_name, last_name, position_code, team_id
+        AND season = '{season}'
+        AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+    GROUP BY player_id
     """
 
     results = bq_service.query(sql)

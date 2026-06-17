@@ -144,13 +144,16 @@ function PlayerExpansion({ row, season }: { row: ArchetypeRankRow; season: strin
           {labels?.descriptor && <p className="pexp__descriptor">{labels.descriptor}</p>}
 
           {detail && (
+            <div className="pexp__statwrap">
             <div className="pexp__stats">
               <Stat label="GP" value={`${detail.games_played}`} />
-              <Stat label="TOI/GP" value={detail.toi_per_gp != null ? detail.toi_per_gp.toFixed(1) : '—'} />
+              <Stat label="5v5 TOI" value={detail.toi_per_gp != null ? detail.toi_per_gp.toFixed(1) : '—'} />
               <Stat label="G/60" value={detail.goals_per60 != null ? detail.goals_per60.toFixed(2) : '—'} />
               <Stat label="A/60" value={detail.assists_per60 != null ? detail.assists_per60.toFixed(2) : '—'} />
               <Stat label="P/60" value={detail.points_per60 != null ? detail.points_per60.toFixed(2) : '—'} />
-              <Stat label="CF%" value={detail.cf_pct != null ? detail.cf_pct.toFixed(1) : '—'} />
+              <Stat label="xGF%" value={detail.cf_pct != null ? (detail.cf_pct * 100).toFixed(1) : '—'} />
+            </div>
+            <div className="pexp__stats-note">Season totals · 5v5 rates</div>
             </div>
           )}
 
