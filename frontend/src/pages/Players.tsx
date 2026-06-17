@@ -532,10 +532,10 @@ export default function Players() {
             <div className="players__toolbar-filters">
               <div className="seg seg--metric" role="group" aria-label="Rating lens">
                 <button className={`seg__btn${metric === 'impact' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('impact')}>
-                  Impact <small>RAPM · repeats</small>
+                  Impact <small>play-driving (RAPM)</small>
                 </button>
                 <button className={`seg__btn${metric === 'value' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('value')}>
-                  Value <small>GAR · happened</small>
+                  Value <small>goals scored (GAR/WAR)</small>
                 </button>
               </div>
               <span className="players__toolbar-div" aria-hidden="true" />
