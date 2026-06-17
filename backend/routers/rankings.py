@@ -97,7 +97,26 @@ async def get_deserved_standings(
             for r in rows]
 
 
-def _skater_value_rows(position: str, season: str, limit: int) -> List[ValueRankingRow]:
+def _confidence_k() -> float:
+    from models_ml import config as mlcfg
+    return float(mlcfg.CONFIDENCE_SORT_K)
+
+
+def _order_expr(sort: str) -> str:
+    """SQL ORDER BY for the value tables. 'confidence' ranks by the lower-confidence bound
+    war − k·war_sd ('value we are confident about') so a low-variance skater is not buried under a
+    high-variance goalie of equal point estimate; 'point' ranks by the raw point estimate."""
+    if sort == "point":
+        return "g.war DESC"
+    return f"(g.war - {_confidence_k()} * COALESCE(g.war_sd, 0)) DESC"
+
+
+def _conf_key(r: ValueRankingRow) -> float:
+    """The confidence-aware sort key for an already-built row (used by the mixed merge)."""
+    return r.war - _confidence_k() * (r.war_sd or 0.0)
+
+
+def _skater_value_rows(position: str, season: str, limit: int, sort: str = "confidence") -> List[ValueRankingRow]:
     """Skater GAR rows (component_kind=skater), qualified by the 5v5-TOI ranking floor."""
     from models_ml import config as mlcfg
     floor = mlcfg.GAR_CONFIG["MIN_TOI_5V5_FOR_RANKING"]
@@ -114,7 +133,7 @@ def _skater_value_rows(position: str, season: str, limit: int) -> List[ValueRank
         LEFT JOIN nm ON g.player_id = nm.player_id
         LEFT JOIN tm ON nm.team_id = tm.team_id
         WHERE g.season_window = '{season}' AND g.position IN {groups} AND g.toi_5v5 >= {floor}
-        ORDER BY g.war DESC
+        ORDER BY {_order_expr(sort)}
         LIMIT {int(limit)}
     """)
     out = []
@@ -130,8 +149,9 @@ def _skater_value_rows(position: str, season: str, limit: int) -> List[ValueRank
     return out
 
 
-def _goalie_value_rows(season: str, limit: int) -> List[ValueRankingRow]:
-    """Goalie GAR rows (component_kind=goalie, distinct save-tier vocabulary), qualified by games."""
+def _goalie_value_rows(season: str, limit: int, sort: str = "confidence") -> List[ValueRankingRow]:
+    """Goalie GAR rows (component_kind=goalie, distinct save-tier vocabulary), qualified by games.
+    GAR/WAR here are the RELIABILITY-SHRUNK estimates (the honest point estimate); see value-gar.md."""
     from models_ml import config as mlcfg
     min_games = mlcfg.GOALIE_GAR_CONFIG["MIN_GAMES_FOR_RANKING"]
     gg = bq_service.get_models_table_id('goalie_gar')
@@ -146,7 +166,7 @@ def _goalie_value_rows(season: str, limit: int) -> List[ValueRankingRow]:
         LEFT JOIN nm ON g.goalie_id = nm.player_id
         LEFT JOIN tm ON nm.team_id = tm.team_id
         WHERE g.season_window = '{season}' AND g.games_played >= {min_games}
-        ORDER BY g.war DESC
+        ORDER BY {_order_expr(sort)}
         LIMIT {int(limit)}
     """)
     out = []
@@ -168,44 +188,50 @@ async def get_value_rankings(
     scope: str = Query("skaters", description="skaters | goalies | all (mixed, WAR-sorted)"),
     position: str = Query("ALL", description="ALL | F | D (skaters scope only)"),
     season: Optional[str] = Query(None, description="Season (default: latest single season)"),
+    sort: str = Query("confidence", description="confidence (default) | point"),
     limit: int = Query(50, ge=1, le=200),
 ) -> List[ValueRankingRow]:
     """Value leaderboard — goals/wins above replacement.
 
-    - scope=skaters: skater GAR ('what happened'), sortable by position; rows carry skater
-      component vocabulary.
-    - scope=goalies: goalie GAR (goals saved above a backup); rows carry goalie save-tier vocabulary.
-    - scope=all: a MIXED skater+goalie list sorted by WAR — the ONLY cross-position-comparable unit
+    - scope=skaters: skater GAR ('what happened'), sortable by position; skater component vocabulary.
+    - scope=goalies: goalie GAR (reliability-SHRUNK goals saved above a backup); save-tier vocabulary.
+    - scope=all: a MIXED skater+goalie list ranked by WAR — the ONLY cross-position-comparable unit
       (skater GAR and goalie GAR are different units and are never sorted together).
 
-    Each row declares entity_kind/component_kind so the frontend renders the correct bar. GAR
-    includes shooting luck / soft goalie variance by design (see value-gar.md)."""
+    sort=confidence (DEFAULT): rank by the lower-confidence bound war − k·war_sd ('value we are
+    confident about'), so a tight-band skater is not buried under a wide-band goalie of equal point
+    estimate. sort=point ranks by the raw (shrunk) point estimate. The DISPLAYED number is always
+    the point estimate; only the ORDER changes. See value-gar.md."""
     gar = bq_service.get_models_table_id('player_gar')
     scope = scope.lower()
+    sort = "point" if sort.lower() == "point" else "confidence"
     if not season:
         season = bq_service.query(
             f"SELECT MAX(season_window) AS s FROM {gar} WHERE season_window LIKE '____-__'")[0]['s']
 
     if scope == "goalies":
-        return _goalie_value_rows(season, limit)
+        return _goalie_value_rows(season, limit, sort)
     if scope == "skaters":
-        return _skater_value_rows(position, season, limit)
+        return _skater_value_rows(position, season, limit, sort)
 
-    # scope == "all": merge both tables and sort by WAR (the cross-position currency). We over-fetch
-    # `limit` from each side, then take the global top `limit` by WAR.
-    return merge_value_rows_by_war(
-        _skater_value_rows("ALL", season, limit), _goalie_value_rows(season, limit), limit)
+    # scope == "all": merge both tables. We over-fetch `limit` from each side (each already ordered
+    # by the chosen key), then take the global top `limit`.
+    return merge_value_rows(
+        _skater_value_rows("ALL", season, limit, sort), _goalie_value_rows(season, limit, sort),
+        limit, sort)
 
 
-def merge_value_rows_by_war(
-    skaters: List[ValueRankingRow], goalies: List[ValueRankingRow], limit: int,
+def merge_value_rows(
+    skaters: List[ValueRankingRow], goalies: List[ValueRankingRow], limit: int, sort: str = "confidence",
 ) -> List[ValueRankingRow]:
-    """Merge skater + goalie value rows and return the global top `limit` by WAR.
+    """Merge skater + goalie value rows and return the global top `limit`.
 
-    The mixed sort key is WAR — NEVER GAR — because skater GAR and goalie GAR are different units
-    (within-position goals above replacement) and are not comparable; only WAR (= GAR/GOALS_PER_WIN,
-    a shared divisor) is. Pure + hermetic so the WAR-sort invariant is unit-tested (see
-    tests/test_value_overall.py)."""
+    The sort key is always WAR-DERIVED — never GAR — because skater GAR and goalie GAR are different
+    units and are not comparable; only WAR (= GAR/GOALS_PER_WIN, a shared divisor) is. The DEFAULT
+    is the confidence-aware lower bound war − k·war_sd (so a ±0.8 skater outranks a ±2.2 goalie of
+    equal WAR point estimate); 'point' falls back to raw WAR. Pure + hermetic so both the
+    WAR-not-GAR invariant and the confidence-default are unit-tested (tests/test_value_overall.py)."""
+    key = (lambda r: r.war) if sort == "point" else _conf_key
     merged = list(skaters) + list(goalies)
-    merged.sort(key=lambda r: r.war, reverse=True)
+    merged.sort(key=key, reverse=True)
     return merged[:limit]

@@ -458,7 +458,10 @@ function PlayerProfile() {
                 </div>
                 <p className="ovr__note" style={{ marginTop: 'var(--space-3)' }}>
                   On the same goals-per-win scale as skater WAR, so the two share one cross-position
-                  leaderboard. Goaltending is less stable year to year — the band is wide by design.
+                  leaderboard. Goaltending is low-signal year to year, so this estimate is regressed
+                  toward the mean by its measured reliability
+                  {gv.raw_war != null && <> (raw, pre-regression: {(gv.raw_war >= 0 ? '+' : '') + gv.raw_war.toFixed(1)} WAR)</>}
+                  ; the band stays wide.
                 </p>
               </div>
               {goalieSeason.overall && <OverallSummary overall={goalieSeason.overall} />}

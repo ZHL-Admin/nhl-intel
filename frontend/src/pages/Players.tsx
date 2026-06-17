@@ -20,7 +20,7 @@ import {
 } from '../components/common'
 import type { StackSegment } from '../components/common'
 import { getOverallLeaders, getDivergenceBoard } from '../api/players'
-import { getValueRankings } from '../api/rankings'
+import { getValueRankings, type ValueSort } from '../api/rankings'
 import { ArchetypeRankRow, DivergenceBoardRow, ValueRankingRow } from '../api/types'
 import { COMPOSITE_COMPONENTS, VALUE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
@@ -80,18 +80,27 @@ const mapValueRow = (r: ValueRankingRow, unit: string, value: number, band?: num
 })
 
 /* ============================================================================
-   The simple magnitude bar for the mixed list (single tone, entity-kind tinted, with a band)
+   The simple magnitude bar for the mixed list — single tone, entity-kind tinted, with a PROMINENT
+   uncertainty band rendered as an error bar (translucent range + end caps + point tick). The wide
+   goalie bands visibly overlap the rows around them, so the order reads as soft / tier-level.
    ============================================================================ */
 function MagnitudeBar({ row, max }: { row: Row; max: number }) {
-  const w = max > 0 ? Math.max(0, (row.value / max)) * 100 : 0
-  const band = row.band ? (row.band / (max || 1)) * 100 : 0
+  const x = (v: number) => (max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0)
+  const v = x(row.value)
+  const sd = row.band ?? 0
+  const lo = x(row.value - sd)
+  const hi = x(row.value + sd)
   return (
     <span className={`magbar magbar--${row.entityKind}`}>
-      <span className="magbar__fill" style={{ width: `${Math.min(100, w)}%` }} />
-      {band > 0 && (
-        <span className="magbar__band"
-          style={{ left: `${Math.max(0, w - band)}%`, width: `${Math.min(100, w + band) - Math.max(0, w - band)}%` }} />
+      <span className="magbar__fill" style={{ width: `${v}%` }} />
+      {sd > 0 && (
+        <>
+          <span className="magbar__range" style={{ left: `${lo}%`, width: `${Math.max(0, hi - lo)}%` }} />
+          <span className="magbar__cap" style={{ left: `${lo}%` }} />
+          <span className="magbar__cap" style={{ left: `${hi}%` }} />
+        </>
       )}
+      <span className="magbar__mark" style={{ left: `${v}%` }} />
     </span>
   )
 }
@@ -99,7 +108,9 @@ function MagnitudeBar({ row, max }: { row: Row; max: number }) {
 /* ============================================================================
    Leaderboard
    ============================================================================ */
-function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; season: string }) {
+function Leaderboard({ show, rankBy, season, sort, setSort }: {
+  show: Show; rankBy: RankBy; season: string; sort: ValueSort; setSort: (s: ValueSort) => void
+}) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -109,16 +120,18 @@ function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; sea
   const mixed = show === 'all'
   const palette: Palette = mixed ? [] : show === 'G' ? GOALIE_VALUE_COMPONENTS
     : effRankBy === 'rapm' ? COMPOSITE_COMPONENTS : VALUE_COMPONENTS
+  // the confidence/point order applies to the value lenses (GAR/WAR), not the RAPM composite lens
+  const sortable = effRankBy !== 'rapm'
 
   useEffect(() => {
     let active = true
     setRows(null); setError(null)
     let req: Promise<Row[]>
     if (mixed) {
-      req = getValueRankings('all', 'ALL', season, 60).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
+      req = getValueRankings('all', 'ALL', season, 60, sort).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
     } else if (show === 'G') {
       const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('goalies', 'ALL', season, 60).then((rs) =>
+      req = getValueRankings('goalies', 'ALL', season, 60, sort).then((rs) =>
         rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
     } else if (effRankBy === 'rapm') {
       req = getOverallLeaders(show, season, 60).then((rs: ArchetypeRankRow[]) => rs.map((r) => ({
@@ -128,12 +141,12 @@ function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; sea
       })))
     } else {
       const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('skaters', show, season, 60).then((rs) =>
+      req = getValueRankings('skaters', show, season, 60, sort).then((rs) =>
         rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
     }
     req.then((d) => active && setRows(d)).catch(() => active && setError('Could not load rankings.'))
     return () => { active = false }
-  }, [show, effRankBy, season, mixed])
+  }, [show, effRankBy, season, mixed, sort])
 
   // shared scales: a symmetric component-bar domain (filtered) and a max for the magnitude bar (mixed)
   const { domain, maxMag } = useMemo(() => {
@@ -148,13 +161,18 @@ function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; sea
     return { domain: [lo, hi * 1.03] as [number, number], maxMag: max }
   }, [rows])
 
-  const caption = mixed
-    ? 'Sorted by Wins Above Replacement (WAR) — skaters and goalies on one scale. Bars show magnitude; goalie order is soft (note the wider bands).'
+  // confidence note appended to the value-lens captions so the order is honest about accounting
+  // for uncertainty (goalie bands are wide; a confident skater outranks a noisy goalie of equal WAR)
+  const confNote = sortable && sort === 'confidence'
+    ? ' Ordered by confidence-adjusted value (point − ½ sd), so wide-band goalies rank by what we’re confident they provided.'
+    : ''
+  const caption = (mixed
+    ? 'Wins Above Replacement (WAR) — skaters and goalies on one scale; goalie estimates are reliability-shrunk and bands are wide, so the order is soft.'
     : show === 'G'
-      ? `Sorted by goalie ${effRankBy === 'gar' ? 'GAR — goals saved above a replacement backup' : 'WAR — goals saved above replacement, on the shared win scale'}. Goaltending is less stable: bands are wide.`
+      ? `Goalie ${effRankBy === 'gar' ? 'GAR — reliability-shrunk goals saved above a replacement backup' : 'WAR — goals saved above replacement, on the shared win scale'}. Goaltending is low-signal: bands are wide, read tiers not exact ranks.`
       : effRankBy === 'rapm'
-        ? 'Sorted by Play-Driving — RAPM-based value above replacement (“what tends to repeat”). The bar breaks value into components.'
-        : `Sorted by ${effRankBy === 'gar' ? 'Production — GAR, goals above replacement (“what happened”)' : 'Total value — WAR, on the shared win scale'}. The bar breaks value into components.`
+        ? 'Play-Driving — RAPM-based value above replacement (“what tends to repeat”). The bar breaks value into components.'
+        : `${effRankBy === 'gar' ? 'Production — GAR, goals above replacement (“what happened”)' : 'Total value — WAR, on the shared win scale'}. The bar breaks value into components.`) + confNote
 
   return (
     <section className="players__board">
@@ -166,6 +184,18 @@ function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; sea
         <>
           <div className="players__caption-row">
             <p className="players__caption">{caption}</p>
+            {sortable && (
+              <span className="players__order">
+                <Tabs
+                  options={[
+                    { value: 'confidence', label: 'Confidence-adjusted' },
+                    { value: 'point', label: 'Point estimate' },
+                  ]}
+                  value={sort}
+                  onChange={(v) => setSort(v as ValueSort)}
+                />
+              </span>
+            )}
             {!mixed && <ColorsLegend palette={palette} />}
             <span className="players__count">{rows.length}</span>
           </div>
@@ -179,9 +209,11 @@ function Leaderboard({ show, rankBy, season }: { show: Show; rankBy: RankBy; sea
                 <span className="prow__id">
                   <span className="prow__name">
                     {r.name ?? r.id}
-                    {r.entityKind === 'goalie' && <span className="prow__gtag">G</span>}
                   </span>
-                  <span className="prow__meta">{r.position}{r.team ? ` · ${r.team}` : ''}</span>
+                  <span className="prow__meta--header">
+                    <span className={`prow__gtag--${r.entityKind} prow__gtag`}>{r.position}</span>
+                    <span className="prow__meta">{r.team ? `${r.team}` : ''}</span>
+                  </span>
                 </span>
                 <span className="prow__bar">
                   {mixed
@@ -209,7 +241,7 @@ function ColorsLegend({ palette }: { palette: Palette }) {
   return (
     <span className="players__colors">
       <button className="players__colors-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        Colors <ChevronDown size={13} className={open ? 'players__colors-chev--open' : ''} />
+        Legend <ChevronDown size={13} className={open ? 'players__colors-chev--open' : ''} />
       </button>
       {open && (
         <span className="players__legend">
@@ -327,6 +359,7 @@ export default function Players() {
   const [show, setShow] = useState<Show>('all')
   const [rankBy, setRankBy] = useState<RankBy>('war')
   const [season, setSeason] = useState<string>(SEASONS[0])
+  const [sort, setSort] = useState<ValueSort>('confidence')   // confidence-adjusted order by default
   const [methodOpen, setMethodOpen] = useState(false)
 
   // Show and Rank-by are interdependent (only WAR is cross-position-comparable; RAPM is skater-only;
@@ -353,75 +386,81 @@ export default function Players() {
           subtitle="League-wide value, ranked. Filter, switch the lens, or search anyone."
         />
 
-        {/* mode + search */}
-        <div className="players__mode">
-          <Tabs
-            options={[
-              { value: 'leaderboard', label: 'Leaderboard' },
-              { value: 'divergence', label: 'Divergence board' },
-            ]}
-            value={view}
-            onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
-          />
-          <div className="players__search">
-            <PlayerPicker placeholder="Find any player…" onSelect={(p) => navigate(`/players/${p.player_id}`)} />
+        {/* consolidated control card (matches the Rankings page) */}
+        <div className="players__toolbar">
+          {/* mode + search */}
+          <div className="players__mode">
+            <Tabs
+              options={[
+                { value: 'leaderboard', label: 'Leaderboard' },
+                { value: 'divergence', label: 'Divergence board' },
+              ]}
+              value={view}
+              onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
+            />
+            <div className="players__search">
+              <PlayerPicker placeholder="Find any player…" onSelect={(p) => navigate(`/players/${p.player_id}`)} />
+            </div>
           </div>
+
+          {view === 'leaderboard' && (
+            <>
+              {/* one consolidated control bar */}
+              <div className="players__controls">
+                <span className="players__control">
+                  <span className="players__control-lbl">Show</span>
+                  <Tabs
+                    options={[
+                      { value: 'all', label: 'All' }, { value: 'F', label: 'Forwards' },
+                      { value: 'D', label: 'Defense' }, { value: 'G', label: 'Goalies' },
+                    ]}
+                    value={show}
+                    onChange={(v) => changeShow(v as Show)}
+                  />
+                </span>
+                <span className="players__divider" />
+                <span className="players__control">
+                  <span className="players__control-lbl">Rank by</span>
+                  <Tabs
+                    options={[
+                      { value: 'war', label: 'Total value', tag: 'WAR' },
+                      { value: 'rapm', label: 'Play-driving', tag: 'RAPM' },
+                      { value: 'gar', label: 'Production', tag: 'GAR' },
+                    ]}
+                    value={show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)}
+                    onChange={(v) => changeRankBy(v as RankBy)}
+                  />
+                </span>
+                <span className="players__controls-spacer" />
+                <Select value={season} ariaLabel="Season"
+                  options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
+              </div>
+
+              {/* honest one-liner + methodology link */}
+              <div className="players__methrow">
+                <button className="players__methlink" onClick={() => setMethodOpen((o) => !o)} aria-expanded={methodOpen}>
+                  How we measure value
+                </button>
+                {methodOpen && (
+                  <p className="players__methnote">
+                    GAR is goals above a freely-available replacement player; WAR = GAR ÷ 6 goals, the
+                    one unit comparable across positions, so skaters and goalies share the mixed list.
+                    Play-driving is the RAPM-based composite (“what tends to repeat”); Production is
+                    actual goals (“what happened”). Goalie value is goals saved above a backup, but
+                    goaltending is low-signal year to year, so goalie estimates are regressed toward
+                    the mean by their measured reliability (more shots → less regression) and their
+                    bands stay wide. The mixed board orders by confidence-adjusted value so a
+                    tight-band skater isn’t out-ranked by a noisy goalie of equal point estimate.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {view === 'leaderboard' && (
-          <>
-            {/* one consolidated control bar */}
-            <div className="players__controls">
-              <span className="players__control">
-                <span className="players__control-lbl">Show</span>
-                <Tabs
-                  options={[
-                    { value: 'all', label: 'All' }, { value: 'F', label: 'Forwards' },
-                    { value: 'D', label: 'Defense' }, { value: 'G', label: 'Goalies' },
-                  ]}
-                  value={show}
-                  onChange={(v) => changeShow(v as Show)}
-                />
-              </span>
-              <span className="players__divider" />
-              <span className="players__control">
-                <span className="players__control-lbl">Rank by</span>
-                <Tabs
-                  options={[
-                    { value: 'war', label: 'Total value', tag: 'WAR' },
-                    { value: 'rapm', label: 'Play-driving', tag: 'RAPM' },
-                    { value: 'gar', label: 'Production', tag: 'GAR' },
-                  ]}
-                  value={show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)}
-                  onChange={(v) => changeRankBy(v as RankBy)}
-                />
-              </span>
-              <span className="players__controls-spacer" />
-              <Select value={season} ariaLabel="Season"
-                options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
-            </div>
-
-            {/* honest one-liner + methodology link */}
-            <div className="players__methrow">
-              <button className="players__methlink" onClick={() => setMethodOpen((o) => !o)} aria-expanded={methodOpen}>
-                How we measure value
-              </button>
-              {methodOpen && (
-                <p className="players__methnote">
-                  GAR is goals above a freely-available replacement player; WAR = GAR ÷ 6 goals, the
-                  one unit comparable across positions, so skaters and goalies share the mixed list.
-                  Play-driving is the RAPM-based composite (“what tends to repeat”); Production is
-                  actual goals (“what happened”). Goalie value is goals saved above a backup — wide
-                  bands because goaltending regresses hard year to year.
-                </p>
-              )}
-            </div>
-
-            <Leaderboard show={show} rankBy={rankBy} season={season} />
-          </>
-        )}
-
-        {view === 'divergence' && <DivergenceBoard />}
+        {view === 'leaderboard'
+          ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort} />
+          : <DivergenceBoard />}
       </div>
     </PageLayout>
   )

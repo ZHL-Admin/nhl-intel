@@ -49,8 +49,8 @@ def main() -> None:
             r = j["a"].corr(j["b"])
             cors.append(r)
             print(f"  {a} -> {b}: r={r:.2f} (n={len(j)})")
-    print(f"  mean YoY r = {np.mean(cors):.2f}  -> goaltending regresses hard; this is WHY the GAR")
-    print("     band carries an instability inflation and rankings are presented at tier-level.")
+    print(f"  mean YoY r = {np.mean(cors):.2f}  -> goaltending regresses hard; this low reliability")
+    print("     is what the per-tier shrinkage encodes (point estimates pulled toward the mean).")
 
     print("\n=== 4. Replacement-pool sensitivity (window; rankings stable, levels move) ===")
     base = frames[GG.WINDOW_LABEL][frames[GG.WINDOW_LABEL]["games_played"] >= FLOOR]
@@ -82,6 +82,29 @@ def main() -> None:
           ", ".join(f"{names.get(r['goalie_id'], r['goalie_id'])} {r['war']:+.1f}" for _, r in goalie.iterrows()))
     ratio = goalie["war"].iloc[0] / skater["war"].iloc[0]
     print(f"  #1 goalie WAR / #1 skater WAR = {ratio:.2f}  -> same neighbourhood (target: not >~3x).")
+
+    print("\n=== 6. Shrinkage effect + confidence-aware mixed top-12 (2024-25) ===")
+    g25 = frames["2024-25"][frames["2024-25"]["games_played"] >= FLOOR].copy()
+    print("  shrinkage pulls noisy point estimates down: top goalie raw WAR "
+          f"{g25['raw_war'].max():+.1f} -> shrunk {g25['war'].max():+.1f}")
+    sk = bq.query_df(f"""
+        select g.war, g.war_sd, r.first_name||' '||r.last_name nm, 'sk' kind
+        from `{bq.project()}.nhl_models.player_gar` g
+        left join (select player_id, any_value(first_name) first_name, any_value(last_name) last_name
+                   from `{bq.project()}.nhl_staging.stg_rosters` group by 1) r on g.player_id=r.player_id
+        where g.season_window='2024-25' and g.toi_5v5>=200""")
+    gg = g25[["war", "war_sd"]].copy()
+    gg["nm"] = g25["goalie_id"].map(lambda i: names.get(i, i)); gg["kind"] = "G "
+    K = config.CONFIDENCE_SORT_K
+    both = pd.concat([sk[["war", "war_sd", "nm", "kind"]], gg], ignore_index=True)
+    both["conf"] = both["war"] - K * both["war_sd"].fillna(0)
+    top = both.sort_values("conf", ascending=False).head(12)
+    print(f"  confidence-adjusted order (war - {K}*sd):")
+    for i, (_, r) in enumerate(top.iterrows(), 1):
+        print(f"    {i:2d}. {str(r['nm'])[:20]:20s} {r['kind']} WAR {r['war']:+.2f} ±{r['war_sd']:.2f} conf {r['conf']:+.2f}")
+    g_ranks = [i for i, (_, r) in enumerate(top.iterrows(), 1) if r["kind"] == "G "]
+    print(f"  -> goalies in top-12: ranks {g_ranks or 'none'} (confident skaters lead; elite goalies"
+          " visible but not buried above them).")
 
 
 if __name__ == "__main__":

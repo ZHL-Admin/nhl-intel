@@ -154,25 +154,73 @@ decomposes into the components above. As with skaters, absolute levels move with
 **rankings do not** — replacement sensitivity (window): rank Spearman **0.996** (tighter, rank>40)
 and **0.999** (looser, rank>24); the UI leads with WAR/ranking.
 
-### Wider bands, on purpose (principle 6)
+### Reliability shrinkage — the honest point estimate (not the raw number)
 
-Goaltending is genuinely less stable than skater production. Measured year-over-year correlation of
-goalie GAR is **r ≈ 0.24** (2021-22 … 2025-26), well below skater production (r=0.66). So the goalie
-uncertainty band is the binomial save-outcome sd (`sqrt(Σ xg·(1−xg))` in goals) **× an instability
-inflation (1.6)** — visibly wider than skaters' by construction. Goalie rankings are presented at
-**tier-level confidence**; the mixed leaderboard renders the wider band so a reader sees the
-cross-position order within a cluster is *soft*, not precise.
+Goaltending is **low-signal season to season**: a single window's GSAx is mostly noise, so the raw
+computed value is *not* the honest point estimate. As with low-sample skaters (the RAPM ridge,
+player-finishing shrinkage), the honest estimate **regresses the raw value toward the population
+mean in proportion to MEASURED reliability**. This is regularization, not a "push goalies down until
+they look right" factor — the shrinkage constant is derived from the data.
 
-### Validation (`models_ml/validate_goalie_gar.py`)
+**Measuring reliability (`models_ml/measure_goalie_reliability.py`).** By method of moments on the
+per-shot save rate `x = GSAx/shots` (per danger tier), `reliability(n) = n / (n + k)`, where `k` is
+the shots at which the estimate is 50% signal. Measured on single-season rows 2021-22…2025-26:
 
-- **Smell test** — top GAR is elite starters (2024-25: Hellebuyck, Thompson, Shesterkin,
-  Montembeault, Oettinger; 2025-26: Thompson, Swayman, Sorokin, Vasilevskiy); backups near 0.
-- **Distribution** replacement-centred (qualified median +3.5 … +6.9 by season) with a long
-  positive tail (elite starters).
-- **Cross-position sanity** — #1 goalie WAR ≈ **1.6×** the #1 skater WAR (2024-25 Hellebuyck +8.0 vs
-  Draisaitl +5.0); same neighbourhood, not 3× off. A workhorse starter genuinely influences more
-  goal outcomes than all but the very best skaters — hence goalies can top the mixed list, and the
-  wide band is the honest signal that the edge over the top skaters is within noise.
+| tier | k (shots @ 50% reliability) | note |
+|---|---|---|
+| high-danger | **277** | reliable per shot, but few HD shots/season |
+| mid-danger | **1125** | |
+| penalty-kill | **599** | |
+| low-danger | **→ ∞** | var(true) ≤ 0 — **no detectable talent** on routine shots; regressed fully to average |
+| overall | **2028** | for context (shrinkage is applied per tier) |
+
+Reliability-vs-workload (overall rate): 300 sh → 0.13, 800 → 0.28, 1200 → 0.37, 1800 → 0.47,
+2500 → 0.55. A year-over-year cross-check agrees (rate YoY r ≈ 0.19 overall) and **rises with
+workload**, exactly what the `k`-form encodes. So even a full workhorse season is well under half
+signal — the empirical justification for substantial shrinkage.
+
+**Applying it (`compute_goalie_gar.py`).** Per tier `b`:
+`shrunk_b = neutral_b + reliability(shots_b)·(raw_b − neutral_b)`, where `neutral_b` = the league
+above-replacement rate in tier `b` × this goalie's tier shots (i.e. *what an average goalie produces
+on this workload* — so volume credit is kept; only the rate is regressed). Low-workload / low-signal
+tiers pull hard to neutral; high-workload elite goalies move little. The **shrunk** value is the
+honest point estimate and is what every user-facing surface shows; `raw_gar`/`raw_war` are stored
+for transparency (a small "raw, pre-regression" readout on the goalie page) and never the headline.
+
+**The band.** The year-to-year instability is now modelled *explicitly* by the shrinkage, so the
+uncertainty band is the pure within-season binomial sampling sd (`sqrt(Σ xg·(1−xg))` in goals) — it
+is **not** additionally inflated for instability (that would double-count). It is still ~3× wider
+than skaters' (±~2.2 vs ±~0.8 WAR single-season), and the shrunk point now sits honestly inside it.
+
+### Confidence-aware sort (the leaderboard default)
+
+Even after shrinkage, a goalie's ±~2.2 WAR band dwarfs a skater's ±~0.8, so leading with point
+estimates still lets a noisy goalie edge a confident skater. The mixed (`all`) leaderboard therefore
+**ranks by a lower-confidence bound**, `value − k·band` (`config.CONFIDENCE_SORT_K`), i.e. "value we
+are confident the player provided." The DISPLAYED number stays the point estimate; only the SORT KEY
+uses the bound. We started at `k = 1.0` (lower edge of the ~68% interval); a full sd buried goalies
+entirely (their genuine sampling band is large), so we **tuned to k = 0.5** — a half-sd bound that
+demotes noisy goalies below confident skaters yet keeps genuinely-elite high-workload goalies
+visible near the top. Skater-only and goalie-only scopes default to the same order with a toggle
+back to the raw point estimate. (Implemented in `backend/routers/rankings.py`; the mixed default is
+unit-tested in `tests/test_value_overall.py`.)
+
+### Validation (`measure_goalie_reliability.py` + `validate_goalie_gar.py`)
+
+- **Reliability curve** measured and printed (above); reliability rises with workload.
+- **Shrinkage effect** — 2024-25 top goalie raw WAR **+8.0 → shrunk +4.0**; small-sample backups
+  pulled toward average. The point order alone now puts the top 5 as skaters (Draisaitl, Reinhart,
+  Makar, McDavid, Kucherov) with Hellebuyck #6 — no goalie above McDavid (the original bug).
+- **Confidence-adjusted mixed order** (k=0.5, 2024-25): confident skaters lead; the #1 goalie
+  (Hellebuyck, +3.97 ± 2.21) lands at **rank 12** — visible near the top, not buried above the
+  skaters we are far more certain about. Noisy / small-sample goalies fall further.
+- **Cross-position sanity** — #1 goalie WAR ≈ **0.8×** the #1 skater WAR (Hellebuyck +4.0 vs
+  Draisaitl +5.0): a genuinely great goalie is top-tier but no longer above the best skaters.
+- **Replacement-pool sensitivity** rank Spearman 0.99+ (levels move, ranks stable, as before).
+
+Plainly: **goalie estimates are regressed toward the mean by their measured reliability because
+goaltending is low-signal season to season, and the board orders by confidence-adjusted value. This
+is honesty about uncertainty, not hand-tuning toward a preferred answer.**
 
 ## RAPM is untouched
 

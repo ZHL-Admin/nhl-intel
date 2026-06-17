@@ -723,3 +723,31 @@ the GSAx marts; verified `git diff` touches no train_rapm/compute_gar/compute_co
   more goal outcomes than all but the best skaters) — the honest result on a shared win scale; the
   WIDE goalie bands + caption communicate the cross-position order is soft (principle 6). Replacement
   level is the documented lever if levels ever need shifting; rankings are stable to it.
+  **→ SUPERSEDED by the reliability-shrinkage pass below.**
+
+## VALUE PART 3 — goalie reliability-shrinkage + confidence-aware leaderboard
+Problem fixed: goalies floated above McDavid on the mixed WAR board purely on noisy point estimates
+carrying huge bands. Fixed at the ROOT (shrink) + PRESENTATION (confidence sort + prominent bands).
+**RAPM + skater GAR untouched** (verified git diff touches no train_rapm/compute_gar/compute_composite).
+- **Part 1** `models_ml/measure_goalie_reliability.py`: method-of-moments reliability of goalie
+  GSAx/shot per danger tier -> reliability(n)=n/(n+k). Measured k: hd 277, md 1125, pk 599, **ld→∞
+  (no talent signal on routine shots)**, overall 2028. YoY rate r~0.19, rises with workload.
+  Stored in `config.GOALIE_GAR_CONFIG['RELIABILITY_K']`.
+- **Part 2** `compute_goalie_gar.py`: per-tier empirical-Bayes shrinkage
+  `shrunk_b = neutral_b + reliability(shots_b)*(raw_b - neutral_b)`, neutral_b = league
+  above-replacement rate × this goalie's tier shots (keeps volume credit, regresses the rate). The
+  DISPLAYED gar/war/components are now SHRUNK; `raw_gar`/`raw_war` stored for transparency. **Band
+  de-inflated** (removed the old ×1.6 INSTABILITY_INFLATION — instability is now in the shrinkage, no
+  double-count): band = pure binomial sampling sd (~±2.2 WAR single-season, still ~3× skaters).
+  Validated: 2024-25 top goalie raw +8.0 WAR → shrunk +4.0; point order alone now top-5 = skaters,
+  Hellebuyck #6; #1 goalie 0.8× #1 skater.
+- **Part 3** confidence-aware sort: `/rankings/value?sort=confidence|point` (DEFAULT confidence) ranks
+  by `war − k·war_sd`, `config.CONFIDENCE_SORT_K=0.5` (started 1.0, tuned down — a full sd buried
+  goalies; 0.5 keeps elite goalies visible ~rank 12 while confident skaters lead). Mixed merge sorts
+  by this key (test asserts confidence-default + WAR-not-GAR). `merge_value_rows_by_war`→`merge_value_rows`.
+- **Part 4** prominent bands: MagnitudeBar is now an error-bar (translucent range + end caps + point
+  tick) so wide goalie bands visibly overlap neighbours = tiers not exact ranks.
+- **Part 5** propagated everywhere (mixed/goalie leaderboard, goalie detail value+raw readout). FE:
+  getValueRankings gains `sort`; Players page Order toggle (Confidence-adjusted | Point); captions +
+  methnote updated. docs/methodology/value-gar.md goalie section rewritten (reliability curve,
+  shrinkage form, confidence sort, k tuning). tsc+build+pytest(6)+dbt compile green.

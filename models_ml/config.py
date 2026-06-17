@@ -263,13 +263,23 @@ GOALIE_GAR_CONFIG = {
     "REPLACEMENT_MIN_SHOTS": 150,        # min shots faced to enter the pool (rate stability)
     "REPLACEMENT_MIN_POOL": 15,          # min pool size per window; else widen (drop the shot floor)
 
-    # Season-to-season INSTABILITY inflation on the uncertainty band. Goaltending regresses hard
-    # year to year (goalie GSAx YoY r is low — measured in validate_goalie_gar.py and cited in
-    # value-gar.md), so a single window's band understates true uncertainty about the goalie's
-    # level. The band = binomial save-outcome sd (sqrt(Σ xg·(1−xg)) in goals) × this multiplier.
-    # > 1 by construction so goalie WAR bands render VISIBLY wider than skaters' (principle 6:
-    # never imply false precision for goalies).
-    "INSTABILITY_INFLATION": 1.6,
+    # RELIABILITY SHRINKAGE (empirical Bayes). Goaltending is low-signal: a single window's GSAx is
+    # mostly noise, so the honest point estimate is the raw value regressed toward the workload-
+    # conditional league mean in proportion to MEASURED reliability — the same regularization logic
+    # already applied to low-sample skaters (RAPM ridge, player-finishing shrinkage), extended to
+    # goalies. reliability(shots) = shots / (shots + k); k is the shots at which the rate is 50%
+    # signal. MEASURED per danger tier by method of moments in models_ml/measure_goalie_reliability.py
+    # (single-season rows 2021-22..2025-26) — NOT hand-tuned. 'ld' showed var_true <= 0 (no reliable
+    # talent on routine low-danger shots — goalies don't repeatably differ there), so it is set to a
+    # large k => reliability ~ 0 => low-danger value fully regressed to average. Re-run that script
+    # to refresh these. See docs/methodology/value-gar.md.
+    "RELIABILITY_K": {
+        "hd": 277,          # high-danger: reliable per shot but few shots/season
+        "md": 1125,         # mid-danger
+        "ld": 10_000_000,   # low-danger: no detectable talent signal (var_true<=0) -> ~0 reliability
+        "pk": 599,          # penalty-kill / special teams
+        "overall": 2028,    # overall rate (reported for context; shrinkage is applied per tier)
+    },
 
     "MIN_GAMES_FOR_RANKING": 15,         # display/validation floor (matches the goalie radar)
 }
@@ -298,6 +308,16 @@ OVERALL_WEIGHTS = {"production": 0.55, "play_driving": 0.45}
 # workload and consistency are lighter (usage / steadiness, not pure quality). Re-percentiled
 # within goalies. Keys match the goalie_radar spoke keys.
 OVERALL_WEIGHTS_GOALIE = {"gsax": 0.40, "hd_gsax": 0.30, "workload": 0.10, "consistency": 0.20}
+
+# --- Confidence-aware value sort (cross-position leaderboard default) ------------------------
+# The mixed WAR leaderboard ranks by a LOWER-CONFIDENCE BOUND, value − k·band, not the raw point
+# estimate, so a low-variance skater (±~0.8 WAR) is not buried under a high-variance goalie
+# (±~2.2 WAR) of equal point estimate. The DISPLAYED number stays the point estimate; only the SORT
+# KEY uses this. Started at k = 1.0 (lower edge of the ~68% interval); a full sd buried goalies
+# entirely (the genuine goalie sampling band is ~2.2 WAR), so TUNED to 0.5 — a half-sd conservative
+# bound that still demotes noisy goalies below confident skaters yet keeps genuinely-elite high-
+# workload goalies visible near the top (validated, value-gar.md). Tunable.
+CONFIDENCE_SORT_K = 0.5
 
 
 # Year-over-year stability of the offensive lenses, MEASURED in models_ml/validate_gar.py

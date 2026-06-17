@@ -321,7 +321,8 @@ export interface PlayerValue {
   finishing_r: number
   overall?: OverallSummary | null
 }
-/** A goalie's GAR/WAR block (goals saved above a backup) on the cross-position WAR scale. */
+/** A goalie's GAR/WAR block (reliability-shrunk goals saved above a backup) on the cross-position
+ * WAR scale. `raw_war` is the pre-regression value, shown only as a small transparency readout. */
 export interface GoalieValue {
   gar: number
   war: number
@@ -329,6 +330,7 @@ export interface GoalieValue {
   war_sd: number
   components: CompositeComponent[]    // goalie save-tier components
   war_percentile?: number | null      // 0..1, within goalies
+  raw_war?: number | null             // pre-regression WAR (transparency)
 }
 /** A row on the value leaderboard — skater OR goalie. The mixed (`all`) list sorts by WAR, the
  * only cross-position-comparable unit. `component_kind` selects the bar colour vocabulary. */

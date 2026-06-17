@@ -117,17 +117,38 @@ def compute(agg: pd.DataFrame, window_label: str) -> pd.DataFrame:
         denom = pool[f"shots_{b}"].sum()
         repl_rate[b] = float(pool[f"gsax_{b}"].sum() / denom) if denom > 0 else 0.0
 
-    # component GAR = bucket GSAx − replacement-rate × bucket shots (goals saved above a backup)
+    # RAW component GAR = bucket GSAx − replacement-rate × bucket shots (goals saved above a backup).
+    raw_comp = {}
     for b, comp in BUCKET_COMP.items():
-        m[comp] = m[f"gsax_{b}"] - repl_rate[b] * m[f"shots_{b}"]
+        raw_comp[comp] = m[f"gsax_{b}"] - repl_rate[b] * m[f"shots_{b}"]
+    m["raw_gar"] = sum(raw_comp.values())
+    m["raw_war"] = m["raw_gar"] / GPW
 
-    m["gar"] = m[COMPONENTS].sum(axis=1)
+    # RELIABILITY SHRINKAGE (empirical Bayes). Goaltending is low-signal, so the honest point
+    # estimate regresses the raw value toward the workload-conditional league mean in proportion to
+    # MEASURED reliability(shots) = shots / (shots + k) (k per tier, measure_goalie_reliability.py).
+    # Per tier: neutral_b = (league above-replacement rate in tier b) × this goalie's tier shots —
+    # i.e. what an average goalie produces on this workload; we keep volume credit and only regress
+    # the rate. Low-workload / low-signal tiers (esp. low-danger, k→∞) pull hard to neutral; high-
+    # workload elite goalies move little. The shrunk values are what everything user-facing uses.
+    kcfg = CFG["RELIABILITY_K"]
+    for b, comp in BUCKET_COMP.items():
+        shots_b = m[f"shots_{b}"]
+        tot_shots = shots_b.sum()
+        pop_rate = float(raw_comp[comp].sum() / tot_shots) if tot_shots > 0 else 0.0  # league rate above repl
+        neutral = pop_rate * shots_b
+        reliability = shots_b / (shots_b + kcfg[b])
+        m[comp] = neutral + reliability * (raw_comp[comp] - neutral)   # shrunk component (displayed)
+
+    m["gar"] = m[COMPONENTS].sum(axis=1)          # shrunk GAR (the honest point estimate)
     m["war"] = m["gar"] / GPW
 
-    # uncertainty band: binomial save-outcome sd × instability inflation (goaltending regresses
-    # hard YoY). Visibly wider than skaters by construction.
-    bino_sd = np.sqrt(m["xg_var"].clip(lower=0))
-    m["gar_sd"] = bino_sd * CFG["INSTABILITY_INFLATION"]
+    # uncertainty band = the within-season binomial save-outcome sd (sqrt(Σ xg·(1−xg)) in goals).
+    # NOTE: the year-to-year INSTABILITY is now modelled explicitly by the reliability shrinkage
+    # above (the point estimate is regressed toward the mean), so the band is NO LONGER inflated for
+    # instability — that would double-count it. It stays the pure sampling uncertainty, still ~3×
+    # wider than skaters' (principle 6), and the SHRUNK point now sits honestly inside it.
+    m["gar_sd"] = np.sqrt(m["xg_var"].clip(lower=0))
     m["war_sd"] = m["gar_sd"] / GPW
 
     m["position"] = "G"
@@ -140,7 +161,8 @@ def compute(agg: pd.DataFrame, window_label: str) -> pd.DataFrame:
     return m
 
 
-OUT_COLS = (["goalie_id", "season_window", "position", "gar", "war", "gar_sd", "war_sd"]
+OUT_COLS = (["goalie_id", "season_window", "position", "gar", "war", "gar_sd", "war_sd",
+             "raw_gar", "raw_war"]
             + COMPONENTS + ["games_played", "shots_total", "is_replacement", "repl_level_meta"])
 
 
@@ -159,10 +181,11 @@ def report(df: pd.DataFrame, label: str) -> None:
     names = _names(df["goalie_id"].tolist())
     floor = CFG["MIN_GAMES_FOR_RANKING"]
     top = df[df["games_played"] >= floor].sort_values("gar", ascending=False).head(25)
-    print(f"\n=== Goalie GAR top-25 ({label}) ===")
+    print(f"\n=== Goalie GAR top-25 ({label}) — shrunk (raw) ===")
     for i, (_, r) in enumerate(top.iterrows(), 1):
-        print(f"  {i:2d}. {names.get(r['goalie_id'], r['goalie_id']):22s} GAR {r['gar']:+6.1f} "
-              f"WAR {r['war']:+4.1f} ±{r['war_sd']:.1f}  (HD {r['hd_saves']:+.1f} MD {r['md_saves']:+.1f} "
+        print(f"  {i:2d}. {names.get(r['goalie_id'], r['goalie_id']):22s} "
+              f"GAR {r['gar']:+6.1f} (raw {r['raw_gar']:+6.1f})  WAR {r['war']:+4.1f} ±{r['war_sd']:.1f}  "
+              f"sh {int(r['shots_total']):>4d}  (HD {r['hd_saves']:+.1f} MD {r['md_saves']:+.1f} "
               f"LD {r['ld_saves']:+.1f} PK {r['pk_goaltending']:+.1f})")
 
 

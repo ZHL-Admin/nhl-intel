@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from models.schemas import (
     GoalieSeason, GoalieGameLogRow, GoalieRadar, GoalieValue, CompositeComponent,
-    OverallSummary, OverallComponent, GOALIE_GAR_LABELS,
+    OverallSummary, OverallComponent, GOALIE_GAR_LABELS, PreviewStat, GoaliePreview,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -30,14 +30,14 @@ def _goalie_value(goalie_id: int, season: str):
     keys = ", ".join(k for k, _ in GOALIE_GAR_LABELS)
     rows = bq_service.query(f"""
         WITH ranked AS (
-            SELECT goalie_id, gar, war, gar_sd, war_sd, {keys},
+            SELECT goalie_id, gar, war, gar_sd, war_sd, raw_war, {keys},
                    PERCENT_RANK() OVER (ORDER BY war) AS war_percentile
             FROM {gg}
             WHERE season_window = '{season}' AND games_played >= {min_games}
         )
         SELECT * FROM ranked WHERE goalie_id = {goalie_id} LIMIT 1""")
     if not rows:
-        raw = bq_service.query(f"""SELECT goalie_id, gar, war, gar_sd, war_sd, {keys}
+        raw = bq_service.query(f"""SELECT goalie_id, gar, war, gar_sd, war_sd, raw_war, {keys}
             FROM {gg} WHERE goalie_id = {goalie_id} AND season_window = '{season}' LIMIT 1""")
         if not raw:
             return None
@@ -49,7 +49,8 @@ def _goalie_value(goalie_id: int, season: str):
         gar=float(r["gar"]), war=float(r["war"]),
         gar_sd=float(r.get("gar_sd") or 0.0), war_sd=float(r.get("war_sd") or 0.0),
         components=comps,
-        war_percentile=float(r["war_percentile"]) if r.get("war_percentile") is not None else None)
+        war_percentile=float(r["war_percentile"]) if r.get("war_percentile") is not None else None,
+        raw_war=float(r["raw_war"]) if r.get("raw_war") is not None else None)
 
 
 def _goalie_overall(goalie_id: int, season: str):
@@ -67,6 +68,75 @@ def _goalie_overall(goalie_id: int, season: str):
                     percentile=float(r[f"{k}_percentile"]) if r.get(f"{k}_percentile") is not None else None)
                     for k, lbl in _GOALIE_OVERALL_LABELS],
         weights={k: float(r[f"w_{k}"]) for k, _ in _GOALIE_OVERALL_LABELS if r.get(f"w_{k}") is not None})
+
+
+def _goalie_preview_sync(goalie_id: int, season: Optional[str]) -> GoaliePreview:
+    mart = bq_service.get_full_table_id('mart_goalie_season')
+    if not season:
+        r = bq_service.query(f"SELECT MAX(season) AS s FROM {mart} WHERE goalie_id = {int(goalie_id)}")
+        season = r[0]['s'] if r and r[0]['s'] else None
+    if not season:
+        raise HTTPException(status_code=404, detail="Goalie season not found")
+
+    rows = bq_service.query(f"""
+        WITH base AS (
+            SELECT goalie_id, games_played, save_pct, gsax, our_hd_gsax, goals_against
+            FROM {mart} WHERE season = '{season}'
+        ),
+        qual AS (SELECT * FROM base WHERE games_played >= 10),
+        ranked AS (
+            SELECT goalie_id, COUNT(*) OVER () AS n,
+                   RANK() OVER (ORDER BY save_pct DESC) AS sv_rank,
+                   RANK() OVER (ORDER BY gsax DESC) AS gsax_rank,
+                   RANK() OVER (ORDER BY our_hd_gsax DESC) AS hd_rank
+            FROM qual
+        )
+        SELECT b.goalie_id, b.games_played, b.save_pct, b.gsax, b.our_hd_gsax, b.goals_against,
+               r.n, r.sv_rank, r.gsax_rank, r.hd_rank
+        FROM base b LEFT JOIN ranked r USING (goalie_id)
+        WHERE b.goalie_id = {int(goalie_id)}
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Goalie season not found")
+    r = rows[0]
+    n = r.get('n')
+    bio = bq_service.query(
+        f"SELECT birth_date, shoots FROM {bq_service.get_full_table_id('stg_player_bio')} "
+        f"WHERE player_id = {int(goalie_id)} LIMIT 1")
+    b = bio[0] if bio else {}
+
+    def stat(key, label, value, fmt, rank):
+        return PreviewStat(key=key, label=label,
+                           value=None if value is None else float(value),
+                           fmt=fmt, rank=rank, n=(n if rank is not None else None))
+
+    stats = [
+        stat('gp', 'GP', r.get('games_played'), 'int', None),
+        stat('sv_pct', 'SV%', r.get('save_pct'), 'pct3', r.get('sv_rank')),
+        stat('gsax', 'GSAx', r.get('gsax'), 'plus', r.get('gsax_rank')),
+        stat('hd_gsax', 'HD GSAx', r.get('our_hd_gsax'), 'plus', r.get('hd_rank')),
+        stat('ga', 'GA', r.get('goals_against'), 'int', None),
+    ]
+    age = None
+    if b.get('birth_date') and season and '-' in season:
+        try:
+            sy = int(season.split('-')[0]); bd = b['birth_date']
+            a = sy - bd.year - (1 if (10, 1) < (bd.month, bd.day) else 0)
+            age = a if 15 <= a <= 50 else None
+        except Exception:
+            age = None
+    return GoaliePreview(goalie_id=goalie_id, season=season, age=age,
+                         catches=b.get('shoots'), stats=stats)
+
+
+@router.get("/{goalie_id}/preview", response_model=GoaliePreview)
+@cache(ttl=1800)
+async def get_goalie_preview(
+    goalie_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> GoaliePreview:
+    """Goalie base stats with within-goalie ranks for the inline row expansion."""
+    return await run_in_threadpool(_goalie_preview_sync, goalie_id, season)
 
 
 @router.get("/{goalie_id}/radar", response_model=GoalieRadar)

@@ -564,12 +564,13 @@ class GoalieValue(BaseModel):
     Goalies have no RAPM play-driving lens, so (unlike the skater PlayerValue) there is no
     Impact-vs-Value gap read — the goalie's actual-vs-expected motif is GSAx-vs-Edge on the radar.
     The band is wide by construction; goalie value is presented at tier-level confidence."""
-    gar: float
-    war: float
+    gar: float                                  # RELIABILITY-SHRUNK goals saved above replacement
+    war: float                                  # shrunk WAR (the honest point estimate)
     gar_sd: float
     war_sd: float
     components: List[CompositeComponent] = []   # goalie save-tier components (GOALIE_GAR_LABELS)
     war_percentile: Optional[float] = None      # WAR percentile within goalies (0-1), for context
+    raw_war: Optional[float] = None             # pre-regression WAR (transparency; never the headline)
 
 
 class PlayerTrendPoint(BaseModel):
@@ -1340,3 +1341,32 @@ class PlayerSummary(BaseModel):
     assists_per60: Optional[float] = None
     points_per60: Optional[float] = None
     xgf_pct: Optional[float] = None
+
+
+class PreviewStat(BaseModel):
+    """One base stat with its WITHIN-POSITION rank, for the inline row-expansion table."""
+    key: str
+    label: str
+    value: Optional[float] = None
+    fmt: str                       # int | rate | min | pct3 | plus
+    rank: Optional[int] = None     # 1 = best among qualified peers (None for context-only rows like GP)
+    n: Optional[int] = None        # size of the qualified peer pool
+
+
+class PlayerPreview(BaseModel):
+    """Skater base stats + within-position ranks + light bio for the inline expansion."""
+    player_id: int
+    season: str
+    pos_group: Optional[str] = None
+    age: Optional[int] = None
+    shoots: Optional[str] = None
+    stats: List[PreviewStat] = Field(default_factory=list)
+
+
+class GoaliePreview(BaseModel):
+    """Goalie base stats + within-goalie ranks for the inline expansion."""
+    goalie_id: int
+    season: str
+    age: Optional[int] = None
+    catches: Optional[str] = None
+    stats: List[PreviewStat] = Field(default_factory=list)
