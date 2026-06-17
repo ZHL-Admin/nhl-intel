@@ -1,10 +1,58 @@
 # Session state — finalization plan progress
 
-Working branch: **`finalization`** (canonical handoff file; sometimes referred to as
-"SESSION-STATUS"). Last updated at the **end of Phase 5 (signature tools) — Phases 0-5 COMPLETE.
-Next: Phase 6 (insight engine, education layer, site completion).** Latest commits: 956d013 (5.3),
-766cdcb (5.2), 9c03134 (5.1), 9e1326b (4.4). Read the **PHASE 6 KICKOFF** block immediately below,
-then the per-phase sections, then `nhl-intel-finalization-plan.md` for the Phase 6 prompts.
+Working branch: **`finalization`**. Phases 0-5 COMPLETE; a **post-Phase-5 archetype-v2 refit +
+skills-radar build** also COMPLETE (see the block below). Next: Phase 6 (insight engine, education
+layer, site completion). Latest commits: 338d822 (radar FE+methodology), 3174337 (radar backend),
+e25b7ed (radar data layer), b7c9226 (archetypes v2 A3), 3afd20f (v2 A1/A2). Read the **ARCHETYPE V2
++ RADAR** block first (it changes the archetype system Phase 6 detectors consume), then the
+**PHASE 6 KICKOFF** block, then per-phase sections + `nhl-intel-finalization-plan.md`.
+
+---
+
+## ===== ARCHETYPE V2 + SKILLS RADAR — READ FIRST (supersedes the v1 archetype system) =====
+
+**Why:** v1 archetypes clustered mostly on offense; defense barely separated clusters (labels were
+a display afterthought). v2 refits on an ENRICHED vector so defense/deployment DRIVE clustering,
+and adds the percentile-within-position skills radar as the primary player-page visual.
+
+**Archetypes v2 (current; model_version `archetypes_v2` in `nhl_models.player_archetypes`):**
+- Fit: `models_ml/fit_archetypes_v2.py` + `archetype_features_v2.py` (build_v2 adds coach-trust
+  composite+components, rink-adj hits/60, penalty diff/60, on-ice xGA suppression to the v1
+  vector). F/D separate, k=12 each, persisted single-threaded at
+  `artifacts/archetypes_v2.joblib` (FORCE-COMMITTED). Trait audit governs naming:
+  `artifacts/archetype_trait_audit_v2.md` (universal ≥80% → name; distinctive centroid → descriptor).
+- Names + descriptors: `config.ARCHETYPE_NAMES_V2` + `ARCHETYPE_DESCRIPTORS_V2` + family map
+  `ARCHETYPE_FAMILY_V2` (human-confirmed). 12 F + 11 D labels.
+- **Display-merge gotcha:** D3 and D4 are DISTINCT GMM components but map to ONE label
+  **"Depth Defenseman"** (union universally low-PP+low-PK = depth). The row builder sums their
+  weights so a mix shows it once. → 23 distinct primaries, not 24.
+- **v1 ARCHETYPE_NAMES is retired** but kept in config for the old `fit_archetypes.py`. All live
+  consumers (linefit_features, score_team_fit, compute_team_needs, metrics.ts, DAG, radar) use
+  ARCHETYPE_NAMES_V2. Line-fit was retrained on v2 (identical metrics; arch cosine is label-invariant).
+- **Season-sensitive:** a star can move clusters by season (e.g. McDavid is Elite Offensive Driver
+  2021-24 but North-South Forward 2025-26 — a fast/conceding season). Labels are descriptive
+  per-season regions; the radar carries the real signal regardless.
+
+**Skills radar (Part B):** `models_ml/compute_player_radar.py` -> `nhl_models.player_radar`
+(14 skater spokes), `compute_goalie_radar.py` -> `nhl_models.goalie_radar` (7 spokes). Percentile-
+WITHIN-POSITION; **variable spoke set** (burst & impact/coach-trust spokes ABSENT pre-2021, omitted
+not zeroed); honesty tag per spoke (skill/usage/style/proxy); sd whisker on noisy impact spokes.
+Derived labels written alongside: Overall family / offensive sub-label (= primary v2 archetype) /
+deployment-based defensive sub-label / descriptor. Backend `GET /players/{id}/radar` +
+`/goalies/{id}/radar`. Frontend `components/visualizations/SkillRadar.tsx` (SVG, variable-length),
+primary header visual on PlayerProfile; `src/api/labels.ts` `getPlayerLabels`/`playerLabelsFromRadar`
+is the single source for player labels. docs/methodology/{archetypes.md (v2 section),player-radar.md}.
+
+**Phase 6 implications:** insight detectors that reference archetypes/labels read v2 names from
+`player_archetypes` (or `player_radar` labels via getPlayerLabels). `team_needs` regenerated on v2.
+**Two deferred-to-Phase-6 items:** (1) ConceptTip per radar spoke — SkillRadar currently uses its
+own hover tooltip; retrofit ConceptTip in 6.3. (2) list surfaces (PlayerPicker chip, Players index,
+line/trade fit) read the offensive sub-label from their batch payloads (same v2 source, no drift,
+no N+1) rather than calling getPlayerLabels per row — intentional.
+
+**Build/regenerate cadence:** `make archetypes-v2` (refit+write), `make radar` (both radars).
+DAG: `compute_player_radar`/`compute_goalie_radar` after archetypes/marts; `write_archetypes` now
+runs `fit_archetypes_v2 --write`. To re-audit before renaming: run `fit_archetypes_v2` (no --write).
 
 ---
 

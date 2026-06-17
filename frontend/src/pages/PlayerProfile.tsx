@@ -8,6 +8,7 @@ import { COMPOSITE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
 import StripPlot from '../components/visualizations/StripPlot'
 import SkillRadar from '../components/visualizations/SkillRadar'
+import { playerLabelsFromRadar } from '../api/labels'
 import {
   getPlayerDetail,
   getPlayerTrends,
@@ -385,26 +386,29 @@ function PlayerProfile() {
                 baseline={(radar ?? goalieRadar)!.baseline}
               />
             </div>
-            {radar && (
-              <div className="player-profile__radar-labels">
-                {radar.overall_label && (
-                  <div className="player-profile__radar-overall">{radar.overall_label}</div>
-                )}
-                <div className="player-profile__radar-chips">
-                  {radar.offensive_label && (
-                    <span className="player-profile__radar-chip">{radar.offensive_label}</span>
+            {radar && (() => {
+              const labels = playerLabelsFromRadar(radar)   // single source for player labels (B6)
+              return (
+                <div className="player-profile__radar-labels">
+                  {labels.overall && (
+                    <div className="player-profile__radar-overall">{labels.overall}</div>
                   )}
-                  {radar.defensive_label && (
-                    <span className="player-profile__radar-chip player-profile__radar-chip--def">
-                      {radar.defensive_label}
-                    </span>
+                  <div className="player-profile__radar-chips">
+                    {labels.offensive && (
+                      <span className="player-profile__radar-chip">{labels.offensive}</span>
+                    )}
+                    {labels.defensive && (
+                      <span className="player-profile__radar-chip player-profile__radar-chip--def">
+                        {labels.defensive}
+                      </span>
+                    )}
+                  </div>
+                  {labels.descriptor && (
+                    <p className="player-profile__radar-descriptor">{labels.descriptor}</p>
                   )}
                 </div>
-                {radar.descriptor && (
-                  <p className="player-profile__radar-descriptor">{radar.descriptor}</p>
-                )}
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
 
