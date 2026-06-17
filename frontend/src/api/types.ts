@@ -303,6 +303,7 @@ export interface ArchetypeRankRow {
   composite_total_sd?: number | null
   components: CompositeComponent[]
   archetype_weight: number
+  primary_archetype?: string | null
 }
 
 export interface PlayerTrendPoint {
@@ -757,6 +758,7 @@ export interface DivergenceBoardRow {
   player_id: number
   player_name?: string | null
   position?: string | null
+  team_abbrev?: string | null
   side: string
   divergence: number
   trust_z: number
@@ -891,6 +893,13 @@ export interface TeamNeedProfile {
   component_needs: NeedComponent[]
 }
 export interface ArchetypeWeightLite { archetype: string; weight: number }
+export interface BestTeamFit {
+  team_id: number
+  fit_score: number
+  reason?: string | null
+  top_need_label?: string | null
+  top_need_gap?: number | null
+}
 export interface TradeFitResult {
   player_id: number
   player_name?: string | null
@@ -918,4 +927,33 @@ export interface MatchupPreview {
   style_clash: string[]
   season_series?: string | null
   notable_streaks: string[]
+}
+
+// --- Skills radar (Part B) ---
+export interface RadarSpoke {
+  key: string
+  label: string
+  tag: string            // skill | usage | style | proxy
+  value: number
+  percentile?: number | null
+  sd?: number | null
+  present: boolean
+}
+export interface PlayerRadar {
+  player_id: number
+  season: string
+  pos_group?: string | null
+  spokes: RadarSpoke[]
+  overall_label?: string | null
+  offensive_label?: string | null
+  defensive_label?: string | null
+  descriptor?: string | null
+  baseline?: string | null
+}
+export interface GoalieRadar {
+  goalie_id: number
+  season: string
+  games_played?: number | null
+  spokes: RadarSpoke[]
+  baseline?: string | null
 }

@@ -78,6 +78,16 @@ export async function getPlayerSituational(
   return response.data
 }
 
+/** The highest-value skaters overall by composite total, optionally by position (Phase 4.2). */
+export async function getOverallLeaders(
+  position: 'ALL' | 'F' | 'D' = 'ALL', season?: string, limit = 50,
+): Promise<ArchetypeRankRow[]> {
+  const response = await apiClient.get<ArchetypeRankRow[]>('/players/leaders', {
+    params: { position, limit, ...(season ? { season } : {}) },
+  })
+  return response.data
+}
+
 /** Players whose primary archetype is `archetype`, ranked by composite total (Phase 4.2). */
 export async function getArchetypeRanking(
   archetype: string, season?: string, limit = 50,
@@ -109,4 +119,10 @@ export async function getDivergenceBoard(season?: string): Promise<DivergenceBoa
 export async function getPlayerTrajectory(playerId: number): Promise<PlayerTrajectory> {
   const response = await apiClient.get<PlayerTrajectory>(`/players/${playerId}/trajectory`)
   return response.data
+}
+
+/** Skater skills radar: spokes + derived labels (Part B). */
+export async function getPlayerRadar(playerId: number | string, season?: string): Promise<import('./types').PlayerRadar> {
+  const r = await apiClient.get(`/players/${playerId}/radar`, { params: season ? { season } : undefined })
+  return r.data
 }

@@ -7,6 +7,7 @@ import type { StackSegment } from '../components/common'
 import { COMPOSITE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
 import StripPlot from '../components/visualizations/StripPlot'
+import SkillRadar from '../components/visualizations/SkillRadar'
 import {
   getPlayerDetail,
   getPlayerTrends,
@@ -14,8 +15,10 @@ import {
   getPlayerVsOpponent,
   getPlayerGamelog,
   getPlayerReconciliation,
-  getPlayerTrajectory
+  getPlayerTrajectory,
+  getPlayerRadar
 } from '../api/players'
+import { getGoalieRadar } from '../api/goalies'
 import {
   PlayerDetail,
   PlayerTrends,
@@ -23,7 +26,9 @@ import {
   PlayerVsOpponent,
   PlayerGamelog,
   PlayerReconciliation,
-  PlayerTrajectory
+  PlayerTrajectory,
+  PlayerRadar,
+  GoalieRadar
 } from '../api/types'
 import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
 import './PlayerProfile.css'
@@ -73,6 +78,8 @@ function PlayerProfile() {
 
   // Data states
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null)
+  const [radar, setRadar] = useState<PlayerRadar | null>(null)
+  const [goalieRadar, setGoalieRadar] = useState<GoalieRadar | null>(null)
   const [reconciliation, setReconciliation] = useState<PlayerReconciliation | null>(null)
   const [trajectory, setTrajectory] = useState<PlayerTrajectory | null>(null)
   const [playerTrends, setPlayerTrends] = useState<PlayerTrends | null>(null)
@@ -126,6 +133,20 @@ function PlayerProfile() {
       clearTeamPrimaryColor()
     }
   }, [playerId])
+
+  // Skills radar (Part B): goalie vs skater radar based on detail position
+  useEffect(() => {
+    if (!playerId || !playerDetail) return
+    let active = true
+    setRadar(null); setGoalieRadar(null)
+    const pid = parseInt(playerId)
+    if (playerDetail.position === 'G') {
+      getGoalieRadar(pid).then(r => active && setGoalieRadar(r)).catch(() => {})
+    } else {
+      getPlayerRadar(pid).then(r => active && setRadar(r)).catch(() => {})
+    }
+    return () => { active = false }
+  }, [playerId, playerDetail])
 
   // Fetch eye-test reconciliation (clutch + consistency + coach trust) — Phase 4.3
   useEffect(() => {
@@ -355,7 +376,39 @@ function PlayerProfile() {
           </div>
         ) : null}
 
-        {/* Composite value stack (Phase 4.2) */}
+        {/* Skills radar — primary header visual (Part B) */}
+        {(radar || goalieRadar) && (
+          <div className="player-profile__radar">
+            <div className="player-profile__radar-chart">
+              <SkillRadar
+                spokes={(radar ?? goalieRadar)!.spokes}
+                baseline={(radar ?? goalieRadar)!.baseline}
+              />
+            </div>
+            {radar && (
+              <div className="player-profile__radar-labels">
+                {radar.overall_label && (
+                  <div className="player-profile__radar-overall">{radar.overall_label}</div>
+                )}
+                <div className="player-profile__radar-chips">
+                  {radar.offensive_label && (
+                    <span className="player-profile__radar-chip">{radar.offensive_label}</span>
+                  )}
+                  {radar.defensive_label && (
+                    <span className="player-profile__radar-chip player-profile__radar-chip--def">
+                      {radar.defensive_label}
+                    </span>
+                  )}
+                </div>
+                {radar.descriptor && (
+                  <p className="player-profile__radar-descriptor">{radar.descriptor}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Composite value stack (Phase 4.2) — depth 2 */}
         {playerDetail && playerDetail.composite_components && playerDetail.composite_components.length > 0 && (() => {
           const segs: StackSegment[] = COMPOSITE_COMPONENTS.map((c) => ({
             key: c.key, label: c.label,

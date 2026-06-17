@@ -8,3 +8,9 @@ export async function getGoalieSeason(goalieId: number, season?: string): Promis
   })
   return response.data
 }
+
+/** Goalie skills radar: spokes percentiled within goalies (Part B). */
+export async function getGoalieRadar(goalieId: number | string, season?: string): Promise<import('./types').GoalieRadar> {
+  const r = await apiClient.get(`/goalies/${goalieId}/radar`, { params: season ? { season } : undefined })
+  return r.data
+}
