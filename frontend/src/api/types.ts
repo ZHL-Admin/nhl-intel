@@ -283,6 +283,38 @@ export interface PlayerDetail {
   composite_components?: CompositeComponent[]
   archetypes?: ArchetypeWeight[]
   primary_archetype?: string | null
+  value?: PlayerValue | null
+}
+
+export interface ValueGapRead {
+  case: string  // value_over_impact | impact_over_value | aligned
+  headline: string
+  body: string
+}
+export interface PlayerValue {
+  gar: number
+  war: number
+  gar_sd: number
+  war_sd: number
+  components: CompositeComponent[]
+  value_percentile?: number | null   // 0..1, within position
+  impact_goals?: number | null
+  impact_percentile?: number | null  // 0..1, within position
+  gap_percentile_points?: number | null
+  read?: ValueGapRead | null
+  production_r: number
+  rapm_r: number
+  finishing_r: number
+}
+export interface ValueRankingRow {
+  player_id: number
+  player_name?: string | null
+  team_abbrev?: string | null
+  position?: string | null
+  gar: number
+  war: number
+  gar_sd?: number | null
+  components: CompositeComponent[]
 }
 
 export interface CompositeComponent {

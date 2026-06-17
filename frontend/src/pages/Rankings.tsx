@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
 import { PageLayout, PageHeader, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
 import type { StackSegment } from '../components/common'
-import { getPowerRankings, getDeservedStandings } from '../api/rankings'
-import { PowerRatingRow, DeservedStandingRow } from '../api/types'
+import { getPowerRankings, getDeservedStandings, getValueRankings } from '../api/rankings'
+import { PowerRatingRow, DeservedStandingRow, ValueRankingRow } from '../api/types'
 import { RATINGS_GLOSSARY } from '../config/metrics'
 import { getTeamLogoUrl } from '../utils/teams'
 import './Rankings.css'
@@ -140,38 +140,127 @@ function DeservedTable({ rows }: { rows: DeservedStandingRow[] }) {
   )
 }
 
+// GAR value-component colours (shared with the composite/Players stacks where keys overlap).
+const GAR_COMPONENTS = [
+  { key: 'ev_offense', label: 'EV Offense', color: '#3b82f6' },
+  { key: 'pp', label: 'Power Play', color: '#f59e0b' },
+  { key: 'ev_defense', label: 'EV Defense', color: '#06b6d4' },
+  { key: 'pk', label: 'Penalty Kill', color: '#a855f7' },
+  { key: 'penalty', label: 'Penalties', color: '#64748b' },
+  { key: 'faceoff', label: 'Faceoffs', color: '#ec4899' },
+]
+
+function ValueTable({ rows }: { rows: ValueRankingRow[] }) {
+  const domain = useMemo<[number, number]>(() => {
+    let lo = 0, hi = 0.1
+    for (const r of rows) {
+      let pos = 0, neg = 0
+      for (const c of GAR_COMPONENTS) {
+        const v = r.components.find((x) => x.key === c.key)?.value ?? 0
+        if (v >= 0) pos += v; else neg += v
+      }
+      const sd = r.gar_sd ?? 0
+      hi = Math.max(hi, pos, r.gar + sd); lo = Math.min(lo, neg, r.gar - sd)
+    }
+    return [lo, hi * 1.03]
+  }, [rows])
+
+  return (
+    <div className="rankings__table-wrap">
+      <table className="rankings__table">
+        <thead>
+          <tr>
+            <th className="rankings__rank-col">#</th>
+            <th>Player</th>
+            <th className="rankings__num">
+              <Tooltip content="GAR = actual goals above a replacement player, across all situations. Includes shooting luck by design (the Value lens — 'what happened'). See the Value (GAR) methodology.">
+                <span className="rankings__th-tip">GAR</span>
+              </Tooltip>
+            </th>
+            <th className="rankings__num">WAR</th>
+            <th className="rankings__bar-col">Component breakdown (goals)</th>
+            <th className="rankings__num">±</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const segments: StackSegment[] = GAR_COMPONENTS.map((c) => ({
+              key: c.key, label: c.label,
+              value: r.components.find((x) => x.key === c.key)?.value ?? 0, color: c.color,
+            }))
+            return (
+              <tr key={r.player_id}>
+                <td className="rankings__rank-col">{i + 1}</td>
+                <td>
+                  <Link to={`/players/${r.player_id}`} className="rankings__team-link">
+                    {r.player_name ?? r.player_id}
+                  </Link>
+                  <span className="rankings__muted"> {r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+                </td>
+                <td className="rankings__num rankings__total">{(r.gar >= 0 ? '+' : '') + r.gar.toFixed(1)}</td>
+                <td className="rankings__num">{(r.war >= 0 ? '+' : '') + r.war.toFixed(1)}</td>
+                <td className="rankings__bar-col">
+                  <ComponentStackBar segments={segments} total={r.gar} domain={domain} se={r.gar_sd} />
+                </td>
+                <td className="rankings__num rankings__muted">{r.gar_sd != null ? r.gar_sd.toFixed(1) : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <div className="rankings__legend">
+        {GAR_COMPONENTS.map((c) => (
+          <span key={c.key} className="rankings__legend-item">
+            <span className="rankings__legend-swatch" style={{ background: c.color }} />{c.label}
+          </span>
+        ))}
+        <span className="rankings__legend-note">
+          GAR is actual goals above replacement — it includes shooting luck (the Value lens).
+          Tick = total, line = uncertainty. Methodology: value-gar.md.
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export default function Rankings() {
-  const [tab, setTab] = useState<'power' | 'deserved'>('power')
+  const [tab, setTab] = useState<'power' | 'deserved' | 'value'>('power')
   const [power, setPower] = useState<PowerRatingRow[] | null>(null)
   const [deserved, setDeserved] = useState<DeservedStandingRow[] | null>(null)
+  const [value, setValue] = useState<ValueRankingRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    Promise.all([getPowerRankings(), getDeservedStandings()])
-      .then(([p, d]) => { if (active) { setPower(p); setDeserved(d) } })
+    Promise.all([getPowerRankings(), getDeservedStandings(), getValueRankings('ALL')])
+      .then(([p, d, v]) => { if (active) { setPower(p); setDeserved(d); setValue(v) } })
       .catch(() => { if (active) setError('Could not load rankings.') })
     return () => { active = false }
   }, [])
 
-  const loading = !power || !deserved
+  const loading = !power || !deserved || !value
 
   return (
     <PageLayout>
       <div className="rankings">
         <PageHeader
           title="Rankings"
-          subtitle="Power ratings show where each team’s edge comes from. Deserved standings replay the season from the chances created."
+          subtitle="Power ratings show where each team’s edge comes from. Deserved standings replay the season from the chances created; Value (GAR) ranks skaters by actual goals above replacement."
         />
         <Tabs
-          options={[{ value: 'power', label: 'Power Ratings' }, { value: 'deserved', label: 'Deserved Standings' }]}
+          options={[
+            { value: 'power', label: 'Power Ratings' },
+            { value: 'deserved', label: 'Deserved Standings' },
+            { value: 'value', label: 'Value (GAR/WAR)' },
+          ]}
           value={tab}
-          onChange={(v) => setTab(v as 'power' | 'deserved')}
+          onChange={(v) => setTab(v as 'power' | 'deserved' | 'value')}
         />
         {error && <p className="rankings__error">{error}</p>}
         {loading && !error && <SkeletonLoader />}
         {!loading && tab === 'power' && <PowerTable rows={power!} />}
         {!loading && tab === 'deserved' && <DeservedTable rows={deserved!} />}
+        {!loading && tab === 'value' && <ValueTable rows={value!} />}
       </div>
     </PageLayout>
   )

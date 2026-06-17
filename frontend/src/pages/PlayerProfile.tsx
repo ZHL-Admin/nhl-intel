@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar } from '../components/common'
+import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel } from '../components/common'
 import type { StackSegment } from '../components/common'
 import { COMPOSITE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
@@ -409,6 +409,13 @@ function PlayerProfile() {
                 </div>
               )
             })()}
+          </div>
+        )}
+
+        {/* Impact (RAPM) vs Value (GAR) — the two scalar verdicts under the radar (Phase 6 GAR) */}
+        {playerDetail?.value && (
+          <div className="player-profile__impact-value">
+            <ImpactValuePanel value={playerDetail.value} name={playerDetail.player_name} />
           </div>
         )}
 

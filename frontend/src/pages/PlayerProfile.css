@@ -347,3 +347,6 @@
   font-size: 0.9rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;
 }
 @media (max-width: 720px) { .player-profile__radar { grid-template-columns: 1fr; } }
+
+/* Impact vs Value panel (Phase 6 GAR) */
+.player-profile__impact-value { margin-top: var(--space-6); }
