@@ -683,3 +683,43 @@ No placeholders/mock data — features die or are labeled proxies when the API c
 - Validated: Kucherov GAR #4 / RAPM-off #11, Panarin #11 / #40 (intended value>impact gap);
   distribution right-skewed; replacement sensitivity spearman 0.998. tsc+build+pytest green;
   no dbt models added.
+
+## VALUE PART 2 — Goalie GAR/WAR + cross-position currency + per-player Overall + Players UX
+(post-VALUE add; **RAPM + skater GAR jobs/tables/artifacts untouched** — goalie work only READS
+the GSAx marts; verified `git diff` touches no train_rapm/compute_gar/compute_composite).
+- **Goalie GAR** `models_ml/compute_goalie_gar.py` -> **nhl_models.goalie_gar** (656 rows): goals
+  SAVED above a replacement BACKUP, decomposed `hd/md/ld_saves` (EV by danger) + `pk_goaltending`
+  (special) — the four partition all faced shots, sum to GAR. SAME `GOALS_PER_WIN=6` as skaters
+  (asserted at import) so WAR is the cross-position unit. Same season_window convention as skater
+  GAR (single 2021-22..2025-26 + 3yr `2023-24_2025-26`). Replacement = backups (games-rank>32,
+  ≥150sh), GSAx/shot per tier+strength. Band = binomial save-outcome sd × 1.6 instability infl ->
+  visibly WIDER than skaters. All constants `config.GOALIE_GAR_CONFIG` + `GOALIE_GAR_COMPONENTS`.
+  `make goalie-gar` / `goalie-gar-validate`; DAG `run_dbt_marts >> compute_goalie_gar`.
+  **validate_goalie_gar.py PASSED**: top=Hellebuyck/Shesterkin/Thompson/Swayman/Sorokin; dist
+  replacement-centred; **YoY r~0.24** (low -> wide bands justified); replacement spearman .996-.999;
+  cross-position #1 goalie 1.6x #1 skater WAR (same neighbourhood, not 3x).
+- **Per-player Overall** `models_ml/compute_overall.py` -> **player_overall (4,482)** + **goalie_overall
+  (1,025)**: within-position percentile, averaged-and-RE-percentiled. Skaters = 0.55*Production(GAR
+  pctile) + 0.45*Play-Driving(RAPM composite pctile), computed with the SAME percent_rank/floor as
+  `_value_block` so the components MATCH the card numbers (consistency). Goalies = goalie_radar axis
+  pctiles (gsax .40/hd .30/consistency .20/workload .10). `config.OVERALL_WEIGHTS[_GOALIE]`.
+  **CARD-ONLY, never a sort key** — no /rankings/overall (test asserts; only detail routers read
+  the tables). `make overall`; DAG `[compute_gar,compute_composite,compute_goalie_gar,
+  compute_goalie_radar] >> compute_overall`.
+- **Backend**: `/rankings/value?scope=skaters|goalies|all` (all = mixed, **WAR-sorted** via pure
+  `merge_value_rows_by_war`; rows carry `entity_kind`/`component_kind`). `/goalies/{id}` gains
+  `value`(GoalieValue)+`overall`; `/players/{id}` value block gains `overall`. Schemas: ValueRankingRow
+  extended (entity/component_kind, war_sd), +GoalieValue/OverallSummary/OverallComponent, GOALIE_GAR_LABELS.
+- **Frontend**: shared **OverallSummary** (number + components ALWAYS together; renders nothing
+  without components — hard rule; reuses PercentileBarList + the Impact-vs-Value read), wired into
+  PlayerProfile (skater value.overall; goalie value stack + overall). **Players page rebuilt**
+  (Part D): one consolidated control bar (Show All/F/D/G · Rank by WAR/RAPM/GAR concept-first w/
+  unit tag · season), uniform ranked list (NO podium, rows navigate to detail), mixed All = simple
+  WAR magnitude bars (entity-tinted, wider goalie bands, 'G' tag) + filtered = component bars behind
+  a Colors toggle. `Tabs` gained optional `tag`+`disabled`. metrics `GOALIE_VALUE_COMPONENTS`
+  (distinct save-tier palette). Removed dead podium/expansion CSS.
+- Docs: value-gar.md goalie section + new **overall-rating.md**. tsc+build+pytest(5)+dbt compile green.
+- **KNOWN/INTENDED:** the mixed `All` leaderboard is goalie-heavy at the top (a starter influences
+  more goal outcomes than all but the best skaters) — the honest result on a shared win scale; the
+  WIDE goalie bands + caption communicate the cross-position order is soft (principle 6). Replacement
+  level is the documented lever if levels ever need shifting; rankings are stable to it.

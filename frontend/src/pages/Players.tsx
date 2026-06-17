@@ -14,7 +14,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, Search } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import {
   PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker,
 } from '../components/common'
@@ -352,7 +352,6 @@ export default function Players() {
             onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
           />
           <div className="players__search">
-            <Search size={15} className="players__search-icon" />
             <PlayerPicker placeholder="Find any player…" onSelect={(p) => navigate(`/players/${p.player_id}`)} />
           </div>
         </div>
