@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit team-needs
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm linefit team-needs archetypes-v2 radar
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -42,4 +42,14 @@ linefit:
 # vs the top-8 teams by power rating. Writes nhl_models.team_needs.
 team-needs:
 	python -m models_ml.compute_team_needs
+
+# Refit archetypes v2 (enriched vector) then emit player_archetypes. Single-threaded for a
+# reproducible fit. Run without --write first to refresh the trait audit, confirm names, then --write.
+archetypes-v2:
+	VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 python -m models_ml.fit_archetypes_v2 --write
+
+# Build the skater + goalie skills radars (Part B) into nhl_models.player_radar / goalie_radar.
+radar:
+	python -m models_ml.compute_player_radar
+	python -m models_ml.compute_goalie_radar
 

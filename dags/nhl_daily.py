@@ -566,6 +566,17 @@ with DAG(
         env=_dbt_env,
     )
 
+    compute_player_radar = BashOperator(
+        task_id="compute_player_radar",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_player_radar"),
+        env=_dbt_env,
+    )
+    compute_goalie_radar = BashOperator(
+        task_id="compute_goalie_radar",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_goalie_radar"),
+        env=_dbt_env,
+    )
+
     # Win probability + leverage depend on the marts (pregame rating) and segment context.
     score_winprob = BashOperator(
         task_id="score_winprob",
@@ -621,3 +632,7 @@ with DAG(
     [write_archetypes, train_rapm] >> train_linefit >> generate_report
     # Phase 5.3 trade-fit needs: team need profiles from composite + archetypes + ratings.
     [compute_composite, write_archetypes, compute_ratings] >> compute_team_needs >> generate_report
+    # Skills radar (Part B): per-player spokes + labels from impact/composite/coach-trust/edge/marts
+    # + the v2 archetype. Needs archetypes + the player models.
+    [write_archetypes, compute_composite] >> compute_player_radar >> generate_report
+    run_dbt_marts >> compute_goalie_radar >> generate_report

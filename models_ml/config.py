@@ -184,3 +184,16 @@ ARCHETYPE_DESCRIPTORS_V2: dict[str, str] = {
     "D10": "penalty-kill role and trusted top-four usage; shoots in tight",
     "D11": "point-shot volume, an offensive puck-mover with no penalty-kill role",
 }
+# Coarse "Overall" family per v2 cluster (Part B3): the headline label claims less than the
+# specific cluster name. Offense is high-resolution (the cluster IS the offensive sub-label);
+# the family + the spoke-derived defensive sub-label keep the headline honest.
+ARCHETYPE_FAMILY_V2: dict[str, str] = {
+    # forwards
+    "F0": "Offensive", "F1": "Defensive", "F2": "Depth", "F3": "Defensive",
+    "F4": "Offensive", "F5": "Two-Way", "F6": "Offensive", "F7": "Defensive",
+    "F8": "Offensive", "F9": "Offensive", "F10": "Depth", "F11": "Offensive",
+    # defensemen
+    "D0": "Offensive", "D1": "Defensive", "D2": "Two-Way", "D3": "Depth", "D4": "Depth",
+    "D5": "Defensive", "D6": "Offensive", "D7": "Defensive", "D8": "Offensive",
+    "D9": "Offensive", "D10": "Two-Way", "D11": "Offensive",
+}
