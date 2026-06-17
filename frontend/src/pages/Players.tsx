@@ -530,14 +530,14 @@ export default function Players() {
 
           {view === 'leaderboard' && (
             <div className="players__toolbar-filters">
-              <div className="seg seg--metric" role="group" aria-label="Rating lens">
-                <button className={`seg__btn${metric === 'impact' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('impact')}>
-                  Impact <small>play-driving (RAPM)</small>
-                </button>
-                <button className={`seg__btn${metric === 'value' ? ' seg__btn--active' : ''}`} onClick={() => setMetric('value')}>
-                  Value <small>goals scored (GAR/WAR)</small>
-                </button>
-              </div>
+              <Tabs
+                options={[
+                  { value: 'impact', label: 'Play Driving' },
+                  { value: 'value', label: 'Production' },
+                ]}
+                value={metric}
+                onChange={(v) => setMetric(v as Metric)}
+              />
               <span className="players__toolbar-div" aria-hidden="true" />
               <div className="seg">
                 {(['ALL', 'F', 'D'] as const).map((p) => (
