@@ -3,12 +3,27 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 
-from models.schemas import GoalieSeason, GoalieGameLogRow
+from models.schemas import GoalieSeason, GoalieGameLogRow, GoalieRadar
 from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+
+@router.get("/{goalie_id}/radar", response_model=GoalieRadar)
+@cache(ttl=1800)
+async def get_goalie_radar(
+    goalie_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> GoalieRadar:
+    """Goalie skills radar: spokes percentiled within goalies (Part B)."""
+    from services.radar import goalie_radar as _radar
+    payload = await run_in_threadpool(_radar, goalie_id, season)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="No radar for this goalie")
+    return GoalieRadar(**payload)
 
 
 def _goalie_name(goalie_id: int) -> Optional[str]:

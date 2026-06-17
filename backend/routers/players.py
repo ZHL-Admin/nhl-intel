@@ -17,7 +17,7 @@ from models.schemas import (
     PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
-    PlayerSearchResult,
+    PlayerSearchResult, PlayerRadar,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -88,17 +88,27 @@ async def get_divergence_board(
         season = bq_service.query(f"SELECT MAX(season_window) AS s FROM {board}")[0]['s']
     rows = bq_service.query(f"""
         WITH nm AS (
-            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name
-            FROM {rosters} GROUP BY player_id
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
+                   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS team_id
+            FROM {rosters}
+            WHERE SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        ),
+        tm AS (
+            SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev
+            FROM {bq_service.get_full_table_id('mart_team_game_stats')} GROUP BY team_id
         )
-        SELECT b.player_id, nm.name, b.pos_group AS position, b.side, b.divergence,
-               b.trust_z, b.composite_z, b.composite_total, b.explanation
-        FROM {board} b LEFT JOIN nm ON b.player_id = nm.player_id
+        SELECT b.player_id, nm.name, tm.abbrev AS team_abbrev, b.pos_group AS position,
+               b.side, b.divergence, b.trust_z, b.composite_z, b.composite_total, b.explanation
+        FROM {board} b
+        LEFT JOIN nm ON b.player_id = nm.player_id
+        LEFT JOIN tm ON nm.team_id = tm.team_id
         WHERE b.season_window = '{season}'
         ORDER BY b.divergence DESC
     """)
     return [DivergenceBoardRow(
         player_id=r['player_id'], player_name=r.get('name'), position=r.get('position'),
+        team_abbrev=r.get('team_abbrev'),
         side=r['side'], divergence=r['divergence'], trust_z=r['trust_z'],
         composite_z=r['composite_z'], composite_total=r['composite_total'],
         explanation=r['explanation']) for r in rows]
@@ -118,6 +128,20 @@ async def search_players(
     from services import tools as tool_svc
     rows = await run_in_threadpool(tool_svc.search_players, q, limit, season)
     return [PlayerSearchResult(**r) for r in rows]
+
+
+@router.get("/{player_id}/radar", response_model=PlayerRadar)
+@cache(ttl=1800)
+async def get_player_radar(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> PlayerRadar:
+    """Skater skills radar: ordered spokes (percentile-within-position) + derived labels (Part B)."""
+    from services.radar import player_radar as _radar
+    payload = await run_in_threadpool(_radar, player_id, season)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="No radar for this player")
+    return PlayerRadar(**payload)
 
 
 @router.get("/{player_id}/trajectory", response_model=PlayerTrajectory)
@@ -237,6 +261,64 @@ async def get_player_reconciliation(
 
     return PlayerReconciliation(player_id=player_id, season=season, clutch=clutch,
                                 consistency=consistency, coach_trust=coach_trust)
+
+
+# NOTE: literal path — must be defined before the /{player_id} route so it isn't shadowed.
+@router.get("/leaders", response_model=List[ArchetypeRankRow])
+@cache(ttl=1800)
+async def get_overall_leaders(
+    position: str = Query("ALL", description="ALL | F | D"),
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+    limit: int = Query(50, ge=1, le=200),
+) -> List[ArchetypeRankRow]:
+    """The highest-value skaters overall, by composite total (Phase 4.2)."""
+    arch = bq_service.get_models_table_id('player_archetypes')
+    comp = bq_service.get_models_table_id('player_composite')
+    rosters = bq_service.get_full_table_id('stg_rosters')
+    if not season:
+        season = bq_service.query(f"SELECT MAX(season_window) AS s FROM {comp}")[0]['s']
+    groups = {"F": "('C','L','R')", "D": "('D')"}.get(position.upper(), "('C','L','R','D')")
+    rows = bq_service.query(f"""
+        WITH nm AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
+                   ANY_VALUE(position_code) AS position,
+                   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS team_id
+            FROM {rosters}
+            WHERE SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        ),
+        tm AS (
+            SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev
+            FROM {bq_service.get_full_table_id('mart_team_game_stats')} GROUP BY team_id
+        ),
+        ar AS (
+            SELECT player_id, archetypes, primary_archetype FROM {arch} WHERE season = '{season}'
+        )
+        SELECT c.*, nm.name, nm.position AS roster_pos, tm.abbrev AS team_abbrev,
+               ar.archetypes, ar.primary_archetype AS primary_arch
+        FROM {comp} c
+        JOIN nm ON c.player_id = nm.player_id
+        LEFT JOIN tm ON nm.team_id = tm.team_id
+        LEFT JOIN ar ON c.player_id = ar.player_id
+        WHERE c.season_window = '{season}' AND nm.position IN {groups}
+        ORDER BY c.total DESC
+        LIMIT {limit}
+    """)
+    out = []
+    for r in rows:
+        primary = r.get("primary_arch")
+        weight = 0.0
+        if r.get("archetypes"):
+            weight = next((a["weight"] for a in json.loads(r["archetypes"])
+                           if a["archetype"] == primary), 0.0)
+        out.append(ArchetypeRankRow(
+            player_id=r["player_id"], player_name=r.get("name"),
+            team_abbrev=r.get("team_abbrev"), position=r.get("roster_pos"),
+            composite_total=float(r["total"]),
+            composite_total_sd=float(r["total_sd"]) if r.get("total_sd") is not None else None,
+            components=_components_from_row(r), archetype_weight=weight,
+            primary_archetype=primary))
+    return out
 
 
 @router.get("/{player_id}", response_model=PlayerDetail)
@@ -385,18 +467,27 @@ async def get_archetype_ranking(
         season = bq_service.query(f"SELECT MAX(season) AS s FROM {arch}")[0]['s']
     rows = bq_service.query(f"""
         WITH a AS (
-            SELECT player_id, archetypes, primary_archetype
+            SELECT player_id, archetypes, primary_archetype AS primary_arch
             FROM {arch} WHERE season = '{season}' AND primary_archetype = @archetype
         ),
         nm AS (
             SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
-                   ANY_VALUE(position_code) AS position
-            FROM {rosters} GROUP BY player_id
+                   ANY_VALUE(position_code) AS position,
+                   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS team_id
+            FROM {rosters}
+            WHERE SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        ),
+        tm AS (
+            SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev
+            FROM {bq_service.get_full_table_id('mart_team_game_stats')} GROUP BY team_id
         )
-        SELECT a.player_id, a.archetypes, nm.name, nm.position, c.*
+        SELECT a.player_id, a.archetypes, a.primary_arch, nm.name, nm.position,
+               tm.abbrev AS team_abbrev, c.*
         FROM a
         JOIN {comp} c ON a.player_id = c.player_id AND c.season_window = '{season}'
         LEFT JOIN nm ON a.player_id = nm.player_id
+        LEFT JOIN tm ON nm.team_id = tm.team_id
         ORDER BY c.total DESC
         LIMIT {limit}
     """, params=[bigquery.ScalarQueryParameter("archetype", "STRING", archetype)])
@@ -406,10 +497,11 @@ async def get_archetype_ranking(
                        if a["archetype"] == archetype), 0.0)
         out.append(ArchetypeRankRow(
             player_id=r["player_id"], player_name=r.get("name"),
-            team_abbrev=None, position=r.get("position"),
+            team_abbrev=r.get("team_abbrev"), position=r.get("position"),
             composite_total=float(r["total"]),
             composite_total_sd=float(r["total_sd"]) if r.get("total_sd") is not None else None,
-            components=_components_from_row(r), archetype_weight=weight))
+            components=_components_from_row(r), archetype_weight=weight,
+            primary_archetype=r.get("primary_arch")))
     return out
 
 

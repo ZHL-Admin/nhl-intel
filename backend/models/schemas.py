@@ -387,6 +387,7 @@ class DivergenceBoardRow(BaseModel):
     player_id: int
     player_name: Optional[str] = None
     position: Optional[str] = None
+    team_abbrev: Optional[str] = None
     side: str
     divergence: float
     trust_z: float
@@ -418,6 +419,7 @@ class ArchetypeRankRow(BaseModel):
     composite_total_sd: Optional[float] = None
     components: List[CompositeComponent]
     archetype_weight: float = Field(description="Membership weight in the queried archetype")
+    primary_archetype: Optional[str] = None
 
 
 # Composite component key -> display label (single source for the stack).
@@ -1148,6 +1150,15 @@ class TradeFitResult(BaseModel):
     need_profile: Optional[TeamNeedProfile] = None
 
 
+class BestTeamFit(BaseModel):
+    """A team whose gaps a player fills well (Phase 5.3 — Trade Fit 'best teams')."""
+    team_id: int
+    fit_score: float
+    reason: Optional[str] = None
+    top_need_label: Optional[str] = None
+    top_need_gap: Optional[float] = None
+
+
 class MatchupPreviewTeam(BaseModel):
     """One team's side of a matchup preview."""
     team_id: int
@@ -1173,3 +1184,38 @@ class MatchupPreview(BaseModel):
 # resolve self/forward references for the Phase 5 models
 LineFitProjection.model_rebuild()
 TradeFitResult.model_rebuild()
+
+
+# --- Skills radar (Part B) ---------------------------------------------------
+
+class RadarSpoke(BaseModel):
+    """One radar axis: a percentile-within-position value with an honesty tag."""
+    key: str
+    label: str
+    tag: str                      # skill | usage | style | proxy
+    value: float
+    percentile: Optional[float] = None
+    sd: Optional[float] = None
+    present: bool = True
+
+
+class PlayerRadar(BaseModel):
+    """Skater skills radar (Part B): ordered, variable-length spokes + derived labels."""
+    player_id: int
+    season: str
+    pos_group: Optional[str] = None
+    spokes: List[RadarSpoke] = Field(default_factory=list)
+    overall_label: Optional[str] = None
+    offensive_label: Optional[str] = None
+    defensive_label: Optional[str] = None
+    descriptor: Optional[str] = None
+    baseline: Optional[str] = None
+
+
+class GoalieRadar(BaseModel):
+    """Goalie skills radar (Part B): spokes percentiled within goalies."""
+    goalie_id: int
+    season: str
+    games_played: Optional[int] = None
+    spokes: List[RadarSpoke] = Field(default_factory=list)
+    baseline: Optional[str] = None
