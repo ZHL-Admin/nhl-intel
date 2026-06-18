@@ -134,3 +134,9 @@ export async function getPlayerSummary(playerId: number | string, season?: strin
   const r = await apiClient.get(`/players/${playerId}/summary`, { params: season ? { season } : undefined })
   return r.data
 }
+
+/** Base stats + within-position ranks + light bio for the inline row expansion. */
+export async function getPlayerPreview(playerId: number | string, season?: string): Promise<import('./types').PlayerPreview> {
+  const r = await apiClient.get(`/players/${playerId}/preview`, { params: season ? { season } : undefined })
+  return r.data
+}

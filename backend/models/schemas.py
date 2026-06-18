@@ -394,6 +394,7 @@ class DivergenceBoardRow(BaseModel):
     composite_z: float
     composite_total: float
     explanation: str
+    archetype: Optional[str] = None   # offensive sub-label (v2 source), for the compact header tag
 
 
 class CompositeComponent(BaseModel):

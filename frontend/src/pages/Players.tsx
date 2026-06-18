@@ -12,16 +12,17 @@
  * right palette and expose the colour legend. Goalie rows carry a "G" tag and a visibly wider
  * uncertainty band (goaltending is less stable; its cross-position order is soft).
  */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
+import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
 import {
   PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker,
 } from '../components/common'
 import type { StackSegment } from '../components/common'
-import { getOverallLeaders, getDivergenceBoard } from '../api/players'
+import { getOverallLeaders, getDivergenceBoard, getPlayerPreview } from '../api/players'
 import { getValueRankings, type ValueSort } from '../api/rankings'
-import { ArchetypeRankRow, DivergenceBoardRow, ValueRankingRow } from '../api/types'
+import { ArchetypeRankRow, DivergenceBoardRow, ValueRankingRow, PreviewStat } from '../api/types'
 import { COMPOSITE_COMPONENTS, VALUE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import './Players.css'
@@ -113,7 +114,16 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
 }) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const navigate = useNavigate()
+  const [expandedId, setExpandedId] = useState<number | null>(null)   // one open at a time
+  const toggle = (id: number) => setExpandedId((cur) => (cur === id ? null : id))
+
+  // Escape closes the open preview
+  useEffect(() => {
+    if (expandedId == null) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpandedId(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expandedId])
 
   // resolve the lens that actually applies to the current scope
   const effRankBy: RankBy = show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)
@@ -125,7 +135,7 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
 
   useEffect(() => {
     let active = true
-    setRows(null); setError(null)
+    setRows(null); setError(null); setExpandedId(null)
     let req: Promise<Row[]>
     if (mixed) {
       req = getValueRankings('all', 'ALL', season, 60, sort).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
@@ -201,33 +211,43 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
           </div>
 
           <div className="players__rows">
-            {rows.map((r, i) => (
-              <button key={r.id} className={`prow${i === 0 ? ' prow--lead' : ''}`}
-                onClick={() => navigate(`/players/${r.id}`)}>
-                <span className="prow__rank">{i + 1}</span>
-                <Avatar id={r.id} team={r.team} name={r.name} size={36} />
-                <span className="prow__id">
-                  <span className="prow__name">
-                    {r.name ?? r.id}
-                  </span>
-                  <span className="prow__meta--header">
-                    <span className={`prow__gtag--${r.entityKind} prow__gtag`}>{r.position}</span>
-                    <span className="prow__meta">{r.team ? `${r.team}` : ''}</span>
-                  </span>
-                </span>
-                <span className="prow__bar">
-                  {mixed
-                    ? <MagnitudeBar row={r} max={maxMag} />
-                    : <ComponentStackBar segments={segmentsFor(r, palette)} total={r.value}
-                        domain={domain} se={r.band ?? undefined} />}
-                </span>
-                <span className="prow__total">
-                  <span className="prow__total-v">{fmt(r.value)}</span>
-                  <span className="prow__total-u">{r.unit}</span>
-                  {r.band != null && r.band > 0 && <span className="prow__total-band">± {r.band.toFixed(1)}</span>}
-                </span>
-              </button>
-            ))}
+            {rows.map((r, i) => {
+              const open = expandedId === r.id
+              return (
+                <Fragment key={r.id}>
+                  <button className={`prow${i === 0 ? ' prow--lead' : ''}${open ? ' prow--active' : ''}`}
+                    onClick={() => toggle(r.id)} aria-expanded={open}>
+                    <span className="prow__rank">{i + 1}</span>
+                    <Avatar id={r.id} team={r.team} name={r.name} size={36} />
+                    <span className="prow__id">
+                      <span className="prow__name">{r.name ?? r.id}</span>
+                      <span className="prow__meta--header">
+                        <span className={`prow__gtag--${r.entityKind} prow__gtag`}>{r.position}</span>
+                        <span className="prow__meta">{r.team ? `${r.team}` : ''}</span>
+                      </span>
+                    </span>
+                    <span className="prow__bar">
+                      {mixed
+                        ? <MagnitudeBar row={r} max={maxMag} />
+                        : <ComponentStackBar segments={segmentsFor(r, palette)} total={r.value}
+                            domain={domain} se={r.band ?? undefined} />}
+                    </span>
+                    <span className="prow__total">
+                      <span className="prow__total-v">{fmt(r.value)}</span>
+                      <span className="prow__total-u">{r.unit}</span>
+                      {r.band != null && r.band > 0 && <span className="prow__total-band">± {r.band.toFixed(1)}</span>}
+                    </span>
+                    <ChevronDown size={16} className={`prow__chev${open ? ' prow__chev--open' : ''}`} aria-hidden="true" />
+                  </button>
+                  {open && (
+                    <PlayerRowExpansion
+                      target={{ id: r.id, name: r.name, team: r.team, position: r.position, entityKind: r.entityKind }}
+                      season={season}
+                    />
+                  )}
+                </Fragment>
+              )
+            })}
           </div>
         </>
       )}
@@ -277,8 +297,27 @@ function DivBar({ label, z, tone }: { label: string; z: number; tone: 'trust' | 
   )
 }
 
-function DivRow({ rank, r, defaultOpen }: { rank: number; r: DivergenceBoardRow; defaultOpen?: boolean }) {
+const ord = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]) }
+const fmtGround = (s: PreviewStat): string =>
+  s.value == null ? '—'
+    : s.fmt === 'rate' ? s.value.toFixed(2)
+    : s.fmt === 'pct1' ? `${(s.value * 100).toFixed(1)}%`
+    : Math.round(s.value).toString()
+
+function DivRow({ rank, r, season, defaultOpen }: { rank: number; r: DivergenceBoardRow; season: string; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(!!defaultOpen)
+  const [ground, setGround] = useState<PreviewStat[] | null>(null)
+
+  // lazy-fetch a couple of grounding stats only when opened (cached by the apiClient)
+  useEffect(() => {
+    if (!open || ground) return
+    let active = true
+    getPlayerPreview(r.player_id, season)
+      .then((p) => active && setGround(p.stats.filter((s) => ['g', 'p', 'p60'].includes(s.key))))
+      .catch(() => active && setGround([]))
+    return () => { active = false }
+  }, [open, ground, r.player_id, season])
+
   return (
     <div className={`divrow${open ? ' divrow--open' : ''}`}>
       <button className="divrow__head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -286,7 +325,10 @@ function DivRow({ rank, r, defaultOpen }: { rank: number; r: DivergenceBoardRow;
         <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={34} />
         <span className="divrow__id">
           <span className="divrow__name">{r.player_name ?? r.player_id}</span>
-          <span className="divrow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+          <span className="divrow__sub">
+            <span className="divrow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
+            {r.archetype && <span className="divrow__tag">{r.archetype}</span>}
+          </span>
         </span>
         <span className="divrow__sigma">{Math.abs(r.divergence).toFixed(1)}σ</span>
         <ChevronDown size={15} className={`divrow__chev${open ? ' divrow__chev--open' : ''}`} />
@@ -296,14 +338,23 @@ function DivRow({ rank, r, defaultOpen }: { rank: number; r: DivergenceBoardRow;
           <DivBar label="Coach trust" z={r.trust_z} tone="trust" />
           <DivBar label="Isolated value" z={r.composite_z} tone="value" />
           <p className="divrow__explain">{r.explanation}</p>
-          <Link to={`/players/${r.player_id}`} className="divrow__link">View player →</Link>
+          {ground && ground.length > 0 && (
+            <div className="divrow__stats">
+              {ground.map((s) => (
+                <span key={s.key} className="divrow__stat">
+                  <b>{fmtGround(s)}</b> {s.label}{s.rank != null ? ` · ${ord(s.rank)}` : ''}
+                </span>
+              ))}
+            </div>
+          )}
+          <Link to={`/players/${r.player_id}`} className="divrow__link">View full profile →</Link>
         </div>
       )}
     </div>
   )
 }
 
-function DivColumn({ title, caption, rows }: { title: string; caption: string; rows: DivergenceBoardRow[] }) {
+function DivColumn({ title, caption, rows, season }: { title: string; caption: string; rows: DivergenceBoardRow[]; season: string }) {
   return (
     <div className="divcol">
       <div className="divcol__head">
@@ -313,20 +364,21 @@ function DivColumn({ title, caption, rows }: { title: string; caption: string; r
       <div className="divcol__list">
         {rows.length === 0
           ? <p className="players__msg" style={{ padding: 'var(--space-5)' }}>No qualifying players.</p>
-          : rows.map((r, i) => <DivRow key={r.player_id} rank={i + 1} r={r} defaultOpen={i === 0} />)}
+          : rows.map((r, i) => <DivRow key={r.player_id} rank={i + 1} r={r} season={season} defaultOpen={i === 0} />)}
       </div>
     </div>
   )
 }
 
-function DivergenceBoard() {
+function DivergenceBoard({ season }: { season: string }) {
   const [rows, setRows] = useState<DivergenceBoardRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let active = true
-    getDivergenceBoard().then((d) => active && setRows(d)).catch(() => active && setError('Could not load board.'))
+    setRows(null); setError(null)
+    getDivergenceBoard(season).then((d) => active && setRows(d)).catch(() => active && setError('Could not load board.'))
     return () => { active = false }
-  }, [])
+  }, [season])
   if (error) return <p className="players__msg">{error}</p>
   if (!rows) return <SkeletonLoader />
   const over = rows.filter((r) => r.side === 'trusted_over_value').sort((a, b) => b.divergence - a.divergence)
@@ -341,10 +393,10 @@ function DivergenceBoard() {
       <div className="div2col">
         <DivColumn title="Trusted beyond their value"
           caption="Heavy deployment the isolated numbers don’t reward — the eye-test-vs-analytics tension."
-          rows={over} />
+          rows={over} season={season} />
         <DivColumn title="Value beyond their deployment"
           caption="Strong isolated value in limited or sheltered roles — often offense not trusted defensively."
-          rows={under} />
+          rows={under} season={season} />
       </div>
     </section>
   )
@@ -460,7 +512,7 @@ export default function Players() {
 
         {view === 'leaderboard'
           ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort} />
-          : <DivergenceBoard />}
+          : <DivergenceBoard season={season} />}
       </div>
     </PageLayout>
   )

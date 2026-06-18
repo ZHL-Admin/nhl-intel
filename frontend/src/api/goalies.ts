@@ -14,3 +14,9 @@ export async function getGoalieRadar(goalieId: number | string, season?: string)
   const r = await apiClient.get(`/goalies/${goalieId}/radar`, { params: season ? { season } : undefined })
   return r.data
 }
+
+/** Goalie base stats + within-goalie ranks for the inline row expansion. */
+export async function getGoaliePreview(goalieId: number | string, season?: string): Promise<import('./types').GoaliePreview> {
+  const r = await apiClient.get(`/goalies/${goalieId}/preview`, { params: season ? { season } : undefined })
+  return r.data
+}

@@ -18,7 +18,7 @@ from models.schemas import (
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
-    OverallSummary, OverallComponent,
+    OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -184,6 +184,9 @@ async def get_divergence_board(
     rosters = bq_service.get_full_table_id('stg_rosters')
     if not season:
         season = bq_service.query(f"SELECT MAX(season_window) AS s FROM {board}")[0]['s']
+    # the trust window is labelled "{start}_{end}" (e.g. 2023-24_2025-26); the archetype tag
+    # comes from the radar of its END season.
+    radar_season = season.split('_')[-1] if season and '_' in season else season
     rows = bq_service.query(f"""
         WITH nm AS (
             SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
@@ -195,12 +198,19 @@ async def get_divergence_board(
         tm AS (
             SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev
             FROM {bq_service.get_full_table_id('mart_team_game_stats')} GROUP BY team_id
+        ),
+        ar AS (
+            SELECT player_id, offensive_label, overall_label
+            FROM {bq_service.get_models_table_id('player_radar')}
+            WHERE season = '{radar_season}'
         )
         SELECT b.player_id, nm.name, tm.abbrev AS team_abbrev, b.pos_group AS position,
-               b.side, b.divergence, b.trust_z, b.composite_z, b.composite_total, b.explanation
+               b.side, b.divergence, b.trust_z, b.composite_z, b.composite_total, b.explanation,
+               ar.offensive_label, ar.overall_label
         FROM {board} b
         LEFT JOIN nm ON b.player_id = nm.player_id
         LEFT JOIN tm ON nm.team_id = tm.team_id
+        LEFT JOIN ar ON b.player_id = ar.player_id
         WHERE b.season_window = '{season}'
         ORDER BY b.divergence DESC
     """)
@@ -209,7 +219,8 @@ async def get_divergence_board(
         team_abbrev=r.get('team_abbrev'),
         side=r['side'], divergence=r['divergence'], trust_z=r['trust_z'],
         composite_z=r['composite_z'], composite_total=r['composite_total'],
-        explanation=r['explanation']) for r in rows]
+        explanation=r['explanation'],
+        archetype=(r.get('offensive_label') or r.get('overall_label'))) for r in rows]
 
 
 @router.get("/search", response_model=List[PlayerSearchResult])
@@ -259,6 +270,104 @@ async def get_player_summary(
         toi_per_gp=r.get('toi_per_gp'), goals_per60=r.get('goals_per60'),
         assists_per60=r.get('assists_per60'), points_per60=r.get('points_per60'),
         xgf_pct=r.get('xgf_pct'))
+
+
+def _age_at_season(birth_date, season: str) -> Optional[int]:
+    """Age on Oct 1 of the season's first year (matches the aging-curve convention)."""
+    if not birth_date or not season or '-' not in season:
+        return None
+    try:
+        start_year = int(season.split('-')[0])
+        bd = birth_date  # a datetime.date from BigQuery
+        age = start_year - bd.year - (1 if (10, 1) < (bd.month, bd.day) else 0)
+        return age if 15 <= age <= 50 else None
+    except Exception:
+        return None
+
+
+def _player_preview_sync(player_id: int, season: Optional[str]) -> PlayerPreview:
+    mart = bq_service.get_full_table_id('mart_player_game_stats')
+    radar_t = bq_service.get_models_table_id('player_radar')
+    if not season:
+        r = bq_service.query(f"SELECT MAX(season) AS s FROM {mart} WHERE player_id = {int(player_id)}")
+        season = r[0]['s'] if r and r[0]['s'] else None
+    if not season:
+        raise HTTPException(status_code=404, detail="No season stats for this player")
+
+    rows = bq_service.query(f"""
+        WITH agg AS (
+            SELECT player_id,
+                   COUNT(DISTINCT game_id) AS gp,
+                   SUM(individual_goals) AS g,
+                   SUM(first_assists) AS a1,
+                   SUM(second_assists) AS a2,
+                   SUM(toi_5v5) AS toi_sum,
+                   AVG(on_ice_xgf_pct) AS xgf
+            FROM {mart}
+            WHERE season = '{season}'
+              AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+            GROUP BY player_id
+        ),
+        joined AS (
+            SELECT a.player_id, a.gp, a.g, a.a1 + a.a2 AS a, a.xgf,
+                   a.g + a.a1 + a.a2 AS p,
+                   SAFE_DIVIDE((a.g + a.a1 + a.a2) * 60.0, a.toi_sum) AS p60,
+                   pr.pos_group
+            FROM agg a
+            LEFT JOIN {radar_t} pr ON pr.player_id = a.player_id AND pr.season = '{season}'
+        ),
+        qual AS (SELECT * FROM joined WHERE gp >= 10 AND pos_group IN ('F', 'D')),
+        ranked AS (
+            SELECT player_id,
+                   COUNT(*) OVER (PARTITION BY pos_group) AS n,
+                   RANK() OVER (PARTITION BY pos_group ORDER BY g DESC) AS g_rank,
+                   RANK() OVER (PARTITION BY pos_group ORDER BY a DESC) AS a_rank,
+                   RANK() OVER (PARTITION BY pos_group ORDER BY p DESC) AS p_rank,
+                   RANK() OVER (PARTITION BY pos_group ORDER BY p60 DESC) AS p60_rank,
+                   RANK() OVER (PARTITION BY pos_group ORDER BY xgf DESC) AS xgf_rank
+            FROM qual
+        )
+        SELECT j.player_id, j.pos_group, j.gp, j.g, j.a, j.p, j.p60, j.xgf,
+               r.n, r.g_rank, r.a_rank, r.p_rank, r.p60_rank, r.xgf_rank
+        FROM joined j LEFT JOIN ranked r USING (player_id)
+        WHERE j.player_id = {int(player_id)}
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No season stats for this player")
+    r = rows[0]
+    n = r.get('n')
+    bio = bq_service.query(
+        f"SELECT birth_date, shoots FROM {bq_service.get_full_table_id('stg_player_bio')} "
+        f"WHERE player_id = {int(player_id)} LIMIT 1")
+    b = bio[0] if bio else {}
+
+    def stat(key, label, value, fmt, rank):
+        return PreviewStat(key=key, label=label,
+                           value=None if value is None else float(value),
+                           fmt=fmt, rank=rank, n=(n if rank is not None else None))
+
+    stats = [
+        stat('gp', 'GP', r.get('gp'), 'int', None),
+        stat('g', 'G', r.get('g'), 'int', r.get('g_rank')),
+        stat('a', 'A', r.get('a'), 'int', r.get('a_rank')),
+        stat('p', 'P', r.get('p'), 'int', r.get('p_rank')),
+        stat('p60', 'P/60', r.get('p60'), 'rate', r.get('p60_rank')),
+        stat('xgf', 'xGF%', r.get('xgf'), 'pct1', r.get('xgf_rank')),
+    ]
+    return PlayerPreview(
+        player_id=player_id, season=season, pos_group=r.get('pos_group'),
+        age=_age_at_season(b.get('birth_date'), season), shoots=b.get('shoots'),
+        stats=stats)
+
+
+@router.get("/{player_id}/preview", response_model=PlayerPreview)
+@cache(ttl=1800)
+async def get_player_preview(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> PlayerPreview:
+    """Base stats with WITHIN-POSITION ranks + light bio for the inline row expansion."""
+    return await run_in_threadpool(_player_preview_sync, player_id, season)
 
 
 @router.get("/{player_id}/radar", response_model=PlayerRadar)

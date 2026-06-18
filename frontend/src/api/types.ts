@@ -830,6 +830,7 @@ export interface DivergenceBoardRow {
   composite_z: number
   composite_total: number
   explanation: string
+  archetype?: string | null
 }
 
 // --- Trajectory (Phase 4.4) ---
@@ -1032,4 +1033,29 @@ export interface PlayerSummary {
   assists_per60?: number | null
   points_per60?: number | null
   xgf_pct?: number | null
+}
+
+/** One base stat with its within-position rank, for the inline row-expansion table. */
+export interface PreviewStat {
+  key: string
+  label: string
+  value?: number | null
+  fmt: string                 // int | rate | min | pct1 | pct3 | plus
+  rank?: number | null        // 1 = best among qualified peers
+  n?: number | null
+}
+export interface PlayerPreview {
+  player_id: number
+  season: string
+  pos_group?: string | null
+  age?: number | null
+  shoots?: string | null
+  stats: PreviewStat[]
+}
+export interface GoaliePreview {
+  goalie_id: number
+  season: string
+  age?: number | null
+  catches?: string | null
+  stats: PreviewStat[]
 }
