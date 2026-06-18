@@ -1438,8 +1438,11 @@ class StyleMapRegion(BaseModel):
     member_count: int
 
 
-class StyleMap(BaseModel):
-    """A position's player style-map: real player points + discovered cluster regions."""
+class PlayerStyleMap(BaseModel):
+    """A position's player style-map: real player points + discovered cluster regions.
+
+    Distinct from the team-level `StyleMap` (Phase 3.2) above; named differently so it no
+    longer shadows it (the duplicate class name broke GET /teams/style-map)."""
     pos_group: str
     points: List[StyleMapPoint] = Field(default_factory=list)
     regions: List[StyleMapRegion] = Field(default_factory=list)

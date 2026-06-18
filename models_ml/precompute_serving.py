@@ -184,6 +184,38 @@ def build_serving_game_skater_box(p: str) -> pd.DataFrame:
     return bq.query_df(sql)
 
 
+def build_player_situation_toi(p: str) -> pd.DataFrame:
+    """Per (player, season, situation) 5v5/PP/PK/all TOI minutes + games, from the shift segments.
+
+    PP/PK are decided by comparing the player's team skater count to the opponent's in each
+    segment. This is the per-situation TOI denominator the marts lack, so /players/{id}/situational
+    can report real per-60 rates by situation. Recent seasons (matching the situational mart).
+    """
+    seasons = ", ".join(f"'{s}'" for s in _recent_seasons(p))
+    sql = f"""
+    WITH seg AS (
+        SELECT s.player_id, s.season, s.game_id, s.segment_duration, s.team_skater_count,
+               CASE WHEN s.team_id = c.home_team_id THEN c.away_skaters ELSE c.home_skaters END AS opp_sk,
+               c.strength_state
+        FROM `{p}.nhl_staging.int_shift_segments` s
+        JOIN `{p}.nhl_staging.int_segment_context` c USING (game_id, segment_index)
+        WHERE s.is_goalie = 0 AND s.season IN ({seasons})
+          AND SUBSTR(CAST(s.game_id AS STRING),5,2) IN ('02','03')
+    ),
+    long AS (
+        SELECT player_id, season, game_id, segment_duration, 'all' AS situation FROM seg
+        UNION ALL SELECT player_id, season, game_id, segment_duration, '5v5' FROM seg WHERE strength_state='5v5'
+        UNION ALL SELECT player_id, season, game_id, segment_duration, 'pp'  FROM seg WHERE team_skater_count > opp_sk
+        UNION ALL SELECT player_id, season, game_id, segment_duration, 'pk'  FROM seg WHERE team_skater_count < opp_sk
+    )
+    SELECT player_id, season, situation,
+           SUM(segment_duration)/60.0 AS toi_minutes,
+           COUNT(DISTINCT game_id) AS games
+    FROM long GROUP BY 1,2,3
+    """
+    return bq.query_df(sql)
+
+
 def build_line_member_features(p: str) -> pd.DataFrame:
     """One row per (player_id, season) of line-fit model features for recent seasons."""
     seasons = _recent_seasons(p)
@@ -198,6 +230,7 @@ BUILDERS = {
     "team_handedness": (build_team_handedness, "nhl_models"),
     "team_current_lines": (build_team_current_lines, "nhl_models"),
     "serving_game_skater_box": (build_serving_game_skater_box, "nhl_models"),
+    "player_situation_toi": (build_player_situation_toi, "nhl_models"),
 }
 
 

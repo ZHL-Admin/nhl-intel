@@ -760,31 +760,55 @@ class BigQueryService:
         Returns:
             List of situational stat records (usually 4: all, 5v5, pp, pk).
         """
+        # mart_player_situational holds per-game per-strength shot/goal/ixg counts; per-situation
+        # TOI (the per-60 denominator) lives in nhl_models.player_situation_toi (precomputed from
+        # the shift segments). 5v5 also gets points/CF%/HD-rate from mart_player_game_stats. PP/PK
+        # have no points/CF/HD split in the data, so those fields are null there (schema allows it).
+        sit = self.get_full_table_id('mart_player_situational')
+        toi = self.get_models_table_id('player_situation_toi')
+        pgs = self.get_full_table_id('mart_player_game_stats')
+        nhl = "SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')"
         sql = f"""
+        WITH s AS (
+            SELECT
+                SUM(goals_5v5) AS g_5v5, SUM(ixg_5v5) AS x_5v5,
+                SUM(goals_pp)  AS g_pp,  SUM(ixg_pp)  AS x_pp,
+                SUM(goals_pk)  AS g_pk,  SUM(ixg_pk)  AS x_pk,
+                SUM(goals_5v5 + goals_pp + goals_pk + goals_other_es) AS g_all,
+                SUM(ixg_5v5 + ixg_pp + ixg_pk + ixg_other_es) AS x_all
+            FROM {sit}
+            WHERE player_id = {int(player_id)} AND season = '{season}' AND {nhl}
+        ),
+        f AS (
+            SELECT AVG(primary_points_per60) AS pts60, AVG(on_ice_xgf_pct) AS cf,
+                   SAFE_DIVIDE(SUM(ihdcf), SUM(toi_5v5)) * 60 AS hdcf60
+            FROM {pgs}
+            WHERE player_id = {int(player_id)} AND season = '{season}' AND {nhl}
+        ),
+        t AS (
+            SELECT situation, toi_minutes, games FROM {toi}
+            WHERE player_id = {int(player_id)} AND season = '{season}'
+        )
         SELECT
-            player_id,
-            season,
-            situation,
-            games_played,
-            toi_per_gp,
-            points_per60,
-            goals_per60,
-            ixg_per60,
-            cf_pct,
-            hdcf_per60
-        FROM {self.get_full_table_id('mart_player_situational')}
-        WHERE player_id = {player_id}
-            AND season = '{season}'
+            {int(player_id)} AS player_id, '{season}' AS season, t.situation,
+            SAFE_DIVIDE(t.toi_minutes, t.games) AS toi_per_gp,
+            CASE t.situation WHEN '5v5' THEN f.pts60 ELSE NULL END AS points_per60,
+            SAFE_DIVIDE(
+                CASE t.situation WHEN 'all' THEN s.g_all WHEN '5v5' THEN s.g_5v5
+                                 WHEN 'pp' THEN s.g_pp WHEN 'pk' THEN s.g_pk END * 60.0,
+                t.toi_minutes) AS goals_per60,
+            SAFE_DIVIDE(
+                CASE t.situation WHEN 'all' THEN s.x_all WHEN '5v5' THEN s.x_5v5
+                                 WHEN 'pp' THEN s.x_pp WHEN 'pk' THEN s.x_pk END * 60.0,
+                t.toi_minutes) AS ixg_per60,
+            CASE t.situation WHEN '5v5' THEN f.cf ELSE NULL END AS cf_pct,
+            CASE t.situation WHEN '5v5' THEN f.hdcf60 ELSE NULL END AS hdcf_per60
+        FROM t CROSS JOIN s LEFT JOIN f ON TRUE
         ORDER BY
-            CASE situation
-                WHEN 'all' THEN 1
-                WHEN '5v5' THEN 2
-                WHEN 'pp' THEN 3
-                WHEN 'pk' THEN 4
-                ELSE 5
+            CASE t.situation
+                WHEN 'all' THEN 1 WHEN '5v5' THEN 2 WHEN 'pp' THEN 3 WHEN 'pk' THEN 4 ELSE 5
             END
         """
-
         return self.query(sql)
 
     def get_player_zone_deployment(self, player_id: int, season: str) -> List[Dict[str, Any]]:

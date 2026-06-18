@@ -14,7 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from models.schemas import (
     ArchetypeCard, ArchetypeTrait, ArchetypeExemplar, RadarSpoke,
-    StyleMap, StyleMapPoint, StyleMapRegion,
+    PlayerStyleMap, StyleMapPoint, StyleMapRegion,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -48,7 +48,7 @@ async def get_archetypes(pos: Optional[str] = Query(None, description="F | D (de
     return await run_in_threadpool(_cards_sync, pos)
 
 
-def _style_map_sync(pos: str) -> StyleMap:
+def _style_map_sync(pos: str) -> PlayerStyleMap:
     sm = bq_service.get_models_table_id("player_style_map")
     rosters = bq_service.get_full_table_id("stg_rosters")
     teams = bq_service.get_full_table_id("mart_team_game_stats")
@@ -82,12 +82,12 @@ def _style_map_sync(pos: str) -> StyleMap:
         a["sx"] += r["x"]; a["sy"] += r["y"]; a["n"] += 1
     regions = [StyleMapRegion(archetype=k, x=v["sx"] / v["n"], y=v["sy"] / v["n"], member_count=v["n"])
                for k, v in agg.items()]
-    return StyleMap(pos_group=pos, points=points, regions=regions)
+    return PlayerStyleMap(pos_group=pos, points=points, regions=regions)
 
 
-@router.get("/style-map", response_model=StyleMap)
+@router.get("/style-map", response_model=PlayerStyleMap)
 @cache(ttl=3600)
-async def get_style_map(pos: str = Query("F", description="F | D")) -> StyleMap:
+async def get_style_map(pos: str = Query("F", description="F | D")) -> PlayerStyleMap:
     """Player style-map for one position: real player points (latest season) + cluster regions."""
     if pos not in ("F", "D"):
         raise HTTPException(status_code=400, detail="pos must be F or D")
