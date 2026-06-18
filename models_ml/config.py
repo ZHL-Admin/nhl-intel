@@ -336,3 +336,56 @@ GAR_STABILITY_YOY = {
 # Fail loudly at import if the two ever drift apart (principle 2).
 assert GOALIE_GAR_CONFIG["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
     "Goalie and skater GOALS_PER_WIN must match for cross-position WAR to be comparable.")
+
+
+# ── Deployment efficiency (Divergence Board rework) ──────────────────────────────────────────
+# The board compares a player's ACTUAL situational usage against the usage his situation-
+# appropriate VALUE justifies. Divergence = actual_usage_pctile − justified_usage_pctile
+# (within position); positive = over-used, negative = under-used.
+DEPLOYMENT = {
+    # Min total window TOI (minutes) + games to qualify — high enough that the VALUE estimate is
+    # reliable (RAPM/composite of a fringe call-up is small-sample noise and otherwise floods the
+    # under-used side with players who barely played). ~a rotation regular over three seasons.
+    "MIN_TOTAL_TOI": 600,
+    "MIN_GAMES": 60,
+    # Additional 5v5-minutes floor: RAPM/composite need even-strength volume to be trustworthy,
+    # so a value estimate below this is too noisy to call a player "mis-deployed" (mirrors the old
+    # board's 500-5v5-minute gate).
+    "MIN_EV_TOI": 500,
+    # Boards SORT by a confidence-adjusted gap = gap shrunk toward 0 by K·gap_sd, so a soft (wide-
+    # band) mismatch ranks below a confident one of equal point estimate.
+    "CONFIDENCE_K": 1.0,
+    # For TOTAL-ice lenses (all / 5v5 / key moments) a near-zero-usage player is a healthy scratch,
+    # not "under-used" — require a floor of actual usage to appear on the under-used side. NOT
+    # applied to PP/PK, where zero situational usage IS the insight (a strong PK candidate who
+    # kills nothing). Usage type 'total'|'ev'|'hilev' -> floored; 'pp'|'pk' -> not.
+    "MIN_UNDERUSED_ACTUAL_PCTILE": 0.12,
+    "FLOORED_USAGE_TYPES": ["total", "ev", "hilev"],
+    # "Key moments" = the most pivotal share of game time, defined as a PERCENTILE of the real
+    # win-probability leverage distribution (not a hand-picked situation list). Top quartile.
+    "KEY_MOMENT_LEVERAGE_PCTILE": 0.75,
+    # Justified usage is capped at a realistic ceiling so a maxed-out star (whose value would
+    # predict impossible minutes) does NOT read as under-used. The ceiling is data-derived: the
+    # given percentile of OBSERVED per-game usage within position+situation (not an arbitrary
+    # number). 0.97 ≈ the busiest handful of players define the realistic max.
+    "USAGE_CEILING_PCTILE": 0.97,
+    # Each situation pairs the right value against the right usage (the fix for the broken side).
+    # value_key is resolved in compute_deployment_efficiency against player_impact/composite.
+    "SITUATIONS": {
+        "all":         {"usage": "total", "value": "composite", "label": "overall value"},
+        "5v5":         {"usage": "ev",    "value": "ev_impact", "label": "even-strength impact"},
+        "pp":          {"usage": "pp",    "value": "pp_impact", "label": "power-play impact"},
+        "pk":          {"usage": "pk",    "value": "pk_blend", "label": "penalty-kill + defensive impact"},
+        "key_moments": {"usage": "hilev", "value": "composite", "label": "overall value"},
+    },
+    # PK justified value blends the PK-specific RAPM coefficient with general defensive impact,
+    # weighted TOWARD pk_impact (each normalised to unit variance first). Pure def_impact floods the
+    # under-used side with offensive forwards whose single-season defensive RAPM is noisily high but
+    # who have no PK track record; weighting toward pk_impact (≈0 for non-killers) damps that noise
+    # while a genuine kill-some-and-defend-well specialist keeps a real signal.
+    "PK_BLEND_W": 0.75,
+    # Reliability gate (PK under-used only): a player may only be flagged under-deployed on the PK if
+    # his value estimate is reliable enough — value-sd at or below this within-position percentile.
+    "DEF_SD_GATE_PCTILE": 0.5,
+    "MODEL_VERSION": "deployment_v1",
+}

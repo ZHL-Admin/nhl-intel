@@ -13,18 +13,18 @@
  * uncertainty band (goaltending is less stable; its cross-position order is soft).
  */
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
+import DeploymentBoard from '../components/players/DeploymentBoard'
 import {
-  PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker,
+  PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar,
 } from '../components/common'
 import type { StackSegment } from '../components/common'
-import { getOverallLeaders, getDivergenceBoard, getPlayerPreview } from '../api/players'
+import { getOverallLeaders } from '../api/players'
 import { getValueRankings, type ValueSort } from '../api/rankings'
-import { ArchetypeRankRow, DivergenceBoardRow, ValueRankingRow, PreviewStat } from '../api/types'
+import { ArchetypeRankRow, ValueRankingRow } from '../api/types'
 import { COMPOSITE_COMPONENTS, VALUE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
-import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import './Players.css'
 
 type Show = 'all' | 'F' | 'D' | 'G'
@@ -33,28 +33,8 @@ type Palette = { key: string; label: string; color: string }[]
 // seasons with value + composite data (newest first)
 const SEASONS = ['2025-26', '2024-25', '2023-24', '2022-23', '2021-22']
 
-function initials(name?: string | null): string {
-  if (!name) return '—'
-  const p = name.trim().split(/\s+/)
-  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '—'
-}
-
-/** Round headshot with a team-logo badge and initials fallback. */
-function Avatar({ id, team, name, size = 38 }: { id: number; team?: string | null; name?: string | null; size?: number }) {
-  const [err, setErr] = useState(false)
-  const src = !err && team ? getPlayerHeadshotUrl(id, team) : ''
-  return (
-    <span className="pav" style={{ ['--pav' as string]: `${size}px` } as React.CSSProperties}>
-      {src
-        ? <img className="pav__img" src={src} alt="" onError={() => setErr(true)} />
-        : <span className="pav__ini">{initials(name)}</span>}
-      {team && (
-        <img className="pav__logo" src={getTeamLogoUrl(team)} alt=""
-          onError={(e) => ((e.currentTarget.style.display = 'none'))} />
-      )}
-    </span>
-  )
-}
+// Rows + divergence board reuse the shared headshot component (one implementation site-wide).
+const Avatar = PlayerAvatar
 
 const fmt = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
 
@@ -276,131 +256,8 @@ function ColorsLegend({ palette }: { palette: Palette }) {
   )
 }
 
-/* ============================================================================
-   Divergence board (unchanged behaviour)
-   ============================================================================ */
-function DivBar({ label, z, tone }: { label: string; z: number; tone: 'trust' | 'value' }) {
-  const clamped = Math.max(-3, Math.min(3, z))
-  const pct = ((clamped + 3) / 6) * 100
-  const left = Math.min(pct, 50)
-  const width = Math.abs(pct - 50)
-  return (
-    <div className={`dbar dbar--${tone}`}>
-      <span className="dbar__label">{label}</span>
-      <span className="dbar__track">
-        <span className="dbar__zero" />
-        <span className="dbar__fill" style={{ left: `${left}%`, width: `${width}%` }} />
-        <span className="dbar__dot" style={{ left: `${pct}%` }} />
-      </span>
-      <span className="dbar__val">{z >= 0 ? '+' : ''}{z.toFixed(1)}σ</span>
-    </div>
-  )
-}
-
-const ord = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]) }
-const fmtGround = (s: PreviewStat): string =>
-  s.value == null ? '—'
-    : s.fmt === 'rate' ? s.value.toFixed(2)
-    : s.fmt === 'pct1' ? `${(s.value * 100).toFixed(1)}%`
-    : Math.round(s.value).toString()
-
-function DivRow({ rank, r, season, defaultOpen }: { rank: number; r: DivergenceBoardRow; season: string; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(!!defaultOpen)
-  const [ground, setGround] = useState<PreviewStat[] | null>(null)
-
-  // lazy-fetch a couple of grounding stats only when opened (cached by the apiClient)
-  useEffect(() => {
-    if (!open || ground) return
-    let active = true
-    getPlayerPreview(r.player_id, season)
-      .then((p) => active && setGround(p.stats.filter((s) => ['g', 'p', 'p60'].includes(s.key))))
-      .catch(() => active && setGround([]))
-    return () => { active = false }
-  }, [open, ground, r.player_id, season])
-
-  return (
-    <div className={`divrow${open ? ' divrow--open' : ''}`}>
-      <button className="divrow__head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="divrow__rank">{rank}</span>
-        <Avatar id={r.player_id} team={r.team_abbrev} name={r.player_name} size={34} />
-        <span className="divrow__id">
-          <span className="divrow__name">{r.player_name ?? r.player_id}</span>
-          <span className="divrow__sub">
-            <span className="divrow__meta">{r.position}{r.team_abbrev ? ` · ${r.team_abbrev}` : ''}</span>
-            {r.archetype && <span className="divrow__tag">{r.archetype}</span>}
-          </span>
-        </span>
-        <span className="divrow__sigma">{Math.abs(r.divergence).toFixed(1)}σ</span>
-        <ChevronDown size={15} className={`divrow__chev${open ? ' divrow__chev--open' : ''}`} />
-      </button>
-      {open && (
-        <div className="divrow__detail">
-          <DivBar label="Coach trust" z={r.trust_z} tone="trust" />
-          <DivBar label="Isolated value" z={r.composite_z} tone="value" />
-          <p className="divrow__explain">{r.explanation}</p>
-          {ground && ground.length > 0 && (
-            <div className="divrow__stats">
-              {ground.map((s) => (
-                <span key={s.key} className="divrow__stat">
-                  <b>{fmtGround(s)}</b> {s.label}{s.rank != null ? ` · ${ord(s.rank)}` : ''}
-                </span>
-              ))}
-            </div>
-          )}
-          <Link to={`/players/${r.player_id}`} className="divrow__link">View full profile →</Link>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function DivColumn({ title, caption, rows, season }: { title: string; caption: string; rows: DivergenceBoardRow[]; season: string }) {
-  return (
-    <div className="divcol">
-      <div className="divcol__head">
-        <h3 className="divcol__title">{title}</h3>
-        <p className="divcol__caption">{caption}</p>
-      </div>
-      <div className="divcol__list">
-        {rows.length === 0
-          ? <p className="players__msg" style={{ padding: 'var(--space-5)' }}>No qualifying players.</p>
-          : rows.map((r, i) => <DivRow key={r.player_id} rank={i + 1} r={r} season={season} defaultOpen={i === 0} />)}
-      </div>
-    </div>
-  )
-}
-
-function DivergenceBoard({ season }: { season: string }) {
-  const [rows, setRows] = useState<DivergenceBoardRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let active = true
-    setRows(null); setError(null)
-    getDivergenceBoard(season).then((d) => active && setRows(d)).catch(() => active && setError('Could not load board.'))
-    return () => { active = false }
-  }, [season])
-  if (error) return <p className="players__msg">{error}</p>
-  if (!rows) return <SkeletonLoader />
-  const over = rows.filter((r) => r.side === 'trusted_over_value').sort((a, b) => b.divergence - a.divergence)
-  const under = rows.filter((r) => r.side === 'value_over_trust').sort((a, b) => a.divergence - b.divergence)
-  return (
-    <section className="players__divergence">
-      <p className="players__subtitle">
-        Where coaching deployment (trust) and isolated value (composite) most disagree, by
-        position-standardized z-scores. Each side is ranked by the size of the gap; expand a row
-        for the breakdown. Explanations are generated from the underlying numbers.
-      </p>
-      <div className="div2col">
-        <DivColumn title="Trusted beyond their value"
-          caption="Heavy deployment the isolated numbers don’t reward — the eye-test-vs-analytics tension."
-          rows={over} season={season} />
-        <DivColumn title="Value beyond their deployment"
-          caption="Strong isolated value in limited or sheltered roles — often offense not trusted defensively."
-          rows={under} season={season} />
-      </div>
-    </section>
-  )
-}
+/* The "Divergence board" tab is now a deployment-efficiency tool (actual vs justified usage with a
+   situation lens) — its own component. */
 
 /* ============================================================================
    Page
@@ -512,7 +369,7 @@ export default function Players() {
 
         {view === 'leaderboard'
           ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort} />
-          : <DivergenceBoard season={season} />}
+          : <DeploymentBoard />}
       </div>
     </PageLayout>
   )

@@ -140,3 +140,15 @@ export async function getPlayerPreview(playerId: number | string, season?: strin
   const r = await apiClient.get(`/players/${playerId}/preview`, { params: season ? { season } : undefined })
   return r.data
 }
+
+/** Deployment-efficiency board (actual vs justified usage) for a situation lens. */
+export async function getDeploymentBoard(situation: string, limit = 15): Promise<import('./types').DeploymentBoard> {
+  const r = await apiClient.get('/players/deployment-board', { params: { situation, limit } })
+  return r.data
+}
+
+/** A player's full deployment profile across situations (the board-row expansion). */
+export async function getPlayerDeployment(playerId: number | string): Promise<import('./types').PlayerDeploymentEntry[]> {
+  const r = await apiClient.get(`/players/${playerId}/deployment`)
+  return r.data
+}

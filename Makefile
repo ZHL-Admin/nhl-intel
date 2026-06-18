@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs archetypes-v2 radar
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs archetypes-v2 radar deployment
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -32,6 +32,11 @@ edge-refresh:
 # bootstrap SDs, into nhl_models.player_impact. Long-running (~1-2h with bootstrap).
 rapm:
 	python -m models_ml.train_rapm
+
+# Deployment efficiency (Divergence Board rework): actual vs justified usage by situation.
+# Writes nhl_models.deployment_efficiency. `--dry-run` prints the boards without writing.
+deployment:
+	python -m models_ml.compute_deployment_efficiency
 
 # Compute Value GAR/WAR (Phase 6): actual goals above replacement, the goals-reality companion
 # to RAPM (which is read, never modified). Writes nhl_models.player_gar. `make gar-validate` runs

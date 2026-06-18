@@ -397,6 +397,42 @@ class DivergenceBoardRow(BaseModel):
     archetype: Optional[str] = None   # offensive sub-label (v2 source), for the compact header tag
 
 
+class DeploymentRow(BaseModel):
+    """One deployment-efficiency entry: actual vs justified usage in a situation (the new board)."""
+    player_id: int
+    player_name: Optional[str] = None
+    position: Optional[str] = None
+    team_abbrev: Optional[str] = None
+    actual_pctile: float
+    justified_pctile: float
+    gap: float
+    gap_sd: float
+    value_pctile: float
+    value_rank: int
+    n_pool: int
+    explanation: str
+
+
+class DeploymentBoard(BaseModel):
+    """Both sides of the deployment board for one situation lens, plus an honest caption."""
+    situation: str
+    value_label: str
+    caption: str
+    over: List[DeploymentRow] = Field(default_factory=list)
+    under: List[DeploymentRow] = Field(default_factory=list)
+
+
+class PlayerDeploymentEntry(BaseModel):
+    """One situation row in a single player's full deployment profile (the row-expansion detail)."""
+    situation: str
+    value_label: str
+    actual_pctile: float
+    justified_pctile: float
+    gap: float
+    value_rank: int
+    n_pool: int
+
+
 class CompositeComponent(BaseModel):
     """One value component on the goals scale (Phase 4.2)."""
     key: str

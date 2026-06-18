@@ -1,0 +1,76 @@
+/* ============================================================================
+   Deployment-efficiency board (Divergence Board rework): situation lens + two sides
+   ============================================================================ */
+.depboard__bar { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+.depboard__caption { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; margin: 0 0 var(--space-4); max-width: 90ch; }
+.depboard__how { border-bottom: 1px dotted var(--color-text-muted); cursor: help; color: var(--color-text-secondary); white-space: nowrap; }
+.depboard__msg { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-4) 0; }
+
+.dep2col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+@media (max-width: 900px) { .dep2col { grid-template-columns: 1fr; } }
+
+.depcol {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+  background: var(--color-bg-surface); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.depcol__head { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--color-border-subtle); }
+.depcol__title { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
+.depcol__caption { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; margin-top: 4px; }
+.depcol__list { display: flex; flex-direction: column; }
+
+/* ---- rows ---- */
+.deprow { border-bottom: 1px solid var(--color-border-subtle); }
+.deprow:last-child { border-bottom: none; }
+.deprow__head {
+  display: grid;
+  grid-template-columns: 22px 32px minmax(0, 1.2fr) minmax(90px, 1.4fr) 52px 16px;
+  align-items: center; gap: var(--space-3);
+  width: 100%; padding: var(--space-3) var(--space-4);
+  background: none; text-align: left; cursor: pointer; transition: background 120ms ease;
+}
+.deprow__head:hover, .deprow--open .deprow__head { background: var(--color-bg-elevated); }
+.deprow__rank { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted); text-align: center; }
+.deprow__id { display: flex; flex-direction: column; min-width: 0; }
+.deprow__name { font-weight: 650; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deprow__meta { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
+.deprow__bar { min-width: 0; }
+.deprow__gap { font-family: var(--font-mono); font-weight: 800; font-size: var(--text-base); text-align: right; display: flex; flex-direction: column; align-items: flex-end; line-height: 1; }
+.deprow__gap small { font-size: 9px; font-weight: 500; color: var(--color-text-muted); margin-top: 2px; }
+.deprow__gap--over { color: var(--color-danger); }
+.deprow__gap--under { color: var(--color-data-1); }
+.deprow__chev { color: var(--color-text-muted); transition: transform 160ms ease; justify-self: center; }
+.deprow__chev--open { transform: rotate(180deg); }
+
+.deprow__detail { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-1) var(--space-4) var(--space-4); background: var(--color-bg-base); }
+.deprow__explain { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.45; margin: 0; }
+.deprow__link { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-secondary); }
+.deprow__link:hover { color: var(--color-text-primary); }
+
+/* ============================================================================
+   Deployment bar: a track with a hollow "justified" tick + a filled "actual" marker, gap shaded
+   ============================================================================ */
+.depbar { position: relative; display: block; height: 10px; border-radius: var(--radius-full); background: var(--color-bg-elevated); }
+.depbar__gapfill { position: absolute; top: 0; bottom: 0; opacity: 0.5; border-radius: var(--radius-full); }
+.depbar--over .depbar__gapfill { background: color-mix(in srgb, var(--color-danger) 45%, transparent); }
+.depbar--under .depbar__gapfill { background: color-mix(in srgb, var(--color-data-1) 45%, transparent); }
+.depbar__justified { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: var(--radius-full); transform: translate(-50%, -50%); background: var(--color-bg-surface); border: 2px solid var(--color-text-secondary); z-index: 2; }
+.depbar__actual { position: absolute; top: 50%; width: 11px; height: 11px; border-radius: var(--radius-full); transform: translate(-50%, -50%); border: 2px solid var(--color-bg-surface); z-index: 3; }
+.depbar--over .depbar__actual { background: var(--color-danger); }
+.depbar--under .depbar__actual { background: var(--color-data-1); }
+/* legend swatches (inline) */
+.depbar__justified--key, .depbar__actual--key { position: static; display: inline-block; transform: none; vertical-align: middle; margin-right: 4px; }
+.depbar__actual--key { background: var(--color-text-secondary); }
+
+/* ============================================================================
+   Per-player profile (expansion): one row per situation
+   ============================================================================ */
+.depprofile { display: flex; flex-direction: column; gap: var(--space-2); }
+.depprofile__head { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); }
+.depprofile__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 40px; align-items: center; gap: var(--space-3); }
+.depprofile__sit { font-size: var(--text-xs); color: var(--color-text-secondary); }
+.depprofile__gap { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; text-align: right; }
+.depprofile__gap--over { color: var(--color-danger); }
+.depprofile__gap--under { color: var(--color-data-1); }
+.depprofile__legend { display: flex; gap: var(--space-4); margin-top: var(--space-1); font-size: 10px; color: var(--color-text-muted); }
+.depprofile__legend span { display: inline-flex; align-items: center; }

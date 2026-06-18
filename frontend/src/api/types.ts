@@ -1059,3 +1059,35 @@ export interface GoaliePreview {
   catches?: string | null
   stats: PreviewStat[]
 }
+
+// --- Deployment efficiency board (the Divergence Board rework) ---
+export interface DeploymentRow {
+  player_id: number
+  player_name?: string | null
+  position?: string | null
+  team_abbrev?: string | null
+  actual_pctile: number
+  justified_pctile: number
+  gap: number
+  gap_sd: number
+  value_pctile: number
+  value_rank: number
+  n_pool: number
+  explanation: string
+}
+export interface DeploymentBoard {
+  situation: string
+  value_label: string
+  caption: string
+  over: DeploymentRow[]
+  under: DeploymentRow[]
+}
+export interface PlayerDeploymentEntry {
+  situation: string
+  value_label: string
+  actual_pctile: number
+  justified_pctile: number
+  gap: number
+  value_rank: number
+  n_pool: number
+}

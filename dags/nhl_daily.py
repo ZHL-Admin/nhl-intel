@@ -500,6 +500,13 @@ with DAG(
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_divergence"),
         env=_dbt_env,
     )
+    # Deployment efficiency (Divergence Board rework): actual vs justified usage by situation.
+    # Needs composite (value) + win_probability (leverage for the key-moments lens) + segments.
+    compute_deployment = BashOperator(
+        task_id="compute_deployment_efficiency",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_deployment_efficiency"),
+        env=_dbt_env,
+    )
 
     # --- Phase 4.4 trajectories (weekly) ---
     # Player bio (age/height/weight) is slow-changing reference; refresh weekly before the jobs
@@ -649,6 +656,7 @@ with DAG(
     run_dbt_marts >> compute_consistency >> generate_report
     run_dbt_marts >> compute_coach_trust
     [compute_composite, compute_coach_trust] >> compute_divergence >> generate_report
+    [compute_composite, score_winprob] >> compute_deployment >> generate_report
     # Phase 4.4 trajectories: aging curves need archetypes (write_archetypes); twins/physical
     # need bio + marts. Bio refresh feeds them via the stg_player_bio view.
     write_archetypes >> fit_aging_curves >> generate_report

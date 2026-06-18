@@ -19,6 +19,7 @@ from models.schemas import (
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
+    DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -171,6 +172,101 @@ def _player_short_name(player_id: int) -> str:
         f"SELECT ANY_VALUE(last_name) AS n FROM {bq_service.get_full_table_id('stg_rosters')} "
         f"WHERE player_id = {player_id}")
     return (rows[0]["n"] if rows and rows[0].get("n") else "This player")
+
+
+# ── Deployment-efficiency board (the Divergence Board rework) ───────────────────────────────
+# Mirrors models_ml.config.DEPLOYMENT board-selection rules (under-used usage floor + PK gate).
+_DEP_SITUATIONS = ("all", "5v5", "pp", "pk", "key_moments")
+_DEP_FLOORED = {"all", "5v5", "key_moments"}           # usage types where 0 = healthy scratch
+_DEP_UNDER_USAGE_FLOOR = 0.12
+_DEP_PK_SD_GATE = 0.5
+_DEP_CAPTION = {
+    "all": "Comparing total ice time against overall value.",
+    "5v5": "Comparing 5v5 ice time against even-strength (RAPM) impact.",
+    "pp": "Comparing power-play time against power-play impact.",
+    "pk": "Comparing penalty-kill time against penalty-kill + defensive impact.",
+    "key_moments": "Comparing high-leverage ice time against overall value — “key moments” = the "
+                   "most pivotal 25% of game time by win-probability leverage.",
+}
+
+
+def _deployment_board_sync(situation: str, limit: int) -> DeploymentBoard:
+    from insight_engine.templates.divergence import deployment_explain
+    dep = bq_service.get_models_table_id("deployment_efficiency")
+    rosters = bq_service.get_full_table_id("stg_rosters")
+    teams = bq_service.get_full_table_id("mart_team_game_stats")
+    rows = bq_service.query(f"""
+        WITH nm AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name,
+                   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS team_id
+            FROM {rosters}
+            WHERE SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
+            GROUP BY player_id
+        ),
+        tm AS (SELECT team_id, ANY_VALUE(team_abbrev) AS abbrev FROM {teams} GROUP BY team_id)
+        SELECT d.*, nm.name, tm.abbrev AS team_abbrev
+        FROM {dep} d
+        LEFT JOIN nm ON d.player_id = nm.player_id
+        LEFT JOIN tm ON nm.team_id = tm.team_id
+        WHERE d.situation = '{situation}'
+    """)
+    value_label = rows[0]["value_label"] if rows else ""
+    floored = situation in _DEP_FLOORED
+
+    def mk(side, r):
+        return DeploymentRow(
+            player_id=r["player_id"], player_name=r.get("name"), position=r.get("position"),
+            team_abbrev=r.get("team_abbrev"),
+            actual_pctile=r["actual_pctile"], justified_pctile=r["justified_pctile"],
+            gap=r["gap"], gap_sd=r["gap_sd"], value_pctile=r["value_pctile"],
+            value_rank=int(r["value_rank"]), n_pool=int(r["n_pool"]),
+            explanation=deployment_explain(side=side, situation=situation, value_label=value_label,
+                                           value_rank=int(r["value_rank"]), n_pool=int(r["n_pool"]),
+                                           actual_pctile=r["actual_pctile"], position=r.get("position") or "F"))
+
+    over = sorted((r for r in rows if r["conf_gap"] > 0), key=lambda r: -r["conf_gap"])
+    under = [r for r in rows if r["conf_gap"] < 0]
+    if floored:
+        under = [r for r in under if r["actual_pctile"] >= _DEP_UNDER_USAGE_FLOOR]
+    if situation == "pk":
+        under = [r for r in under if r["value_sd_pctile"] <= _DEP_PK_SD_GATE]
+    under = sorted(under, key=lambda r: r["conf_gap"])
+    return DeploymentBoard(
+        situation=situation, value_label=value_label, caption=_DEP_CAPTION.get(situation, ""),
+        over=[mk("over", r) for r in over[:limit]],
+        under=[mk("under", r) for r in under[:limit]])
+
+
+@router.get("/deployment-board", response_model=DeploymentBoard)
+@cache(ttl=1800)
+async def get_deployment_board(
+    situation: str = Query("all", description="all | 5v5 | pp | pk | key_moments"),
+    limit: int = Query(15, ge=1, le=40),
+) -> DeploymentBoard:
+    """Deployment efficiency: actual vs justified usage, by situation (the Divergence Board rework)."""
+    if situation not in _DEP_SITUATIONS:
+        raise HTTPException(status_code=400, detail=f"situation must be one of {_DEP_SITUATIONS}")
+    return await run_in_threadpool(_deployment_board_sync, situation, limit)
+
+
+def _player_deployment_sync(player_id: int):
+    dep = bq_service.get_models_table_id("deployment_efficiency")
+    rows = bq_service.query(
+        f"SELECT situation, value_label, actual_pctile, justified_pctile, gap, value_rank, n_pool "
+        f"FROM {dep} WHERE player_id = {int(player_id)}")
+    order = {s: i for i, s in enumerate(_DEP_SITUATIONS)}
+    rows.sort(key=lambda r: order.get(r["situation"], 99))
+    return [PlayerDeploymentEntry(
+        situation=r["situation"], value_label=r["value_label"],
+        actual_pctile=r["actual_pctile"], justified_pctile=r["justified_pctile"],
+        gap=r["gap"], value_rank=int(r["value_rank"]), n_pool=int(r["n_pool"])) for r in rows]
+
+
+@router.get("/{player_id}/deployment", response_model=List[PlayerDeploymentEntry])
+@cache(ttl=1800)
+async def get_player_deployment(player_id: int) -> List[PlayerDeploymentEntry]:
+    """A single player's full deployment profile across situations (the board-row expansion)."""
+    return await run_in_threadpool(_player_deployment_sync, player_id)
 
 
 # Registered before /{player_id} so "divergence-board" is not coerced to an int player id.
