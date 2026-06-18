@@ -294,27 +294,34 @@ def _need_dimension(needs, prof) -> dict:
 
 
 def _positional_dimension(p, prof, hand, team_id) -> dict:
-    """Gate in [FLOOR,1]: every NHL position is usable; modulate by handedness balance + role use."""
+    """Gate in [FLOOR,1]: every NHL position is usable; modulate by handedness balance vs the team's
+    actual L/R distribution at the position. The note leads on that handedness context — specific to
+    THIS player + team — and never emits tautological filler ('a role every team ices'). When no
+    handedness signal is available it states the position plainly and stops."""
     pg, shoots = prof["pos_group"], prof["shoots"]
     base = 0.82  # any F or D is positionally usable by any team
-    hnote = ""
+    pos_word = {"D": "defenseman", "F": "forward"}[pg]
+    hand_word = {"L": "left-shot ", "R": "right-shot "}.get(shoots or "", "")
+    abbr = prof["_team_abbrev"]
+    # Plain-fact fallback (no editorializing tail) — used when handedness can't be determined.
+    note = f"A {hand_word}{pos_word}.".replace("  ", " ")
+
     h = hand.get((int(team_id), pg))
     if h and shoots in ("L", "R") and (h["L"] + h["R"]) > 0:
         share = h[shoots] / (h["L"] + h["R"])           # team's current share of the player's hand
         # under-supplied handedness (low share) -> bump; over-supplied -> slight trim. ±0.12.
-        adj = (0.5 - share) * 0.24
-        base += adj
+        base += (0.5 - share) * 0.24
         side = "left" if shoots == "L" else "right"
+        opp = "right" if shoots == "L" else "left"
         if share <= 0.42:
-            hnote = f" {prof['_team_abbrev']} are light on {side}-shot {pg}."
+            note = f"A {hand_word}{pos_word} — {abbr} lean {opp}-shot at the position, so the handedness helps."
         elif share >= 0.62:
-            hnote = f" {prof['_team_abbrev']} already carry plenty of {side}-shot {pg}."
+            note = f"A {hand_word}{pos_word}, where {abbr} already have {side}-shot depth."
+        else:
+            note = f"A {hand_word}{pos_word}; {abbr} are balanced at the position."
     level = max(CFG["GATE_FLOOR"], min(1.0, base))
-    pos_word = {"D": "defenseman", "F": "forward"}[pg]
-    hand_word = {"L": "left-shot ", "R": "right-shot "}.get(shoots or "", "")
-    note = f"A {hand_word}{pos_word} — a role every team ices.{hnote}"
     return {"key": "positional", "label": "Positional fit", "level": round(level, 3),
-            "value": _word(level), "note": note.strip(), "tone": "positive"}
+            "value": _word(level), "note": note, "tone": "positive"}
 
 
 def _orient(rush, cyc):
