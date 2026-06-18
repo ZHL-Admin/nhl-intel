@@ -250,24 +250,26 @@ async def get_team_detail(
         # Calculate overall percentages from totals
         total_faceoffs = sum(g['total_faceoffs'] for g in faceoff_data if g.get('total_faceoffs'))
         total_won = sum(g['faceoffs_won'] for g in faceoff_data if g.get('faceoffs_won'))
+        # Return a 0-1 share (like cf_pct); the frontend multiplies by 100 once. (Was *100 here,
+        # which the frontend then doubled -> 5107% on the snapshot.)
         if total_faceoffs > 0:
-            faceoff_win_pct = (total_won / total_faceoffs) * 100
+            faceoff_win_pct = total_won / total_faceoffs
 
         # Zone-specific faceoffs
         oz_total = sum(g['oz_faceoffs'] for g in faceoff_data if g.get('oz_faceoffs'))
         oz_won = sum(g['oz_faceoffs_won'] for g in faceoff_data if g.get('oz_faceoffs_won'))
         if oz_total > 0:
-            oz_faceoff_win_pct = (oz_won / oz_total) * 100
+            oz_faceoff_win_pct = oz_won / oz_total
 
         nz_total = sum(g['nz_faceoffs'] for g in faceoff_data if g.get('nz_faceoffs'))
         nz_won = sum(g['nz_faceoffs_won'] for g in faceoff_data if g.get('nz_faceoffs_won'))
         if nz_total > 0:
-            nz_faceoff_win_pct = (nz_won / nz_total) * 100
+            nz_faceoff_win_pct = nz_won / nz_total
 
         dz_total = sum(g['dz_faceoffs'] for g in faceoff_data if g.get('dz_faceoffs'))
         dz_won = sum(g['dz_faceoffs_won'] for g in faceoff_data if g.get('dz_faceoffs_won'))
         if dz_total > 0:
-            dz_faceoff_win_pct = (dz_won / dz_total) * 100
+            dz_faceoff_win_pct = dz_won / dz_total
 
     return TeamDetail(
         team_id=row['team_id'],
@@ -425,39 +427,67 @@ async def get_team_roster(
         season_result = bq_service.query(season_sql)
         season = season_result[0]['current_season'] if season_result else "2025-26"
 
-    # Roster comes from stg_rosters (per-season roster spots: correct positions and
-    # season-scoped), with per-game stats left-joined from the player game-stats mart.
+    # Real per-player season values, joined from tables that carry actual ice time / on-ice data
+    # (the old version hardcoded toi=15.0 and cf_pct=0.5). Per-60 rates use the player's REAL total
+    # TOI from player_situation_toi (the shift layer); on-ice xGF% is the player's real on-ice share
+    # (mart_player_relative); OZS% from zone deployment; hot/cold = latest game's flag; archetype +
+    # headshot from the current-roster dim. On-ice CF% has no real per-player source -> omitted.
+    rosters = bq_service.get_full_table_id('stg_rosters')
+    pgs = bq_service.get_full_table_id('mart_player_game_stats')
+    rel = bq_service.get_full_table_id('mart_player_relative')
+    zone = bq_service.get_full_table_id('mart_player_zone_deployment')
+    toi_t = bq_service.get_models_table_id('player_situation_toi')
+    dim = bq_service.get_models_table_id('dim_current_roster')
     sql = f"""
     WITH roster AS (
-        SELECT
-            player_id,
-            ANY_VALUE(CONCAT(first_name, ' ', last_name)) AS player_name,
-            ANY_VALUE(position_code) AS position,
-            COUNT(DISTINCT game_id) AS games_played
-        FROM {bq_service.get_full_table_id('stg_rosters')}
+        SELECT player_id,
+               ANY_VALUE(CONCAT(first_name, ' ', last_name)) AS player_name,
+               ANY_VALUE(position_code) AS position,
+               COUNT(DISTINCT game_id) AS games_played
+        FROM {rosters}
         WHERE team_id = {team_id} AND season = '{season}'
+            AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
         GROUP BY player_id
     ),
-    stats AS (
-        SELECT
-            player_id,
-            AVG(toi_5v5) AS toi_per_gp,
-            AVG(primary_points_per60) AS points_per60
-        FROM {bq_service.get_full_table_id('mart_player_game_stats')}
-        WHERE team_id = {team_id} AND season = '{season}'
-        GROUP BY player_id
-    )
+    toi AS (  -- real total ice time (minutes) + games, from the shift layer
+        SELECT player_id, toi_minutes AS total_min, games AS toi_games
+        FROM {toi_t} WHERE season = '{season}' AND situation = 'all'
+    ),
+    prod AS (
+        SELECT player_id,
+               SUM(individual_goals) AS g,
+               SUM(first_assists + second_assists) AS a,
+               SUM(ixg) AS ixg,
+               ARRAY_AGG(hot_cold_flag ORDER BY game_date DESC LIMIT 1)[OFFSET(0)] AS hot_cold
+        FROM {pgs} WHERE team_id = {team_id} AND season = '{season}' GROUP BY player_id
+    ),
+    onice AS (
+        SELECT player_id, AVG(on_ice_xgf_pct) AS on_ice_xgf_pct
+        FROM {rel} WHERE team_id = {team_id} AND season = '{season}' GROUP BY player_id
+    ),
+    ozs AS (
+        SELECT player_id, AVG(ozs_pct) AS ozs_pct
+        FROM {zone} WHERE team_id = {team_id} AND season = '{season}' GROUP BY player_id
+    ),
+    arch AS (SELECT player_id, primary_archetype, headshot_url FROM {dim})
     SELECT
-        r.player_id,
-        r.player_name,
-        r.position,
-        r.games_played,
-        COALESCE(s.toi_per_gp, 0) AS toi_per_gp,
-        COALESCE(s.points_per60, 0) AS points_per60,
-        0.5 AS cf_pct  -- TODO: Calculate player CF% when on-ice data available
+        r.player_id, r.player_name, r.position, r.games_played,
+        SAFE_DIVIDE(t.total_min, t.toi_games) AS toi_per_gp,
+        SAFE_DIVIDE((prod.g + prod.a) * 60.0, t.total_min) AS points_per60,
+        SAFE_DIVIDE(prod.g * 60.0, t.total_min) AS goals_per60,
+        SAFE_DIVIDE(prod.ixg * 60.0, t.total_min) AS ixg_per60,
+        onice.on_ice_xgf_pct AS on_ice_xgf_pct,
+        ozs.ozs_pct AS ozs_pct,
+        prod.hot_cold AS hot_cold,
+        arch.primary_archetype AS archetype,
+        arch.headshot_url AS headshot_url
     FROM roster r
-    LEFT JOIN stats s USING (player_id)
-    ORDER BY r.position, points_per60 DESC
+    LEFT JOIN toi t USING (player_id)
+    LEFT JOIN prod USING (player_id)
+    LEFT JOIN onice USING (player_id)
+    LEFT JOIN ozs USING (player_id)
+    LEFT JOIN arch USING (player_id)
+    ORDER BY r.position, points_per60 DESC NULLS LAST
     """
 
     results = bq_service.query(sql)
@@ -474,9 +504,15 @@ async def get_team_roster(
             player_name=row['player_name'],
             position=row['position'],
             games_played=row['games_played'],
-            toi_per_gp=row['toi_per_gp'],
-            points_per60=row['points_per60'],
-            cf_pct=row['cf_pct']
+            toi_per_gp=row.get('toi_per_gp'),
+            points_per60=row.get('points_per60'),
+            goals_per60=row.get('goals_per60'),
+            ixg_per60=row.get('ixg_per60'),
+            on_ice_xgf_pct=row.get('on_ice_xgf_pct'),
+            ozs_pct=row.get('ozs_pct'),
+            hot_cold=row.get('hot_cold'),
+            archetype=row.get('archetype'),
+            headshot_url=row.get('headshot_url'),
         )
 
         if row['position'] in ['C', 'L', 'R']:

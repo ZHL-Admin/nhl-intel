@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, ComponentStackBar } from '../components/common'
+import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, ComponentStackBar, PlayerAvatar } from '../components/common'
 import type { StackSegment } from '../components/common'
 import Tabs from '../components/common/Tabs'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
-import { StreakDoctorCard, LineSwapWidget } from '../components/common'
+import { LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent, getTeamStreak } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
 import { getTeamGames } from '../api/games'
-import { TeamDetail, TeamTrends, TeamRoster, Game, TeamVsOpponent, StreakCard, PowerRatingRow } from '../api/types'
+import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, TeamVsOpponent, StreakCard, PowerRatingRow } from '../api/types'
 import { RATINGS_COMPONENTS } from '../config/metrics'
-import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
+import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, formatTOI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
 
@@ -180,15 +180,17 @@ function TeamProfile() {
 
   const sortPlayers = (players: any[]) => {
     if (!sortConfig.key) return players
-
+    const dir = sortConfig.direction === 'asc' ? 1 : -1
     return [...players].sort((a, b) => {
       const aVal = a[sortConfig.key]
       const bVal = b[sortConfig.key]
-
+      // null/undefined always sort to the bottom regardless of direction
+      const aNull = aVal == null, bNull = bVal == null
+      if (aNull && bNull) return 0
+      if (aNull) return 1
+      if (bNull) return -1
       if (aVal === bVal) return 0
-
-      const comparison = aVal > bVal ? 1 : -1
-      return sortConfig.direction === 'asc' ? comparison : -comparison
+      return (aVal > bVal ? 1 : -1) * dir
     })
   }
 
@@ -320,11 +322,10 @@ function TeamProfile() {
               options={[
                 { value: 'overview', label: 'Overview' },
                 { value: 'identity', label: 'Identity' },
-                { value: 'form', label: 'Form' },
+                { value: 'performance', label: 'Performance / Trends' },
                 { value: 'lines', label: 'Lines' },
-                { value: 'performance', label: 'Performance' },
                 { value: 'roster', label: 'Roster' },
-                { value: 'matchups', label: 'Matchups' }
+                // Matchups hidden until its vs-opponent content is built (no empty tab).
               ]}
               value={currentTab}
               onChange={handleTabChange}
@@ -355,10 +356,16 @@ function TeamProfile() {
           </div>
         )}
 
-        {/* Auto-surface a notable run on the Overview tab (Phase 3.3) */}
+        {/* Notable run -> a single compact insight line (the full Streak Doctor lives on
+            Performance / Trends, not here). */}
         {currentTab === 'overview' && streakCard?.is_notable && (
           <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
-            <StreakDoctorCard card={streakCard} />
+            <Link to={`/teams/${teamId}?tab=performance`} className="team-profile__streak-line">
+              <Badge variant={streakCard.run_word === 'surge' ? 'hot' : streakCard.run_word === 'slump' ? 'cold' : 'small-sample'}
+                label={streakCard.run_word ? streakCard.run_word.toUpperCase() : 'FORM'} />
+              <span>{streakCard.verdict}</span>
+              <span className="team-profile__streak-line-cta">See Performance / Trends →</span>
+            </Link>
           </div>
         )}
 
@@ -366,7 +373,9 @@ function TeamProfile() {
           <TeamIdentityTab teamId={parseInt(teamId)} />
         )}
 
-        {currentTab === 'form' && teamId && (
+        {/* Performance / Trends — the form verdict (Streak Doctor) lives here only, with its own
+            Last 5/10/20 toggle; rolling trend charts are added in the Phase C redesign. */}
+        {currentTab === 'performance' && teamId && (
           <TeamFormTab teamId={parseInt(teamId)} />
         )}
 
@@ -377,13 +386,10 @@ function TeamProfile() {
           </div>
         )}
 
-        {currentTab === 'performance' && (
-          <PerformanceTab />
-        )}
-
         {currentTab === 'roster' && (
           <RosterTab
             teamRoster={teamRoster}
+            teamAbbrev={teamDetail?.team_abbrev}
             rosterError={rosterError}
             handleRetryRoster={handleRetryRoster}
             sortConfig={sortConfig}
@@ -391,10 +397,6 @@ function TeamProfile() {
             sortPlayers={sortPlayers}
             navigate={navigate}
           />
-        )}
-
-        {currentTab === 'matchups' && (
-          <MatchupsTab />
         )}
       </div>
     </PageLayout>
@@ -767,21 +769,10 @@ function OverviewTab({
 }
 
 // Performance Tab Placeholder
-function PerformanceTab() {
-  return (
-    <div className="team-profile__content">
-      <div className="team-profile__section">
-        <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-16)' }}>
-          Performance tab content coming in PART 6
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // Roster Tab Component
 function RosterTab({
   teamRoster,
+  teamAbbrev,
   rosterError,
   handleRetryRoster,
   sortConfig,
@@ -790,6 +781,7 @@ function RosterTab({
   navigate
 }: {
   teamRoster: TeamRoster | null
+  teamAbbrev?: string | null
   rosterError: string | null
   handleRetryRoster: () => void
   sortConfig: { key: string; direction: 'asc' | 'desc' }
@@ -797,137 +789,44 @@ function RosterTab({
   sortPlayers: (players: any[]) => any[]
   navigate: (path: string) => void
 }) {
+  const f = teamRoster?.forwards ?? []
+  const d = teamRoster?.defensemen ?? []
+  const g = teamRoster?.goalies ?? []
+  const summary = teamRoster
+    ? `${f.length} forwards · ${d.length} defensemen · ${g.length} goalies — 5v5 production, real ice time, and on-ice xGF share.`
+    : ''
+
   return (
     <div className="team-profile__content">
       <div className="team-profile__section">
         <h2 className="team-profile__section-title">Roster</h2>
+        {summary && <p className="team-profile__section-sub">{summary}</p>}
         {rosterError ? (
           <div className="team-profile__section-error">
             <p>{rosterError}</p>
-            <button onClick={handleRetryRoster} className="team-profile__retry-button">
-              Retry
-            </button>
+            <button onClick={handleRetryRoster} className="team-profile__retry-button">Retry</button>
           </div>
         ) : teamRoster ? (
           <div className="team-profile__roster">
-            {/* Forwards */}
-            {teamRoster.forwards.length > 0 && (
-              <div className="team-profile__roster-section">
-                <h3 className="team-profile__roster-heading">Forwards</h3>
-                <table className="team-profile__roster-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleSort('player_name')} className="team-profile__roster-sortable">
-                        Player {sortConfig.key === 'player_name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('games_played')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        GP {sortConfig.key === 'games_played' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('toi_per_gp')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        TOI/GP {sortConfig.key === 'toi_per_gp' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('points_per60')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        PTS/60 {sortConfig.key === 'points_per60' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('cf_pct')} className="team-profile__roster-table-number team-profile__roster-sortable hide-mobile">
-                        CF% {sortConfig.key === 'cf_pct' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortPlayers(teamRoster.forwards).map((player) => (
-                      <tr
-                        key={player.player_id}
-                        className="team-profile__roster-row"
-                        onClick={() => navigate(`/players/${player.player_id}`)}
-                      >
-                        <td>{player.player_name}</td>
-                        <td className="team-profile__roster-table-number mono">{player.games_played}</td>
-                        <td className="team-profile__roster-table-number mono">{player.toi_per_gp.toFixed(1)}</td>
-                        <td className="team-profile__roster-table-number mono">{player.points_per60.toFixed(2)}</td>
-                        <td className="team-profile__roster-table-number mono hide-mobile">
-                          {(player.cf_pct * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {f.length > 0 && (
+              <RosterTable heading="Forwards" players={sortPlayers(f)} teamAbbrev={teamAbbrev}
+                sortConfig={sortConfig} handleSort={handleSort} navigate={navigate} />
             )}
-
-            {/* Defensemen */}
-            {teamRoster.defensemen.length > 0 && (
-              <div className="team-profile__roster-section">
-                <h3 className="team-profile__roster-heading">Defensemen</h3>
-                <table className="team-profile__roster-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleSort('player_name')} className="team-profile__roster-sortable">
-                        Player {sortConfig.key === 'player_name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('games_played')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        GP {sortConfig.key === 'games_played' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('toi_per_gp')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        TOI/GP {sortConfig.key === 'toi_per_gp' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('points_per60')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        PTS/60 {sortConfig.key === 'points_per60' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('cf_pct')} className="team-profile__roster-table-number team-profile__roster-sortable hide-mobile">
-                        CF% {sortConfig.key === 'cf_pct' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortPlayers(teamRoster.defensemen).map((player) => (
-                      <tr
-                        key={player.player_id}
-                        className="team-profile__roster-row"
-                        onClick={() => navigate(`/players/${player.player_id}`)}
-                      >
-                        <td>{player.player_name}</td>
-                        <td className="team-profile__roster-table-number mono">{player.games_played}</td>
-                        <td className="team-profile__roster-table-number mono">{player.toi_per_gp.toFixed(1)}</td>
-                        <td className="team-profile__roster-table-number mono">{player.points_per60.toFixed(2)}</td>
-                        <td className="team-profile__roster-table-number mono hide-mobile">
-                          {(player.cf_pct * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {d.length > 0 && (
+              <RosterTable heading="Defensemen" players={sortPlayers(d)} teamAbbrev={teamAbbrev}
+                sortConfig={sortConfig} handleSort={handleSort} navigate={navigate} />
             )}
-
-            {/* Goalies */}
-            {teamRoster.goalies.length > 0 && (
+            {g.length > 0 && (
               <div className="team-profile__roster-section">
                 <h3 className="team-profile__roster-heading">Goalies</h3>
                 <table className="team-profile__roster-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleSort('player_name')} className="team-profile__roster-sortable">
-                        Player {sortConfig.key === 'player_name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('games_played')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        GP {sortConfig.key === 'games_played' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('toi_per_gp')} className="team-profile__roster-table-number team-profile__roster-sortable">
-                        TOI/GP {sortConfig.key === 'toi_per_gp' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Goalie</th><th className="team-profile__roster-table-number">GP</th></tr></thead>
                   <tbody>
-                    {sortPlayers(teamRoster.goalies).map((player) => (
-                      <tr
-                        key={player.player_id}
-                        className="team-profile__roster-row"
-                        onClick={() => navigate(`/players/${player.player_id}`)}
-                      >
-                        <td>{player.player_name}</td>
+                    {g.map((player) => (
+                      <tr key={player.player_id} className="team-profile__roster-row"
+                        onClick={() => navigate(`/players/${player.player_id}`)}>
+                        <td><RosterNameCell player={player} teamAbbrev={teamAbbrev} /></td>
                         <td className="team-profile__roster-table-number mono">{player.games_played}</td>
-                        <td className="team-profile__roster-table-number mono">{player.toi_per_gp.toFixed(1)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -943,15 +842,85 @@ function RosterTab({
   )
 }
 
-// Matchups Tab Placeholder
-function MatchupsTab() {
+/** Player name cell: headshot + name + archetype chip (reused across roster tables). */
+function RosterNameCell({ player, teamAbbrev }: { player: RosterPlayer; teamAbbrev?: string | null }) {
   return (
-    <div className="team-profile__content">
-      <div className="team-profile__section">
-        <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-16)' }}>
-          Matchups tab content coming in PART 7
-        </p>
+    <div className="team-profile__roster-player">
+      <PlayerAvatar id={player.player_id} team={teamAbbrev} name={player.player_name} size={28} />
+      <div className="team-profile__roster-player-meta">
+        <span className="team-profile__roster-player-name">{player.player_name}</span>
+        {player.archetype && <span className="team-profile__roster-arch">{player.archetype}</span>}
       </div>
+    </div>
+  )
+}
+
+/** Tier color for an on-ice share around 50% (top third green / bottom third red, per UX rule 7). */
+function shareColor(v?: number | null): string | undefined {
+  if (v == null) return undefined
+  if (v >= 0.52) return 'var(--color-success)'
+  if (v <= 0.48) return 'var(--color-danger)'
+  return undefined
+}
+const pct1 = (v?: number | null) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)
+const dec2 = (v?: number | null) => (v == null ? '—' : v.toFixed(2))
+
+/** Sortable skater roster table with real per-player values (UX number formatting). */
+function RosterTable({ heading, players, teamAbbrev, sortConfig, handleSort, navigate }: {
+  heading: string
+  players: RosterPlayer[]
+  teamAbbrev?: string | null
+  sortConfig: { key: string; direction: 'asc' | 'desc' }
+  handleSort: (key: string) => void
+  navigate: (path: string) => void
+}) {
+  const arrow = (key: string) => (sortConfig.key === key ? (sortConfig.direction === 'asc' ? ' ↑' : ' ↓') : '')
+  const cols: { key: string; label: string; mobileHide?: boolean }[] = [
+    { key: 'games_played', label: 'GP' },
+    { key: 'toi_per_gp', label: 'TOI/GP' },
+    { key: 'points_per60', label: 'PTS/60' },
+    { key: 'goals_per60', label: 'G/60', mobileHide: true },
+    { key: 'ixg_per60', label: 'ixG/60', mobileHide: true },
+    { key: 'on_ice_xgf_pct', label: 'ON-ICE xGF%' },
+    { key: 'ozs_pct', label: 'OZS%', mobileHide: true },
+  ]
+  return (
+    <div className="team-profile__roster-section">
+      <h3 className="team-profile__roster-heading">{heading}</h3>
+      <table className="team-profile__roster-table">
+        <thead>
+          <tr>
+            <th onClick={() => handleSort('player_name')} className="team-profile__roster-sortable">Player{arrow('player_name')}</th>
+            {cols.map((c) => (
+              <th key={c.key} onClick={() => handleSort(c.key)}
+                className={`team-profile__roster-table-number team-profile__roster-sortable${c.mobileHide ? ' hide-mobile' : ''}`}>
+                {c.label}{arrow(c.key)}
+              </th>
+            ))}
+            <th className="team-profile__roster-table-number">FORM</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player) => (
+            <tr key={player.player_id} className="team-profile__roster-row"
+              onClick={() => navigate(`/players/${player.player_id}`)}>
+              <td><RosterNameCell player={player} teamAbbrev={teamAbbrev} /></td>
+              <td className="team-profile__roster-table-number mono">{player.games_played}</td>
+              <td className="team-profile__roster-table-number mono">{formatTOI(player.toi_per_gp)}</td>
+              <td className="team-profile__roster-table-number mono">{dec2(player.points_per60)}</td>
+              <td className="team-profile__roster-table-number mono hide-mobile">{dec2(player.goals_per60)}</td>
+              <td className="team-profile__roster-table-number mono hide-mobile">{dec2(player.ixg_per60)}</td>
+              <td className="team-profile__roster-table-number mono" style={{ color: shareColor(player.on_ice_xgf_pct) }}>{pct1(player.on_ice_xgf_pct)}</td>
+              <td className="team-profile__roster-table-number mono hide-mobile">{pct1(player.ozs_pct)}</td>
+              <td className="team-profile__roster-table-number">
+                {player.hot_cold === 'hot' ? <Badge variant="hot" />
+                  : player.hot_cold === 'cold' ? <Badge variant="cold" />
+                    : <span className="team-profile__roster-form-neutral">—</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

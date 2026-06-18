@@ -225,3 +225,12 @@ export function getPlayerHeadshotUrl(
   const season = seasonId || getCurrentSeasonId()
   return `https://assets.nhle.com/mugs/nhl/${season}/${teamAbbrev}/${playerId}.png`
 }
+
+/** Format minutes (decimal) as mm:ss per UX 3.6 (never a decimal like 15.0). null -> em-dash. */
+export function formatTOI(minutes?: number | null): string {
+  if (minutes == null || !isFinite(minutes)) return '—'
+  const total = Math.round(minutes * 60)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}

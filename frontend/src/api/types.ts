@@ -220,9 +220,15 @@ export interface RosterPlayer {
   player_name: string
   position: string
   games_played: number
-  toi_per_gp: number
-  points_per60: number
-  cf_pct: number
+  toi_per_gp?: number | null        // real TOI/GP in MINUTES (render mm:ss)
+  points_per60?: number | null
+  goals_per60?: number | null
+  ixg_per60?: number | null
+  on_ice_xgf_pct?: number | null    // 0-1 share (real, per-player)
+  ozs_pct?: number | null           // 0-1 offensive-zone-start share
+  hot_cold?: string | null          // 'hot' | 'cold' | 'neutral'
+  archetype?: string | null
+  headshot_url?: string | null
 }
 
 export interface TeamRoster {

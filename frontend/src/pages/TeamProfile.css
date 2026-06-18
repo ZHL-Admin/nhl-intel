@@ -368,3 +368,27 @@
     font-size: var(--text-xs);
   }
 }
+
+/* ---- Roster (real per-player values) + Overview streak insight line (Phase A/B) ---- */
+.team-profile__section-sub {
+  font-size: var(--text-sm); color: var(--color-text-secondary);
+  margin: calc(-1 * var(--space-2)) 0 var(--space-6); max-width: 80ch; line-height: 1.5;
+}
+.team-profile__roster-player { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.team-profile__roster-player-meta { display: flex; flex-direction: column; min-width: 0; }
+.team-profile__roster-player-name { font-weight: 650; color: var(--color-text-primary); white-space: nowrap; }
+.team-profile__roster-arch {
+  font-size: 10px; color: var(--color-text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22ch;
+}
+.team-profile__roster-form-neutral { color: var(--color-text-muted); }
+
+.team-profile__streak-line {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle);
+  font-size: var(--text-sm); color: var(--color-text-secondary); text-decoration: none;
+  transition: border-color 140ms ease;
+}
+.team-profile__streak-line:hover { border-color: var(--color-border-strong); }
+.team-profile__streak-line-cta { margin-left: auto; color: var(--color-accent); font-weight: 600; white-space: nowrap; }

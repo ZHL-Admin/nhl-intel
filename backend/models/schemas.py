@@ -261,14 +261,24 @@ class TeamTrends(BaseModel):
 
 
 class RosterPlayer(BaseModel):
-    """Player in team roster."""
+    """Player in team roster (real per-player season values; missing fields omitted, not faked).
+
+    Per-60 rates use the player's real total TOI (from the shift layer). On-ice xGF% is the
+    player's real on-ice 5v5 share. On-ice CF% has no real per-player source, so it is omitted.
+    """
     player_id: int
     player_name: str
     position: str
     games_played: int
-    toi_per_gp: float
-    points_per60: float
-    cf_pct: float
+    toi_per_gp: Optional[float] = None       # real TOI/GP in MINUTES (frontend formats mm:ss)
+    points_per60: Optional[float] = None
+    goals_per60: Optional[float] = None
+    ixg_per60: Optional[float] = None
+    on_ice_xgf_pct: Optional[float] = None   # 0-1 share (real, per-player)
+    ozs_pct: Optional[float] = None          # 0-1 offensive-zone-start share
+    hot_cold: Optional[str] = None           # 'hot' | 'cold' | 'neutral'
+    archetype: Optional[str] = None
+    headshot_url: Optional[str] = None
 
 
 class TeamRoster(BaseModel):
