@@ -8,13 +8,12 @@
  */
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Check, Info, Plus, ArrowRight, RotateCcw, Share2, Zap, Sparkles } from 'lucide-react'
-import { PageLayout, PageHeader, PlayerCard, PlayerExplorer, SkeletonLoader } from '../components/common'
-import type { PlayerCardData } from '../components/common'
-import { tradeFit, bestTeamFits } from '../api/tools'
-import { getPlayerPreview } from '../api/players'
+import { Check, Info, ArrowRight, RotateCcw, Share2, Zap, Sparkles, Search, X } from 'lucide-react'
+import { PageLayout, PageHeader, SkeletonLoader } from '../components/common'
+import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
+import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
-import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, PlayerPreview } from '../api/types'
+import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, PlayerPreview, ArchetypeRankRow } from '../api/types'
 import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
 import './TradeFit.css'
 
@@ -86,6 +85,95 @@ function TeamGrid({ teams, activeId, onPick }: {
               <span className="tf-teamcard__name">{t.name}</span>
             </button>
           ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** A browse/search row: avatar + name + position·team (mono) + archetype label. */
+function PlayerRow({ p, onPick, selected }: {
+  p: PlayerSearchResult; onPick: (p: PlayerSearchResult) => void; selected?: boolean
+}) {
+  const face = p.headshot_url || (p.team_abbrev ? getPlayerHeadshotUrl(p.player_id, p.team_abbrev) : '')
+  return (
+    <button className={`tf-prow${selected ? ' tf-prow--selected' : ''}`} onClick={() => onPick(p)}>
+      {face
+        ? <img className="tf-prow__face" src={face} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
+        : <span className="tf-prow__face tf-prow__face--blank" />}
+      <span className="tf-prow__name">{p.name}</span>
+      <span className="tf-prow__meta">{p.position ?? ''}{p.team_abbrev ? ` · ${p.team_abbrev}` : ''}</span>
+      {p.archetype && <span className="tf-prow__arch">{p.archetype}</span>}
+    </button>
+  )
+}
+
+/**
+ * Player-active picker: league search + a short "recent & notable" list. Each row shows the
+ * player's archetype label straight from the search / leaders payload — the same v2 archetype
+ * source getPlayerLabels derives from, so there's no drift and no per-row fetch (no N+1).
+ */
+function PlayerPickerPanel({ onPick, selectedId }: {
+  onPick: (p: PlayerSearchResult) => void; selectedId: number | null
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<PlayerSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [notable, setNotable] = useState<PlayerSearchResult[] | null>(null)
+
+  // "recent & notable" = the league's top players by Overall (the leaders payload carries the
+  // archetype + team, so we render rows without an extra call per player).
+  useEffect(() => {
+    let on = true
+    getOverallLeaders('ALL', undefined, 12)
+      .then((rows: ArchetypeRankRow[]) => {
+        if (!on) return
+        setNotable(rows.filter((r) => r.position !== 'G').map((r) => ({
+          player_id: r.player_id, name: r.player_name ?? '', team_id: null,
+          team_abbrev: r.team_abbrev ?? null, position: r.position ?? null,
+          headshot_url: r.team_abbrev ? getPlayerHeadshotUrl(r.player_id, r.team_abbrev) : null,
+          archetype: r.primary_archetype ?? null,
+        })))
+      })
+      .catch(() => on && setNotable([]))
+    return () => { on = false }
+  }, [])
+
+  // debounced league-wide search
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults([]); setSearching(false); return }
+    let on = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      try { const data = await searchPlayers(q, 24); if (on) setResults(data.filter((p) => p.position !== 'G')) }
+      catch { if (on) setResults([]) }
+      finally { if (on) setSearching(false) }
+    }, 220)
+    return () => { on = false; clearTimeout(t) }
+  }, [query])
+
+  const searchMode = query.trim().length >= 2
+  const list = searchMode ? results : (notable ?? [])
+
+  return (
+    <section className="tf-pick">
+      <div className="tf-pick__search">
+        <Search size={16} className="tf-pick__search-icon" />
+        <input className="tf-pick__input" placeholder="Search any player in the league…"
+          value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
+        {query && (
+          <button className="tf-pick__clear" onClick={() => setQuery('')} aria-label="Clear search"><X size={15} /></button>
+        )}
+      </div>
+      <h4 className="tf-pick__head">{searchMode ? 'Search results' : 'Recent & notable'}</h4>
+      {(searchMode ? (searching && results.length === 0) : notable === null) ? (
+        <SkeletonLoader />
+      ) : list.length === 0 ? (
+        <p className="tf-pick__empty">{searchMode ? `No players match “${query.trim()}”.` : 'No players to show.'}</p>
+      ) : (
+        <div className="tf-pick__list">
+          {list.map((p) => <PlayerRow key={p.player_id} p={p} onPick={onPick} selected={p.player_id === selectedId} />)}
         </div>
       )}
     </section>
@@ -194,49 +282,79 @@ export default function TradeFit() {
           <>
             <div className="tf-build">
               <div className="tf-build__slots">
-                <div className={`tf-slot${mode === 'player' ? ' tf-slot--armed' : ''}`} onClick={() => setMode('player')}>
-                  <span className="tf-slot__label">Player</span>
+                {/* Player card — a stateful toggle; active one drives the picker below */}
+                <button type="button" aria-pressed={mode === 'player'}
+                  className={`tf-card${mode === 'player' ? ' tf-card--active' : ''}`}
+                  onClick={() => setMode('player')}>
+                  <span className="tf-card__head">
+                    <span className="tf-card__label">Player</span>
+                    {mode === 'player' && <span className="tf-card__tag">Selecting</span>}
+                  </span>
                   {player ? (
-                    <PlayerCard player={player as PlayerCardData} size="lg" onRemove={() => setPlayer(null)} />
+                    <span className="tf-card__chip">
+                      {(player.headshot_url || player.team_abbrev)
+                        ? <img className="tf-card__face" alt=""
+                            src={player.headshot_url || getPlayerHeadshotUrl(player.player_id, player.team_abbrev || '')}
+                            onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
+                        : <span className="tf-card__face tf-card__face--blank" />}
+                      <span className="tf-card__chip-meta">
+                        <span className="tf-card__chip-name">{player.name}</span>
+                        <span className="tf-card__chip-sub">{player.position ?? ''}{player.team_abbrev ? ` · ${player.team_abbrev}` : ''}</span>
+                      </span>
+                      <span className="tf-card__clear" role="button" tabIndex={0} aria-label="Clear player"
+                        onClick={(e) => { e.stopPropagation(); setPlayer(null); setMode('player') }}><X size={14} /></span>
+                    </span>
                   ) : (
-                    <button className="tf-slot__empty" onClick={(e) => { e.stopPropagation(); setMode('player') }}>
-                      <span className="tf-slot__plus"><Plus size={20} /></span>
-                      <span>Add a player</span>
-                    </button>
+                    <span className="tf-card__placeholder">Search for a player</span>
                   )}
-                </div>
+                </button>
 
                 <ArrowRight className="tf-build__arrow" size={22} />
 
-                <div className={`tf-slot${mode === 'team' ? ' tf-slot--armed' : ''}`} onClick={() => setMode('team')}>
-                  <span className="tf-slot__label">Destination</span>
+                {/* Destination card — toggle to the team grid */}
+                <button type="button" aria-pressed={mode === 'team'}
+                  className={`tf-card${mode === 'team' ? ' tf-card--active' : ''}`}
+                  onClick={() => setMode('team')}>
+                  <span className="tf-card__head">
+                    <span className="tf-card__label">Destination</span>
+                    {mode === 'team' && <span className="tf-card__tag">Selecting</span>}
+                  </span>
                   {team ? (
-                    <div className="tf-slot__team">
-                      <img src={getTeamLogoUrl(team.abbrev)} alt=""
+                    <span className="tf-card__chip">
+                      <img className="tf-card__logo" src={getTeamLogoUrl(team.abbrev)} alt=""
                         onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-                      <span className="tf-slot__team-name">{team.name}</span>
-                      <button className="tf-slot__team-clear" onClick={(e) => { e.stopPropagation(); setTeam(null) }} aria-label="Clear team">✕</button>
-                    </div>
+                      <span className="tf-card__chip-meta">
+                        <span className="tf-card__chip-name">{team.name}</span>
+                        <span className="tf-card__chip-sub">{team.abbrev}</span>
+                      </span>
+                      <span className="tf-card__clear" role="button" tabIndex={0} aria-label="Clear team"
+                        onClick={(e) => { e.stopPropagation(); setTeam(null); setMode('team') }}><X size={14} /></span>
+                    </span>
                   ) : (
-                    <button className="tf-slot__empty" onClick={(e) => { e.stopPropagation(); setMode('team') }}>
-                      <span className="tf-slot__plus"><Plus size={20} /></span>
-                      <span>Choose a team</span>
-                    </button>
+                    <span className="tf-card__placeholder">Choose a destination team</span>
                   )}
-                </div>
+                </button>
               </div>
 
               {error && <div className="tf__error">{error}</div>}
 
               <button className="tf-run" disabled={!player || !team || loading} onClick={run}>
                 <Zap size={16} />
-                {loading ? 'Scoring…' : !player ? 'Add a player' : !team ? 'Choose a team' : 'Score fit'}
+                {loading ? 'Scoring…' : 'Score the fit'}
               </button>
+              {!(player && team) && (
+                <p className="tf-build__hint">
+                  {!player && !team ? 'Add a player and a destination to score'
+                    : !player ? 'Add a player to score'
+                      : 'Choose a destination to score'}
+                </p>
+              )}
             </div>
 
+            {/* ONE contextual picker, driven by the active card */}
             {mode === 'team'
               ? <TeamGrid teams={teams} activeId={team?.team_id} onPick={pickTeam} />
-              : <PlayerExplorer onPick={pickPlayer} takenIds={player ? new Set([player.player_id]) : undefined} />}
+              : <PlayerPickerPanel onPick={pickPlayer} selectedId={player?.player_id ?? null} />}
           </>
         )}
       </div>

@@ -36,65 +36,49 @@
 }
 .tf-build__arrow { color: var(--color-text-muted); flex: 0 0 auto; }
 
-.tf-slot {
+/* Player / Destination cards = stateful toggles. Active = 2px accent border + "Selecting" tag;
+   inactive = quiet 0.5px border. The active card drives the contextual picker below. */
+.tf-card {
   flex: 1 1 280px;
   max-width: 360px;
-  min-height: 196px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 0.5px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-.tf-slot--armed {
-  border-color: var(--color-accent);
+.tf-card:hover { border-color: var(--color-border-strong); }
+.tf-card--active {
+  border: 2px solid var(--color-accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
-.tf-slot__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
+.tf-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.tf-card__label {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--color-text-muted);
 }
-.tf-slot__empty {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-3);
-  color: var(--color-text-muted);
-  background: none;
-  font-size: var(--text-sm);
+.tf-card__tag {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--color-text-inverse); background: var(--color-accent);
+  padding: 1px 7px; border-radius: var(--radius-full);
 }
-.tf-slot__plus {
-  display: grid; place-items: center;
-  width: 38px; height: 38px; border-radius: var(--radius-full);
-  background: var(--color-bg-elevated); color: var(--color-text-secondary);
-  transition: background 140ms ease, color 140ms ease;
+.tf-card__placeholder { display: flex; align-items: center; min-height: 44px; color: var(--color-text-muted); font-size: var(--text-sm); }
+.tf-card__chip { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.tf-card__face { width: 40px; height: 40px; border-radius: var(--radius-full); object-fit: cover; object-position: top center; background: var(--color-bg-elevated); flex: 0 0 auto; }
+.tf-card__logo { width: 40px; height: 40px; object-fit: contain; flex: 0 0 auto; }
+.tf-card__chip-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tf-card__chip-name { font-weight: 700; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tf-card__chip-sub { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.tf-card__clear {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: var(--radius-full);
+  background: var(--color-bg-elevated); color: var(--color-text-secondary); cursor: pointer;
 }
-.tf-slot:hover .tf-slot__plus { color: var(--color-text-primary); }
-.tf-slot--armed .tf-slot__plus { background: var(--color-accent-subtle); color: var(--color-text-primary); }
-
-.tf-slot__team {
-  flex: 1;
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-2);
-}
-.tf-slot__team img { width: 72px; height: 72px; object-fit: contain; }
-.tf-slot__team-name { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); text-align: center; }
-.tf-slot__team-clear {
-  position: absolute; top: -4px; right: -4px;
-  width: 24px; height: 24px; display: grid; place-items: center;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-elevated); color: var(--color-text-secondary);
-  font-size: 12px;
-}
-.tf-slot__team-clear:hover { background: var(--color-danger-bg); color: var(--color-danger); }
+.tf-card__clear:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 
 .tf-run {
   align-self: center;
@@ -109,6 +93,53 @@
 }
 .tf-run:not(:disabled):hover { background: var(--color-accent-hover); transform: translateY(-1px); }
 .tf-run:disabled { opacity: 0.5; cursor: not-allowed; }
+/* helper line — says what's missing instead of renaming the submit button */
+.tf-build__hint { align-self: center; margin-top: calc(-1 * var(--space-2)); font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* ============================================================================
+   Player picker panel (player-active): search + "recent & notable" rows
+   ============================================================================ */
+.tf-pick {
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+.tf-pick__search { position: relative; display: flex; align-items: center; }
+.tf-pick__search-icon { position: absolute; left: var(--space-3); color: var(--color-text-muted); pointer-events: none; }
+.tf-pick__input {
+  width: 100%; padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--space-3) + 24px);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-bg-elevated); color: var(--color-text-primary); font-size: var(--text-base);
+}
+.tf-pick__input:focus { outline: none; border-color: var(--color-accent); }
+.tf-pick__clear { position: absolute; right: var(--space-2); display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-full); color: var(--color-text-muted); }
+.tf-pick__clear:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.tf-pick__head {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}
+.tf-pick__empty { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-3) 0; }
+.tf-pick__list { display: flex; flex-direction: column; gap: 2px; }
+
+.tf-prow {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
+  background: none; text-align: left; cursor: pointer; width: 100%;
+  transition: background 120ms ease;
+}
+.tf-prow:hover { background: var(--color-bg-elevated); }
+.tf-prow--selected { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.tf-prow__face { width: 34px; height: 34px; border-radius: var(--radius-full); object-fit: cover; object-position: top center; background: var(--color-bg-elevated); flex: 0 0 auto; }
+.tf-prow__name { font-weight: 650; color: var(--color-text-primary); }
+.tf-prow__meta { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); flex: 0 0 auto; }
+.tf-prow__arch {
+  margin-left: auto; font-size: var(--text-xs); color: var(--color-text-secondary);
+  background: var(--color-bg-elevated); padding: 2px 8px; border-radius: var(--radius-full);
+  white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis;
+}
 
 .tf__error {
   align-self: center;
@@ -411,7 +442,8 @@
 @media (max-width: 860px) {
   .tf { padding: var(--space-6) var(--space-4) var(--space-12); }
   .tf-build__arrow { transform: rotate(90deg); }
-  .tf-slot { max-width: none; }
+  .tf-card { max-width: none; }
+  .tf-build__slots { flex-direction: column; align-items: stretch; }
   .tf-hero__banner { flex-wrap: wrap; gap: var(--space-4); padding: var(--space-5); }
   .tf-hero__body { grid-template-columns: 1fr; gap: var(--space-6); padding: var(--space-5); }
   .tf-hero__col--needs { border-left: none; padding-left: 0; border-top: 1px solid var(--color-border-subtle); padding-top: var(--space-6); }
