@@ -112,11 +112,16 @@ def _raw_values(df: pd.DataFrame) -> pd.DataFrame:
     toi = num("total_toi").replace(0, np.nan)
     att = num("attempts").replace(0, np.nan)
     out = pd.DataFrame(index=df.index)
+    toi5 = num("toi_5v5").replace(0, np.nan)
     out["finishing"] = num("finishing")
-    out["shot_volume"] = num("attempts") / num("toi_5v5").replace(0, np.nan) * 60.0
-    out["shot_danger"] = num("ixg") / att
-    out["rush_offense"] = num("rush") / att
-    out["cycle_forecheck"] = (num("cycle") + num("forecheck")) / att
+    out["shot_volume"] = num("attempts") / toi5 * 60.0
+    out["shot_danger"] = num("ixg") / att          # per-attempt: this IS a quality (efficiency) metric
+    # Rush / cycle "offense" are VOLUME measures of how much rush/cycle generation a player drives,
+    # so they must be per-60 RATES (like shot_volume / playmaking) — NOT a share of the player's own
+    # attempts. As a share they penalize high-volume shooters (e.g. McDavid's 17 rush of ~540
+    # attempts reads low), which is wrong; the per-60 rate ranks elite rush/cycle creators correctly.
+    out["rush_offense"] = num("rush") / toi5 * 60.0
+    out["cycle_forecheck"] = (num("cycle") + num("forecheck")) / toi5 * 60.0
     out["playmaking"] = num("first_assists") / toi * 60.0
     out["ev_off_impact"] = num("off_impact")
     out["pp_value"] = num("pp_impact")

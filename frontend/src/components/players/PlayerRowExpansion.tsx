@@ -36,11 +36,6 @@ type Payload =
 
 const _cache = new Map<string, Payload>()
 
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'], v = n % 100
-  return n + (s[(v - 20) % 10] || s[v] || s[0])
-}
-
 function fmtStat(s: PreviewStat): string {
   const v = s.value
   if (v == null) return '—'
@@ -57,7 +52,8 @@ function fmtStat(s: PreviewStat): string {
 
 const POS_NOUN: Record<string, string> = { F: 'forwards', D: 'defensemen', G: 'goalies' }
 
-/** Ranked base-stats table: every stat shows its within-position rank in a mono column. */
+/** Ranked base-stats table: every stat shows its within-position RANK as "rank / pool" — the pool
+ * size makes it unambiguously a rank (e.g. 150 / 479), never confusable with a 0-100 percentile. */
 function StatTable({ stats }: { stats: PreviewStat[] }) {
   return (
     <table className="pxe-stats">
@@ -66,7 +62,11 @@ function StatTable({ stats }: { stats: PreviewStat[] }) {
           <tr key={s.key}>
             <th scope="row">{s.label}</th>
             <td className="pxe-stats__v">{fmtStat(s)}</td>
-            <td className="pxe-stats__rank">{s.rank != null ? ordinal(s.rank) : ''}</td>
+            <td className="pxe-stats__rank">
+              {s.rank != null
+                ? <>{s.rank}{s.n != null && <span className="pxe-stats__rank-n"> / {s.n}</span>}</>
+                : ''}
+            </td>
           </tr>
         ))}
       </tbody>

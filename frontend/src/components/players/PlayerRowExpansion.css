@@ -51,7 +51,8 @@
 .pxe-stats tr:last-child th, .pxe-stats tr:last-child td { border-bottom: none; }
 .pxe-stats th { font-weight: 600; color: var(--color-text-secondary); font-size: var(--text-sm); }
 .pxe-stats__v { text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
-.pxe-stats__rank { text-align: right; width: 64px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.pxe-stats__rank { text-align: right; width: 84px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-secondary); }
+.pxe-stats__rank-n { color: var(--color-text-muted); }
 
 /* value readout (WAR/GAR) reused inside the Overall strip's aside slot */
 .pxe-warline { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
