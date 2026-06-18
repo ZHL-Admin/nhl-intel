@@ -9,12 +9,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { Tabs, Tooltip, SkeletonLoader, PlayerAvatar } from '../common'
+import { Tooltip, SkeletonLoader, PlayerAvatar } from '../common'
 import { getDeploymentBoard, getPlayerDeployment } from '../../api/players'
 import { DeploymentBoard as Board, DeploymentRow, PlayerDeploymentEntry } from '../../api/types'
 import './DeploymentBoard.css'
 
-const SITUATIONS = [
+// Single source for the situation filter; the Players page renders these options inside the toolbar
+// card (so the Usage & Value tab's controls match the Player Rankings tab), and passes the choice in.
+export const DEPLOYMENT_SITUATIONS = [
   { value: 'all', label: 'All' },
   { value: '5v5', label: '5v5' },
   { value: 'pp', label: 'PP' },
@@ -124,8 +126,8 @@ function Column({ title, caption, rows, side }: { title: string; caption: string
   )
 }
 
-export default function DeploymentBoard() {
-  const [situation, setSituation] = useState('all')
+/** The situation filter is owned by the Players toolbar card (so the two tabs match) and passed in. */
+export default function DeploymentBoard({ situation = 'all' }: { situation?: string }) {
   const [board, setBoard] = useState<Board | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -138,9 +140,6 @@ export default function DeploymentBoard() {
 
   return (
     <section className="depboard">
-      <div className="depboard__bar">
-        <Tabs options={SITUATIONS} value={situation} onChange={setSituation} />
-      </div>
       <p className="depboard__caption">
         {board?.caption ?? 'Comparing usage against the value it’s justified by.'}{' '}
         <Tooltip content={HOW}><span className="depboard__how">How this works</span></Tooltip>

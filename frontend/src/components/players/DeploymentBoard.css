@@ -1,8 +1,8 @@
 /* ============================================================================
    Deployment-efficiency board (Divergence Board rework): situation lens + two sides
    ============================================================================ */
-.depboard__bar { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
-.depboard__caption { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; margin: 0 0 var(--space-4); max-width: 90ch; }
+/* the situation filter now lives in the Players toolbar card (so both tabs match); caption stays here */
+.depboard__caption { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; margin: var(--space-4) 0; max-width: 90ch; }
 .depboard__how { border-bottom: 1px dotted var(--color-text-muted); cursor: help; color: var(--color-text-secondary); white-space: nowrap; }
 .depboard__msg { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-4) 0; }
 

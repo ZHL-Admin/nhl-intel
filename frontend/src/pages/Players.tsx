@@ -16,7 +16,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
-import DeploymentBoard from '../components/players/DeploymentBoard'
+import DeploymentBoard, { DEPLOYMENT_SITUATIONS } from '../components/players/DeploymentBoard'
 import {
   PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar,
 } from '../components/common'
@@ -269,6 +269,7 @@ export default function Players() {
   const [rankBy, setRankBy] = useState<RankBy>('war')
   const [season, setSeason] = useState<string>(SEASONS[0])
   const [sort, setSort] = useState<ValueSort>('confidence')   // confidence-adjusted order by default
+  const [situation, setSituation] = useState('all')           // Usage & Value tab's situation filter
   const [methodOpen, setMethodOpen] = useState(false)
 
   // Show and Rank-by are interdependent (only WAR is cross-position-comparable; RAPM is skater-only;
@@ -301,8 +302,8 @@ export default function Players() {
           <div className="players__mode">
             <Tabs
               options={[
-                { value: 'leaderboard', label: 'Leaderboard' },
-                { value: 'divergence', label: 'Divergence board' },
+                { value: 'leaderboard', label: 'Player Rankings' },
+                { value: 'divergence', label: 'Usage & Value' },
               ]}
               value={view}
               onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
@@ -365,11 +366,20 @@ export default function Players() {
               </div>
             </>
           )}
+
+          {view === 'divergence' && (
+            <div className="players__controls">
+              <span className="players__control">
+                <span className="players__control-lbl">Situation</span>
+                <Tabs options={DEPLOYMENT_SITUATIONS} value={situation} onChange={setSituation} />
+              </span>
+            </div>
+          )}
         </div>
 
         {view === 'leaderboard'
           ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort} />
-          : <DeploymentBoard />}
+          : <DeploymentBoard situation={situation} />}
       </div>
     </PageLayout>
   )
