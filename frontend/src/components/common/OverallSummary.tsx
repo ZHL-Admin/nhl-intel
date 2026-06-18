@@ -50,31 +50,34 @@ export default function OverallSummary({ overall, read, variant = 'card', aside 
   const pct = Math.round((overall.overall_percentile ?? 0) * 100)
   const posNoun = POS_NOUN[overall.pos_group ?? ''] ?? 'their position'
 
-  // ---- condensed strip: lead percentile + COMPACT inline component bars + value readout ----
+  // ---- condensed strip: a compact bordered card. Row 1 = lead percentile + inline component
+  //      bars; row 2 = the value (WAR/GAR) readout. Never the number without its components. ----
   if (variant === 'strip') {
     return (
       <div className="ovr ovr--strip">
-        <div className="ovr__lead">
-          <span className="ovr__pct">{ordinal(pct)}</span>
-          <span className="ovr__lead-sub">
-            percentile overall · among {posNoun}
-            <span className="ovr__info" tabIndex={0} role="note" aria-label={NOTE} title={NOTE}>ⓘ</span>
-          </span>
-        </div>
-        <div className="ovr__minis">
-          {comps.map((c) => {
-            const p = c.percentile
-            const w = p == null ? 0 : Math.round(p * 100)
-            return (
-              <div className="ovr-mini" key={c.key}>
-                <span className="ovr-mini__label">{c.label}</span>
-                <span className="ovr-mini__track">
-                  {p != null && <span className={`ovr-mini__fill ${toneClass(p)}`} style={{ width: `${w}%` }} />}
-                </span>
-                <span className="ovr-mini__pct">{p == null ? '—' : w}</span>
-              </div>
-            )
-          })}
+        <div className="ovr__strip-top">
+          <div className="ovr__lead">
+            <span className="ovr__pct">{ordinal(pct)}</span>
+            <span className="ovr__lead-sub">
+              percentile overall · among {posNoun}
+              <span className="ovr__info" tabIndex={0} role="note" aria-label={NOTE} title={NOTE}>ⓘ</span>
+            </span>
+          </div>
+          <div className="ovr__minis">
+            {comps.map((c) => {
+              const p = c.percentile
+              const w = p == null ? 0 : Math.round(p * 100)
+              return (
+                <div className="ovr-mini" key={c.key}>
+                  <span className="ovr-mini__label" title={c.label}>{c.label}</span>
+                  <span className="ovr-mini__track">
+                    {p != null && <span className={`ovr-mini__fill ${toneClass(p)}`} style={{ width: `${w}%` }} />}
+                  </span>
+                  <span className="ovr-mini__pct">{p == null ? '—' : w}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
         {aside && <div className="ovr__aside">{aside}</div>}
       </div>

@@ -1,19 +1,24 @@
 /* ============================================================================
-   Inline Leaderboard-row expansion — FULL-WIDTH STACKED player detail card.
-   Reading order: identity → condensed Overall strip → radar centrepiece → season stats → link.
+   Inline Leaderboard-row expansion — TWO-COLUMN player detail card.
+   LEFT: identity · Overall card · season stats · handoff.  RIGHT: verdict · large radar.
    ============================================================================ */
 .pxe {
-  display: flex; flex-direction: column; gap: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+  gap: var(--space-6);
+  align-items: stretch;
   padding: var(--space-5) var(--space-6);
   background: var(--color-bg-base);
   border-top: 1px solid var(--color-accent);
   animation: pxe-in 160ms ease;
 }
 @keyframes pxe-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-.pxe__loading { width: 100%; }
+.pxe__loading { grid-column: 1 / -1; }
 
-/* ---- 1. identity ---- */
-.pxe__identity { display: flex; flex-direction: column; gap: var(--space-3); }
+.pxe__left { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.pxe__right { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+/* ---- identity ---- */
 .pxe__id { display: flex; align-items: center; gap: var(--space-3); }
 .pxe__idtext { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pxe__name { font-size: var(--text-xl); font-weight: 800; color: var(--color-text-primary); line-height: 1.15; }
@@ -28,18 +33,19 @@
 }
 .pxe__chip--quiet { background: var(--color-bg-elevated); color: var(--color-text-secondary); }
 
-.pxe__verdict { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.5; margin: 0; max-width: 80ch; }
+/* ---- verdict (top of the right column, above the radar) ---- */
+.pxe__verdict { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.55; margin: 0; }
 .pxe__verdict strong { color: var(--color-text-primary); }
 
-/* ---- 2. condensed Overall strip (the OverallSummary strip variant brings its own band styling) ---- */
+/* ---- Overall card (OverallSummary strip variant supplies the bordered-card styling) ---- */
 .pxe__lenses-fallback { padding: var(--space-2) 0; }
 
-/* ---- 3. radar centrepiece — the biggest element, centred at full card width ---- */
-.pxe__radar { display: flex; justify-content: center; padding: var(--space-2) 0; }
-.pxe__radar .skill-radar { width: 100%; max-width: 560px; }
+/* ---- radar — the large centrepiece of the right column, with legend/caption beneath ---- */
+.pxe__radar { display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; }
+.pxe__radar .skill-radar { width: 100%; max-width: 540px; }
 .pxe__radar .skill-radar__svg { width: 100%; max-width: 100%; }
 
-/* ---- 4. season stats ---- */
+/* ---- season stats ---- */
 .pxe__base { min-width: 0; }
 .pxe__base-head {
   font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
@@ -62,9 +68,9 @@
 
 .pxe__empty { font-size: var(--text-xs); color: var(--color-text-muted); padding: var(--space-3) 0; text-align: center; }
 
-/* ---- 5. handoff ---- */
+/* ---- handoff — pinned to the bottom-left of the column (aligns with the radar's lower edge) ---- */
 .pxe__profile {
-  display: inline-flex; align-self: flex-start; align-items: center; justify-content: center; gap: 6px;
+  display: inline-flex; align-self: flex-start; margin-top: auto; align-items: center; justify-content: center; gap: 6px;
   padding: 9px var(--space-4);
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
   background: var(--color-accent); color: var(--color-text-inverse);
@@ -73,6 +79,11 @@
 }
 .pxe__profile:hover { opacity: 0.88; }
 
+/* ---- responsive: stack the two columns; radar follows the identity/stats ---- */
+@media (max-width: 880px) {
+  .pxe { grid-template-columns: 1fr; gap: var(--space-4); }
+  .pxe__profile { margin-top: var(--space-1); }
+}
 @media (max-width: 560px) {
   .pxe { padding: var(--space-4); }
   .pxe__profile { align-self: stretch; }

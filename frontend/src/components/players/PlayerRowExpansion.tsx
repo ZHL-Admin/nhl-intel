@@ -172,10 +172,10 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
 
   return (
     <div className="pxe" role="region" aria-label={`${target.name ?? 'Player'} preview`}>
-      {/* 1. IDENTITY — headshot, name/meta, archetype tags, then the value-vs-impact verdict */}
-      <div className="pxe__identity">
+      {/* LEFT — identity, Overall card, season stats, handoff */}
+      <div className="pxe__left">
         <div className="pxe__id">
-          <PlayerAvatar id={target.id} team={target.team} name={target.name} size={60} />
+          <PlayerAvatar id={target.id} team={target.team} name={target.name} size={56} />
           <div className="pxe__idtext">
             <div className="pxe__name">{target.name ?? target.id}</div>
             <div className="pxe__meta">{meta}</div>
@@ -188,33 +188,34 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
             )}
           </div>
         </div>
+
+        {/* condensed Overall card (percentile + compact component bars + WAR/GAR readout) */}
+        {overall
+          ? <OverallSummary overall={overall} variant="strip" aside={valueLine} />
+          : valueLine ? <div className="pxe__lenses-fallback">{valueLine}</div> : null}
+
+        {/* season stats, each with its within-position rank */}
+        <div className="pxe__base">
+          <div className="pxe__base-head">Season stats <span>· rank vs {posNoun}</span></div>
+          {stats.length > 0 ? <StatTable stats={stats} /> : <p className="pxe__empty">No stats this season.</p>}
+        </div>
+
+        <button className="pxe__profile" onClick={goProfile}>
+          View full profile <ArrowRight size={15} />
+        </button>
+      </div>
+
+      {/* RIGHT — the value-vs-impact verdict, then the large radar (legend + caption beneath it) */}
+      <div className="pxe__right">
         {verdict && (
           <p className="pxe__verdict"><strong>{verdict.headline}</strong> {verdict.body}</p>
         )}
+        <div className="pxe__radar">
+          {hasRadar
+            ? <SkillRadar spokes={radarSpokes} baseline={payload.radar?.baseline ?? `percentile within ${posNoun}, ${season}`} size={440} />
+            : <p className="pxe__empty">No radar this season.</p>}
+        </div>
       </div>
-
-      {/* 2. CONDENSED OVERALL STRIP (percentile + compact component bars + WAR/GAR readout) */}
-      {overall
-        ? <OverallSummary overall={overall} variant="strip" aside={valueLine} />
-        : valueLine ? <div className="pxe__lenses-fallback">{valueLine}</div> : null}
-
-      {/* 3. RADAR — the full-width centrepiece (its Skill/Usage/Style legend sits tight beneath) */}
-      <div className="pxe__radar">
-        {hasRadar
-          ? <SkillRadar spokes={radarSpokes} baseline={payload.radar?.baseline ?? `Percentile vs ${posNoun}`} size={440} />
-          : <p className="pxe__empty">No radar this season.</p>}
-      </div>
-
-      {/* 4. SEASON STATS (full width, each with its within-position rank) */}
-      <div className="pxe__base">
-        <div className="pxe__base-head">Season stats <span>· rank vs {posNoun}</span></div>
-        {stats.length > 0 ? <StatTable stats={stats} /> : <p className="pxe__empty">No stats this season.</p>}
-      </div>
-
-      {/* 5. handoff */}
-      <button className="pxe__profile" onClick={goProfile}>
-        View full profile <ArrowRight size={15} />
-      </button>
     </div>
   )
 }
