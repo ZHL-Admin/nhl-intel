@@ -27,8 +27,8 @@ player pages. `models_ml/compute_player_radar.py` -> `nhl_models.player_radar`;
 | 1 | Finishing | skill | `player_composite.finishing` |
 | 2 | Shot Volume | skill | individual attempts /60 (`mart_player_game_stats`) |
 | 3 | Shot Danger | skill | mean ixG/attempt |
-| 4 | Rush Offense | skill | rush-attempt share (sequence) |
-| 5 | Cycle/Forecheck Offense | skill | forecheck+cycle attempt share |
+| 4 | Rush Offense | skill | rush attempts /60 (sequence) |
+| 5 | Cycle/Forecheck Offense | skill | forecheck+cycle attempts /60 |
 | 6 | Playmaking | skill | primary assists /60 (`first_assists`) |
 | 7 | EV Offensive Impact | skill | `player_impact.off_impact` (± `off_sd`) |
 | 8 | Power-Play Value | usage | `player_impact.pp_impact` |
@@ -38,6 +38,13 @@ player pages. `models_ml/compute_player_radar.py` -> `nhl_models.player_radar`;
 | 12 | Defensive Deployment | usage | coach-trust composite |
 | 13 | Penalty Differential | skill | (drawn − taken) /60 |
 | 14 | Physicality (rink-adjusted) | style | `hits_adj` /60 (never raw) |
+
+**Rush / Cycle are per-60 RATES, not shares.** They count rush (and forecheck+cycle) attempts per
+60 of 5v5 ice, like Shot Volume and Playmaking — NOT as a fraction of the player's own attempts. A
+share penalises high-volume creators (a 540-attempt forward's 17 rush shots read low even when his
+rush *generation* is elite), so a pass-first rush driver like McDavid was landing ~26th percentile
+on a share; on the rate he correctly reads ~82nd. The sequence-mix *shares* remain the right feature
+for the archetype clustering (a style signal), which is a separate consumer.
 
 **Deliberate offense/defense resolution asymmetry.** Offense has high-resolution spokes
 (finishing, volume, danger, rush, cycle, playmaking, EV impact); defense is intentionally thinner

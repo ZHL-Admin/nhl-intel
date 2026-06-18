@@ -751,3 +751,61 @@ carrying huge bands. Fixed at the ROOT (shrink) + PRESENTATION (confidence sort 
   getValueRankings gains `sort`; Players page Order toggle (Confidence-adjusted | Point); captions +
   methnote updated. docs/methodology/value-gar.md goalie section rewritten (reliability curve,
   shrinkage form, confidence sort, k tuning). tsc+build+pytest(6)+dbt compile green.
+
+## PLAYER DETAIL CARD (PlayerRowExpansion) + radar/stats correctness fixes
+- **Card layout** (`components/players/PlayerRowExpansion.{tsx,css}`): the inline player-detail card
+  is **two-column ~46/54** — LEFT: identity + archetype chips + a condensed bordered **Overall card**
+  (lead percentile + compact Production/Play-Driving bars row 1, WAR/GAR readout row 2) + season-stats
+  table + "View full profile"; RIGHT: the value-vs-impact verdict then the large **SkillRadar**
+  (legend + caption beneath). (Iterated full-width-stacked → 2-col per user pref.)
+- **OverallSummary** gained a `variant='strip'` (condensed bordered card; HARD RULE still holds:
+  number never without its component percentiles; note moved to an info tooltip).
+- **Shared `PlayerAvatar`** (`components/common`) extracted — Players rows, divergence/deployment
+  rows, and the card all reuse it (dropped the per-surface `pav`/`pxe-av` copies).
+- **SkillRadar**: viewBox padded horizontally so long spoke labels stay IN bounds (no overflow);
+  per-vertex percentile numbers moved inboard. NOTE: a later **compact-mode** refactor (small-multiple
+  archetype gallery, `compact`/`shortLabels`/`arcGroups` props) supersedes the inboard numbers in
+  compact mode and removed the full-mode per-vertex number text.
+- **B1 radar spoke bug FIXED** (`compute_player_radar.py`): `rush_offense` + `cycle_forecheck` spokes
+  were a SHARE of the player's own attempts (penalised high-volume creators — McDavid rush 26th).
+  Now a per-60 RATE (consistent with shot_volume/playmaking). Re-verified: McDavid rush 26→82, cycle
+  29→92; MacKinnon 95/98; Matthews 89/93. **player_radar rewritten** (display table; no model
+  retrain). McDavid's "North-South Forward" archetype for 2025-26 is a hard-1.00 season-sensitive v2
+  assignment (Elite Offensive Driver 2021-25) — NOT a bug; the archetype uses share-of-mix (style),
+  distinct from the volume spoke.
+- **B2 stat-rank display**: the season-stats column is a within-position RANK (G 4th, A 1st); xGF%
+  "150th" is a CORRECT raw rank (McDavid 150 / 479 forwards in on-ice 5v5 xGF%, value verified) — not
+  a percentile bug. Now rendered "**rank / pool**" (e.g. 150 / 479) so it never reads as a broken
+  0-100 percentile. Display-only (source was correct).
+- **Players "Usage & Value" tab**: the situation filter (All/5v5/PP/PK/Key moments) moved INTO the
+  consolidated toolbar card to match the Player-Rankings tab. `DeploymentBoard` now takes `situation`
+  as a controlled prop; `DEPLOYMENT_SITUATIONS` exported as the single source.
+
+## VALUE PART 4 — Trade Fit rebuilt as MULTI-DIMENSION fit
+Old tool = single cosine(player-profile, team need-vector) with positive-gaps-only + cosine floored
+at 0 → a D addressing a defensive need at a defense-STRONG team scored ~0 (position was never a term;
+a surplus team's need vector was empty where the player was strong). **Rebuilt** (`score_team_fit.py`
+→ structured payload; `POST /tools/trade-fit`):
+- FIVE separate dimensions, none floored at 0: (1) **POSITIONAL gate** (position+handedness+role,
+  bounded [0.55,1] → relevant player never zeros, MULTIPLIES the blend); (2) **NEED** (team_needs gap
+  weighted by where the player provides value, sigmoid-mapped; surplus ~0.15, neutral, NEVER
+  negative/red; no redundancy penalty); (3) **STYLE** (rush-vs-forecheck/cycle ORIENTATION match — a
+  within-entity ratio, comparable across the player-pctile-within-pos vs team-pctile-within-league
+  scale mismatch — vs mart_team_identity); (4) **LINE** (swap into the team's current top unit, project
+  with score_line; carries its interval); (5) **QUALITY** (WAR pctile within position + RAPM).
+- `overall = positional_gate * weighted_avg(need .28/style .24/line .20/quality .28)` → A-F bands; all
+  constants `config.TRADE_FIT`. Deterministic verdict naming drivers + the "can't see injury/cap/
+  roster" caveat. Grade ALWAYS shown WITH its 5 dimensions.
+- Validated (`validate_trade_fit.py` / `make trade-fit-validate`): Slavin→strong-def VGK now **C 56**
+  (was ~0); same player diverges by team (Hutson VGK B vs CHI A); style differs (McDavid CAR 93 vs CBJ
+  53); below-replacement D → F (correct). No max(0,) clamp; headline never F for a relevant contributor.
+- Backend additive: `FitDimension` + restructured `TradeFitResult` (overall_grade/score, verdict,
+  dimensions[]); `BestTeamFit` gains `grade`; `best_team_fits` is a lightweight no-line variant.
+- FE `TradeFit.tsx`: headline card (grade + verdict) + 5 decomposed dimension rows (label · level bar
+  + tangible-driver note · value); colour discipline (low-need amber, mismatch orange, never red);
+  model-estimate softness band on line/quality. docs/methodology/trade-fit.md. **No retrain** of
+  RAPM/GAR/composite/archetype. tsc+build+pytest(6)+dbt compile green.
+- **Gotcha this session:** the harness temp fs (`/private/tmp/claude-501/.../tasks`) kept hitting
+  ENOSPC, swallowing Bash stdout — route long output to a repo file and Read it. Also a parallel
+  agent's `SkillRadar.tsx` compact-mode work left an unused-var that blocked the build; removed it in
+  the working tree (left unstaged for that change's owner).
