@@ -51,5 +51,5 @@
 .ovr-mini__pct { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--color-text-primary); text-align: right; }
 
 /* row 2: the value readout, right-aligned under a divider */
-.ovr__aside { display: flex; justify-content: flex-end; padding-top: var(--space-3); border-top: 1px solid var(--color-border-subtle); }
+.ovr__aside { display: flex; justify-content: flex-start; padding-top: var(--space-3); border-top: 1px solid var(--color-border-subtle); }
 

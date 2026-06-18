@@ -107,3 +107,30 @@ pure relabel of the locked GMM's clusters (no refit), re-emitted by `fit_archety
 `GET /players/{id}` returns the archetype mix; `GET /players/archetypes/{archetype}` lists
 players whose primary archetype is that one, ranked by composite total. PlayerProfile shows the
 mix line ("100% High-Danger Driver"); the Players index ranks within a selected archetype.
+
+## Archetype explainer (gallery + player style-map)
+
+`models_ml/compute_archetype_explainer.py` (reads the locked v2 artifacts — NO retrain) writes two
+tables that drive the Learn → Archetypes page:
+
+- **`nhl_models.archetype_gallery`** — one row per DISPLAY archetype (12 F + 11 D; D3+D4 merge to
+  "Depth Defenseman"): name, family, descriptor, member count, the **universal traits** (the same
+  >=80%-one-sided audit that governs naming), the **distinctive traits** (top centroid |z|), the
+  **exemplars** (top members by GMM membership weight, current-season preferred), and the
+  **characteristic centroid radar** — the mean of the cluster members' shipped `player_radar`
+  spokes (percentile-within-position), so each type renders as a recognisable radar shape.
+
+- **`nhl_models.player_style_map`** — one row per tracking-era player-season: a **2D PCA projection
+  of the standardized clustering feature vector**, primary archetype, membership strength, and a
+  boundary flag (max membership < 0.6). **Forwards and defensemen are projected SEPARATELY** — they
+  occupy different feature spaces, so co-plotting them on one axis would be meaningless; the UI
+  toggles F/D and never co-plots. PCA orientation is sign-pinned by a reference feature so the axes
+  are stable across rebuilds. Per-archetype region metadata is the centroid of its plotted points;
+  the endpoint plots one point per player (latest season).
+
+Honest by construction: archetypes are **discovered** clusters, not designable points. The gallery
+browses the real discrete types; the map shows where real players actually sit. Gaps between
+clusters are real and read as empty — neither surface lets a user invent an archetype, and the map
+returns only real players. Endpoints: `GET /archetypes` (gallery) and `GET /archetypes/style-map?pos=`.
+Archetype tags across the site (player detail, the expanded leaderboard card) deep-link into the
+explainer at the matching type (`/learn/archetypes?type={name}`).

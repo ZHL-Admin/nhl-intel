@@ -7,6 +7,16 @@
 .skill-radar__axis { stroke: var(--color-border); stroke-width: 1; opacity: 0.4; }
 .skill-radar__poly { fill: color-mix(in srgb, var(--color-accent, #3b82f6) 22%, transparent);
   stroke: var(--color-accent, #3b82f6); stroke-width: 2; }
+/* compact small-multiple: the silhouette is the visual — solid translucent fill + thick outline */
+.skill-radar__poly--solid { fill: color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
+  stroke-width: 2.6; stroke-linejoin: round; }
+.skill-radar__hit { cursor: pointer; }
+.skill-radar__spoke-label--compact { font-size: 9px; font-weight: 700; }
+.skill-radar__arc {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+  fill: var(--color-text-muted); paint-order: stroke; stroke: var(--color-bg-surface);
+  stroke-width: 3px;
+}
 .skill-radar__whisker { stroke: var(--color-text-secondary); stroke-width: 2; opacity: 0.35; stroke-linecap: round; }
 .skill-radar__dot { stroke: var(--color-bg-surface, #fff); stroke-width: 1.5; transition: r 120ms; }
 .skill-radar__spoke-label { font-size: 10px; font-weight: 600; fill: var(--color-text); }

@@ -79,7 +79,10 @@
 }
 
 .navbar__link {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+  font-family: var(--font-mono);
   color: var(--color-text-secondary);
   text-decoration: none;
   transition: color 150ms ease;
@@ -105,7 +108,7 @@
 }
 
 /* Tools dropdown */
-.navbar__dropdown { position: relative; }
+.navbar__dropdown { position: relative; display: flex; }
 .navbar__dropdown-trigger {
   display: inline-flex;
   align-items: center;

@@ -1,0 +1,233 @@
+"""Precompute the serving tables the API's tool/search endpoints need.
+
+These are the inputs that let the model-scoring + search endpoints run entirely on the local
+DuckDB serving file (no BigQuery on the request path). All are pure functions of last night's
+data, so they're materialized nightly into nhl_models / nhl_mart and ride the export.
+
+Builds (idempotent, WRITE_TRUNCATE):
+  dim_current_roster        search picker: current-season players, name + team + archetype.
+  line_member_features      one row/(player,season) of line-fit model features (the expensive
+                            build, so live line-fit just looks them up + runs the artifact).
+  team_handedness           per (team,season,pos_group) L/R 5v5 TOI — trade-fit positional gate.
+  team_current_lines        per team: top forward trios / D pairs over last 10 games — for
+                            /teams/{id}/lines and the trade-fit line dimension.
+  serving_game_skater_box   flattened per-game skater box lines — /games/{id}/skater-impact
+                            (replaces the raw_boxscores nested UNNEST on the request path).
+
+Run in COMPUTE mode (reads BigQuery): SERVING_BACKEND is forced to bigquery here.
+
+    python -m models_ml.precompute_serving --all
+    python -m models_ml.precompute_serving --only dim_current_roster,team_handedness
+"""
+from __future__ import annotations
+
+import argparse
+import os
+
+# This job is a COMPUTE step: always read BigQuery, never the serving file.
+os.environ["SERVING_BACKEND"] = "bigquery"
+
+import pandas as pd  # noqa: E402
+
+from models_ml import bq, config, linefit_features as lf  # noqa: E402
+
+RECENT_SEASONS = 3
+
+
+def _recent_seasons(p: str, n: int = RECENT_SEASONS) -> list[str]:
+    df = bq.query_df(
+        f"SELECT DISTINCT season FROM `{p}.nhl_staging.stg_games` ORDER BY season DESC LIMIT {n}"
+    )
+    return df["season"].tolist()
+
+
+def _latest_season(p: str) -> str:
+    return _recent_seasons(p, 1)[0]
+
+
+# --------------------------------------------------------------------------- #
+def build_dim_current_roster(p: str) -> pd.DataFrame:
+    season = _latest_season(p)
+    sql = f"""
+    WITH latest AS (
+        SELECT player_id,
+               ARRAY_AGG(STRUCT(team_id, headshot_url, first_name, last_name, position_code)
+                         ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS r
+        FROM `{p}.nhl_staging.stg_rosters`
+        WHERE season = '{season}' AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01','02','03')
+        GROUP BY player_id
+    ),
+    tm AS (SELECT team_id, ANY_VALUE(team_abbrev) abbrev
+           FROM `{p}.nhl_mart.mart_team_game_stats` WHERE season = '{season}' GROUP BY team_id)
+    SELECT l.player_id,
+           '{season}' AS season,
+           l.r.first_name AS first_name, l.r.last_name AS last_name,
+           l.r.first_name || ' ' || l.r.last_name AS full_name,
+           LOWER(l.r.first_name || ' ' || l.r.last_name) AS name_lower,
+           l.r.team_id AS team_id, tm.abbrev AS team_abbrev,
+           l.r.position_code AS position_code, l.r.headshot_url AS headshot_url,
+           a.primary_archetype AS primary_archetype
+    FROM latest l
+    LEFT JOIN tm ON l.r.team_id = tm.team_id
+    LEFT JOIN `{p}.nhl_models.player_archetypes` a
+      ON a.player_id = l.player_id AND a.season = '{season}'
+    """
+    return bq.query_df(sql)
+
+
+def build_team_handedness(p: str) -> pd.DataFrame:
+    seasons = ", ".join(f"'{s}'" for s in _recent_seasons(p))
+    sql = f"""
+    WITH toi AS (
+        SELECT s.player_id, s.team_id, s.season,
+               SUM(IF(c.strength_state='5v5', s.segment_duration, 0)) toi5,
+               CASE WHEN s.position_code='D' THEN 'D' ELSE 'F' END pg
+        FROM `{p}.nhl_staging.int_shift_segments` s
+        JOIN `{p}.nhl_staging.int_segment_context` c USING (game_id, segment_index)
+        WHERE s.is_goalie=0 AND s.season IN ({seasons})
+          AND SUBSTR(CAST(s.game_id AS STRING),5,2) IN ('02','03')
+        GROUP BY 1,2,3,5
+    )
+    SELECT t.team_id, t.season, t.pg AS pos_group,
+           SUM(IF(b.shoots='L', t.toi5, 0)) AS l_toi,
+           SUM(IF(b.shoots='R', t.toi5, 0)) AS r_toi
+    FROM toi t JOIN `{p}.nhl_staging.stg_player_bio` b USING (player_id)
+    WHERE b.shoots IN ('L','R')
+    GROUP BY 1,2,3
+    """
+    return bq.query_df(sql)
+
+
+def build_team_current_lines(p: str) -> pd.DataFrame:
+    """Top 4 forward trios + top 3 defense pairs per team over its last 10 games (current season).
+
+    Mirrors the backend current_lines() shape; precomputed so /teams/{id}/lines and the
+    trade-fit line dimension read it instead of scanning int_shift_segments at request time.
+    """
+    season = _latest_season(p)
+    teams = bq.query_df(
+        f"""SELECT DISTINCT team_id FROM `{p}.nhl_mart.mart_team_game_stats`
+            WHERE season = '{season}'"""
+    )["team_id"].astype(int).tolist()
+    frames = []
+    for team in teams:
+        sql = f"""
+        WITH g AS (
+            SELECT game_id, game_date FROM `{p}.nhl_staging.stg_boxscores`
+            WHERE (home_team_id={team} OR away_team_id={team}) AND season='{season}'
+              AND SUBSTR(CAST(game_id AS STRING),5,2) IN ('02','03')
+            ORDER BY game_date DESC LIMIT 10),
+        seg5 AS (
+            SELECT s.game_id, s.segment_index, s.player_id, s.position_code, c.segment_duration
+            FROM `{p}.nhl_staging.int_shift_segments` s
+            JOIN `{p}.nhl_staging.int_segment_context` c USING (game_id, segment_index)
+            JOIN g USING (game_id)
+            WHERE s.team_id={team} AND s.is_goalie=0 AND c.strength_state='5v5'),
+        fwd AS (
+            SELECT game_id, segment_index, ANY_VALUE(segment_duration) dur,
+                   ARRAY_AGG(player_id ORDER BY player_id) members, COUNT(*) n
+            FROM seg5 WHERE position_code IN ('C','L','R') GROUP BY 1,2),
+        def AS (
+            SELECT game_id, segment_index, ANY_VALUE(segment_duration) dur,
+                   ARRAY_AGG(player_id ORDER BY player_id) members, COUNT(*) n
+            FROM seg5 WHERE position_code='D' GROUP BY 1,2),
+        trio AS (
+            SELECT 'F3' line_type,
+                   (SELECT STRING_AGG(CAST(m AS STRING), '-' ORDER BY m) FROM UNNEST(members) m) line_key,
+                   SUM(dur)/60.0 minutes
+            FROM fwd WHERE n=3 GROUP BY line_key ORDER BY minutes DESC LIMIT 4),
+        pair AS (
+            SELECT 'D2' line_type,
+                   (SELECT STRING_AGG(CAST(m AS STRING), '-' ORDER BY m) FROM UNNEST(members) m) line_key,
+                   SUM(dur)/60.0 minutes
+            FROM def WHERE n=2 GROUP BY line_key ORDER BY minutes DESC LIMIT 3)
+        SELECT {team} AS team_id, '{season}' AS season, line_type, line_key, minutes,
+               ROW_NUMBER() OVER (PARTITION BY line_type ORDER BY minutes DESC) AS rnk
+        FROM (SELECT * FROM trio UNION ALL SELECT * FROM pair)
+        """
+        df = bq.query_df(sql)
+        if not df.empty:
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(
+        columns=["team_id", "season", "line_type", "line_key", "minutes", "rnk"])
+
+
+def build_serving_game_skater_box(p: str) -> pd.DataFrame:
+    """Flattened per-game skater box lines for recent seasons (replaces raw_boxscores UNNEST)."""
+    seasons_start = int(_recent_seasons(p)[-1][:4])
+    sql = f"""
+    WITH box AS (
+        SELECT game_id,
+               homeTeam.id AS home_id, homeTeam.abbrev AS home_abbrev,
+               awayTeam.id AS away_id, awayTeam.abbrev AS away_abbrev,
+               playerByGameStats AS pg
+        FROM `{p}.nhl_raw.raw_boxscores`
+        WHERE CAST(SUBSTR(CAST(game_id AS STRING),1,4) AS INT64) >= {seasons_start}
+    )
+    SELECT game_id, 'home' AS side, home_abbrev AS team_abbrev, sk.playerId AS player_id,
+           sk.name.default AS player_name, sk.position, sk.toi,
+           sk.goals, sk.assists, sk.points, sk.sog AS shots
+    FROM box, UNNEST(pg.homeTeam.forwards) sk
+    UNION ALL
+    SELECT game_id, 'home', home_abbrev, sk.playerId, sk.name.default, sk.position, sk.toi,
+           sk.goals, sk.assists, sk.points, sk.sog
+    FROM box, UNNEST(pg.homeTeam.defense) sk
+    UNION ALL
+    SELECT game_id, 'away', away_abbrev, sk.playerId, sk.name.default, sk.position, sk.toi,
+           sk.goals, sk.assists, sk.points, sk.sog
+    FROM box, UNNEST(pg.awayTeam.forwards) sk
+    UNION ALL
+    SELECT game_id, 'away', away_abbrev, sk.playerId, sk.name.default, sk.position, sk.toi,
+           sk.goals, sk.assists, sk.points, sk.sog
+    FROM box, UNNEST(pg.awayTeam.defense) sk
+    """
+    return bq.query_df(sql)
+
+
+def build_line_member_features(p: str) -> pd.DataFrame:
+    """One row per (player_id, season) of line-fit model features for recent seasons."""
+    seasons = _recent_seasons(p)
+    df = lf.build_member_features(seasons).reset_index()
+    # Drop columns that don't round-trip cleanly / aren't needed by the scorer.
+    return df
+
+
+BUILDERS = {
+    "dim_current_roster": (build_dim_current_roster, "nhl_models"),
+    "line_member_features": (build_line_member_features, "nhl_models"),
+    "team_handedness": (build_team_handedness, "nhl_models"),
+    "team_current_lines": (build_team_current_lines, "nhl_models"),
+    "serving_game_skater_box": (build_serving_game_skater_box, "nhl_models"),
+}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--all", action="store_true", help="build every serving table")
+    ap.add_argument("--only", help="comma-separated subset of table names")
+    ap.add_argument("--dry-run", action="store_true", help="build the df, print shape, do not write")
+    args = ap.parse_args()
+
+    names = (list(BUILDERS) if args.all
+             else [s.strip() for s in args.only.split(",")] if args.only else [])
+    if not names:
+        ap.error("pass --all or --only <names>")
+
+    p = bq.project()
+    for name in names:
+        if name not in BUILDERS:
+            print(f"  ! unknown table {name}; known: {list(BUILDERS)}")
+            continue
+        builder, dataset = BUILDERS[name]
+        print(f"building {name} ...", flush=True)
+        df = builder(p)
+        print(f"  {name}: {len(df):,} rows x {len(df.columns)} cols", flush=True)
+        if args.dry_run:
+            continue
+        bq.write_df(df, name)  # writes to nhl_models (config.MODELS_DATASET)
+        print(f"  wrote nhl_models.{name}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

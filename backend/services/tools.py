@@ -30,7 +30,26 @@ def latest_roster_season() -> str:
 
 def search_players(q: str, limit: int = 20, season: Optional[str] = None) -> list[dict]:
     """Current-season roster players whose name matches `q` (prefix or substring)."""
+    from services import serving
     season = season or latest_roster_season()
+
+    if serving.serving_backend() == "duckdb":
+        # Indexed lookup against the precomputed current-season roster dimension (no
+        # re-derivation of rosterSpots over raw play-by-play on every keystroke).
+        rows = bq_service.query(
+            "SELECT player_id, first_name, last_name, team_id, team_abbrev, "
+            "position_code AS position, headshot_url, primary_archetype AS archetype "
+            "FROM dim_current_roster WHERE name_lower LIKE @like "
+            "ORDER BY last_name, first_name LIMIT " + str(int(limit)),
+            params=[bigquery.ScalarQueryParameter("like", "STRING", f"%{q.lower()}%")])
+        return [{
+            "player_id": r["player_id"],
+            "name": " ".join(p for p in [r.get("first_name"), r.get("last_name")] if p),
+            "team_id": r.get("team_id"), "team_abbrev": r.get("team_abbrev"),
+            "position": r.get("position"), "headshot_url": r.get("headshot_url"),
+            "archetype": r.get("archetype"),
+        } for r in rows]
+
     rosters = bq_service.get_full_table_id("stg_rosters")
     arch = bq_service.get_models_table_id("player_archetypes")
     sql = f"""
@@ -108,6 +127,38 @@ def get_same_tier_candidates(player_id: int, line_ids: list[int], season: str, k
     positions = FWD_POS if kind == "F" else ("D",)
     pos_list = ", ".join(f"'{p}'" for p in positions)
     exclude = ", ".join(str(int(i)) for i in line_ids) or "0"
+
+    from services import serving
+    if serving.serving_backend() == "duckdb":
+        rows = bq_service.query(
+            f"""
+            SELECT d.player_id, d.first_name AS fn, d.last_name AS ln, d.team_id,
+                   d.position_code AS position, d.headshot_url, c.total AS total, c.toi_5v5 AS toi
+            FROM dim_current_roster d
+            JOIN player_composite c ON c.player_id = d.player_id AND c.season_window = @season
+            WHERE d.primary_archetype = @arch AND d.position_code IN ({pos_list})
+              AND c.total BETWEEN @lo AND @hi AND c.toi_5v5 >= @min_toi
+              AND d.player_id NOT IN ({exclude})
+            ORDER BY c.total DESC LIMIT {int(limit)}
+            """,
+            params=[
+                bigquery.ScalarQueryParameter("season", "STRING", season),
+                bigquery.ScalarQueryParameter("arch", "STRING", arch),
+                bigquery.ScalarQueryParameter("lo", "FLOAT64", lo),
+                bigquery.ScalarQueryParameter("hi", "FLOAT64", hi),
+                bigquery.ScalarQueryParameter("min_toi", "FLOAT64", min_toi),
+            ])
+        out = []
+        for r in rows:
+            out.append({
+                "player_id": r["player_id"],
+                "name": " ".join(p for p in [r.get("fn"), r.get("ln")] if p),
+                "team_id": r.get("team_id"), "team_abbrev": _abbrev(r.get("team_id")),
+                "position": r.get("position"), "headshot_url": r.get("headshot_url"),
+                "archetype": arch,
+                "composite_total": round(float(r["total"]), 2) if r.get("total") is not None else None,
+            })
+        return out
 
     rows = bq_service.query(
         f"""
@@ -261,16 +312,26 @@ SELECT * FROM trio UNION ALL SELECT * FROM pair
 
 def current_lines(team_id: int, season: Optional[str] = None) -> dict:
     """A team's current forward trios + defense pairs over its last 10 games, each projected."""
+    from services import serving
     season = season or latest_roster_season()
-    sql = _CURRENT_LINES_SQL.format(
-        box=bq_service.get_full_table_id("stg_boxscores"),
-        seg=bq_service.get_full_table_id("int_shift_segments"),
-        ctx=bq_service.get_full_table_id("int_segment_context"),
-    )
-    rows = bq_service.query(sql, params=[
-        bigquery.ScalarQueryParameter("team", "INT64", team_id),
-        bigquery.ScalarQueryParameter("season", "STRING", season),
-    ])
+    if serving.serving_backend() == "duckdb":
+        # Read the precomputed memberships (the int_shift_segments scan ran nightly).
+        rows = bq_service.query(
+            "SELECT line_type, line_key, minutes FROM team_current_lines "
+            f"WHERE team_id = {int(team_id)} AND season = '{season}' ORDER BY line_type, rnk")
+        rows = [{"line_type": r["line_type"],
+                 "members": [int(x) for x in str(r["line_key"]).split("-")],
+                 "minutes": r["minutes"]} for r in rows]
+    else:
+        sql = _CURRENT_LINES_SQL.format(
+            box=bq_service.get_full_table_id("stg_boxscores"),
+            seg=bq_service.get_full_table_id("int_shift_segments"),
+            ctx=bq_service.get_full_table_id("int_segment_context"),
+        )
+        rows = bq_service.query(sql, params=[
+            bigquery.ScalarQueryParameter("team", "INT64", team_id),
+            bigquery.ScalarQueryParameter("season", "STRING", season),
+        ])
     fwd, dfn = [], []
     for r in rows:
         ids = [int(m) for m in r["members"]]

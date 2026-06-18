@@ -12,7 +12,13 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from routers import games, teams, players, goalies, rankings, streaks, tools
+# The API serves request-time reads from the local DuckDB serving file by default (built by
+# the nightly `make export-serving`); no BigQuery client is opened on the request path. Set
+# SERVING_BACKEND=bigquery to query BigQuery live instead (legacy path / bypass). This must be
+# set before the routers/services import, so the BigQueryService singleton picks it up.
+os.environ.setdefault("SERVING_BACKEND", "duckdb")
+
+from routers import games, teams, players, goalies, rankings, streaks, tools, archetypes
 
 app = FastAPI(
     title="NHL Analytics Dashboard API",
@@ -37,6 +43,7 @@ app.include_router(goalies.router, prefix="/goalies", tags=["goalies"])
 app.include_router(rankings.router, prefix="/rankings", tags=["rankings"])
 app.include_router(streaks.router, prefix="/streaks", tags=["streaks"])
 app.include_router(tools.router, prefix="/tools", tags=["tools"])
+app.include_router(archetypes.router, prefix="/archetypes", tags=["archetypes"])
 
 
 @app.get("/")

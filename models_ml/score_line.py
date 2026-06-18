@@ -35,6 +35,16 @@ def _load():
 
 @lru_cache(maxsize=4)
 def _members(season: str) -> pd.DataFrame:
+    # In DuckDB serving mode (the API), read the precomputed line_member_features table from the
+    # serving file — the expensive feature build ran nightly. In compute mode, build live.
+    from models_ml import duck
+
+    if duck.serving_active():
+        df = bq.query_df(
+            f"select * from `{bq.project()}.nhl_models.line_member_features` "
+            f"where season = '{season}'")
+        if not df.empty:
+            return df.set_index(["player_id", "season"])
     return lf.build_member_features([season])
 
 

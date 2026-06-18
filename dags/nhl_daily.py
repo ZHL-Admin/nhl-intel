@@ -591,6 +591,14 @@ with DAG(
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_goalie_radar"),
         env=_dbt_env,
     )
+    # Archetype explainer (gallery + style-map): reads the locked v2 artifacts + player_radar.
+    compute_archetype_explainer = BashOperator(
+        task_id="compute_archetype_explainer",
+        bash_command=_mon.format(
+            "cd /opt/airflow && VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 "
+            "python -m models_ml.compute_archetype_explainer"),
+        env=_dbt_env,
+    )
 
     # Goalie Value GAR/WAR (cross-position currency): goals saved above a replacement backup, on the
     # SAME goals-per-win scale as skater GAR. Read-only over the GSAx layer (int_goalie_shots /
@@ -607,6 +615,23 @@ with DAG(
     compute_overall = BashOperator(
         task_id="compute_overall",
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_overall"),
+        env=_dbt_env,
+    )
+
+    # Precompute the DuckDB serving tables (search roster, line member features, team
+    # handedness, current lines, flattened skater box) — the inputs that let the API's
+    # search/tool endpoints run entirely on the local serving file.
+    precompute_serving = BashOperator(
+        task_id="precompute_serving",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.precompute_serving --all"),
+        env=_dbt_env,
+    )
+
+    # Final sink: materialize everything the site reads into the local DuckDB serving file
+    # (atomic swap). BigQuery stays the system of record; the API serves from this file.
+    export_serving = BashOperator(
+        task_id="export_serving",
+        bash_command=_mon.format("cd /opt/airflow && python -m scripts.export_to_duckdb"),
         env=_dbt_env,
     )
 
@@ -660,6 +685,7 @@ with DAG(
     # Phase 4.4 trajectories: aging curves need archetypes (write_archetypes); twins/physical
     # need bio + marts. Bio refresh feeds them via the stg_player_bio view.
     write_archetypes >> fit_aging_curves >> generate_report
+    [write_archetypes, compute_player_radar] >> compute_archetype_explainer >> generate_report
     [refresh_player_bio, run_dbt_marts] >> compute_twins >> generate_report
     run_dbt_marts >> compute_physical >> generate_report
     # Phase 5.1 line-fit: needs int_line_seasons (built upstream in run_dbt_pre_xg) plus
@@ -674,3 +700,8 @@ with DAG(
     # Goalie GAR off the marts; per-player Overall needs both value lenses for skaters and goalies.
     run_dbt_marts >> compute_goalie_gar >> generate_report
     [compute_gar, compute_composite, compute_goalie_gar, compute_goalie_radar] >> compute_overall >> generate_report
+
+    # DuckDB serving layer (final sink): precompute the serving tables after their model deps,
+    # then export everything the site reads into the local DuckDB file once all compute is done.
+    [write_archetypes, train_rapm, run_dbt_marts] >> precompute_serving
+    [generate_report, precompute_serving] >> export_serving

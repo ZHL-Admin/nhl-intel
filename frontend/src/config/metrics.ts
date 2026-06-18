@@ -247,6 +247,28 @@ export const GOALIE_VALUE_COMPONENTS: { key: string; label: string; color: strin
   { key: 'pk_goaltending', label: 'Penalty-Kill', color: '#6366f1' },
 ]
 
+/**
+ * Short 1–2 word radar spoke labels for the COMPACT small-multiple radars (archetype gallery cards).
+ * Keyed by spoke key; the full label is still shown on hover and in the expanded detail radar.
+ */
+export const SHORT_SPOKE_LABELS: Record<string, string> = {
+  finishing: 'Finish', shot_volume: 'Volume', shot_danger: 'Danger', rush_offense: 'Rush',
+  cycle_forecheck: 'Cycle', playmaking: 'Playmk', ev_off_impact: 'EV O', pp_value: 'PP',
+  burst: 'Speed', ev_def_impact: 'EV D', pk_role: 'PK', def_deployment: 'Deploy',
+  penalty_diff: 'Pen Diff', physicality: 'Hits',
+}
+
+/**
+ * Arc-group labels drawn outside the compact radar ring so neighborhoods read at a glance. Each
+ * group is the contiguous run of spokes (in ring order) STARTING at `startKey` up to the next group.
+ * Order matches the shipped radar spoke order (offense block, then ST/defense, then style).
+ */
+export const RADAR_ARC_GROUPS: { label: string; startKey: string }[] = [
+  { label: 'Offense', startKey: 'finishing' },
+  { label: 'Special teams & defense', startKey: 'pp_value' },
+  { label: 'Style', startKey: 'penalty_diff' },
+]
+
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {
   const m = METRICS[key]

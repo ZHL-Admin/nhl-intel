@@ -166,6 +166,18 @@ def _team_identity(p: str, season: str) -> dict:
 
 def _team_handedness(p: str, season: str) -> dict:
     """Per team: TOI-weighted handedness share by position group (for the positional gate)."""
+    from models_ml import duck
+
+    if duck.serving_active():
+        # Read the precomputed table (the int_shift_segments scan ran nightly).
+        df = bq.query_df(f"""select team_id, pos_group, l_toi, r_toi
+            from `{p}.nhl_models.team_handedness` where season='{season}'""")
+        out: dict = {}
+        for r in df.itertuples():
+            out[(int(r.team_id), r.pos_group)] = {
+                "L": float(r.l_toi or 0.0), "R": float(r.r_toi or 0.0)}
+        return out
+
     df = bq.query_df(f"""
         with toi as (
           select s.player_id, s.team_id,
@@ -212,12 +224,23 @@ def _line_fit(p: str, player_id: int, team_id: int, season: str, pos_group: str,
               player_war: float | None) -> dict | None:
     """Swap the player into the team's current top unit for his position; project with score_line."""
     from models_ml.score_line import score_line
-    pos = "'C','L','R'" if pos_group == "F" else "'D'"
-    n = 3 if pos_group == "F" else 2
-    df = bq.query_df(_TOP_UNIT_SQL.format(p=p, team=int(team_id), season=season, pos=pos, n=n))
-    if df.empty:
-        return None
-    members = [int(m) for m in df.iloc[0]["members"]]
+    from models_ml import duck
+    line_type = "F3" if pos_group == "F" else "D2"
+    if duck.serving_active():
+        # Read the precomputed top unit (the int_shift_segments scan ran nightly).
+        df = bq.query_df(f"""select line_key from `{p}.nhl_models.team_current_lines`
+            where team_id={int(team_id)} and season='{season}'
+              and line_type='{line_type}' and rnk=1""")
+        if df.empty:
+            return None
+        members = [int(x) for x in str(df.iloc[0]["line_key"]).split("-")]
+    else:
+        pos = "'C','L','R'" if pos_group == "F" else "'D'"
+        n = 3 if pos_group == "F" else 2
+        df = bq.query_df(_TOP_UNIT_SQL.format(p=p, team=int(team_id), season=season, pos=pos, n=n))
+        if df.empty:
+            return None
+        members = [int(m) for m in df.iloc[0]["members"]]
     if int(player_id) in members:
         return None  # already on the unit
     # replace the lowest-WAR member with the trade player

@@ -51,7 +51,8 @@ export default function ComponentStackBar({
   formatValue = fmtDefault,
   gridlines,
   variant = 'stacked',
-  totalColor = 'var(--color-data-1)',
+  // Neutral by default so a single-tone total bar is never mistaken for a coloured component.
+  totalColor = 'var(--color-data-neutral)',
 }: ComponentStackBarProps) {
   const [min, max] = domain
   const span = max - min || 1

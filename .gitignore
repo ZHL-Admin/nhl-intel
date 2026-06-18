@@ -67,3 +67,6 @@ models_ml/artifacts/*
 
 # ppt-replay sprite on-disk cache (immutable, re-fetchable)
 scripts/ppt_cache/
+
+# DuckDB serving layer: rebuildable read-only snapshot of BigQuery (make export-serving)
+data/serving/

@@ -13,6 +13,8 @@ import Rankings from './pages/Rankings'
 const Tools = lazy(() => import('./pages/Tools'))
 const LineupLab = lazy(() => import('./pages/LineupLab'))
 const TradeFit = lazy(() => import('./pages/TradeFit'))
+// Learn section (lazy): the archetype explainer is the first page.
+const ArchetypeExplorer = lazy(() => import('./pages/ArchetypeExplorer'))
 
 function App() {
   return (
@@ -30,6 +32,7 @@ function App() {
             <Route path="/tools" element={<Tools />} />
             <Route path="/tools/lineup-lab" element={<LineupLab />} />
             <Route path="/tools/trade-fit" element={<TradeFit />} />
+            <Route path="/learn/archetypes" element={<ArchetypeExplorer />} />
           </Routes>
         </Suspense>
       </Router>

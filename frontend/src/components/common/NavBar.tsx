@@ -8,6 +8,7 @@ import './NavBar.css'
 const TOOLS = [
   { to: '/tools/lineup-lab', label: 'Lineup Lab' },
   { to: '/tools/trade-fit', label: 'Trade Fit' },
+  { to: '/learn/archetypes', label: 'Player Archetypes' },
 ]
 
 function NavBar() {

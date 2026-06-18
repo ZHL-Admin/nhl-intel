@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel, OverallSummary } from '../components/common'
@@ -399,12 +399,17 @@ function PlayerProfile() {
                   )}
                   <div className="player-profile__radar-chips">
                     {labels.offensive && (
-                      <span className="player-profile__radar-chip">{labels.offensive}</span>
+                      <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.offensive)}`}
+                        className="player-profile__radar-chip" title={`What is a ${labels.offensive}?`}>
+                        {labels.offensive}
+                      </Link>
                     )}
                     {labels.defensive && (
-                      <span className="player-profile__radar-chip player-profile__radar-chip--def">
+                      <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.defensive)}`}
+                        className="player-profile__radar-chip player-profile__radar-chip--def"
+                        title={`What is a ${labels.defensive}?`}>
                         {labels.defensive}
-                      </span>
+                      </Link>
                     )}
                   </div>
                   {labels.descriptor && (

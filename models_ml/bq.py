@@ -40,6 +40,14 @@ def models(table: str) -> str:
 
 
 def query_df(sql: str, cli: bigquery.Client | None = None) -> pd.DataFrame:
+    # When the API process runs in DuckDB serving mode (SERVING_BACKEND=duckdb), route the
+    # model-scoring reads (score_line / score_team_fit) to the local serving file so they
+    # never touch BigQuery on the request path. Compute jobs leave SERVING_BACKEND=bigquery
+    # (the default) and hit BigQuery as before.
+    from models_ml import duck
+
+    if cli is None and duck.serving_active():
+        return duck.query_df(sql)
     cli = cli or client()
     # Use the BigQuery Storage API when available (far faster than the REST download for
     # the multi-million-row training/scoring pulls); fall back to REST if it is missing.

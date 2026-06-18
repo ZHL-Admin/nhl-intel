@@ -1,0 +1,126 @@
+# serving_tables.yml
+#
+# Single source of truth for the DuckDB SERVING layer.
+#
+# Architecture: BigQuery stays the nightly COMPUTE engine + system of record. Everything
+# the SITE READS at request time is materialized into ONE local DuckDB file each night
+# (scripts/export_to_duckdb.py); the FastAPI backend reads only from DuckDB (ms latency,
+# no BigQuery client on the request path). DuckDB is a rebuildable, read-only serving copy
+# — if lost, `make export-serving` regenerates it from BigQuery. Nothing lives only here.
+#
+# This file is BOTH the human inventory (Part 1 deliverable) and the machine-readable
+# config the export script consumes (the `tables:` list). One config, no drift.
+#
+# kind:
+#   source   -> copy the BigQuery table/view AS-IS into DuckDB; the backend keeps the same
+#               query SHAPE (filters/aggregations/windows) but runs it in DuckDB.
+#   precompute-> the endpoint RESULT, materialized nightly by a models_ml/dbt job into a BQ
+#               table that then rides this same export (built: true once the job ships).
+# cap:
+#   full     -> all rows / all seasons.
+#   recent   -> only the most recent `meta.recent_seasons` seasons, filtered by the game_id
+#               season prefix (CAST(SUBSTR(CAST(game_id AS STRING),1,4) AS INT64) >= start_year).
+#               Used for big per-event/per-game tables that the site only shows for recent games.
+
+meta:
+  duckdb_path: data/serving/nhl_intel.duckdb
+  recent_seasons: 3                 # current + prior 2 (capped per-event tables)
+  staging_dataset: nhl_staging
+  mart_dataset: nhl_mart
+  models_dataset: nhl_models
+
+# =============================================================================
+# Tables exported into DuckDB (the machine-readable manifest the export reads)
+# =============================================================================
+tables:
+
+  # --- staging VIEWS read at request time (the slow ones today) ----------------
+  - {name: stg_games,           dataset: staging, kind: source, cap: full,   indexes: [game_id, game_date, season]}
+  - {name: stg_boxscores,       dataset: staging, kind: source, cap: full,   indexes: [game_id, season]}
+  - {name: stg_rosters,         dataset: staging, kind: source, cap: full,   indexes: [player_id, game_id, [team_id, season]]}
+  - {name: stg_play_by_play,    dataset: staging, kind: source, cap: recent, indexes: [game_id]}
+  - {name: stg_game_context,    dataset: staging, kind: source, cap: full,   indexes: [game_id]}
+  - {name: stg_standings,       dataset: staging, kind: source, cap: full,   indexes: [team_abbrev, standings_date]}
+  - {name: stg_player_bio,      dataset: staging, kind: source, cap: full,   indexes: [player_id]}
+  - {name: int_shot_types,      dataset: staging, kind: source, cap: recent, indexes: [game_id, shooting_player_id]}
+  - {name: int_shot_attempts_all, dataset: staging, kind: source, cap: recent, indexes: [game_id]}
+  - {name: int_line_seasons,    dataset: staging, kind: source, cap: full,   indexes: [[season, line_key]]}
+  # int_shot_sequence / int_shift_segments / int_segment_context: NOT exported — only the
+  # model-scoring paths read them, and those become precompute (line_member_features etc).
+
+  # --- marts (already BASE TABLEs) --------------------------------------------
+  - {name: mart_team_game_stats,       dataset: mart, kind: source, cap: full, indexes: [team_id, game_id, season]}
+  - {name: mart_player_game_stats,     dataset: mart, kind: source, cap: full, indexes: [player_id, game_id, season]}
+  - {name: mart_goalie_game_stats,     dataset: mart, kind: source, cap: full, indexes: [goalie_id, game_id]}
+  - {name: mart_goalie_season,         dataset: mart, kind: source, cap: full, indexes: [goalie_id, season]}
+  - {name: mart_team_identity,         dataset: mart, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: mart_team_rolling,          dataset: mart, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: mart_team_zone_time,        dataset: mart, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: mart_team_faceoffs,         dataset: mart, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: mart_team_stats_situational,dataset: mart, kind: source, cap: full, indexes: [team_id, game_id]}
+  - {name: mart_player_zone_deployment,dataset: mart, kind: source, cap: full, indexes: [player_id, team_id, season]}
+  - {name: mart_player_situational,    dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_shooting_luck,  dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_relative,       dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_game_score,     dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_edge_player_profile,   dataset: mart, kind: source, cap: full, indexes: [player_id]}
+  - {name: mart_edge_team_profile,     dataset: mart, kind: source, cap: full, indexes: [team_id]}
+
+  # --- model tables -----------------------------------------------------------
+  - {name: shot_xg,            dataset: models, kind: source, cap: recent, indexes: [game_id]}
+  - {name: win_probability,    dataset: models, kind: source, cap: recent, indexes: [game_id]}
+  - {name: player_archetypes,  dataset: models, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: player_composite,   dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_radar,       dataset: models, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: goalie_radar,       dataset: models, kind: source, cap: full, indexes: [goalie_id, season]}
+  - {name: player_gar,         dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: goalie_gar,         dataset: models, kind: source, cap: full, indexes: [goalie_id, season_window]}
+  - {name: player_overall,     dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: goalie_overall,     dataset: models, kind: source, cap: full, indexes: [goalie_id, season_window]}
+  - {name: player_impact,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_clutch,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_consistency, dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_coach_trust, dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: divergence_board,   dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: deployment_efficiency, dataset: models, kind: source, cap: full, indexes: [player_id, situation]}
+  - {name: aging_curves,       dataset: models, kind: source, cap: full, indexes: [archetype]}
+  - {name: player_twins,       dataset: models, kind: source, cap: full, indexes: [player_id]}
+  - {name: player_physical,    dataset: models, kind: source, cap: full, indexes: [player_id]}
+  - {name: team_ratings,       dataset: models, kind: source, cap: full, indexes: [team_id, season, game_date]}
+  - {name: deserved_standings, dataset: models, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: style_map,          dataset: models, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: streak_cards,       dataset: models, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: team_needs,         dataset: models, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: archetype_gallery,  dataset: models, kind: source, cap: full, indexes: [pos_group]}
+  - {name: player_style_map,   dataset: models, kind: source, cap: full, indexes: [player_id, pos_group]}
+
+  # --- NEW precomputed serving tables (built by models_ml/precompute_serving.py) ---
+  # built:false flips to true once the precompute job has run + written the table.
+  - {name: dim_current_roster,     dataset: models, kind: precompute, cap: full, built: true, indexes: [player_id, name_lower]}
+  - {name: line_member_features,   dataset: models, kind: precompute, cap: full, built: true, indexes: [[player_id, season]]}
+  - {name: team_handedness,        dataset: models, kind: precompute, cap: full, built: true, indexes: [[team_id, season]]}
+  - {name: team_current_lines,     dataset: models, kind: precompute, cap: full, built: true, indexes: [team_id]}
+  - {name: serving_game_skater_box,dataset: models, kind: precompute, cap: full, built: true, indexes: [game_id, player_id]}
+  # best_team_fits is NOT precomputed: it runs live on DuckDB (cheap once inputs are local) + cached.
+
+# =============================================================================
+# Open DECISIONS resolved with the user (2026-06-18)
+# =============================================================================
+decisions_resolved:
+  season_scope: "cap big per-event tables (stg_play_by_play, int_shot_types, int_shot_attempts_all, shot_xg, win_probability) to recent 3 seasons; everything else full."
+  line_fit: "precompute line_member_features; live line-fit reads features from DuckDB + cached LightGBM artifact (no BigQuery, no segment export)."
+  trade_fit: "precompute best_team_fits (top-N per player) fully; specific player-vs-team is a cached live DuckDB compute, not a precomputed grid."
+  git: "ArchetypeExplorer work is the user's; safe to commit together."
+
+# =============================================================================
+# Endpoint -> serving strategy notes (the Part 1 inventory, condensed)
+# =============================================================================
+# Roster-trick endpoints (search, /players/leaders, /players/archetypes/{a}, divergence &
+#   deployment boards, archetype style-map, /rankings/value, score_line names) currently do
+#   ARRAY_AGG(team_id ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] over stg_rosters on every
+#   call -> repoint to nhl_models.dim_current_roster (name+team+abbrev+archetype joined).
+# Model-scoring endpoints (POST /tools/trade-fit, GET /tools/trade-fit/best-teams,
+#   GET /teams/{id}/lines, GET /games/{id}/preview) -> precomputed tables / cached live.
+# POST /tools/line-fit, /line-fit/suggestions -> live model over line_member_features (DuckDB).
+# GET /games/{id}/skater-impact -> mart_game_skater_box (replaces raw_boxscores UNNEST).
+# Everything else -> same query shape, run in DuckDB against the exported source tables.

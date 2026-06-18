@@ -247,7 +247,7 @@ export default function Rankings() {
                   onClick={() => setShowColors((s) => !s)}
                   aria-expanded={showColors}
                 >
-                  Colors
+                  Legend
                 </button>
               )}
             </div>

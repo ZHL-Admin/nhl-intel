@@ -16,6 +16,7 @@ router = APIRouter()
 
 
 @router.post("/line-fit", response_model=LineFitProjection)
+@cache(ttl=3600)
 async def post_line_fit(req: LineFitRequest) -> LineFitProjection:
     """Project a hypothetical line (2 D, 3 F, or a 5-skater unit) from member profiles."""
     ids = req.player_ids
@@ -29,6 +30,7 @@ async def post_line_fit(req: LineFitRequest) -> LineFitProjection:
 
 
 @router.post("/line-fit/suggestions", response_model=LineSuggestionsResponse)
+@cache(ttl=3600)
 async def post_line_suggestions(req: LineFitRequest) -> LineSuggestionsResponse:
     """Per-slot 'better fit' candidates: same-caliber players ranked by projected xGF% gain."""
     ids = req.player_ids
@@ -42,6 +44,7 @@ async def post_line_suggestions(req: LineFitRequest) -> LineSuggestionsResponse:
 
 
 @router.post("/trade-fit", response_model=TradeFitResult)
+@cache(ttl=3600)
 async def post_trade_fit(req: TradeFitRequest) -> TradeFitResult:
     """Score how well a player addresses a team's archetype + component gaps (Phase 5.3)."""
     try:
@@ -55,6 +58,7 @@ async def post_trade_fit(req: TradeFitRequest) -> TradeFitResult:
 
 
 @router.get("/trade-fit/best-teams", response_model=List[BestTeamFit])
+@cache(ttl=3600)
 async def get_best_team_fits(
     player_id: int = Query(...),
     exclude_team: Optional[int] = Query(None),

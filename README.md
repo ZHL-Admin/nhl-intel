@@ -29,10 +29,20 @@ See `backend/README.md` for full API documentation and deployment instructions.
 - Daily HTML report generated and published to GCS
 
 **Phase 2 (Dashboard API):**
-- FastAPI backend deployed to Cloud Run
-- Queries BigQuery `nhl_staging` dataset (contains mart tables)
-- In-memory caching layer for performance
-- Service account authentication for BigQuery access
+- FastAPI backend; serves request-time reads from a local **DuckDB serving file** (default), not
+  BigQuery — see below.
+- In-memory caching layer for performance.
+
+**Serving layer (DuckDB):**
+BigQuery is the nightly COMPUTE engine and system of record. Everything the site reads at request
+time is materialized each night into one local DuckDB file (`data/serving/nhl_intel.duckdb`) by
+`scripts/export_to_duckdb.py`, and the backend reads only from that file — interactive reads are
+milliseconds, with no BigQuery client on the request path. This is additive: it does not change
+any ingestion or dbt transform. Nightly order is `ingest -> dbt -> model jobs -> precompute-serving
+-> export-serving`. The file is a rebuildable, read-only snapshot; if lost, `make export-serving`
+regenerates it from BigQuery (nothing lives only in DuckDB). Set `SERVING_BACKEND=bigquery` to
+bypass DuckDB and query BigQuery live (the legacy path). The manifest of exported tables and the
+per-endpoint serving strategy is `serving_tables.yml`.
 
 ## Setup Instructions
 
@@ -81,12 +91,27 @@ dbt build --select staging --target dev
 > Always pass `--target dev` locally — the default `prod` target expects the
 > Airflow VM keyfile path.
 
-### 4. Backend
+### 4. Serving file + backend
+
+The backend serves from the local DuckDB serving file by default. Build it once (and after each
+nightly compute) — this reads BigQuery and writes `data/serving/nhl_intel.duckdb`:
+
+```bash
+make precompute-serving   # build the precomputed serving tables in BigQuery (search roster, etc.)
+make export-serving       # materialize all site-read tables into the DuckDB file (atomic swap)
+```
+
+Then run the backend (it opens no BigQuery client on the request path):
 
 ```bash
 cd backend
 uvicorn main:app --reload --port 8000
 ```
+
+> Optional speedup: grant the service account `roles/bigquery.readSessionUser` so the export uses
+> the BigQuery Storage API (seconds) instead of the slower REST download. Without it the nightly
+> export still works, just slower on the large game-grain marts.
+> To bypass DuckDB and query BigQuery live, run the backend with `SERVING_BACKEND=bigquery`.
 
 ### 5. Frontend
 
@@ -111,6 +136,9 @@ A top-level `Makefile` wraps the common workflows (run from the repo root with
 | `make backend` | run the FastAPI backend with reload on :8000 |
 | `make frontend` | run the Vite dev server |
 | `make test` | run the backend/pipeline pytest suite |
+| `make precompute-serving` | build the precomputed serving tables in BigQuery |
+| `make export-serving` | materialize the site-read tables into the local DuckDB serving file |
+| `make verify-serving` | differential parity check of DuckDB vs BigQuery results |
 
 Model-training and insight jobs (`models_ml/`, `insight_engine/`) get their own
 targets as those layers land in later phases.

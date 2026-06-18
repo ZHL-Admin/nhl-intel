@@ -1,4 +1,27 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving
+
+# --- DuckDB serving layer ----------------------------------------------------
+# The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
+# so search/pages/tools are milliseconds, with no BigQuery on the request path. BigQuery stays
+# the compute engine + system of record. Nightly order: precompute-serving -> export-serving.
+
+# Build the precomputed serving tables in BigQuery (search roster, line member features,
+# team handedness, current lines, flattened skater box). Pure functions of last night's data.
+precompute-serving:
+	python -m models_ml.precompute_serving --all
+
+# Materialize everything the site reads into data/serving/nhl_intel.duckdb (atomic swap).
+# Idempotent + fully regenerable from BigQuery. Run AFTER precompute-serving.
+export-serving:
+	python -m scripts.export_to_duckdb
+
+# Differential parity check: run the backend's real request-time queries against both
+# BigQuery and DuckDB and diff. Proves the serving file returns identical values.
+verify-serving:
+	SERVING_BACKEND=bigquery python -m scripts.verify_serving_parity > /tmp/parity_bq.txt
+	SERVING_BACKEND=duckdb   python -m scripts.verify_serving_parity > /tmp/parity_duck.txt
+	diff <(grep -E '^(PROBE|  rows|  checksum)' /tmp/parity_bq.txt) \
+	     <(grep -E '^(PROBE|  rows|  checksum)' /tmp/parity_duck.txt) && echo "PARITY OK"
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:

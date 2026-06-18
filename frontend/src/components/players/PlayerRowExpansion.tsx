@@ -6,7 +6,7 @@
  * is the handoff. Lazy-fetches the clicked player only and caches it so re-open is instant.
  */
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 // (headshot/logo helpers now live in the shared PlayerAvatar)
 import SkillRadar from '../visualizations/SkillRadar'
@@ -181,9 +181,9 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
             <div className="pxe__meta">{meta}</div>
             {labels && (labels.offensive || labels.defensive || labels.overall) && (
               <div className="pxe__chips">
-                {labels.offensive && <span className="pxe__chip">{labels.offensive}</span>}
-                {labels.defensive && <span className="pxe__chip pxe__chip--quiet">{labels.defensive}</span>}
-                {!labels.offensive && !labels.defensive && labels.overall && <span className="pxe__chip">{labels.overall}</span>}
+                {labels.offensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.offensive)}`} className="pxe__chip" title={`What is a ${labels.offensive}?`}>{labels.offensive}</Link>}
+                {labels.defensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.defensive)}`} className="pxe__chip pxe__chip--quiet" title={`What is a ${labels.defensive}?`}>{labels.defensive}</Link>}
+                {!labels.offensive && !labels.defensive && labels.overall && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.overall)}`} className="pxe__chip">{labels.overall}</Link>}
               </div>
             )}
           </div>

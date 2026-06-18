@@ -8,6 +8,7 @@
   gap: var(--space-6);
   align-items: stretch;
   padding: var(--space-5) var(--space-6);
+  padding-bottom: var(--space-8);
   background: var(--color-bg-base);
   border-top: 1px solid var(--color-accent);
   animation: pxe-in 160ms ease;
@@ -30,7 +31,9 @@
   font-size: var(--text-xs); font-weight: 600;
   background: var(--color-accent-subtle, color-mix(in srgb, var(--color-accent) 14%, transparent));
   color: var(--color-accent);
+  text-decoration: none; cursor: pointer; transition: filter 140ms ease;
 }
+.pxe__chip:hover { filter: brightness(1.08); text-decoration: underline; }
 .pxe__chip--quiet { background: var(--color-bg-elevated); color: var(--color-text-secondary); }
 
 /* ---- verdict (top of the right column, above the radar) ---- */

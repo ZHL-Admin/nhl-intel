@@ -23,25 +23,44 @@ class BigQueryService:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self) -> None:
-        """Initialize BigQuery client if not already initialized."""
-        if self._client is None:
-            self.project_id = os.getenv("GCP_PROJECT_ID")
-            # Configure datasets for different model layers
-            self.dataset_staging = os.getenv("GCP_DATASET_STAGING", "nhl_staging")
-            self.dataset_mart = os.getenv("GCP_DATASET_MART", "nhl_mart")
-            self.dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
-            self.dataset_models = os.getenv("GCP_DATASET_MODELS", "nhl_models")
+    _initialized: bool = False
 
-            # Handle credentials path - make it absolute if relative
+    def __init__(self) -> None:
+        """Initialize the service once.
+
+        Default serving backend is DuckDB (the local serving file built by the nightly
+        export): no BigQuery client is opened on the request path. Set SERVING_BACKEND=bigquery
+        to query BigQuery live instead (the legacy path / bypass).
+        """
+        if self._initialized:
+            return
+        self._initialized = True
+
+        from services import serving  # local import avoids an import cycle at module load
+        self._serving_mode = serving.serving_backend() == "duckdb"
+        self._serving = None  # ServingDB created lazily on first query
+
+        self.project_id = os.getenv("GCP_PROJECT_ID")
+        self.dataset_staging = os.getenv("GCP_DATASET_STAGING", "nhl_staging")
+        self.dataset_mart = os.getenv("GCP_DATASET_MART", "nhl_mart")
+        self.dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+        self.dataset_models = os.getenv("GCP_DATASET_MODELS", "nhl_models")
+
+        if not self._serving_mode:
+            # Legacy BigQuery serving path: open a client.
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if creds_path and not Path(creds_path).is_absolute():
-                # Assume relative to project root (parent of backend dir)
                 root_dir = Path(__file__).parent.parent.parent
                 creds_path = str(root_dir / creds_path)
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-
             self._client = bigquery.Client(project=self.project_id)
+
+    def _serving_db(self):
+        """Lazily create the DuckDB serving connection (first request-path use)."""
+        if self._serving is None:
+            from services.serving import get_serving_db
+            self._serving = get_serving_db()
+        return self._serving
 
     @property
     def client(self) -> bigquery.Client:
@@ -67,6 +86,9 @@ class BigQueryService:
         Raises:
             Exception: If query execution fails.
         """
+        if self._serving_mode:
+            return self._serving_db().query(sql, params)
+
         job_config = bigquery.QueryJobConfig()
 
         if params:
@@ -84,8 +106,11 @@ class BigQueryService:
             table_name: Name of the table (e.g., 'stg_boxscores', 'mart_team_game_stats').
 
         Returns:
-            Fully qualified table ID (project.dataset.table).
+            Fully qualified table ID (project.dataset.table), or the bare table name when
+            serving from DuckDB (tables live under their bare names in the serving file).
         """
+        if self._serving_mode:
+            return table_name
         # Route tables to correct dataset based on prefix
         if table_name.startswith('mart_'):
             dataset = self.dataset_mart
@@ -100,7 +125,12 @@ class BigQueryService:
         return f"{self.project_id}.{dataset}.{table_name}"
 
     def get_models_table_id(self, table_name: str) -> str:
-        """Fully qualified ID for a Python model-layer output table (nhl_models)."""
+        """Fully qualified ID for a Python model-layer output table (nhl_models).
+
+        Returns the bare table name when serving from DuckDB.
+        """
+        if self._serving_mode:
+            return table_name
         return f"{self.project_id}.{self.dataset_models}.{table_name}"
 
     def get_player_edge(self, player_id: int, season_id: Optional[int] = None, game_type: int = 2) -> Optional[Dict[str, Any]]:
@@ -156,6 +186,37 @@ class BigQueryService:
         ctx = self.get_full_table_id('stg_game_context')
         games = self.get_full_table_id('stg_games')
         standings = self.get_full_table_id('stg_standings')
+
+        if self._serving_mode:
+            # DuckDB has no SELECT AS STRUCT; fetch the context row + each team's last-10
+            # standings row, and assemble the home_last10/away_last10 dicts in Python.
+            base = self.query(f"""
+                SELECT c.*, g.home_team_abbrev, g.away_team_abbrev
+                FROM {ctx} c
+                JOIN {games} g ON g.game_id = c.game_id
+                WHERE c.game_id = {game_id}
+            """)
+            if not base:
+                return None
+            row = base[0]
+            gdate = self.query(
+                f"SELECT game_date FROM {games} WHERE game_id = {game_id}")
+            gd = gdate[0]["game_date"] if gdate else None
+
+            def _last10(abbrev):
+                if not abbrev or gd is None:
+                    return None
+                r = self.query(f"""
+                    SELECT team_abbrev, l10_wins, l10_losses, l10_ot_losses, league_rank, points
+                    FROM {standings}
+                    WHERE team_abbrev = '{abbrev}' AND standings_date <= DATE '{gd}'
+                    ORDER BY standings_date DESC LIMIT 1
+                """)
+                return r[0] if r else None
+
+            row["home_last10"] = _last10(row.get("home_team_abbrev"))
+            row["away_last10"] = _last10(row.get("away_team_abbrev"))
+            return row
 
         sql = f"""
         WITH g AS (
@@ -936,8 +997,26 @@ class BigQueryService:
         """Per-skater impact line with real TOI and box-score G/A/P from the raw
         boxscore, joined to individual xG and high-danger chances from the shot model.
         """
-        raw = self.get_full_table_id('raw_boxscores')
         shots = self.get_full_table_id('int_shot_attempts_all')
+        if self._serving_mode:
+            # raw_boxscores (nested JSON) isn't exported; read the precomputed flat box lines.
+            sql = f"""
+            SELECT sk.player_id, sk.player_name, sk.team_abbrev, sk.position, sk.toi,
+                   sk.goals, sk.assists, sk.points, sk.shots,
+                   COALESCE(ix.ixg, 0.0) AS ixg, COALESCE(ix.ihdcf, 0) AS ihdcf
+            FROM serving_game_skater_box sk
+            LEFT JOIN (
+                SELECT COALESCE(shooting_player_id, scoring_player_id) AS pid,
+                       ROUND(SUM(xg_value), 2) AS ixg, COUNTIF(is_high_danger) AS ihdcf
+                FROM {shots}
+                WHERE game_id = {game_id}
+                    AND COALESCE(shooting_player_id, scoring_player_id) IS NOT NULL
+                GROUP BY pid
+            ) ix ON ix.pid = sk.player_id
+            WHERE sk.game_id = {game_id}
+            """
+            return self.query(sql)
+        raw = self.get_full_table_id('raw_boxscores')
         sql = f"""
         WITH box AS (
             SELECT

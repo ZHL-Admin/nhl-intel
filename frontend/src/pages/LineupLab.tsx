@@ -334,7 +334,7 @@ export default function LineupLab() {
     <PageLayout>
       <div className="lab">
         <PageHeader
-          back={{ to: '/tools', label: 'Tools' }}
+          back={{ to: '/tools', label: 'All Tools' }}
           title="Lineup Lab"
           subtitle="Build a line and project its 5v5 results from each member’s measured profile — no two players need to have ever shared the ice."
         />
