@@ -118,20 +118,32 @@ TEAM_NEEDS_TOP_N = 8
 # statistical gap" (neutral, never negative/red). No redundancy penalty (a team strong at a
 # position can still validly add the player). See docs/methodology/trade-fit.md.
 TRADE_FIT = {
-    # weights over the four blended dimensions (the positional gate multiplies the blend)
-    "WEIGHTS": {"need": 0.28, "style": 0.24, "line": 0.20, "quality": 0.28},
+    # Score = (positional gate) * weighted_avg(quality, line, style)  +  asymmetric NEED bonus.
+    # NEED is NOT averaged into the base: it can only ADD (filling a hole is upside), never drag a
+    # score down. A great player is a great add regardless of need; a team already strong at the
+    # position is not penalised for having no gap. (Was a 4th averaged, floored term -> it pulled
+    # every low-need trade toward the floor, incorrectly demoting strong fits.)
+    "WEIGHTS": {"quality": 0.45, "line": 0.30, "style": 0.25},   # base dims (talent-dominant); sum 1.0
     # the positional gate is bounded so a relevant NHL skater is never zeroed: gate in [FLOOR, 1].
     "GATE_FLOOR": 0.55,
-    # NEED level = sigmoid(team_gap_in_player_area / SCALE); SCALE ~ league sd of component gaps so a
-    # big positive gap reads ~0.9 and a surplus reads ~0.15 (low, NOT negative). Floored, never 0.
+    # NEED -> additive bonus in [0, NEED_BONUS_MAX]: bonus = MAX * max(0, 2*sigmoid(gap/SCALE) - 1),
+    # so a surplus/no gap adds 0 (neutral) and a big gap adds up to MAX. NEED_GAP_SCALE ~ league sd
+    # of component gaps. NEED_BONUS_MAX is sized to visibly lift a real-need fit (~a B->A- bump) yet
+    # never rescue a bad player (0.30 base + 0.12 = 0.42 is still C/D). NEED_FLOOR only floors the
+    # DISPLAYED need level for the breakdown bar; it no longer enters the score.
     "NEED_GAP_SCALE": 12.0,
     "NEED_FLOOR": 0.15,
+    "NEED_BONUS_MAX": 0.12,
     # STYLE level = alignment of the player's generation profile (rush / cycle-forecheck / volume /
     # pace percentiles, from the radar) with the team's identity fingerprint (same percentiles).
     # LINE level maps the projected pairing/line xGF% across this band to [0,1].
     "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,
-    # letter grade on the 0-1 overall score (first band whose floor is met wins).
-    "GRADE_BANDS": [("A", 0.70), ("B", 0.58), ("C", 0.46), ("D", 0.34), ("F", 0.0)],
+    # letter grade on the 0-1 overall score (first band whose floor is met wins). Tuned to the
+    # post-change distribution (validate_trade_fit: n=72, median ~0.62, a clear valley ~0.42-0.55
+    # where below-average-but-relevant players land, and a bad-player floor ~0.15-0.27). A = top
+    # fits, B = solid contributors, C = a decent fit limited by the player (e.g. an elite line/style
+    # fit dragged by below-average value), D/F = weak/bad. See docs/methodology/trade-fit.md.
+    "GRADE_BANDS": [("A", 0.70), ("B", 0.56), ("C", 0.42), ("D", 0.30), ("F", 0.0)],
 }
 
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------

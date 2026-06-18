@@ -287,7 +287,10 @@ def _need_dimension(needs, prof) -> dict:
         note = (f"Addresses {prof['_team_abbrev']}'s {COMPONENT_LABEL[top_c]} gap "
                 f"(~{gap:+.0f} goals behind the top teams).")
     return {"key": "need", "label": "Need fit", "level": round(level, 3),
-            "value": _word(level), "note": note, "tone": "neutral" if gap <= 0.5 else "positive"}
+            "value": _word(level), "note": note, "tone": "neutral" if gap <= 0.5 else "positive",
+            # raw team gap in the player's area; drives the additive bonus in _combine. NEED only
+            # ADDS to the score (never subtracts) — see _need_bonus. (Ignored by the response model.)
+            "gap": round(gap, 3)}
 
 
 def _positional_dimension(p, prof, hand, team_id) -> dict:
@@ -393,34 +396,61 @@ def _abbrev_map(p: str, season: str) -> dict:
     return dict(zip(df["team_id"].astype(int), df["a"]))
 
 
+def _need_bonus(gap: float | None) -> float:
+    """Asymmetric additive NEED bonus in [0, NEED_BONUS_MAX].
+
+    0 for a surplus / no gap (need is neutral, never a penalty); rises monotonically with a real
+    team gap in the player's area, up to NEED_BONUS_MAX. Filling a hole is upside ON TOP of the
+    player-and-fit base — it can lift a grade but can never rescue a bad player.
+    """
+    g = gap or 0.0
+    return CFG["NEED_BONUS_MAX"] * max(0.0, 2.0 * _sigmoid(g / CFG["NEED_GAP_SCALE"]) - 1.0)
+
+
 def _combine(dims: list[dict]) -> tuple[float, str]:
-    """positional gate * weighted blend of (need, style, line, quality); skip n/a dims (renormalise)."""
+    """(positional gate) * weighted_avg(quality, line, style)  +  asymmetric NEED bonus.
+
+    The base is purely about the player and the fit (talent-dominant), gated so a positionally
+    relevant skater is never zeroed. NEED is added afterwards and can only HELP (see _need_bonus):
+    low need adds nothing, it does NOT drag the average down.
+    """
     by = {d["key"]: d for d in dims}
     gate = by["positional"]["level"] or CFG["GATE_FLOOR"]
     w = CFG["WEIGHTS"]; num = den = 0.0
-    for k in ("need", "style", "line", "quality"):
+    for k in ("quality", "line", "style"):
         lvl = by[k]["level"]
         if lvl is not None:
             num += w[k] * lvl; den += w[k]
-    blend = (num / den) if den > 0 else 0.5
-    score = gate * blend
+    base = (num / den) if den > 0 else 0.5
+    gated_base = gate * base
+    bonus = _need_bonus(by["need"].get("gap"))
+    score = max(0.0, min(1.0, gated_base + bonus))
     return round(score, 4), _grade(score)
 
 
 def _verdict(name, team_abbrev, grade, dims) -> str:
+    """Deterministic verdict. The grade is driven by the base (quality/line/style); NEED is framed
+    as pure upside (mention only when it's a real gap, never as a deduction), and a low base is
+    attributed to its real cause — usually the player's value — not to a lack of need."""
     by = {d["key"]: d for d in dims}
-    drivers = sorted([d for d in dims if d["key"] != "positional" and d["level"] is not None],
-                     key=lambda d: -(d["level"] or 0))
-    strong = [d for d in drivers if (d["level"] or 0) >= 0.6]
-    lead = strong[0] if strong else (drivers[0] if drivers else None)
+    base = sorted([by[k] for k in ("quality", "line", "style") if by.get(k) and by[k]["level"] is not None],
+                  key=lambda d: -(d["level"] or 0))
     bits = []
-    if lead:
-        bits.append({"need": "fills a real need", "style": "fits the team's style",
+    # lead with the strongest base dimension when it's genuinely a strength
+    lead = base[0] if base else None
+    if lead and (lead["level"] or 0) >= 0.6:
+        bits.append({"style": "fits the team's style",
                      "line": "would upgrade the line he slots into",
                      "quality": "brings real top-end value"}[lead["key"]])
-    if by["need"]["level"] is not None and by["need"]["level"] < 0.4:
-        bits.append("the team isn't statistically short here, so the case is fit-and-upgrade, not need")
-    body = "; ".join(bits) if bits else "the dimensions are mixed"
+    # name the legitimate drag (now quality, not need) when the player is below average
+    q = by.get("quality")
+    if q and q["level"] is not None and q["level"] < 0.4:
+        bits.append("though he's held back by his below-average value")
+    # NEED is upside only: mention a real hole as a positive; otherwise say nothing about need
+    nd = by["need"]
+    if (nd.get("gap") or 0.0) > 0.5:
+        bits.append("and he fills a clear hole at the position")
+    body = ", ".join(bits) if bits else "the dimensions are mixed"
     return (f"{name} grades {grade} as a fit for {team_abbrev}: {body}. "
             f"Weigh this against what the model can't see — injuries, departures, cap, and locker room.")
 
