@@ -5,8 +5,9 @@
 import { useState, useEffect } from 'react'
 import { ChartPanel, PercentileBarList, Tabs, SkeletonLoader } from '../common'
 import type { PercentileBarItem } from '../common'
+import TeamRadar from './TeamRadar'
 import { getTeamIdentity } from '../../api/teams'
-import { TeamIdentity, TeamIdentityWindow } from '../../api/types'
+import { TeamIdentity, TeamIdentityWindow, TeamDetail } from '../../api/types'
 import { FINGERPRINT_GROUPS } from '../../config/metrics'
 import './TeamIdentityTab.css'
 
@@ -61,7 +62,9 @@ function ConversionPanel({ win, size }: { win: TeamIdentityWindow; size: number 
   )
 }
 
-export default function TeamIdentityTab({ teamId }: { teamId: number }) {
+export default function TeamIdentityTab({ teamId, teamDetail, teamColor }: {
+  teamId: number; teamDetail?: TeamDetail | null; teamColor?: string
+}) {
   const [identity, setIdentity] = useState<TeamIdentity | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [windowKind, setWindowKind] = useState<'season' | 'last25'>('season')
@@ -94,6 +97,12 @@ export default function TeamIdentityTab({ teamId }: { teamId: number }) {
         />
         <span className="identity__games">{win.games} games</span>
       </div>
+
+      {teamDetail && (
+        <ChartPanel title="Performance profile" subtitle="Percentile across six dimensions vs the league (dashed = median)">
+          <TeamRadar teamDetail={teamDetail} color={teamColor || 'var(--color-accent)'} />
+        </ChartPanel>
+      )}
 
       <ChartPanel title="Territory-to-danger conversion" subtitle="Where this team's offense comes from structurally">
         <ConversionPanel win={win} size={identity.league_size} />

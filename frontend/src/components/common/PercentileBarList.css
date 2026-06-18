@@ -6,17 +6,18 @@
 
 .pct-bar-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1.4fr) 3fr auto auto;
+  grid-template-columns: minmax(160px, 1.6fr) 3fr auto auto;
   align-items: center;
   gap: var(--space-3, 12px);
   font-size: var(--font-size-sm, 0.9rem);
 }
 
+/* Labels never truncate (UX rule 2): wrap to two lines rather than ellipsis. */
 .pct-bar-label {
   color: var(--color-text-secondary, #888);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .pct-bar-track {

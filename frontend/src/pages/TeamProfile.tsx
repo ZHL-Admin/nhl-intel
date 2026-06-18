@@ -353,7 +353,7 @@ function TeamProfile() {
         )}
 
         {currentTab === 'identity' && teamId && (
-          <TeamIdentityTab teamId={parseInt(teamId)} />
+          <TeamIdentityTab teamId={parseInt(teamId)} teamDetail={teamDetail} teamColor={teamColor} />
         )}
 
         {/* Performance / Trends — form verdict (Streak Doctor, its own Last 5/10/20 toggle) then
