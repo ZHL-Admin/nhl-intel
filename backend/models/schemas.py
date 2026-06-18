@@ -1283,14 +1283,34 @@ class TradeFitRequest(BaseModel):
     season: Optional[str] = None
 
 
+class FitDimension(BaseModel):
+    """One separately-measured Trade Fit dimension (positional / need / style / line / quality).
+
+    `level` is 0-1 for the bar (None = not measurable). `tone` drives colour discipline —
+    'neutral' for a LOW need (not a gap, never red); 'positive' for strength; 'warn' for a genuine
+    stylistic mismatch. `uncertain`/`sd` flag model estimates (line, quality)."""
+    key: str
+    label: str
+    level: Optional[float] = None
+    value: str = ""
+    note: str = ""
+    tone: str = "neutral"          # positive | neutral | warn
+    uncertain: bool = False
+    sd: Optional[float] = None
+
+
 class TradeFitResult(BaseModel):
-    """How well a player addresses a team's needs (Phase 5.3)."""
+    """Multi-dimension Trade Fit (Phase 5.3 rebuild): a positional gate * weighted need/style/line/
+    quality blend -> a combined letter grade, ALWAYS decomposed into its dimensions. No zero-floor;
+    need is one dimension, not the master score. The verdict notes context the model can't see."""
     player_id: int
     player_name: Optional[str] = None
     team_id: int
     season: str
-    fit_score: float          # 0-100
-    reasons: List[str] = Field(default_factory=list)
+    overall_grade: str             # A-F
+    overall_score: float           # 0-100 (decomposable into `dimensions`)
+    verdict_sentence: str = ""
+    dimensions: List[FitDimension] = Field(default_factory=list)
     player_archetypes: List["ArchetypeWeight"] = Field(default_factory=list)
     need_profile: Optional[TeamNeedProfile] = None
 
@@ -1299,6 +1319,7 @@ class BestTeamFit(BaseModel):
     """A team whose gaps a player fills well (Phase 5.3 — Trade Fit 'best teams')."""
     team_id: int
     fit_score: float
+    grade: Optional[str] = None
     reason: Optional[str] = None
     top_need_label: Optional[str] = None
     top_need_gap: Optional[float] = None
@@ -1340,7 +1361,7 @@ class RadarSpoke(BaseModel):
     key: str
     label: str
     tag: str                      # skill | usage | style | proxy
-    value: float
+    value: Optional[float] = None  # raw stat value (None for an archetype centroid radar)
     percentile: Optional[float] = None
     sd: Optional[float] = None
     present: bool = True
@@ -1366,6 +1387,62 @@ class GoalieRadar(BaseModel):
     games_played: Optional[int] = None
     spokes: List[RadarSpoke] = Field(default_factory=list)
     baseline: Optional[str] = None
+
+
+# --- Archetype explainer (gallery + style-map) — placed after RadarSpoke (reused below) ---
+class ArchetypeTrait(BaseModel):
+    label: str
+    dir: Optional[str] = None      # '+' | '-' (universal traits)
+    z: float
+    share: Optional[float] = None  # universal-trait one-sided share (0..1)
+
+
+class ArchetypeExemplar(BaseModel):
+    player_id: int
+    name: Optional[str] = None
+    season: str
+    team_abbrev: Optional[str] = None
+    weight: float
+
+
+class ArchetypeCard(BaseModel):
+    """One discovered archetype: characteristic centroid radar + measured traits + real exemplars."""
+    key: str
+    name: str
+    pos_group: str
+    family: Optional[str] = None
+    descriptor: Optional[str] = None
+    member_count: int
+    universal_traits: List[ArchetypeTrait] = Field(default_factory=list)
+    distinctive_traits: List[ArchetypeTrait] = Field(default_factory=list)
+    centroid_radar: List[RadarSpoke] = Field(default_factory=list)
+    exemplars: List[ArchetypeExemplar] = Field(default_factory=list)
+
+
+class StyleMapPoint(BaseModel):
+    player_id: int
+    name: Optional[str] = None
+    team_abbrev: Optional[str] = None
+    season: str
+    x: float
+    y: float
+    archetype: str
+    membership: float
+    is_boundary: bool
+
+
+class StyleMapRegion(BaseModel):
+    archetype: str
+    x: float
+    y: float
+    member_count: int
+
+
+class StyleMap(BaseModel):
+    """A position's player style-map: real player points + discovered cluster regions."""
+    pos_group: str
+    points: List[StyleMapPoint] = Field(default_factory=list)
+    regions: List[StyleMapRegion] = Field(default_factory=list)
 
 
 class PlayerSummary(BaseModel):

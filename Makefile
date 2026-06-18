@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs archetypes-v2 radar deployment
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer
 
 # Create the Python venv and install all dependencies (Python + frontend).
 setup:
@@ -69,6 +69,11 @@ linefit:
 team-needs:
 	python -m models_ml.compute_team_needs
 
+# Validate the multi-dimension Trade Fit rebuild: print disagreement cases (need vs style/quality)
+# and confirm the defenseman-to-strong-defense team no longer scores ~0. Reads only; no writes.
+trade-fit-validate:
+	python -m models_ml.validate_trade_fit
+
 # Refit archetypes v2 (enriched vector) then emit player_archetypes. Single-threaded for a
 # reproducible fit. Run without --write first to refresh the trait audit, confirm names, then --write.
 archetypes-v2:
@@ -78,4 +83,9 @@ archetypes-v2:
 radar:
 	python -m models_ml.compute_player_radar
 	python -m models_ml.compute_goalie_radar
+
+# Archetype explainer (gallery + player style-map) into nhl_models.archetype_gallery /
+# player_style_map. Reads the locked v2 artifacts (no retrain). `--dry-run` prints, no write.
+archetype-explainer:
+	VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 python -m models_ml.compute_archetype_explainer
 

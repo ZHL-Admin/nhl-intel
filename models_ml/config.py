@@ -112,6 +112,28 @@ LINEFIT_ARTIFACT = "linefit_v1"
 # A team's need profile is measured against the average of the top-N teams by power rating.
 TEAM_NEEDS_TOP_N = 8
 
+# Multi-dimension Trade Fit (rebuild). Fit is NOT one number: a POSITIONAL gate (relevance —
+# guarantees a positionally-relevant player never scores 0) multiplies a weighted blend of four
+# separately-measured dimensions. NEED is one dimension, not the master axis; low need = "not a
+# statistical gap" (neutral, never negative/red). No redundancy penalty (a team strong at a
+# position can still validly add the player). See docs/methodology/trade-fit.md.
+TRADE_FIT = {
+    # weights over the four blended dimensions (the positional gate multiplies the blend)
+    "WEIGHTS": {"need": 0.28, "style": 0.24, "line": 0.20, "quality": 0.28},
+    # the positional gate is bounded so a relevant NHL skater is never zeroed: gate in [FLOOR, 1].
+    "GATE_FLOOR": 0.55,
+    # NEED level = sigmoid(team_gap_in_player_area / SCALE); SCALE ~ league sd of component gaps so a
+    # big positive gap reads ~0.9 and a surplus reads ~0.15 (low, NOT negative). Floored, never 0.
+    "NEED_GAP_SCALE": 12.0,
+    "NEED_FLOOR": 0.15,
+    # STYLE level = alignment of the player's generation profile (rush / cycle-forecheck / volume /
+    # pace percentiles, from the radar) with the team's identity fingerprint (same percentiles).
+    # LINE level maps the projected pairing/line xGF% across this band to [0,1].
+    "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,
+    # letter grade on the 0-1 overall score (first band whose floor is met wins).
+    "GRADE_BANDS": [("A", 0.70), ("B", 0.58), ("C", 0.46), ("D", 0.34), ("F", 0.0)],
+}
+
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------
 # A scheduled game has no segments, so its pregame home win probability is derived from the power
 # ratings (which are on a goals/game scale, the same prior the WP model consumes): expected home

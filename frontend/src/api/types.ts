@@ -962,17 +962,32 @@ export interface ArchetypeWeightLite { archetype: string; weight: number }
 export interface BestTeamFit {
   team_id: number
   fit_score: number
+  grade?: string | null
   reason?: string | null
   top_need_label?: string | null
   top_need_gap?: number | null
+}
+/** One separately-measured Trade Fit dimension. `tone`: positive | neutral | warn (low need is
+ * NEUTRAL, never red). `level` 0-1 drives the bar; `uncertain`/`sd` flag model estimates. */
+export interface FitDimension {
+  key: string
+  label: string
+  level?: number | null
+  value: string
+  note: string
+  tone: 'positive' | 'neutral' | 'warn'
+  uncertain?: boolean
+  sd?: number | null
 }
 export interface TradeFitResult {
   player_id: number
   player_name?: string | null
   team_id: number
   season: string
-  fit_score: number
-  reasons: string[]
+  overall_grade: string
+  overall_score: number          // 0-100, decomposable into `dimensions`
+  verdict_sentence: string
+  dimensions: FitDimension[]
   player_archetypes: ArchetypeWeightLite[]
   need_profile?: TeamNeedProfile | null
 }
@@ -1000,11 +1015,33 @@ export interface RadarSpoke {
   key: string
   label: string
   tag: string            // skill | usage | style | proxy
-  value: number
+  value?: number | null  // raw stat value (null for an archetype centroid radar)
   percentile?: number | null
   sd?: number | null
   present: boolean
 }
+
+// --- Archetype explainer (gallery + style-map) ---
+export interface ArchetypeTrait { label: string; dir?: string | null; z: number; share?: number | null }
+export interface ArchetypeExemplar { player_id: number; name?: string | null; season: string; team_abbrev?: string | null; weight: number }
+export interface ArchetypeCard {
+  key: string
+  name: string
+  pos_group: string
+  family?: string | null
+  descriptor?: string | null
+  member_count: number
+  universal_traits: ArchetypeTrait[]
+  distinctive_traits: ArchetypeTrait[]
+  centroid_radar: RadarSpoke[]
+  exemplars: ArchetypeExemplar[]
+}
+export interface StyleMapPoint {
+  player_id: number; name?: string | null; team_abbrev?: string | null; season: string
+  x: number; y: number; archetype: string; membership: number; is_boundary: boolean
+}
+export interface StyleMapRegion { archetype: string; x: number; y: number; member_count: number }
+export interface StyleMap { pos_group: string; points: StyleMapPoint[]; regions: StyleMapRegion[] }
 export interface PlayerRadar {
   player_id: number
   season: string

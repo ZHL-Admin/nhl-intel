@@ -13,26 +13,30 @@ import { PageLayout, PageHeader, PlayerCard, PlayerExplorer, SkeletonLoader } fr
 import type { PlayerCardData } from '../components/common'
 import { tradeFit, bestTeamFits } from '../api/tools'
 import { getStyleMap } from '../api/teams'
-import { TradeFitResult, PlayerSearchResult, BestTeamFit } from '../api/types'
+import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension } from '../api/types'
 import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
 import './TradeFit.css'
 
 interface TeamOpt { team_id: number; abbrev: string; name: string }
 
-interface ScoreMeta { label: string; phrase: string; color: string }
-function scoreMeta(score: number): ScoreMeta {
-  if (score >= 75) return { label: 'Excellent fit', phrase: 'is an excellent fit', color: '#16a34a' }
-  if (score >= 60) return { label: 'Strong fit', phrase: 'is a strong fit', color: '#65a30d' }
-  if (score >= 45) return { label: 'Moderate fit', phrase: 'is a moderate fit', color: '#d97706' }
-  if (score >= 30) return { label: 'Marginal fit', phrase: 'is a marginal fit', color: '#ea580c' }
-  return { label: 'Poor fit', phrase: 'is a poor fit', color: '#dc2626' }
+/** Letter-grade colour (the combined headline). */
+const GRADE_COLOR: Record<string, string> = { A: '#16a34a', B: '#65a30d', C: '#d97706', D: '#ea580c', F: '#dc2626' }
+function gradeColor(grade?: string | null): string {
+  return GRADE_COLOR[(grade ?? '')[0]] ?? '#64748b'
+}
+/** Per-dimension colour discipline: positive = green ramp; neutral (incl. LOW NEED) = amber, never
+ * red; warn (a genuine stylistic mismatch) = orange. Low need is "not a gap", not a failure. */
+function dimColor(tone: string): string {
+  if (tone === 'positive') return '#16a34a'
+  if (tone === 'warn') return '#ea580c'
+  return '#d97706'   // neutral / low-need amber
 }
 
 /** Share the current fit — Web Share API on mobile, clipboard link otherwise. */
-function ShareButton({ url, name, team, score }: { url: string; name: string; team: string; score: number }) {
+function ShareButton({ url, name, team, grade }: { url: string; name: string; team: string; grade: string }) {
   const [copied, setCopied] = useState(false)
   const onShare = async () => {
-    const text = `${name} grades ${score}/100 as a fit for the ${team} in NHL Intel’s Trade Fit:`
+    const text = `${name} grades ${grade} as a fit for the ${team} in NHL Intel’s Trade Fit:`
     if (typeof navigator !== 'undefined' && (navigator as any).share) {
       try { await (navigator as any).share({ title: 'NHL Intel · Trade Fit', text, url }) } catch { /* dismissed */ }
       return
@@ -156,7 +160,7 @@ export default function TradeFit() {
               </button>
               {shareUrl && (
                 <ShareButton url={shareUrl} name={result!.player_name ?? 'This player'}
-                  team={team?.name ?? ''} score={Math.round(result!.fit_score)} />
+                  team={team?.name ?? ''} grade={result!.overall_grade} />
               )}
             </div>
             <Hero result={result!} player={player} team={team} />
@@ -221,92 +225,72 @@ export default function TradeFit() {
   )
 }
 
+/** One fit dimension row: label | bar (level) over a tangible-driver note | right-aligned value. */
+function DimensionRow({ d }: { d: FitDimension }) {
+  const color = dimColor(d.tone)
+  const pct = d.level == null ? 0 : Math.max(0, Math.min(1, d.level)) * 100
+  // model-estimate softness: a faint band around the marker (line fit, quality)
+  const band = d.uncertain && d.sd ? Math.min(20, d.sd * 100) : 0
+  return (
+    <div className={`tf-dim tf-dim--${d.tone}`}>
+      <div className="tf-dim__head">
+        <span className="tf-dim__label">{d.label}{d.uncertain && <span className="tf-dim__est" title="Model estimate — read as a tier, not a precise number">~</span>}</span>
+        <span className="tf-dim__val" style={{ color }}>{d.value}</span>
+      </div>
+      <div className="tf-dim__bar" aria-hidden="true">
+        {d.level != null && band > 0 && (
+          <span className="tf-dim__band" style={{ left: `${Math.max(0, pct - band)}%`, width: `${Math.min(100, pct + band) - Math.max(0, pct - band)}%`, background: color }} />
+        )}
+        {d.level != null && <span className="tf-dim__fill" style={{ width: `${pct}%`, background: color }} />}
+      </div>
+      <p className="tf-dim__note">{d.note}</p>
+    </div>
+  )
+}
+
 function Hero({ result, player, team }: {
   result: TradeFitResult
   player: PlayerSearchResult | null
   team: TeamOpt | null
 }) {
-  const meta = scoreMeta(result.fit_score)
+  const color = gradeColor(result.overall_grade)
   const name = result.player_name ?? player?.name ?? 'This player'
   const faceSrc = player?.headshot_url
     || (player?.team_abbrev ? getPlayerHeadshotUrl(player.player_id, player.team_abbrev) : '')
-  const needs = result.need_profile?.component_needs ?? []
-  const maxGap = Math.max(0.0001, ...needs.map((n) => Math.abs(n.gap)))
-
-  // Archetype mix (soft-membership weights). Show the % only when it's a real blend; a player
-  // who is overwhelmingly one role just reads as "Play style: X" — the lone 99% is noise.
-  const mix = [...result.player_archetypes].sort((a, b) => b.weight - a.weight)
-  const archDominant = mix.length > 0 && mix[0].weight >= 0.8
-  const archShown = archDominant ? mix.slice(0, 1) : mix.filter((a) => a.weight >= 0.2).slice(0, 3)
 
   return (
-    <div className="tf-hero" style={{ ['--tf-grade' as string]: meta.color } as React.CSSProperties}>
-      <div className="tf-hero__banner">
-        <div className="tf-hero__score">
-          <span className="tf-hero__score-num">{result.fit_score.toFixed(0)}</span>
-          <span className="tf-hero__score-den">/100</span>
-        </div>
-        <div className="tf-hero__headline">
-          <div className="tf-hero__band">{meta.label}</div>
-          <p className="tf-hero__sentence">
-            {name} {meta.phrase}{team ? ` for the ${team.name}` : ''}.
-          </p>
-          {archShown.length > 0 && (
-            <div className="tf-hero__arch">
-              <span className="tf-hero__arch-label">{archDominant ? 'Play style' : 'Archetype mix'}</span>
-              <div className="tf-hero__chips">
-                {archShown.map((a) => (
-                  <span key={a.archetype} className="tf-hero__chip">
-                    {archDominant ? a.archetype : `${(a.weight * 100).toFixed(0)}% ${a.archetype}`}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="tf-hero__viz">
-          {faceSrc
-            ? <img className="tf-hero__face" src={faceSrc} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-            : <span className="tf-hero__face tf-hero__face--blank" />}
-          <ArrowRight size={20} className="tf-hero__viz-arrow" />
-          {team && <img className="tf-hero__logo" src={getTeamLogoUrl(team.abbrev)} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />}
-        </div>
+    <div className="tf-hero" style={{ ['--tf-grade' as string]: color } as React.CSSProperties}>
+      {/* player -> team inputs */}
+      <div className="tf-hero__io">
+        {faceSrc
+          ? <img className="tf-hero__face" src={faceSrc} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
+          : <span className="tf-hero__face tf-hero__face--blank" />}
+        <span className="tf-hero__io-name">{name}</span>
+        <ArrowRight size={18} className="tf-hero__viz-arrow" />
+        {team && <img className="tf-hero__logo" src={getTeamLogoUrl(team.abbrev)} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />}
+        <span className="tf-hero__io-name">{team?.name ?? ''}</span>
       </div>
 
-      <div className="tf-hero__body">
-        <div className="tf-hero__col">
-          <h4 className="tf-hero__col-head">Why this fits</h4>
-          {result.reasons.length > 0 ? (
-            <ul className="tf-hero__reasons">
-              {result.reasons.map((r, i) => (
-                <li key={i}><Check size={15} className="tf-hero__reason-icon" /><span>{r}</span></li>
-              ))}
-            </ul>
-          ) : <p className="tf-hero__muted">No standout fit drivers.</p>}
+      {/* HEADLINE CARD: grade (left) + deterministic verdict (right) */}
+      <div className="tf-headline">
+        <div className="tf-headline__grade">
+          <span className="tf-headline__letter">{result.overall_grade}</span>
+          <span className="tf-headline__label">overall fit</span>
         </div>
-        <div className="tf-hero__col tf-hero__col--needs">
-          <h4 className="tf-hero__col-head">Where {team?.name ?? 'they'} trail the top teams</h4>
-          {needs.length > 0 ? (
-            <div className="tf-needs">
-              {needs.map((n) => (
-                <div className="tf-need" key={n.key}>
-                  <span className="tf-need__label">{n.label}</span>
-                  <span className="tf-need__bar">
-                    <i style={{ width: `${Math.max(0, Math.min(1, n.gap / maxGap)) * 100}%` }} />
-                  </span>
-                  <span className="tf-need__val"><strong>{n.gap.toFixed(1)}</strong> goals behind</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="tf-hero__muted">No material component gaps.</p>}
-        </div>
+        <p className="tf-headline__verdict">{result.verdict_sentence}</p>
+      </div>
+
+      {/* BREAKDOWN: the five dimensions (the grade NEVER appears without these) */}
+      <div className="tf-dims">
+        {result.dimensions.map((d) => <DimensionRow key={d.key} d={d} />)}
       </div>
 
       <div className="tf-hero__limit">
         <Info size={14} />
         <span>
-          Fit blends the player’s archetype mix and component profile against the team’s gaps versus
-          the league’s top teams. It does not weigh contract, cap, age, or trade cost.
+          Each dimension is measured separately; the grade is a weighted blend gated by positional
+          relevance. Low need means “not a statistical gap”, not a bad fit. The model can’t see
+          injuries, departures, cap, or locker room — weigh those yourself.
         </span>
       </div>
     </div>
@@ -359,8 +343,8 @@ function BestTeamFits({ playerId, excludeTeamId, teams, onPick }: {
             if (!t) return null
             return (
               <button key={d.team_id} className="tf-bestcard" onClick={() => onPick(t)}>
-                <span className="tf-bestcard__score" style={{ color: scoreMeta(d.fit_score).color }}>
-                  {d.fit_score.toFixed(0)}<small>/100</small>
+                <span className="tf-bestcard__score" style={{ color: gradeColor(d.grade) }}>
+                  {d.grade ?? '—'}<small>{d.fit_score.toFixed(0)}</small>
                 </span>
                 <img className="tf-bestcard__logo" src={getTeamLogoUrl(t.abbrev)} alt=""
                   onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
