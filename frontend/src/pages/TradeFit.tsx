@@ -12,8 +12,9 @@ import { Check, Info, Plus, ArrowRight, RotateCcw, Share2, Zap, Sparkles } from 
 import { PageLayout, PageHeader, PlayerCard, PlayerExplorer, SkeletonLoader } from '../components/common'
 import type { PlayerCardData } from '../components/common'
 import { tradeFit, bestTeamFits } from '../api/tools'
+import { getPlayerPreview } from '../api/players'
 import { getStyleMap } from '../api/teams'
-import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension } from '../api/types'
+import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, PlayerPreview } from '../api/types'
 import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
 import './TradeFit.css'
 
@@ -30,6 +31,24 @@ function dimColor(tone: string): string {
   if (tone === 'positive') return '#16a34a'
   if (tone === 'warn') return '#ea580c'
   return '#d97706'   // neutral / low-need amber
+}
+
+/**
+ * Dimension bar/value colour by LEVEL (strength), so a weak dimension visibly reads as the soft
+ * spot at a glance — not all green. Thresholds live HERE (one place):
+ *   strong   >= 0.60  -> green
+ *   middling 0.40-0.60 -> amber
+ *   weak     <  0.40  -> muted burnt-red (a "soft spot" tone, not alarm-red)
+ * NEED is excluded from this scale: it keeps its tone colour (low need = amber "not a gap", never a
+ * penalty), per the asymmetric-need model — so a low-need bar must not look like a weakness.
+ */
+const LEVEL_STRONG = 0.60
+const LEVEL_MIDDLING = 0.40
+function levelColor(level?: number | null): string {
+  if (level == null) return '#94a3b8'            // n/a — slate
+  if (level >= LEVEL_STRONG) return '#16a34a'    // strong — green
+  if (level >= LEVEL_MIDDLING) return '#d97706'  // middling — amber
+  return '#b1442e'                               // weak — muted burnt-red (the soft spot)
 }
 
 /** Share the current fit — Web Share API on mobile, clipboard link otherwise. */
@@ -227,14 +246,24 @@ export default function TradeFit() {
 
 /** One fit dimension row: label | bar (level) over a tangible-driver note | right-aligned value. */
 function DimensionRow({ d }: { d: FitDimension }) {
-  const color = dimColor(d.tone)
+  // NEED keeps its tone colour (low need = amber, never a penalty); every other dimension is
+  // coloured by LEVEL so a weak one (e.g. 12th-pctile quality) reads as the soft spot, not green.
+  const color = d.key === 'need' ? dimColor(d.tone) : levelColor(d.level)
   const pct = d.level == null ? 0 : Math.max(0, Math.min(1, d.level)) * 100
   // model-estimate softness: a faint band around the marker (line fit, quality)
   const band = d.uncertain && d.sd ? Math.min(20, d.sd * 100) : 0
   return (
     <div className={`tf-dim tf-dim--${d.tone}`}>
       <div className="tf-dim__head">
-        <span className="tf-dim__label">{d.label}{d.uncertain && <span className="tf-dim__est" title="Model estimate — read as a tier, not a precise number">~</span>}</span>
+        <span className="tf-dim__label">
+          {d.label}
+          {d.uncertain && (
+            <span className="tf-dim__est"
+              title="Projected with a confidence band — read this as a tier, not a precise number">
+              est.
+            </span>
+          )}
+        </span>
         <span className="tf-dim__val" style={{ color }}>{d.value}</span>
       </div>
       <div className="tf-dim__bar" aria-hidden="true">
@@ -258,6 +287,22 @@ function Hero({ result, player, team }: {
   const faceSrc = player?.headshot_url
     || (player?.team_abbrev ? getPlayerHeadshotUrl(player.player_id, player.team_abbrev) : '')
 
+  // Tangible player facts we actually have from the API (age / position / handedness / current
+  // team). No contract or cap — the NHL API doesn't provide it, so we don't fabricate it.
+  const [preview, setPreview] = useState<PlayerPreview | null>(null)
+  useEffect(() => {
+    if (!player) return
+    let on = true
+    getPlayerPreview(player.player_id).then((p) => on && setPreview(p)).catch(() => {})
+    return () => { on = false }
+  }, [player?.player_id])
+  const factParts = [
+    player?.position ?? preview?.pos_group ?? null,
+    preview?.shoots ? `Shoots ${preview.shoots}` : null,
+    preview?.age ? `Age ${preview.age}` : null,
+    player?.team_abbrev ? getTeamName(player.team_abbrev) : null,
+  ].filter(Boolean) as string[]
+
   return (
     <div className="tf-hero" style={{ ['--tf-grade' as string]: color } as React.CSSProperties}>
       {/* player -> team inputs */}
@@ -270,6 +315,11 @@ function Hero({ result, player, team }: {
         {team && <img className="tf-hero__logo" src={getTeamLogoUrl(team.abbrev)} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />}
         <span className="tf-hero__io-name">{team?.name ?? ''}</span>
       </div>
+
+      {/* tangible player facts (what the API gives us; no cap/contract) */}
+      {factParts.length > 0 && (
+        <div className="tf-hero__facts">{factParts.join(' · ')}</div>
+      )}
 
       {/* HEADLINE CARD: grade (left) + deterministic verdict (right) */}
       <div className="tf-headline">
@@ -288,9 +338,10 @@ function Hero({ result, player, team }: {
       <div className="tf-hero__limit">
         <Info size={14} />
         <span>
-          Each dimension is measured separately; the grade is a weighted blend gated by positional
-          relevance. Low need means “not a statistical gap”, not a bad fit. The model can’t see
-          injuries, departures, cap, or locker room — weigh those yourself.
+          Each dimension is measured separately. The grade is a player-and-fit base — quality, line
+          and style — gated by positional relevance, plus a bonus when he fills a real team need
+          (low need adds nothing, it never penalises). The model can’t see injuries, departures,
+          cap, or locker room — weigh those yourself.
         </span>
       </div>
     </div>
@@ -320,14 +371,20 @@ function BestTeamFits({ playerId, excludeTeamId, teams, onPick }: {
 
   const byId = (id: number) => teams.find((t) => t.team_id === id)
 
+  // Honesty: these are ranked by OVERALL fit grade. For a fixed player talent is constant, so the
+  // ordering comes from team need + style. When no destination clears a B, don't imply a meaningful
+  // ranking — say plainly that his best fits are all middling.
+  const noStrongFit = !!data && data.length > 0 && !data.some((d) => 'AB'.includes((d.grade ?? '')[0]))
+
   return (
     <div className="tf-best">
       <div className="tf-best__head">
         <span className="tf-best__icon"><Sparkles size={16} /></span>
         <div>
-          <h3 className="tf-best__title">Best team fits</h3>
+          <h3 className="tf-best__title">His strongest fits</h3>
           <p className="tf-best__sub">
-            Teams whose biggest gaps this player’s skills fill best. Click a team to re-score the fit there.
+            Ranked by overall fit grade. Talent is the same everywhere, so the differences come from
+            each team’s need and style. Click a team to re-score the fit there.
           </p>
         </div>
       </div>
@@ -337,23 +394,31 @@ function BestTeamFits({ playerId, excludeTeamId, teams, onPick }: {
       ) : error ? (
         <p className="tf-best__msg">{error}</p>
       ) : data && data.length > 0 ? (
-        <div className="tf-best__grid">
-          {data.map((d) => {
-            const t = byId(d.team_id)
-            if (!t) return null
-            return (
-              <button key={d.team_id} className="tf-bestcard" onClick={() => onPick(t)}>
-                <span className="tf-bestcard__score" style={{ color: gradeColor(d.grade) }}>
-                  {d.grade ?? '—'}<small>{d.fit_score.toFixed(0)}</small>
-                </span>
-                <img className="tf-bestcard__logo" src={getTeamLogoUrl(t.abbrev)} alt=""
-                  onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-                <span className="tf-bestcard__name">{t.name}</span>
-                {d.reason && <span className="tf-bestcard__reason">{d.reason}</span>}
-              </button>
-            )
-          })}
-        </div>
+        <>
+          {noStrongFit && (
+            <p className="tf-best__note">
+              His best fits are all middling — a below-average player doesn’t strongly fit anywhere.
+            </p>
+          )}
+          <div className="tf-best__grid">
+            {data.map((d) => {
+              const t = byId(d.team_id)
+              if (!t) return null
+              return (
+                <button key={d.team_id} className="tf-bestcard" onClick={() => onPick(t)}>
+                  <span className="tf-bestcard__grade" style={{ color: gradeColor(d.grade) }}
+                    title="Overall fit grade if traded here">
+                    {d.grade ?? '—'}
+                  </span>
+                  <img className="tf-bestcard__logo" src={getTeamLogoUrl(t.abbrev)} alt=""
+                    onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
+                  <span className="tf-bestcard__name">{t.name}</span>
+                  {d.reason && <span className="tf-bestcard__reason">{d.reason}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </>
       ) : (
         <p className="tf-best__msg">No clearly stronger fit elsewhere.</p>
       )}
