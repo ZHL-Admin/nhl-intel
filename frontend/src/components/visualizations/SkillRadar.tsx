@@ -34,6 +34,12 @@ export default function SkillRadar({ spokes, baseline, size = 420 }: Props) {
   const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2
   const pt = (i: number, r: number) => [cx + Math.cos(angle(i)) * r, cy + Math.sin(angle(i)) * r]
   const ringPcts = [25, 50, 75, 100]
+  // The spoke labels sit beyond the rings and extend outward by their text width, so they overhang
+  // the size×size box (worst case the long left/right labels). Pad the viewBox horizontally (and a
+  // little vertically) so the labels live INSIDE it — the SVG then scales to fit its container with
+  // nothing spilling past the bounds.
+  const PAD_X = Math.round(size * 0.24)         // room for the longest left/right spoke labels
+  const PAD_Y = Math.round(size * 0.05)
 
   const poly = usable.map((s, i) => pt(i, (s.percentile! / 100) * R).join(',')).join(' ')
 
@@ -41,7 +47,8 @@ export default function SkillRadar({ spokes, baseline, size = 420 }: Props) {
 
   return (
     <div className="skill-radar">
-      <svg viewBox={`0 0 ${size} ${size}`} className="skill-radar__svg" role="img">
+      <svg viewBox={`${-PAD_X} ${-PAD_Y} ${size + 2 * PAD_X} ${size + 2 * PAD_Y}`}
+           className="skill-radar__svg" role="img">
         {/* rings */}
         {ringPcts.map(p => (
           <circle key={p} cx={cx} cy={cy} r={(p / 100) * R} className="skill-radar__ring" />
@@ -64,10 +71,14 @@ export default function SkillRadar({ spokes, baseline, size = 420 }: Props) {
         })}
         {/* polygon */}
         <polygon points={poly} className="skill-radar__poly" />
-        {/* points + labels */}
+        {/* points + labels. The outer ring carries ONLY the spoke label; the percentile number is
+            placed INBOARD next to its data dot (with a halo for legibility) so the two never collide. */}
         {usable.map((s, i) => {
-          const [px, py] = pt(i, (s.percentile! / 100) * R)
-          const [lx, ly] = pt(i, R + 20)
+          const dataR = (s.percentile! / 100) * R
+          const [px, py] = pt(i, dataR)
+          const [lx, ly] = pt(i, R + 18)
+          // number sits just inboard of the dot, clamped so it neither leaves the rings nor stacks on centre
+          const [nx, ny] = pt(i, Math.min(R - 6, Math.max(16, dataR - 15)))
           const anchor = Math.abs(Math.cos(angle(i))) < 0.3 ? 'middle'
             : Math.cos(angle(i)) > 0 ? 'start' : 'end'
           return (
@@ -78,7 +89,7 @@ export default function SkillRadar({ spokes, baseline, size = 420 }: Props) {
                     style={{ fill: hover === i ? TAG_COLOR[s.tag] : undefined }}>
                 {s.label}
               </text>
-              <text x={lx} y={ly + 12} textAnchor={anchor as any} className="skill-radar__spoke-pctl">
+              <text x={nx} y={ny + 3} textAnchor="middle" className="skill-radar__spoke-pctl">
                 {Math.round(s.percentile!)}
               </text>
             </g>

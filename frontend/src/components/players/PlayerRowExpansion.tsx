@@ -8,8 +8,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
+// (headshot/logo helpers now live in the shared PlayerAvatar)
 import SkillRadar from '../visualizations/SkillRadar'
 import OverallSummary from '../common/OverallSummary'
+import PlayerAvatar from '../common/PlayerAvatar'
 import SkeletonLoader from '../common/SkeletonLoader'
 import { getPlayerRadar, getPlayerDetail, getPlayerPreview } from '../../api/players'
 import { getGoalieRadar, getGoalieSeason, getGoaliePreview } from '../../api/goalies'
@@ -18,7 +20,6 @@ import {
   PlayerRadar, GoalieRadar, PlayerDetail, GoalieSeason, PlayerPreview, GoaliePreview, PreviewStat,
   OverallSummary as OverallData,
 } from '../../api/types'
-import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../../utils/teams'
 import './PlayerRowExpansion.css'
 
 export interface ExpansionTarget {
@@ -55,25 +56,6 @@ function fmtStat(s: PreviewStat): string {
 }
 
 const POS_NOUN: Record<string, string> = { F: 'forwards', D: 'defensemen', G: 'goalies' }
-
-function initials(name?: string | null): string {
-  if (!name) return '—'
-  const p = name.trim().split(/\s+/)
-  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '—'
-}
-
-function BigAvatar({ id, team, name }: { id: number; team?: string | null; name?: string | null }) {
-  const [err, setErr] = useState(false)
-  const src = !err && team ? getPlayerHeadshotUrl(id, team) : ''
-  return (
-    <span className="pxe-av">
-      {src ? <img className="pxe-av__img" src={src} alt="" onError={() => setErr(true)} />
-        : <span className="pxe-av__ini">{initials(name)}</span>}
-      {team && <img className="pxe-av__logo" src={getTeamLogoUrl(team)} alt=""
-        onError={(e) => ((e.currentTarget.style.display = 'none'))} />}
-    </span>
-  )
-}
 
 /** Ranked base-stats table: every stat shows its within-position rank in a mono column. */
 function StatTable({ stats }: { stats: PreviewStat[] }) {
@@ -186,58 +168,53 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
   const meta = [target.position, target.team, age != null ? `Age ${age}` : null, hand ? `${hand}` : null]
     .filter(Boolean).join(' · ')
 
+  const hasRadar = radarSpokes.filter((s) => s.percentile != null).length >= 3
+
   return (
     <div className="pxe" role="region" aria-label={`${target.name ?? 'Player'} preview`}>
-      {/* LEFT — identity, archetype tags, verdict, handoff */}
-      <div className="pxe__left">
+      {/* 1. IDENTITY — headshot, name/meta, archetype tags, then the value-vs-impact verdict */}
+      <div className="pxe__identity">
         <div className="pxe__id">
-          <BigAvatar id={target.id} team={target.team} name={target.name} />
+          <PlayerAvatar id={target.id} team={target.team} name={target.name} size={60} />
           <div className="pxe__idtext">
             <div className="pxe__name">{target.name ?? target.id}</div>
             <div className="pxe__meta">{meta}</div>
+            {labels && (labels.offensive || labels.defensive || labels.overall) && (
+              <div className="pxe__chips">
+                {labels.offensive && <span className="pxe__chip">{labels.offensive}</span>}
+                {labels.defensive && <span className="pxe__chip pxe__chip--quiet">{labels.defensive}</span>}
+                {!labels.offensive && !labels.defensive && labels.overall && <span className="pxe__chip">{labels.overall}</span>}
+              </div>
+            )}
           </div>
         </div>
-
-        {labels && (labels.offensive || labels.defensive || labels.overall) && (
-          <div className="pxe__chips">
-            {labels.offensive && <span className="pxe__chip">{labels.offensive}</span>}
-            {labels.defensive && <span className="pxe__chip pxe__chip--quiet">{labels.defensive}</span>}
-            {!labels.offensive && !labels.defensive && labels.overall && <span className="pxe__chip">{labels.overall}</span>}
-          </div>
-        )}
-
         {verdict && (
           <p className="pxe__verdict"><strong>{verdict.headline}</strong> {verdict.body}</p>
         )}
-
-        <button className="pxe__profile" onClick={goProfile}>
-          View full profile <ArrowRight size={15} />
-        </button>
       </div>
 
-      {/* CENTER — the radar centerpiece */}
-      <div className="pxe__center">
-        {radarSpokes.filter((s) => s.percentile != null).length >= 3 ? (
-          <>
-            <SkillRadar spokes={radarSpokes} baseline={payload.radar?.baseline} size={320} />
-            <div className="pxe__center-cap">Percentile vs {posNoun}</div>
-          </>
-        ) : (
-          <p className="pxe__empty">No radar this season.</p>
-        )}
+      {/* 2. CONDENSED OVERALL STRIP (percentile + compact component bars + WAR/GAR readout) */}
+      {overall
+        ? <OverallSummary overall={overall} variant="strip" aside={valueLine} />
+        : valueLine ? <div className="pxe__lenses-fallback">{valueLine}</div> : null}
+
+      {/* 3. RADAR — the full-width centrepiece (its Skill/Usage/Style legend sits tight beneath) */}
+      <div className="pxe__radar">
+        {hasRadar
+          ? <SkillRadar spokes={radarSpokes} baseline={payload.radar?.baseline ?? `Percentile vs ${posNoun}`} size={440} />
+          : <p className="pxe__empty">No radar this season.</p>}
       </div>
 
-      {/* RIGHT — value lenses (top) + ranked base stats (bottom) */}
-      <div className="pxe__right">
-        <div className="pxe__value">
-          {overall ? <OverallSummary overall={overall} /> : valueLine ? <div className="pxe__lenses-fallback">{valueLine}</div> : null}
-          {overall && valueLine}
-        </div>
-        <div className="pxe__base">
-          <div className="pxe__base-head">Season stats <span>· rank vs {posNoun}</span></div>
-          {stats.length > 0 ? <StatTable stats={stats} /> : <p className="pxe__empty">No stats this season.</p>}
-        </div>
+      {/* 4. SEASON STATS (full width, each with its within-position rank) */}
+      <div className="pxe__base">
+        <div className="pxe__base-head">Season stats <span>· rank vs {posNoun}</span></div>
+        {stats.length > 0 ? <StatTable stats={stats} /> : <p className="pxe__empty">No stats this season.</p>}
       </div>
+
+      {/* 5. handoff */}
+      <button className="pxe__profile" onClick={goProfile}>
+        View full profile <ArrowRight size={15} />
+      </button>
     </div>
   )
 }

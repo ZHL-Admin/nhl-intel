@@ -23,19 +23,63 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
+const NOTE = 'A within-position summary that averages and re-percentiles the component lenses — ' +
+  'shown only with its parts, never as a ranking.'
+
+function toneClass(p: number): string {
+  if (p >= 0.66) return 'ovr-mini--good'
+  if (p <= 0.33) return 'ovr-mini--bad'
+  return 'ovr-mini--mid'
+}
+
 interface Props {
   overall: OverallData
   /** Optional Impact-vs-Value read (skaters) — reused verbatim to explain a divergence. */
   read?: ValueGapRead | null
+  /** 'card' (default, tall) or 'strip' (condensed horizontal band for the detail-card header). */
+  variant?: 'card' | 'strip'
+  /** Optional value readout (e.g. WAR/GAR) rendered to the right in 'strip' mode. */
+  aside?: React.ReactNode
 }
 
-export default function OverallSummary({ overall, read }: Props) {
+export default function OverallSummary({ overall, read, variant = 'card', aside }: Props) {
   const comps = overall.components ?? []
   // HARD RULE: no components -> render nothing (never the number alone).
   if (comps.length === 0) return null
 
   const pct = Math.round((overall.overall_percentile ?? 0) * 100)
   const posNoun = POS_NOUN[overall.pos_group ?? ''] ?? 'their position'
+
+  // ---- condensed strip: lead percentile + COMPACT inline component bars + value readout ----
+  if (variant === 'strip') {
+    return (
+      <div className="ovr ovr--strip">
+        <div className="ovr__lead">
+          <span className="ovr__pct">{ordinal(pct)}</span>
+          <span className="ovr__lead-sub">
+            percentile overall · among {posNoun}
+            <span className="ovr__info" tabIndex={0} role="note" aria-label={NOTE} title={NOTE}>ⓘ</span>
+          </span>
+        </div>
+        <div className="ovr__minis">
+          {comps.map((c) => {
+            const p = c.percentile
+            const w = p == null ? 0 : Math.round(p * 100)
+            return (
+              <div className="ovr-mini" key={c.key}>
+                <span className="ovr-mini__label">{c.label}</span>
+                <span className="ovr-mini__track">
+                  {p != null && <span className={`ovr-mini__fill ${toneClass(p)}`} style={{ width: `${w}%` }} />}
+                </span>
+                <span className="ovr-mini__pct">{p == null ? '—' : w}</span>
+              </div>
+            )
+          })}
+        </div>
+        {aside && <div className="ovr__aside">{aside}</div>}
+      </div>
+    )
+  }
 
   const items: PercentileBarItem[] = comps.map((c) => ({
     key: c.key,

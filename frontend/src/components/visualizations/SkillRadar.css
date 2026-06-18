@@ -10,7 +10,11 @@
 .skill-radar__whisker { stroke: var(--color-text-secondary); stroke-width: 2; opacity: 0.35; stroke-linecap: round; }
 .skill-radar__dot { stroke: var(--color-bg-surface, #fff); stroke-width: 1.5; transition: r 120ms; }
 .skill-radar__spoke-label { font-size: 10px; font-weight: 600; fill: var(--color-text); }
-.skill-radar__spoke-pctl { font-size: 9px; fill: var(--color-text-secondary); }
+/* inboard percentile number: halo (stroke under fill) so it reads over the polygon */
+.skill-radar__spoke-pctl {
+  font-size: 9px; font-weight: 700; fill: var(--color-text-secondary);
+  stroke: var(--color-bg-surface, #fff); stroke-width: 2.5px; paint-order: stroke fill;
+}
 
 .skill-radar__tip {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
