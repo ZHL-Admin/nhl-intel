@@ -3,13 +3,15 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, ComponentStackBar, PlayerAvatar } from '../components/common'
 import type { StackSegment } from '../components/common'
 import Tabs from '../components/common/Tabs'
+import { ChartPanel } from '../components/common'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
+import TeamRadar from '../components/teams/TeamRadar'
 import { LineSwapWidget } from '../components/common'
-import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamVsOpponent, getTeamStreak } from '../api/teams'
+import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
 import { getTeamGames } from '../api/games'
-import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, TeamVsOpponent, StreakCard, PowerRatingRow } from '../api/types'
+import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, StreakCard, PowerRatingRow } from '../api/types'
 import { RATINGS_COMPONENTS } from '../config/metrics'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, formatTOI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
@@ -25,15 +27,13 @@ function TeamProfile() {
   const [teamTrends, setTeamTrends] = useState<TeamTrends | null>(null)
   const [teamRoster, setTeamRoster] = useState<TeamRoster | null>(null)
   const [upcomingGame, setUpcomingGame] = useState<Game | null>(null)
-  const [selectedOpponent, setSelectedOpponent] = useState<number | null>(null)
-  const [opponentStats, setOpponentStats] = useState<TeamVsOpponent | null>(null)
+  const [recentGames, setRecentGames] = useState<Game[]>([])
   const [streakCard, setStreakCard] = useState<StreakCard | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [trendsError, setTrendsError] = useState<string | null>(null)
   const [rosterError, setRosterError] = useState<string | null>(null)
-  const [opponentError, setOpponentError] = useState<string | null>(null)
 
   const [sortConfig, setSortConfig] = useState<{
     key: string
@@ -99,6 +99,21 @@ function TeamProfile() {
         // Not critical, don't set error state
       }
 
+      // Last 10 completed games (for the Performance / Trends results timeline)
+      try {
+        const today = new Date()
+        const past = new Date()
+        past.setDate(today.getDate() - 60)
+        const games = await getTeamGames(parseInt(teamId), formatDateForAPI(past), formatDateForAPI(today))
+        const finals = games
+          .filter(g => !g.is_preview && g.home_score != null && g.away_score != null)
+          .sort((a, b) => b.game_date.localeCompare(a.game_date))
+          .slice(0, 10)
+        setRecentGames(finals)
+      } catch (err) {
+        console.error('Error fetching recent games:', err)
+      }
+
       setLoading(false)
     }
 
@@ -146,27 +161,6 @@ function TeamProfile() {
       setTeamRoster(roster)
     } catch (err) {
       setRosterError('Failed to load team roster.')
-    }
-  }
-
-  const handleOpponentSelect = async (opponentId: number) => {
-    if (!teamId) return
-    setSelectedOpponent(opponentId)
-    setOpponentError(null)
-    setOpponentStats(null)
-
-    try {
-      const stats = await getTeamVsOpponent(parseInt(teamId), opponentId)
-      setOpponentStats(stats)
-    } catch (err) {
-      console.error('Error fetching opponent stats:', err)
-      setOpponentError('Failed to load opponent stats.')
-    }
-  }
-
-  const handleRetryOpponent = () => {
-    if (selectedOpponent) {
-      handleOpponentSelect(selectedOpponent)
     }
   }
 
@@ -335,18 +329,7 @@ function TeamProfile() {
 
         {/* Tab Content */}
         {currentTab === 'overview' && (
-          <OverviewTab
-            teamDetail={teamDetail}
-            teamTrends={teamTrends}
-            trendsError={trendsError}
-            handleRetryTrends={handleRetryTrends}
-            selectedOpponent={selectedOpponent}
-            opponentStats={opponentStats}
-            opponentError={opponentError}
-            handleOpponentSelect={handleOpponentSelect}
-            handleRetryOpponent={handleRetryOpponent}
-            teamColor={teamColor}
-          />
+          <OverviewTab teamDetail={teamDetail} teamColor={teamColor} streakCard={streakCard} />
         )}
 
         {/* Power-rating component breakdown — the full four-part split lives here (Phase 3.1) */}
@@ -373,10 +356,21 @@ function TeamProfile() {
           <TeamIdentityTab teamId={parseInt(teamId)} />
         )}
 
-        {/* Performance / Trends — the form verdict (Streak Doctor) lives here only, with its own
-            Last 5/10/20 toggle; rolling trend charts are added in the Phase C redesign. */}
+        {/* Performance / Trends — form verdict (Streak Doctor, its own Last 5/10/20 toggle) then
+            the season-long rolling trend charts + last-10 results. */}
         {currentTab === 'performance' && teamId && (
-          <TeamFormTab teamId={parseInt(teamId)} />
+          <>
+            <TeamFormTab teamId={parseInt(teamId)} />
+            <PerformanceTrendsTab
+              teamTrends={teamTrends}
+              trendsError={trendsError}
+              handleRetryTrends={handleRetryTrends}
+              teamColor={teamColor}
+              recentGames={recentGames}
+              teamId={parseInt(teamId)}
+              navigate={navigate}
+            />
+          </>
         )}
 
         {currentTab === 'lines' && teamId && (
@@ -473,297 +467,142 @@ function TeamPowerCard({ teamId }: { teamId: number }) {
 }
 
 // Overview Tab Component
-function OverviewTab({
-  teamDetail,
-  teamTrends,
-  trendsError,
-  handleRetryTrends,
-  selectedOpponent,
-  opponentStats,
-  opponentError,
-  handleOpponentSelect,
-  handleRetryOpponent,
-  teamColor
-}: {
-  teamDetail: TeamDetail
-  teamTrends: TeamTrends | null
-  trendsError: string | null
-  handleRetryTrends: () => void
-  selectedOpponent: number | null
-  opponentStats: TeamVsOpponent | null
-  opponentError: string | null
-  handleOpponentSelect: (opponentId: number) => void
-  handleRetryOpponent: () => void
-  teamColor: string
+/** Deterministic Overview verdict (Layer 1) from real rank fields + any notable run. Template-only
+ * (no generated prose); the Phase 6 insight engine will replace this. */
+function teamVerdict(t: TeamDetail, streak: StreakCard | null): string {
+  const tier = (r?: number | null) => r == null ? 'a middling' : r <= 8 ? 'an elite' : r <= 16 ? 'a strong' : r <= 24 ? 'a middling' : 'a bottom-tier'
+  const gd = (t.total_goals_for - t.total_goals_against) / Math.max(1, t.games_played)
+  const gen = t.hdcf_per60_rank, supp = t.hdca_per60_rank
+  let danger: string
+  if (gen != null && supp != null && gen <= 12 && supp <= 12) danger = 'win the high-danger battle at both ends'
+  else if (gen != null && gen <= 12) danger = 'create high-danger chances well but give up too many'
+  else if (supp != null && supp <= 12) danger = 'lean on suppressing danger more than creating it'
+  else danger = 'are middling in the high-danger battle'
+  const result = gd >= 0.4 ? 'and outscore opponents comfortably' : gd >= 0 ? 'and roughly break even on goals'
+    : gd >= -0.4 ? 'and are narrowly outscored' : 'and get outscored'
+  let s = `${t.team_abbrev} are ${tier(t.cf_pct_rank)} possession team that ${danger}, ${result} (${gd >= 0 ? '+' : ''}${gd.toFixed(2)}/gm).`
+  if (streak?.is_notable && streak.run_word) s += ` Recent form: a ${streak.run_word}.`
+  return s
+}
+
+function OverviewTab({ teamDetail, teamColor, streakCard }: {
+  teamDetail: TeamDetail; teamColor: string; streakCard: StreakCard | null
 }) {
+  const xgfShare = teamDetail.xgf_per60 + teamDetail.xga_per60 > 0
+    ? teamDetail.xgf_per60 / (teamDetail.xgf_per60 + teamDetail.xga_per60) : null
   return (
     <div className="team-profile__content">
-      {/* Season Snapshot */}
+      <p className="team-profile__verdict">{teamVerdict(teamDetail, streakCard)}</p>
+
+      <div className="team-profile__section">
+        <h2 className="team-profile__section-title">Performance Profile</h2>
+        <p className="team-profile__section-sub">Percentile rank across six dimensions vs the league — the dashed polygon is the league median.</p>
+        <ChartPanel title="How this team is built">
+          <TeamRadar teamDetail={teamDetail} color={teamColor} />
+        </ChartPanel>
+      </div>
+
       <div className="team-profile__section">
         <h2 className="team-profile__section-title">Season Snapshot</h2>
         <div className="team-profile__stat-grid">
-          <StatCard
-            label="CF%"
-            value={(teamDetail.cf_pct * 100).toFixed(1) + '%'}
-            rank={teamDetail.cf_pct_rank}
-          />
-          <StatCard
-            label="xGF%"
-            value={((teamDetail.xgf_per60 / (teamDetail.xgf_per60 + teamDetail.xga_per60)) * 100).toFixed(1) + '%'}
-            rank={teamDetail.xgf_pct_rank}
-          />
-          <StatCard
-            label="HDCF/60"
-            value={teamDetail.hdcf_per60.toFixed(2)}
-            rank={teamDetail.hdcf_per60_rank}
-          />
-          <StatCard
-            label="HDCA/60"
-            value={teamDetail.hdca_per60.toFixed(2)}
-            rank={teamDetail.hdca_per60_rank}
-          />
-          <StatCard
-            label="GF/GP"
-            value={(teamDetail.total_goals_for / teamDetail.games_played).toFixed(2)}
-            rank={teamDetail.gf_per_gp_rank}
-          />
-          <StatCard
-            label="GA/GP"
-            value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)}
-            rank={teamDetail.ga_per_gp_rank}
-          />
+          <StatCard label="CF%" value={(teamDetail.cf_pct * 100).toFixed(1) + '%'} rank={teamDetail.cf_pct_rank} tooltip="Corsi For % — share of unblocked + blocked shot attempts at 5v5." />
+          <StatCard label="xGF%" value={xgfShare != null ? (xgfShare * 100).toFixed(1) + '%' : '—'} rank={teamDetail.xgf_pct_rank} tooltip="Expected-goals share at 5v5." />
+          <StatCard label="HDCF/60" value={teamDetail.hdcf_per60.toFixed(1)} rank={teamDetail.hdcf_per60_rank} tooltip="High-danger chances FOR per 60 minutes." />
+          <StatCard label="HDCA/60" value={teamDetail.hdca_per60.toFixed(1)} rank={teamDetail.hdca_per60_rank} tooltip="High-danger chances AGAINST per 60 (lower is better)." />
+          <StatCard label="GF/GP" value={(teamDetail.total_goals_for / teamDetail.games_played).toFixed(2)} rank={teamDetail.gf_per_gp_rank} />
+          <StatCard label="GA/GP" value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)} rank={teamDetail.ga_per_gp_rank} />
           {teamDetail.zone_entry_proxy_success_rate != null && (
-            <StatCard
-              label="Zone Entry Success (proxy)"
-              value={`${(teamDetail.zone_entry_proxy_success_rate * 100).toFixed(1)}%`}
-              rank={teamDetail.zone_entry_proxy_success_rate_rank || undefined}
-            />
+            <StatCard label="Zone Entry % (proxy)" value={`${(teamDetail.zone_entry_proxy_success_rate * 100).toFixed(1)}%`} rank={teamDetail.zone_entry_proxy_success_rate_rank || undefined} tooltip="Derived proxy: inferred from consecutive event zone codes, not measured entries." />
           )}
           {teamDetail.faceoff_win_pct != null && (
-            <StatCard
-              label="Faceoff Win %"
-              value={`${(teamDetail.faceoff_win_pct * 100).toFixed(1)}%`}
-            />
+            <StatCard label="Faceoff Win %" value={`${(teamDetail.faceoff_win_pct * 100).toFixed(1)}%`} tooltip="Share of faceoffs won (all situations)." />
           )}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Season Trends - Chart 1: CF% and xGF% */}
+/** Performance / Trends: full-season rolling charts (de-defaulted per UX 3.5) + last-10 results. */
+function PerformanceTrendsTab({ teamTrends, trendsError, handleRetryTrends, teamColor, recentGames, teamId, navigate }: {
+  teamTrends: TeamTrends | null; trendsError: string | null; handleRetryTrends: () => void
+  teamColor: string; recentGames: Game[]; teamId: number; navigate: (p: string) => void
+}) {
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const possData = teamTrends?.cf_pct_5gp.map((pt, i) => ({
+    date: fmtDate(pt.game_date), cf_pct: pt.value * 100, xgf_pct: (teamTrends.xgf_pct_5gp[i]?.value ?? 0) * 100,
+  })) ?? []
+  const dangerData = teamTrends?.hdcf_per60_5gp.map((pt) => ({ date: fmtDate(pt.game_date), hdcf: pt.value })) ?? []
+  const tip = { backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 11 }
+  return (
+    <div className="team-profile__content">
       <div className="team-profile__section">
-        <h2 className="team-profile__section-title">Possession Trends (5-Game Rolling)</h2>
+        <h2 className="team-profile__section-title">Season Trends</h2>
+        <p className="team-profile__section-sub">Five-game rolling averages over the full season (not controlled by the form toggle above).</p>
         {trendsError ? (
-          <div className="team-profile__section-error">
-            <p>{trendsError}</p>
-            <button onClick={handleRetryTrends} className="team-profile__retry-button">
-              Retry
-            </button>
-          </div>
-        ) : teamTrends && teamTrends.cf_pct_5gp.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart
-              data={teamTrends.cf_pct_5gp.map((point, i) => ({
-                date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                cf_pct: point.value * 100,
-                xgf_pct: teamTrends.xgf_pct_5gp[i]?.value * 100 || 50
-              }))}
-              margin={{ right: 60 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="date"
-                stroke="var(--color-text-muted)"
-                style={{ fontSize: 'var(--text-xs)' }}
-              />
-              <YAxis
-                stroke="var(--color-text-muted)"
-                style={{ fontSize: 'var(--text-xs)' }}
-                domain={[40, 60]}
-                tickFormatter={(value) => Math.round(value).toString()}
-              />
-              <RechartsTooltip
-                formatter={(value) => typeof value === 'number' ? `${value.toFixed(1)}%` : ''}
-                contentStyle={{
-                  backgroundColor: 'var(--color-bg-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)'
-                }}
-              />
-              <ReferenceLine y={50} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
-              <Line
-                type="monotone"
-                dataKey="cf_pct"
-                stroke={teamColor}
-                strokeWidth={2}
-                dot={false}
-                name="CF%"
-              >
-                <Label
-                  value="CF%"
-                  position="insideBottomRight"
-                  offset={15}
-                  fill={teamColor}
-                  style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
-                />
-              </Line>
-              <Line
-                type="monotone"
-                dataKey="xgf_pct"
-                stroke="var(--color-accent)"
-                strokeWidth={2}
-                dot={false}
-                name="xGF%"
-              >
-                <Label
-                  value="xGF%"
-                  position="insideBottomRight"
-                  fill="var(--color-accent)"
-                  style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
-                />
-              </Line>
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="team-profile__no-data">Insufficient data for trends</div>
-        )}
-      </div>
-
-      {/* Season Trends - Chart 2: HDCF/60 vs HDCA/60 */}
-      <div className="team-profile__section">
-        <h2 className="team-profile__section-title">High Danger Chances For (5-Game Rolling)</h2>
-        {trendsError ? (
-          <div className="team-profile__section-error">
-            <p>{trendsError}</p>
-            <button onClick={handleRetryTrends} className="team-profile__retry-button">
-              Retry
-            </button>
-          </div>
-        ) : teamTrends && teamTrends.hdcf_per60_5gp.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart
-              data={teamTrends.hdcf_per60_5gp.map((point) => ({
-                date: new Date(point.game_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                hdcf: point.value
-              }))}
-              margin={{ right: 80 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="date"
-                stroke="var(--color-text-muted)"
-                style={{ fontSize: 'var(--text-xs)' }}
-              />
-              <YAxis
-                stroke="var(--color-text-muted)"
-                style={{ fontSize: 'var(--text-xs)' }}
-                tickFormatter={(value) => Math.round(value).toString()}
-              />
-              <RechartsTooltip
-                formatter={(value) => typeof value === 'number' ? value.toFixed(2) : ''}
-                contentStyle={{
-                  backgroundColor: 'var(--color-bg-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)'
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="hdcf"
-                stroke="var(--color-data-positive)"
-                strokeWidth={2}
-                dot={false}
-                name="HDCF/60"
-              >
-                <Label
-                  value="HDCF/60"
-                  position="insideBottomRight"
-                  offset={15}
-                  fill="var(--color-data-positive)"
-                  style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}
-                />
-              </Line>
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="team-profile__no-data">Insufficient data for trends</div>
-        )}
-      </div>
-
-      {/* vs Opponent Section */}
-      <div className="team-profile__section">
-        <h2 className="team-profile__section-title">vs Opponent</h2>
-        {!selectedOpponent ? (
-          <div className="team-profile__vs-opponent-prompt">
-            <p>Select an opponent to view head-to-head stats</p>
-            <select
-              className="team-profile__vs-opponent-select"
-              onChange={(e) => handleOpponentSelect(parseInt(e.target.value))}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Choose opponent...
-              </option>
-              {/* NHL Teams - hardcoded for now */}
-              <option value="1">New Jersey Devils</option>
-              <option value="2">New York Islanders</option>
-              <option value="3">New York Rangers</option>
-              <option value="4">Philadelphia Flyers</option>
-              <option value="5">Pittsburgh Penguins</option>
-              <option value="6">Boston Bruins</option>
-              <option value="7">Buffalo Sabres</option>
-              <option value="8">Montreal Canadiens</option>
-              <option value="9">Ottawa Senators</option>
-              <option value="10">Toronto Maple Leafs</option>
-            </select>
-          </div>
-        ) : opponentError ? (
-          <div className="team-profile__section-error">
-            <p>{opponentError}</p>
-            <button onClick={handleRetryOpponent} className="team-profile__retry-button">
-              Retry
-            </button>
-          </div>
-        ) : opponentStats ? (
-          <div className="team-profile__vs-opponent-stats">
-            {opponentStats.small_sample && (
-              <div className="team-profile__small-sample-badge">
-                <Badge variant="small-sample" />
-                <span className="team-profile__small-sample-text">
-                  {opponentStats.games_played} {opponentStats.games_played === 1 ? 'game' : 'games'} played
-                </span>
-              </div>
+          <div className="team-profile__section-error"><p>{trendsError}</p><button onClick={handleRetryTrends} className="team-profile__retry-button">Retry</button></div>
+        ) : possData.length > 0 ? (
+          <>
+            <ChartPanel title="Possession and chance share (CF% / xGF%)">
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={possData} margin={{ top: 8, right: 56, bottom: 0, left: 0 }}>
+                  <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
+                  <XAxis dataKey="date" stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} />
+                  <YAxis domain={[40, 60]} stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} tickFormatter={(v) => Math.round(v).toString()} />
+                  <RechartsTooltip contentStyle={tip} formatter={(v: any) => `${Number(v).toFixed(1)}%`} />
+                  <ReferenceLine y={50} stroke="var(--color-border-strong)" strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="cf_pct" stroke={teamColor} strokeWidth={2} dot={false} isAnimationActive={false}>
+                    <Label value="CF%" position="right" fill={teamColor} style={{ fontSize: 11, fontWeight: 600 }} />
+                  </Line>
+                  <Line type="monotone" dataKey="xgf_pct" stroke="var(--color-accent)" strokeWidth={2} dot={false} isAnimationActive={false}>
+                    <Label value="xGF%" position="right" fill="var(--color-accent)" style={{ fontSize: 11, fontWeight: 600 }} />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartPanel>
+            {dangerData.length > 0 && (
+              <ChartPanel title="High-danger chances created (HDCF/60)">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={dangerData} margin={{ top: 8, right: 64, bottom: 0, left: 0 }}>
+                    <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
+                    <XAxis dataKey="date" stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} />
+                    <YAxis stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} tickFormatter={(v) => Math.round(v).toString()} />
+                    <RechartsTooltip contentStyle={tip} formatter={(v: any) => Number(v).toFixed(1)} />
+                    <Line type="monotone" dataKey="hdcf" stroke="var(--color-data-positive)" strokeWidth={2} dot={false} isAnimationActive={false}>
+                      <Label value="HDCF/60" position="right" fill="var(--color-data-positive)" style={{ fontSize: 11, fontWeight: 600 }} />
+                    </Line>
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartPanel>
             )}
-            <div className="team-profile__stat-grid">
-              <StatCard
-                label="Record"
-                value={`${opponentStats.wins}-${opponentStats.losses}-${opponentStats.otl}`}
-              />
-              <StatCard
-                label="CF%"
-                value={opponentStats.cf_pct != null ? `${(opponentStats.cf_pct * 100).toFixed(1)}%` : '—'}
-                tooltip={opponentStats.cf_pct == null ? 'Not enough games against this opponent to report CF%' : undefined}
-              />
-              <StatCard
-                label="HDCF/60"
-                value={opponentStats.hdcf_per60 != null ? opponentStats.hdcf_per60.toFixed(2) : '—'}
-                tooltip={opponentStats.hdcf_per60 == null ? 'Not enough games against this opponent to report HDCF/60' : undefined}
-              />
-              <StatCard
-                label="xGF/60"
-                value={opponentStats.xgf_per60 != null ? opponentStats.xgf_per60.toFixed(2) : '—'}
-                tooltip={opponentStats.xgf_per60 == null ? 'Not enough games against this opponent to report xGF/60' : undefined}
-              />
-            </div>
-            <button
-              className="team-profile__vs-opponent-change"
-              onClick={() => handleOpponentSelect(0)}
-            >
-              Change Opponent
-            </button>
-          </div>
+          </>
         ) : (
-          <div className="team-profile__no-data">Loading opponent stats...</div>
+          <div className="team-profile__no-data">Insufficient data for trends</div>
         )}
       </div>
+
+      {recentGames.length > 0 && (
+        <div className="team-profile__section">
+          <h2 className="team-profile__section-title">Last 10 Results</h2>
+          <div className="team-profile__results">
+            {recentGames.map((g) => {
+              const isHome = g.home_team_id === teamId
+              const us = isHome ? g.home_score : g.away_score
+              const them = isHome ? g.away_score : g.home_score
+              const oppAbbrev = isHome ? g.away_team_abbrev : g.home_team_abbrev
+              const win = (us ?? 0) > (them ?? 0)
+              return (
+                <button key={g.game_id} className="team-profile__result-row" onClick={() => navigate(`/games/${g.game_id}`)}>
+                  <span className="team-profile__result-date">{fmtDate(g.game_date)}</span>
+                  <span className="team-profile__result-opp">{isHome ? 'vs' : '@'} {oppAbbrev}</span>
+                  <span className={`team-profile__result-chip ${win ? 'is-win' : 'is-loss'}`}>{win ? 'W' : 'L'}</span>
+                  <span className="team-profile__result-score mono">{us}–{them}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
