@@ -15,7 +15,7 @@ const W = 720
 const H = 480
 const PAD = 56
 
-export default function StyleMapChart({ height }: { height?: number }) {
+export default function StyleMapChart({ height, highlightTeamId }: { height?: number; highlightTeamId?: number | null }) {
   const navigate = useNavigate()
   const [data, setData] = useState<StyleMap | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -53,21 +53,25 @@ export default function StyleMapChart({ height }: { height?: number }) {
           <text x={PAD / 2} y={cy - 6} textAnchor="start" className="stylemap__axis-label">◀ {data.x_neg_desc}</text>
           <text x={cx + 6} y={PAD / 2} textAnchor="start" className="stylemap__axis-label">▲ {data.y_pos_desc}</text>
           <text x={cx + 6} y={H - PAD / 2 + 4} textAnchor="start" className="stylemap__axis-label">▼ {data.y_neg_desc}</text>
-          {/* team logos */}
-          {data.teams.map((t) => (
-            <image
-              key={t.team_id}
-              href={t.team_abbrev ? getTeamLogoUrl(t.team_abbrev) : undefined}
-              x={sx(t.x) - 14}
-              y={sy(t.y) - 14}
-              width={28}
-              height={28}
-              className="stylemap__logo"
-              onClick={() => navigate(`/teams/${t.team_id}`)}
-            >
-              <title>{t.team_abbrev}</title>
-            </image>
-          ))}
+          {/* team logos (the highlighted team is enlarged + ringed; others dim) */}
+          {data.teams.map((t) => {
+            const hi = highlightTeamId != null && t.team_id === highlightTeamId
+            const dim = highlightTeamId != null && !hi
+            const r = hi ? 18 : 14
+            return (
+              <g key={t.team_id} className={dim ? 'stylemap__mark stylemap__mark--dim' : 'stylemap__mark'}>
+                {hi && <circle cx={sx(t.x)} cy={sy(t.y)} r={24} className="stylemap__ring" />}
+                <image
+                  href={t.team_abbrev ? getTeamLogoUrl(t.team_abbrev) : undefined}
+                  x={sx(t.x) - r} y={sy(t.y) - r} width={r * 2} height={r * 2}
+                  className="stylemap__logo"
+                  onClick={() => navigate(`/teams/${t.team_id}`)}
+                >
+                  <title>{t.team_abbrev}</title>
+                </image>
+              </g>
+            )
+          })}
         </svg>
       </div>
     </ChartPanel>

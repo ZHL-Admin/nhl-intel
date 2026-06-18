@@ -7,6 +7,7 @@ import { ChartPanel } from '../components/common'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
 import TeamRadar from '../components/teams/TeamRadar'
+import LineBoard from '../components/teams/LineBoard'
 import { LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
@@ -374,9 +375,16 @@ function TeamProfile() {
         )}
 
         {currentTab === 'lines' && teamId && (
-          <div className="team-profile__section">
-            <h2 className="team-profile__section-title">Line Lab</h2>
-            <LineSwapWidget teamId={parseInt(teamId)} />
+          <div className="team-profile__content">
+            <div className="team-profile__section">
+              <h2 className="team-profile__section-title">Lines</h2>
+              <LineBoard teamId={parseInt(teamId)} />
+            </div>
+            <div className="team-profile__section">
+              <h2 className="team-profile__section-title">Experiment with a swap</h2>
+              <p className="team-profile__section-sub">Swap any player into a current line to see the projected grade and xGF% change.</p>
+              <LineSwapWidget teamId={parseInt(teamId)} />
+            </div>
           </div>
         )}
 

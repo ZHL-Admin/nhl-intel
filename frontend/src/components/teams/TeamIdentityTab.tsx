@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { ChartPanel, PercentileBarList, Tabs, SkeletonLoader } from '../common'
 import type { PercentileBarItem } from '../common'
 import TeamRadar from './TeamRadar'
+import StyleMapChart from './StyleMapChart'
 import { getTeamIdentity } from '../../api/teams'
 import { TeamIdentity, TeamIdentityWindow, TeamDetail } from '../../api/types'
 import { FINGERPRINT_GROUPS } from '../../config/metrics'
@@ -103,6 +104,8 @@ export default function TeamIdentityTab({ teamId, teamDetail, teamColor }: {
           <TeamRadar teamDetail={teamDetail} color={teamColor || 'var(--color-accent)'} />
         </ChartPanel>
       )}
+
+      <StyleMapChart highlightTeamId={teamId} />
 
       <ChartPanel title="Territory-to-danger conversion" subtitle="Where this team's offense comes from structurally">
         <ConversionPanel win={win} size={identity.league_size} />

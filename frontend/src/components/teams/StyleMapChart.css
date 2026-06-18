@@ -25,3 +25,10 @@
 }
 .stylemap__error { color: var(--color-text-secondary, #888); }
 .stylemap__loading { height: 360px; }
+
+/* single-team highlight (used on the Team Identity tab) */
+.stylemap__mark--dim { opacity: 0.32; }
+.stylemap__ring {
+  fill: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  stroke: var(--color-accent); stroke-width: 1.5;
+}
