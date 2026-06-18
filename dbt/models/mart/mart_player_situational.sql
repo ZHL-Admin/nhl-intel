@@ -32,20 +32,36 @@ games as (
     from {{ ref('stg_boxscores') }}
 ),
 
+-- All shot attempts across EVERY strength state (not the 5v5-only int_shot_attempts), so PP/PK
+-- columns populate. A GOAL event carries scoring_player_id (not shooting_player_id), so attribute
+-- the shooter via COALESCE — otherwise every goal is dropped and the goals_* columns read 0.
+-- PP/PK are decided by the player's team's skater count vs the opponent's, parsed from
+-- situation_code = [awayGoalie][awaySkaters][homeSkaters][homeGoalie] (the canonical parsing also
+-- used by the goaltending/special-teams services): away skaters = char 2, home skaters = char 3.
 shot_attempts as (
     select
         pbp.game_id,
         pbp.season,
-        pbp.shooting_player_id as player_id,
+        coalesce(pbp.shooting_player_id, pbp.scoring_player_id) as player_id,
         pbp.event_owner_team_id as team_id,
         pbp.situation_code,
-        g.home_team_id,
-        g.away_team_id,
         pbp.is_goal,
-        pbp.xg_value
-    from {{ ref('int_shot_attempts') }} pbp
+        pbp.xg_value,
+        (
+            (pbp.event_owner_team_id = g.home_team_id
+                and safe_cast(substr(pbp.situation_code, 3, 1) as int64) > safe_cast(substr(pbp.situation_code, 2, 1) as int64))
+            or (pbp.event_owner_team_id = g.away_team_id
+                and safe_cast(substr(pbp.situation_code, 2, 1) as int64) > safe_cast(substr(pbp.situation_code, 3, 1) as int64))
+        ) as is_pp,
+        (
+            (pbp.event_owner_team_id = g.home_team_id
+                and safe_cast(substr(pbp.situation_code, 3, 1) as int64) < safe_cast(substr(pbp.situation_code, 2, 1) as int64))
+            or (pbp.event_owner_team_id = g.away_team_id
+                and safe_cast(substr(pbp.situation_code, 2, 1) as int64) < safe_cast(substr(pbp.situation_code, 3, 1) as int64))
+        ) as is_pk
+    from {{ ref('int_shot_attempts_all') }} pbp
     inner join games g on pbp.game_id = g.game_id
-    where pbp.shooting_player_id is not null
+    where coalesce(pbp.shooting_player_id, pbp.scoring_player_id) is not null
 ),
 
 situational_shots as (
@@ -61,74 +77,14 @@ situational_shots as (
         sum(case when situation_code = '1551' then xg_value else 0.0 end) as ixg_5v5,
 
         -- Power play stats (team has more skaters)
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) > cast(substr(situation_code, 1, 2) as int64)
-                     then 1
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) > cast(substr(situation_code, 3, 2) as int64)
-                     then 1
-                else 0
-            end
-        ) as shots_pp,
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) > cast(substr(situation_code, 1, 2) as int64)
-                     and is_goal then 1
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) > cast(substr(situation_code, 3, 2) as int64)
-                     and is_goal then 1
-                else 0
-            end
-        ) as goals_pp,
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) > cast(substr(situation_code, 1, 2) as int64)
-                     then xg_value
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) > cast(substr(situation_code, 3, 2) as int64)
-                     then xg_value
-                else 0.0
-            end
-        ) as ixg_pp,
+        sum(case when is_pp then 1 else 0 end) as shots_pp,
+        sum(case when is_pp and is_goal then 1 else 0 end) as goals_pp,
+        sum(case when is_pp then xg_value else 0.0 end) as ixg_pp,
 
         -- Penalty kill stats (team has fewer skaters)
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) < cast(substr(situation_code, 1, 2) as int64)
-                     then 1
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) < cast(substr(situation_code, 3, 2) as int64)
-                     then 1
-                else 0
-            end
-        ) as shots_pk,
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) < cast(substr(situation_code, 1, 2) as int64)
-                     and is_goal then 1
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) < cast(substr(situation_code, 3, 2) as int64)
-                     and is_goal then 1
-                else 0
-            end
-        ) as goals_pk,
-        sum(
-            case
-                when team_id = home_team_id
-                     and cast(substr(situation_code, 3, 2) as int64) < cast(substr(situation_code, 1, 2) as int64)
-                     then xg_value
-                when team_id = away_team_id
-                     and cast(substr(situation_code, 1, 2) as int64) < cast(substr(situation_code, 3, 2) as int64)
-                     then xg_value
-                else 0.0
-            end
-        ) as ixg_pk,
+        sum(case when is_pk then 1 else 0 end) as shots_pk,
+        sum(case when is_pk and is_goal then 1 else 0 end) as goals_pk,
+        sum(case when is_pk then xg_value else 0.0 end) as ixg_pk,
 
         -- 4v4, 3v3 (even strength but not 5v5)
         sum(case when situation_code in ('1441', '1331') then 1 else 0 end) as shots_other_es,

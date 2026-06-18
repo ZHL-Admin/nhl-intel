@@ -168,7 +168,19 @@ def main() -> int:
             stale.unlink()
 
     summary: list[tuple[str, int, float]] = []
-    con = duckdb.connect(str(build_path))
+    try:
+        con = duckdb.connect(str(build_path))
+    except duckdb.IOException as e:
+        # A running backend (SERVING_BACKEND=duckdb) holds a read lock on the file, so an
+        # in-place update can't open it read-write. (A full export is unaffected — it builds a
+        # temp file and swaps.) Fail loudly rather than silently no-op.
+        if into_existing:
+            sys.exit(
+                f"Cannot open {build_path} for an in-place update — it's locked, most likely by "
+                f"a running backend. Stop the backend first, or run a full export (no --only/"
+                f"--into-existing), which builds a temp file and swaps atomically.\n  ({e})"
+            )
+        raise
     try:
         for t in plan:
             name = t["name"]
