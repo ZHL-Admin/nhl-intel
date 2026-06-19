@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -111,4 +111,25 @@ radar:
 # player_style_map. Reads the locked v2 artifacts (no retrain). `--dry-run` prints, no write.
 archetype-explainer:
 	VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 python -m models_ml.compute_archetype_explainer
+
+# --- Trade tool: contract surplus + futures value (data + value foundation) -------------------
+# Ingest the dated contract snapshot, resolve to player_ids (conservative; emits an unmatched
+# report), then parse it (dbt: stg_contracts + mart_player_contracts). `make trade-contracts`
+# runs the whole contract refresh; the dbt step is `make dbt-build`.
+contracts-load:
+	python -m scripts.load_contracts
+contracts-match:
+	python -m scripts.match_contracts
+# Contract surplus: projected on-ice value vs cap, present-valued. Reads player_gar/goalie_gar +
+# aging_curves; writes nhl_models.player_contract_value. Run AFTER gar/goalie-gar/aging.
+contract-value:
+	python -m models_ml.compute_contract_value
+# Futures inventory: org prospect lists + own-pick assets (-> nhl_raw.raw_prospects/raw_draft_picks).
+futures-ingest:
+	python -m scripts.ingest_futures
+# Futures value: prospect + pick proxies in the WAR + dollar currency. Writes nhl_models.futures_value.
+futures-value:
+	python -m models_ml.compute_futures_value
+# One-shot trade-tool refresh (snapshot -> match -> value); dbt + futures ingest run separately.
+trade-data: contracts-load contracts-match contract-value futures-ingest futures-value
 

@@ -618,6 +618,49 @@ with DAG(
         env=_dbt_env,
     )
 
+    # --- Trade tool (weekly): contract surplus + futures value -------------------------------
+    # Resolve the dated contract snapshot to player_ids (conservative; emits an unmatched report).
+    # The snapshot CSV itself is loaded manually (scripts.load_contracts); matching re-runs weekly
+    # so the map tracks roster changes. Needs fresh rosters/marts/bio.
+    contracts_match = BashOperator(
+        task_id="contracts_match",
+        bash_command=_mon.format("cd /opt/airflow && python -m scripts.match_contracts"),
+        env=_dbt_env,
+    )
+    # Rebuild the contract mart off the fresh map (stg_contracts is a view built upstream).
+    build_contract_mart = BashOperator(
+        task_id="build_contract_mart",
+        bash_command=_mon.format(f"{_dbt} --select mart_player_contracts"),
+        env=_dbt_env,
+    )
+    # Contract surplus: projected on-ice value vs cap. Needs the contract mart + the value lenses
+    # (gar/goalie_gar) + aging curves + archetypes. Runs after compute_gar/composite/aging.
+    contract_value = BashOperator(
+        task_id="compute_contract_value",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_contract_value"),
+        env=_dbt_env,
+    )
+    # Futures inventory: org prospect lists + own-pick assets (API pull, idempotent per snapshot).
+    futures_ingest = BashOperator(
+        task_id="ingest_futures",
+        bash_command=_mon.format("cd /opt/airflow && python -m scripts.ingest_futures"),
+        env=_dbt_env,
+    )
+    # Futures value: prospect + pick proxies in the WAR + dollar currency (reads stg_prospects /
+    # stg_draft_picks views over the freshly ingested raw).
+    futures_value = BashOperator(
+        task_id="compute_futures_value",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_futures_value"),
+        env=_dbt_env,
+    )
+    # Unified tradeable-asset layer: union players (surplus) + prospects + picks. Built LAST, after
+    # both value jobs, so it reflects today's values (not yesterday's), then rides export_serving.
+    build_tradeable_assets = BashOperator(
+        task_id="build_tradeable_assets",
+        bash_command=_mon.format(f"{_dbt} --select mart_tradeable_assets"),
+        env=_dbt_env,
+    )
+
     # Precompute the DuckDB serving tables (search roster, line member features, team
     # handedness, current lines, flattened skater box) — the inputs that let the API's
     # search/tool endpoints run entirely on the local serving file.
@@ -701,7 +744,16 @@ with DAG(
     run_dbt_marts >> compute_goalie_gar >> generate_report
     [compute_gar, compute_composite, compute_goalie_gar, compute_goalie_radar] >> compute_overall >> generate_report
 
+    # Trade tool (weekly): match contracts off fresh rosters -> rebuild the contract mart -> value
+    # it against gar/composite/aging; ingest futures -> value them; then the unified asset mart
+    # builds last (today's values, not yesterday's) and gates the serving export.
+    run_dbt_marts >> contracts_match >> build_contract_mart
+    [build_contract_mart, compute_gar, compute_goalie_gar, compute_composite,
+     fit_aging_curves, write_archetypes] >> contract_value
+    run_dbt_marts >> futures_ingest >> futures_value
+    [contract_value, futures_value] >> build_tradeable_assets
+
     # DuckDB serving layer (final sink): precompute the serving tables after their model deps,
     # then export everything the site reads into the local DuckDB file once all compute is done.
     [write_archetypes, train_rapm, run_dbt_marts] >> precompute_serving
-    [generate_report, precompute_serving] >> export_serving
+    [generate_report, precompute_serving, build_tradeable_assets] >> export_serving

@@ -11,4 +11,5 @@ by the model jobs and must regenerate idempotently.
 Expected files as phases land: `sequence-mining.md`, `xg-model.md`,
 `scorer-bias.md`, `win-probability.md`, `goaltending.md`, `power-ratings.md`,
 `isolated-impact.md`, `composite.md`, `archetypes.md`, `reconciliation.md`,
-`trajectories.md`, `lineup-lab.md`, `streak-doctor.md`, `edge-cross-validation.md`.
+`trajectories.md`, `lineup-lab.md`, `streak-doctor.md`, `edge-cross-validation.md`,
+`contract-surplus.md`, `futures-value.md`.
