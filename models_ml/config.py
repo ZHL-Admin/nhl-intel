@@ -483,7 +483,7 @@ CONTRACT_VALUE = {
     "GROUNDED_MIN_GAMES": 25,    # current-season games to call a WAR estimate "grounded"/high-confidence
     # Band on grounded players: propagate the GAR war_sd through the projection (± this many SDs).
     "BAND_SDS": 1.0,
-    "MODEL_VERSION": "contract_value_v1",
+    "MODEL_VERSION": "contract_value_v2",   # v2: cap-share cost + forward cap projection
 }
 
 # ---------------------------------------------------------------------------------------------
