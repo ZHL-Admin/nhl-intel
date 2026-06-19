@@ -12,15 +12,23 @@ import AssetPicker from './AssetPicker'
 import type { BuilderItem } from '../../pages/TradeBuilder'
 import './TradeTeamPanel.css'
 
-function AssetChip({ item, teams, onRemove, onSetDestination }: {
+// retention presets — the engine allows any fraction in (0, 0.50]; 5% steps cover real elections.
+const RETENTION_OPTIONS = [{ value: '', label: 'No retention' },
+  ...[5, 10, 15, 20, 25, 30, 35, 40, 45, 50].map((p) => ({ value: String(p / 100), label: `Retain ${p}%` }))]
+
+function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, onSetRetention }: {
   item: BuilderItem
   teams: number[]
+  retentionAllowed: boolean        // false when this team already retains its max (3) and this one isn't retained
   onRemove: (id: string) => void
   onSetDestination: (id: string, to: number) => void
+  onSetRetention: (id: string, pct: number | undefined) => void
 }) {
   const a = item.asset
   const dests = teams.filter((t) => t !== item.fromTeam)
   const band = fmtWarBand(a.value_war_low, a.value_war_high)
+  const isPlayer = a.asset_type === 'player' && a.player_id != null
+  const dstAbbrev = item.toTeam != null ? getTeamAbbrev(item.toTeam) : null
   return (
     <div className={`asset-chip asset-chip--${a.asset_type}`}>
       <div className="asset-chip__id">
@@ -63,12 +71,32 @@ function AssetChip({ item, teams, onRemove, onSetDestination }: {
           onChange={(v) => v && onSetDestination(a.asset_id, Number(v))}
         />
       </div>
+
+      {isPlayer && (retentionAllowed ? (
+        <div className="asset-chip__retain">
+          <Select
+            ariaLabel={`Salary retained on ${a.label}`}
+            value={item.retainedPct != null ? String(item.retainedPct) : ''}
+            options={RETENTION_OPTIONS}
+            onChange={(v) => onSetRetention(a.asset_id, v ? Number(v) : undefined)}
+          />
+          {item.retainedPct != null && (
+            <span className="asset-chip__retain-note">
+              {getTeamAbbrev(item.fromTeam)} keeps {Math.round(item.retainedPct * 100)}% of cap{dstAbbrev ? ` · ${dstAbbrev} pays the rest` : ''}
+            </span>
+          )}
+        </div>
+      ) : (
+        <p className="asset-chip__retain-max">Max 3 retained contracts per team reached.</p>
+      ))}
     </div>
   )
 }
 
+const MAX_RETAINED = 3
+
 export default function TradeTeamPanel({
-  teamId, teams, items, usedIds, canRemove, onRemoveTeam, onAddAsset, onRemoveAsset, onSetDestination,
+  teamId, teams, items, usedIds, canRemove, onRemoveTeam, onAddAsset, onRemoveAsset, onSetDestination, onSetRetention,
 }: {
   teamId: number
   teams: number[]
@@ -82,6 +110,7 @@ export default function TradeTeamPanel({
   onSetRetention: (assetId: string, pct: number | undefined) => void
 }) {
   const abbrev = getTeamAbbrev(teamId)
+  const retainedCount = items.filter((i) => i.retainedPct != null).length
   return (
     <section className="trade-team-panel">
       <header className="trade-team-panel__head">
@@ -103,7 +132,9 @@ export default function TradeTeamPanel({
           ? <p className="trade-team-panel__none">Nothing yet — search above to add an asset {abbrev} would trade.</p>
           : items.map((it) => (
               <AssetChip key={it.asset.asset_id} item={it} teams={teams}
-                         onRemove={onRemoveAsset} onSetDestination={onSetDestination} />
+                         retentionAllowed={it.retainedPct != null || retainedCount < MAX_RETAINED}
+                         onRemove={onRemoveAsset} onSetDestination={onSetDestination}
+                         onSetRetention={onSetRetention} />
             ))}
       </div>
     </section>

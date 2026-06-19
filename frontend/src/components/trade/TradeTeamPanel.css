@@ -56,3 +56,7 @@
 
 .asset-chip__dest { display: flex; align-items: center; gap: var(--space-2); }
 .asset-chip__dest-arrow { color: var(--color-text-muted); flex-shrink: 0; }
+
+.asset-chip__retain { display: flex; flex-direction: column; gap: 4px; }
+.asset-chip__retain-note { font-size: var(--text-xs); color: var(--color-warning); line-height: 1.3; }
+.asset-chip__retain-max { font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; font-style: italic; }
