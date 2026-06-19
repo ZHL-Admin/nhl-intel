@@ -8,9 +8,9 @@ Builds (idempotent, WRITE_TRUNCATE):
   dim_current_roster        search picker: current-season players, name + team + archetype.
   line_member_features      one row/(player,season) of line-fit model features (the expensive
                             build, so live line-fit just looks them up + runs the artifact).
-  team_handedness           per (team,season,pos_group) L/R 5v5 TOI — trade-fit positional gate.
+  team_handedness           per (team,season,pos_group) L/R 5v5 TOI — player-fit positional gate.
   team_current_lines        per team: top forward trios / D pairs over last 10 games — for
-                            /teams/{id}/lines and the trade-fit line dimension.
+                            /teams/{id}/lines and the player-fit line dimension.
   serving_game_skater_box   flattened per-game skater box lines — /games/{id}/skater-impact
                             (replaces the raw_boxscores nested UNNEST on the request path).
 
@@ -102,7 +102,7 @@ def build_team_current_lines(p: str) -> pd.DataFrame:
     """Top 4 forward trios + top 3 defense pairs per team over its last 10 games (current season).
 
     Mirrors the backend current_lines() shape; precomputed so /teams/{id}/lines and the
-    trade-fit line dimension read it instead of scanning int_shift_segments at request time.
+    player-fit line dimension read it instead of scanning int_shift_segments at request time.
     """
     season = _latest_season(p)
     teams = bq.query_df(

@@ -87,12 +87,12 @@ overall:
 linefit:
 	python -m models_ml.train_linefit
 
-# Compute per-team need profiles (Phase 5.3) for the trade-fit tool: archetype + component gaps
+# Compute per-team need profiles (Phase 5.3) for the player-fit tool: archetype + component gaps
 # vs the top-8 teams by power rating. Writes nhl_models.team_needs.
 team-needs:
 	python -m models_ml.compute_team_needs
 
-# Validate the multi-dimension Trade Fit rebuild: print disagreement cases (need vs style/quality)
+# Validate the multi-dimension Player Fit rebuild: print disagreement cases (need vs style/quality)
 # and confirm the defenseman-to-strong-defense team no longer scores ~0. Reads only; no writes.
 trade-fit-validate:
 	python -m models_ml.validate_trade_fit

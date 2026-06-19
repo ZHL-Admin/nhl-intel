@@ -574,7 +574,7 @@ with DAG(
     )
 
     # Team need profiles (Phase 5.3): each team's archetype + component gaps vs the top-8 by power
-    # rating. Needs composite + archetypes + ratings. Feeds the trade-fit tool. Weekly.
+    # rating. Needs composite + archetypes + ratings. Feeds the player-fit tool. Weekly.
     compute_team_needs = BashOperator(
         task_id="compute_team_needs",
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_team_needs"),
@@ -734,7 +734,7 @@ with DAG(
     # Phase 5.1 line-fit: needs int_line_seasons (built upstream in run_dbt_pre_xg) plus
     # archetypes (member archetype mix) and RAPM impact (member off/def features).
     [write_archetypes, train_rapm] >> train_linefit >> generate_report
-    # Phase 5.3 trade-fit needs: team need profiles from composite + archetypes + ratings.
+    # Phase 5.3 player-fit needs: team need profiles from composite + archetypes + ratings.
     [compute_composite, write_archetypes, compute_ratings] >> compute_team_needs >> generate_report
     # Skills radar (Part B): per-player spokes + labels from impact/composite/coach-trust/edge/marts
     # + the v2 archetype. Needs archetypes + the player models.

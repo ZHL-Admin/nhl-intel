@@ -1,4 +1,4 @@
-"""Signature-tool endpoints (Phase 5): Lineup Lab line-fit, trade fit, matchup previews."""
+"""Signature-tool endpoints (Phase 5): Lineup Lab line-fit, player fit, matchup previews."""
 
 from typing import List, Optional
 

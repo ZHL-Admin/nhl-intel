@@ -1,4 +1,4 @@
-"""Service layer for the Phase 5 signature tools (Lineup Lab, trade fit, matchup previews).
+"""Service layer for the Phase 5 signature tools (Lineup Lab, player fit, matchup previews).
 
 Wraps the model-layer scoring jobs (models_ml.score_line, models_ml.score_team_fit) and the
 BigQuery lookups the tool endpoints need. The model layer lives at the repo root, so we put the

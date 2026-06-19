@@ -1,5 +1,5 @@
 /**
- * Shared player explorer (Phase 5.2): a two-level browser used by the Lineup Lab and Trade Fit.
+ * Shared player explorer (Phase 5.2): a two-level browser used by the Lineup Lab and Player Fit.
  *
  *  - Landing: a grid of 32 team cards.
  *  - Click a team -> its roster (forwards / defense) with a tab-styled season selector.

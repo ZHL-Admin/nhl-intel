@@ -16,7 +16,7 @@ const TOOLS = [
   {
     to: '/tools/trade-fit',
     icon: ArrowLeftRight,
-    title: 'Trade Fit',
+    title: 'Player Fit',
     blurb: 'Score how well a player addresses a team’s biggest archetype and component gaps versus the league’s top teams.',
   },
   {
