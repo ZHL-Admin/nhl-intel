@@ -56,21 +56,50 @@ For each matched player:
 2. **Age the WAR forward** each remaining season by the per-archetype aging curve
    (`nhl_models.aging_curves`, a points/82 *level* by age) used as a **ratio** vs the player's
    current age. Production-shape aging applied to value is a documented proxy.
-3. **Price it** with a per-position **monotone market curve** — an isotonic regression of AAV as a
-   function of WAR, fit on the league's matched contracts. This yields the AAV the open market pays
-   for that production level.
+3. **Price it** with a per-position **monotone market curve** (see below) — the AAV the open market
+   pays for that production level.
 4. **Surplus** `surplus_y = expected_aav_y − cap_hit`, summed over remaining years and **discounted**
    to present value at `CONTRACT_VALUE['DISCOUNT'] = 0.90`/yr.
 
 Value is carried in **both currencies** — discounted projected WAR and discounted market dollars —
-plus the surplus and a confidence band, so the [unified asset layer](#the-unified-asset-layer) can
+plus the surplus and a confidence band, so the [unified asset layer](#the-two-axis-asset-layer) can
 net it against prospects and picks.
+
+### The market curve (why not isotonic)
+The first version fit AAV-as-a-function-of-WAR with **isotonic regression**. Isotonic is monotone but
+its terminal block is a flat step: with few elite contracts, it pooled the sparse top into a
+**plateau ≈ $9M**, well below what elite production actually commands. Surplus is `expected_aav −
+cap_hit`, so every max-deal star fell out as a multi-million *false negative* (Kaprizov read ≈ −$47M).
+That is a calibration artifact, not a real read, and a trade engine would net those magnitudes.
+
+The curve is now a smooth, monotone form that **keeps rising at the top** instead of plateauing:
+
+- **log(AAV) is linear in WAR** (`log(AAV) = a + b·WAR`, `b > 0`), fit per position group by OLS — so
+  the top end is *multiplicative* and never flattens. (One of the spec's blessed forms.)
+- The intercept is shifted to the **upper-mid conditional quantile** (`MARKET_QUANTILE = 0.65`), not
+  the mean. Contracts price peak and reputation that a single noisy season of WAR understates, and the
+  high-WAR cohort is diluted by ELC/bridge deals, so the conditional *mean* reads genuine stars as
+  overpaid. The 0.65 quantile is "the going rate a well-paid player at this production commands."
+- A smooth **soft-cap** asymptotes the very top to the CBA maximum-contract ceiling (≈ 20% of the cap,
+  taken as `1.05 ×` the max observed AAV). It keeps a positive slope everywhere — a real economic
+  bound, not a fitting plateau.
+
+The job asserts and prints the acceptance checks: the curve is monotone and rising at the top for
+F/D/G; top-decile production prices within a realistic band of observed elite AAVs (F ×0.94, D ×0.99
+— tracking them, not flattening below); and the three sample stars read modest per-year surplus
+(Kaprizov −$2.9M, Draisaitl +$2.3M, Eichel +$1.9M) rather than multi-million negative. The **top
+decile of production is widened-band and capped at `medium` confidence** — comparables are sparse
+there, so the price is inherently lower-confidence (`TOP_DECILE_BAND_MULT = 1.6`).
 
 ## Constants (`models_ml/config.CONTRACT_VALUE`)
 | constant | value | meaning |
 |---|---|---|
 | `DISCOUNT` | 0.90 | present-value discount per future season (aging/injury/time-value) |
 | `MARKET_MIN_N` | 60 | min sample to fit a position market curve; below it, pool all skaters |
+| `MARKET_QUANTILE` | 0.65 | conditional quantile of AAV the curve targets (the going rate, not the mean) |
+| `MARKET_CEIL_MULT` | 1.05 | soft-cap ceiling = this × max observed AAV (the CBA max-contract bound) |
+| `MARKET_KNEE_FRAC` | 0.75 | soft-cap bends in from this × ceiling |
+| `TOP_DECILE_BAND_MULT` | 1.6 | widen the band (and cap confidence at medium) for top-decile production |
 | `REPLACEMENT_WAR` | 0.0 | GAR is above-replacement, so replacement ≈ 0 WAR |
 | `PROXY_WAR_BAND` | 1.0 | ± WAR band on a floored (proxy) player — deliberately wide |
 | `GROUNDED_MIN_GAMES` | 25 | current-season games to call a WAR estimate grounded/high-confidence |
@@ -80,14 +109,16 @@ net it against prospects and picks.
 A player with **no current-season WAR** (injured, just called up, too few games) cannot be grounded:
 their production is **floored near replacement with a wide band and a `proxy` tag** — never an
 invented point estimate. Grounded players get `high` (≥25 games, skater) or `medium` confidence,
-with a band propagated from the GAR `war_sd` through the projection. On the latest run: 488 high /
-169 medium / 73 proxy.
+with a band propagated from the GAR `war_sd` through the projection (widened in the top decile). On
+the latest run: 427 high / 230 medium / 73 proxy.
 
 ## Known limitations
-- **Market-curve top-end compression.** Isotonic regression flattens the noisy top of the AAV-vs-WAR
-  cloud, so elite production on a max contract reads as a large *negative* surplus (you pay full
-  freight and the aging tail compounds over 8 years). The ranking among stars is informative; the
-  magnitude at the extreme is a proxy.
+- **The top decile is lower-confidence by nature.** Even with the recalibrated curve, elite
+  production has few comparables, so its price is the least certain part of the curve — which is why
+  the band is widened there and confidence is capped at `medium`. Read the band, not the point.
+- **Quantile target is a modeling choice.** Pricing at the 0.65 conditional quantile (not the mean)
+  is what lets genuine stars read fairly; it is a deliberate, documented bias toward "what the market
+  pays a well-paid player," chosen so the sample stars and the mid/low range both stay sane.
 - **Goalie aging.** The aging curves are skater points/82; goalie WAR is held **flat** across
   remaining years and tagged lower-confidence. Revisit when a goalie aging curve exists.
 - **Single cap figure.** The snapshot carries one cap hit per contract, not a per-year cash schedule,
@@ -95,9 +126,30 @@ with a band propagated from the GAR `war_sd` through the projection. On the late
 - **Extension vs current deal.** When the snapshot row is a future extension, its AAV (not the
   player's current-season cap hit) drives surplus; the value layer uses the extension going forward.
 
-## The unified asset layer
-`mart_tradeable_assets` unions players (this doc), prospects, and picks ([futures](futures-value.md))
-into one row with one interface — `asset_id, asset_type, label, org, value+band, cost, surplus,
-confidence` — all in the same WAR + dollar currency. A prospect who is also a rostered player appears
-once, as the player (the grounded contract value supersedes the proxy). Served via
-`GET /players/{id}/contract`, `GET /assets/search`, and `GET /rankings/surplus`.
+## The two-axis asset layer
+Surplus alone is the wrong single currency for a trade: a **fairly paid star** has near-zero surplus
+but enormous talent value, while an **overpaid veteran** and a **cheap pick** can show similar surplus
+for opposite reasons. So `mart_tradeable_assets` carries value and cost as **two separate axes**, for
+players, prospects, and picks alike:
+
+- **Talent** — projected on-ice value over the control window (`value_war` / `value_dollars`, with a
+  band). What the asset is *worth*.
+- **Cost** — `cap_hit`, `remaining_years`, and the discounted `cost_dollars`. What it is *owed*
+  (≈ 0 for prospects and picks).
+- **Surplus** — value minus cost, with its band. Kept available, but never the only thing exposed.
+
+Worked examples (latest run):
+
+| asset | talent value | cost | surplus | reads as |
+|---|---|---|---|---|
+| Mitch Marner | $72M (45–91) | $12.0M × 8y | +$4M | fairly paid star |
+| Macklin Celebrini | $34M | $1.0M × 2y | +$32M | underpaid young star |
+| Jonathan Huberdeau | $19M | $10.5M × 6y | −$30M | overpaid veteran |
+| Jake O'Brien (prospect) | $19M (8–35) | ≈ $0 | +$19M | proxy, wide band |
+| 2026 R1 (EDM) pick | $11M (5–22) | $0 | +$11M | proxy, wide band |
+
+The unified mart unions all three sources into one interface — `asset_id, asset_type, label, org,
+talent value + band, cap_hit/remaining_years/cost, surplus + band, confidence` — all in the same WAR +
+dollar currency. A prospect who is also a rostered player appears once, as the player (the grounded
+contract value supersedes the proxy). Served via `GET /players/{id}/contract`, `GET /assets/search`,
+`GET /rankings/surplus` (efficiency axis), and `GET /rankings/talent` (talent axis).

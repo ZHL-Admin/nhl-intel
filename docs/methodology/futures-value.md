@@ -69,7 +69,11 @@ becomes a star and which busts.
   career WAR (the model layer does not hold enough retired-player career WAR to fit it cleanly). It is
   a transparent proxy, which is why bands are wide and the tag is `proxy`.
 
-## The unified asset layer
-Prospects and picks join players in `mart_tradeable_assets` (see [contract surplus](contract-surplus.md)).
-A prospect who is also a rostered player is deduped to the player row, so the grounded contract value
-supersedes the proxy. Searchable across all three asset types via `GET /assets/search`.
+## The two-axis asset layer
+Prospects and picks join players in `mart_tradeable_assets` (see [contract surplus](contract-surplus.md)),
+which carries value and cost as **two separate axes**. For a prospect or a pick the **talent axis** is
+the futures value above (`value_war` / `value_dollars`, with a wide band) and the **cost axis** is
+effectively zero — `cap_hit` and `remaining_years` are null and `cost_dollars` is 0, so surplus ≈
+value. That is the whole point of futures: cheap optionality. A prospect who is also a rostered player
+is deduped to the player row, so the grounded contract value supersedes the proxy. Searchable across
+all three asset types via `GET /assets/search`, and ranked on the talent axis by `GET /rankings/talent`.
