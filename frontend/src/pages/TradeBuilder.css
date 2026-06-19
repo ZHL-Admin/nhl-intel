@@ -27,6 +27,17 @@
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+.trade-team-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-3); min-height: 160px;
+  background: var(--color-bg-surface); border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+}
+.trade-team-slot__icon { color: var(--color-text-muted); }
+.trade-team-slot__label {
+  font-size: var(--text-sm); font-weight: 650; color: var(--color-text-secondary);
+}
+
 .trade-builder__hint {
   font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
   background: var(--color-bg-surface); border: 1px dashed var(--color-border);

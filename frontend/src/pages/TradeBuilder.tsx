@@ -35,9 +35,29 @@ export interface BuilderItem {
 
 const ALL_TEAMS = DIVISIONS.flatMap((d) => d.teams).sort((a, b) => getTeamName(a.abbrev).localeCompare(getTeamName(b.abbrev)))
 
+/** An empty team slot — a dashed card prompting the user to choose a team (no team is preselected). */
+function EmptyTeamSlot({ available, onPick }: {
+  available: { id: number; abbrev: string }[]
+  onPick: (id: number) => void
+}) {
+  return (
+    <div className="trade-team-slot">
+      <Plus size={18} className="trade-team-slot__icon" />
+      <span className="trade-team-slot__label">Add a team</span>
+      <Select
+        ariaLabel="Choose a team for this side of the trade"
+        value=""
+        options={[{ value: '', label: 'Select team…' },
+                  ...available.map((t) => ({ value: String(t.id), label: getTeamName(t.abbrev) }))]}
+        onChange={(v) => v && onPick(Number(v))}
+      />
+    </div>
+  )
+}
+
 export default function TradeBuilder() {
-  // Start with two teams (the common case); the engine and UI both support N.
-  const [teams, setTeams] = useState<number[]>([ALL_TEAMS[0].id, ALL_TEAMS[1].id])
+  // No teams are preselected — the board starts empty and the user chooses each side.
+  const [teams, setTeams] = useState<number[]>([])
   const [items, setItems] = useState<BuilderItem[]>([])
 
   const addTeam = (id: number) => setTeams((t) => (t.includes(id) ? t : [...t, id]))
@@ -75,6 +95,8 @@ export default function TradeBuilder() {
 
   const availableToAdd = ALL_TEAMS.filter((t) => !teams.includes(t.id))
   const hasMovements = request.movements.length > 0
+  // show empty team slots: at least two cards on an empty board, then one trailing "add" slot
+  const slotCount = availableToAdd.length === 0 ? 0 : Math.max(2 - teams.length, 1)
 
   // re-evaluate on any change to the trade (debounced); the verdict updates live
   const [result, setResult] = useState<TradeEvaluateResponse | null>(null)
@@ -114,24 +136,12 @@ export default function TradeBuilder() {
         />
 
         <div className="trade-builder__toolbar">
-          {availableToAdd.length > 0 && (
-            <div className="trade-builder__add-team">
-              <Plus size={15} />
-              <Select
-                ariaLabel="Add a team to the trade"
-                value=""
-                options={[{ value: '', label: 'Add team…' },
-                          ...availableToAdd.map((t) => ({ value: String(t.id), label: getTeamName(t.abbrev) }))]}
-                onChange={(v) => v && addTeam(Number(v))}
-              />
-            </div>
-          )}
           <span className="trade-builder__teamcount">{teams.length} teams · {items.length} assets</span>
           {loading && result && (
             <span className="trade-builder__updating"><Loader2 size={13} className="spin" /> Evaluating…</span>
           )}
-          {(items.length > 0 || teams.length > 2) && (
-            <button className="trade-builder__reset" onClick={() => { setItems([]); setTeams([ALL_TEAMS[0].id, ALL_TEAMS[1].id]) }}>
+          {(items.length > 0 || teams.length > 0) && (
+            <button className="trade-builder__reset" onClick={() => { setItems([]); setTeams([]) }}>
               <RotateCcw size={14} /> Reset
             </button>
           )}
@@ -141,7 +151,7 @@ export default function TradeBuilder() {
         {hasMovements && loading && !result && <SkeletonLoader />}
         {result && <TradeSummaryBand teams={result.teams} />}
 
-        <div className="trade-builder__panels" data-count={teams.length}>
+        <div className="trade-builder__panels" data-count={teams.length + slotCount}>
           {teams.map((tid) => (
             <TradeTeamPanel
               key={tid}
@@ -149,7 +159,7 @@ export default function TradeBuilder() {
               teams={teams}
               items={items.filter((i) => i.fromTeam === tid)}
               usedIds={usedIds}
-              canRemove={teams.length > 2}
+              canRemove={true}
               result={resultByTeam.get(tid)}
               domains={result ? domains : null}
               onRemoveTeam={() => removeTeam(tid)}
@@ -159,12 +169,16 @@ export default function TradeBuilder() {
               onSetRetention={setRetention}
             />
           ))}
+          {Array.from({ length: slotCount }).map((_, i) => (
+            <EmptyTeamSlot key={`slot-${i}`} available={availableToAdd} onPick={addTeam} />
+          ))}
         </div>
 
         {!hasMovements && (
           <p className="trade-builder__hint">
-            Add assets to each team and assign where they go. The verdict appears here as soon as the
-            first asset has a destination.
+            {teams.length < 2
+              ? 'Choose two or more teams to start building a trade.'
+              : 'Add assets to each team and assign where they go. The verdict appears here as soon as the first asset has a destination.'}
           </p>
         )}
         {result?.dollar_basis && (
