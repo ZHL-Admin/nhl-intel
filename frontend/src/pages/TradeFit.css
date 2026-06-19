@@ -1,5 +1,5 @@
 /* ============================================================================
-   Trade Fit — visual builder + hero result (Phase 5.3 redesign)
+   Player Fit — visual builder + hero result (Phase 5.3 redesign)
    ============================================================================ */
 .tf {
   max-width: 1200px;
@@ -229,7 +229,7 @@
 }
 @keyframes tf-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ---- multi-dimension Trade Fit result ---- */
+/* ---- multi-dimension Player Fit result ---- */
 .tf-hero__io {
   display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
   padding: var(--space-4) var(--space-5);
@@ -247,17 +247,33 @@
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
-/* headline card: large grade (left) + verdict (right), a single band */
-.tf-headline {
-  display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap;
-  padding: var(--space-5);
-  background: color-mix(in srgb, var(--tf-grade) 7%, var(--color-bg-surface));
-  border-bottom: 1px solid var(--color-border-subtle);
+/* two axes: FIT (grade + score, tinted by grade) and QUALITY (separate) — never one masks the other */
+.tf-axes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-3);
 }
-.tf-headline__grade { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; min-width: 96px; }
-.tf-headline__letter { font-size: 3.6rem; font-weight: 800; line-height: 0.9; color: var(--tf-grade); }
-.tf-headline__label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-top: 4px; }
-.tf-headline__verdict { flex: 1; min-width: 240px; margin: 0; font-size: var(--text-base); color: var(--color-text-secondary); line-height: 1.55; }
+.tf-axis {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-subtle); background: var(--color-bg-surface);
+}
+.tf-axis--fit { background: color-mix(in srgb, var(--tf-grade) 8%, var(--color-bg-surface)); }
+.tf-axis--fit .tf-axis__letter {
+  font-size: 3rem; font-weight: 800; line-height: 0.9; color: var(--tf-grade);
+  flex-shrink: 0; min-width: 60px; text-align: center;
+}
+.tf-axis__qval { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 800; line-height: 0.9; flex-shrink: 0; min-width: 60px; text-align: center; }
+.tf-axis__meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tf-axis__name { font-weight: 700; color: var(--color-text-primary); font-size: var(--text-sm); }
+.tf-axis__tag {
+  display: inline-block; margin-left: 6px; padding: 0 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--color-text-secondary); background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-full); vertical-align: middle;
+}
+.tf-axis__sub { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
+.tf-headline__verdict { margin: 0; padding: 0 var(--space-5) var(--space-4); font-size: var(--text-base); color: var(--color-text-secondary); line-height: 1.55; }
+@media (max-width: 640px) { .tf-axes { grid-template-columns: 1fr; } }
 
 /* dimension breakdown */
 .tf-dims { display: flex; flex-direction: column; padding: var(--space-3) var(--space-5); gap: var(--space-3); }
@@ -278,6 +294,21 @@
 .tf-dim__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
 .tf-dim__band { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); opacity: 0.4; border-radius: 2px; }
 .tf-dim__note { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
+
+/* NEED component-by-role breakdown: per component, team-need bar beside his-strength bar */
+.tf-needbd { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; padding: var(--space-2) var(--space-3); background: var(--color-bg-elevated); border-radius: var(--radius-md); }
+.tf-needbd__legend { display: flex; gap: var(--space-3); font-size: 10px; color: var(--color-text-muted); }
+.tf-needbd__legend span { display: inline-flex; align-items: center; gap: 4px; }
+.tf-needbd__dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.tf-needbd__dot--need { background: #d97706; }
+.tf-needbd__dot--str { background: #2563eb; }
+.tf-needbd__row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: var(--space-2); }
+.tf-needbd__label { font-size: var(--text-xs); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tf-needbd__bars { display: flex; flex-direction: column; gap: 2px; }
+.tf-needbd__bar { position: relative; height: 5px; border-radius: var(--radius-full); background: var(--color-bg-surface); }
+.tf-needbd__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
+.tf-needbd__fill--need { background: #d97706; }
+.tf-needbd__fill--str { background: #2563eb; }
 
 .tf-hero__banner {
   position: relative;

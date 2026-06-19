@@ -950,7 +950,7 @@ export interface TeamLines {
   defense_pairs: TeamLine[]
 }
 
-// --- Phase 5.3: trade fit + matchup previews ---
+// --- Phase 5.3: player fit + matchup previews ---
 export interface NeedComponent {
   key: string
   label: string
@@ -973,8 +973,16 @@ export interface BestTeamFit {
   top_need_label?: string | null
   top_need_gap?: number | null
 }
-/** One separately-measured Trade Fit dimension. `tone`: positive | neutral | warn (low need is
- * NEUTRAL, never red). `level` 0-1 drives the bar; `uncertain`/`sd` flag model estimates. */
+/** One (role x component) cell of the NEED breakdown: team weakness x player strength. */
+export interface FitComponentNeed {
+  component: string
+  label: string
+  team_need: number          // 0-1: how weak the team's own depth is here, at the player's role
+  player_strength: number    // 0-1: the player's within-role percentile in this component
+  opportunity: number        // team_need * player_strength
+}
+/** One MATCH dimension of Player Fit (need / style / line). `level` 0-1 drives the bar; `tone`:
+ * positive | neutral | warn; `uncertain`/`sd` flag model estimates; `breakdown` is set for NEED. */
 export interface FitDimension {
   key: string
   label: string
@@ -984,18 +992,29 @@ export interface FitDimension {
   tone: 'positive' | 'neutral' | 'warn'
   uncertain?: boolean
   sd?: number | null
+  breakdown?: FitComponentNeed[]
+}
+/** The player's overall quality — a SEPARATE axis beside fit (it FLOORS fit, never caps it). */
+export interface FitQualityAxis {
+  percentile?: number | null   // within-position overall percentile (drives the floor)
+  war?: number | null
+  war_sd?: number | null
+  label: string                // elite / high-end / solid / depth / below-replacement
+  note: string
 }
 export interface TradeFitResult {
   player_id: number
   player_name?: string | null
   team_id: number
   season: string
-  overall_grade: string
-  overall_score: number          // 0-100, decomposable into `dimensions`
+  role?: string | null
+  overall_grade: string          // carding only; always shown WITH the decomposition + quality axis
+  overall_score: number          // 0-100 composed fit = floor + (1-floor)*match
   verdict_sentence: string
-  dimensions: FitDimension[]
+  quality: FitQualityAxis        // SEPARATE axis (never folded into match)
+  dimensions: FitDimension[]     // need (w/ breakdown) + style + line
+  need_breakdown: FitComponentNeed[]
   player_archetypes: ArchetypeWeightLite[]
-  need_profile?: TeamNeedProfile | null
 }
 export interface MatchupPreviewTeam {
   team_id: number

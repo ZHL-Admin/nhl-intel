@@ -1157,7 +1157,7 @@ class EdgeTeamProfile(BaseModel):
     high_danger_shooting_pct: Optional[float] = None
 
 
-# --- Phase 5: signature tools (Lineup Lab, trade fit, matchup previews) ------
+# --- Phase 5: signature tools (Lineup Lab, player fit, matchup previews) ------
 
 class PlayerSearchResult(BaseModel):
     """A current-roster player returned by /players/search (PlayerPicker)."""
@@ -1293,40 +1293,62 @@ class TradeFitRequest(BaseModel):
     season: Optional[str] = None
 
 
-class FitDimension(BaseModel):
-    """One separately-measured Trade Fit dimension (positional / need / style / line / quality).
+class FitComponentNeed(BaseModel):
+    """One (role x component) cell of the NEED breakdown: how weak the team's own depth is there, and
+    how strongly the player provides it. opportunity = team_need * player_strength."""
+    component: str
+    label: str
+    team_need: float          # 0-1: how weak the team's current depth is at this role+component
+    player_strength: float    # 0-1: the player's within-role percentile in this component
+    opportunity: float        # team_need * player_strength
 
-    `level` is 0-1 for the bar (None = not measurable). `tone` drives colour discipline —
-    'neutral' for a LOW need (not a gap, never red); 'positive' for strength; 'warn' for a genuine
-    stylistic mismatch. `uncertain`/`sd` flag model estimates (line, quality)."""
+
+class FitDimension(BaseModel):
+    """One MATCH dimension of Player Fit (need / style / line). `level` 0-1 for the bar (None = not
+    measurable). `tone`: positive | neutral | warn. `uncertain`/`sd` flag model estimates (line).
+    `breakdown` is populated for NEED (the component-by-role detail)."""
     key: str
     label: str
     level: Optional[float] = None
     value: str = ""
     note: str = ""
-    tone: str = "neutral"          # positive | neutral | warn
+    tone: str = "neutral"
     uncertain: bool = False
     sd: Optional[float] = None
+    breakdown: List[FitComponentNeed] = Field(default_factory=list)
+
+
+class FitQualityAxis(BaseModel):
+    """The player's overall quality — a SEPARATE axis beside fit (it FLOORS fit, never caps it), so
+    'elite player, mediocre fit here' and 'depth player, ideal fit here' both read cleanly."""
+    percentile: Optional[float] = None   # within-position-group overall percentile (drives the floor)
+    war: Optional[float] = None
+    war_sd: Optional[float] = None
+    label: str = ""                      # elite / high-end / solid / depth / below-replacement
+    note: str = ""
 
 
 class TradeFitResult(BaseModel):
-    """Multi-dimension Trade Fit (Phase 5.3 rebuild): a positional gate * weighted need/style/line/
-    quality blend -> a combined letter grade, ALWAYS decomposed into its dimensions. No zero-floor;
-    need is one dimension, not the master score. The verdict notes context the model can't see."""
+    """Player Fit (rebuilt): quality FLOORS fit (never caps); fit = floor + (1-floor)*match where
+    match = weighted(need, style, line). Need is the core and absorbs position (role x component vs the
+    team's OWN depth). The DECOMPOSITION is the product — `dimensions` (need w/ breakdown, style, line)
+    plus `quality` as a separate axis are ALWAYS returned, never a lone grade."""
     player_id: int
     player_name: Optional[str] = None
     team_id: int
     season: str
-    overall_grade: str             # A-F
-    overall_score: float           # 0-100 (decomposable into `dimensions`)
+    role: Optional[str] = None
+    overall_grade: str             # A-F (carding only; always shown WITH the decomposition)
+    overall_score: float           # 0-100 composed fit
     verdict_sentence: str = ""
+    quality: FitQualityAxis = Field(default_factory=FitQualityAxis)
     dimensions: List[FitDimension] = Field(default_factory=list)
+    need_breakdown: List[FitComponentNeed] = Field(default_factory=list)
     player_archetypes: List["ArchetypeWeight"] = Field(default_factory=list)
-    need_profile: Optional[TeamNeedProfile] = None
 
 
 class BestTeamFit(BaseModel):
-    """A team whose gaps a player fills well (Phase 5.3 — Trade Fit 'best teams')."""
+    """A team whose gaps a player fills well (Phase 5.3 — Player Fit 'best teams')."""
     team_id: int
     fit_score: float
     grade: Optional[str] = None
