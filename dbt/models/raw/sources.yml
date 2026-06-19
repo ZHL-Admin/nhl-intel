@@ -82,6 +82,32 @@ sources:
           season) soft archetype memberships from per-position Gaussian mixtures. Names are
           hand-assigned (config.ARCHETYPE_NAMES) from the labeling report.
 
+      - name: player_contract_value
+        description: >
+          Contract surplus (Trade tool P4; models_ml/compute_contract_value.py): one row per matched
+          player on the latest snapshot with projected on-ice value (WAR + market dollars), cap cost,
+          present-valued surplus, a confidence band, and a grounded/proxy tag.
+        columns:
+          - name: player_id
+            description: Canonical NHL player id
+          - name: total_discounted_surplus
+            description: Present value of (market AAV - cap hit) over the remaining years
+          - name: confidence
+            description: high / medium / proxy
+
+      - name: futures_value
+        description: >
+          Prospect + draft-pick value (Trade tool P6; models_ml/compute_futures_value.py): one row
+          per prospect and per pick in the same WAR + dollar currency as contracts. Explicit proxies
+          with wide bands. asset_kind discriminates prospect vs pick.
+        columns:
+          - name: asset_id
+            description: Stable asset key (prospect:<id> or pick:<team>:<year>:R<round>)
+          - name: asset_kind
+            description: prospect | pick
+          - name: player_id
+            description: Player id for a prospect (null for a pick)
+
       - name: contract_player_map
         description: >
           Contract -> canonical player_id resolution (Trade tool P2;

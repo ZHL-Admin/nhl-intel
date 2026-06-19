@@ -1497,3 +1497,51 @@ class GoaliePreview(BaseModel):
     age: Optional[int] = None
     catches: Optional[str] = None
     stats: List[PreviewStat] = Field(default_factory=list)
+
+
+# --- Trade tool: contracts, surplus, and the unified tradeable-asset layer --------------------
+class PlayerContract(BaseModel):
+    """A player's parsed contract + present-valued surplus (Trade tool P3/P4). Every dollar
+    traces to a computed column; the surplus carries a confidence band, never a bare number."""
+    player_id: int
+    as_of_date: Optional[DateType] = None
+    season: Optional[str] = None
+    contract_team: Optional[str] = None
+    cap_hit: Optional[int] = None
+    aav: Optional[int] = None
+    remaining_years: Optional[int] = None
+    expiry_year: Optional[int] = None
+    is_ufa: Optional[bool] = None
+    contract_type: Optional[str] = None
+    # surplus (from player_contract_value); absent if the player has no value row
+    war_now: Optional[float] = None
+    value_war: Optional[float] = None
+    expected_aav_now: Optional[int] = None
+    surplus_current: Optional[int] = None
+    total_discounted_surplus: Optional[int] = None
+    surplus_low: Optional[int] = None
+    surplus_high: Optional[int] = None
+    confidence: Optional[str] = None          # high | medium | proxy
+    is_grounded: Optional[bool] = None
+    match_method: Optional[str] = None        # how the contract resolved to this player_id (auditable)
+
+
+class TradeableAsset(BaseModel):
+    """One row of the unified asset layer (Trade tool P7): a player, prospect, or pick with a
+    common interface — value with a band, cost, surplus, confidence — in one WAR + dollar currency."""
+    asset_id: str
+    asset_type: str                            # player | prospect | pick
+    player_id: Optional[int] = None
+    label: str
+    org_team: Optional[str] = None
+    pos_or_slot: Optional[str] = None
+    value_war: Optional[float] = None
+    value_war_low: Optional[float] = None
+    value_war_high: Optional[float] = None
+    value_dollars: Optional[int] = None
+    cost_dollars: Optional[int] = None
+    surplus_dollars: Optional[int] = None
+    surplus_low: Optional[int] = None
+    surplus_high: Optional[int] = None
+    confidence: Optional[str] = None
+    note: Optional[str] = None                  # e.g. own-picks ownership caveat

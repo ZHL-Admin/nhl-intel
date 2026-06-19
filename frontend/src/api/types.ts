@@ -1134,3 +1134,46 @@ export interface PlayerDeploymentEntry {
   value_rank: number
   n_pool: number
 }
+
+// --- Trade tool: contracts, surplus, and the unified tradeable-asset layer -------------------
+export interface PlayerContract {
+  player_id: number
+  as_of_date?: string | null
+  season?: string | null
+  contract_team?: string | null
+  cap_hit?: number | null
+  aav?: number | null
+  remaining_years?: number | null
+  expiry_year?: number | null
+  is_ufa?: boolean | null
+  contract_type?: string | null
+  war_now?: number | null
+  value_war?: number | null
+  expected_aav_now?: number | null
+  surplus_current?: number | null
+  total_discounted_surplus?: number | null
+  surplus_low?: number | null
+  surplus_high?: number | null
+  confidence?: string | null
+  is_grounded?: boolean | null
+  match_method?: string | null
+}
+
+export interface TradeableAsset {
+  asset_id: string
+  asset_type: 'player' | 'prospect' | 'pick'
+  player_id?: number | null
+  label: string
+  org_team?: string | null
+  pos_or_slot?: string | null
+  value_war?: number | null
+  value_war_low?: number | null
+  value_war_high?: number | null
+  value_dollars?: number | null
+  cost_dollars?: number | null
+  surplus_dollars?: number | null
+  surplus_low?: number | null
+  surplus_high?: number | null
+  confidence?: string | null
+  note?: string | null
+}

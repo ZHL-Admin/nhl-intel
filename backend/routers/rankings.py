@@ -6,8 +6,9 @@ from fastapi import APIRouter, Query
 
 from models.schemas import (
     PowerRatingRow, DeservedStandingRow, ValueRankingRow, CompositeComponent, GAR_LABELS,
-    GOALIE_GAR_LABELS,
+    GOALIE_GAR_LABELS, TradeableAsset,
 )
+from fastapi.concurrency import run_in_threadpool
 from services.bigquery import bq_service
 from services.cache import cache
 
@@ -235,3 +236,29 @@ def merge_value_rows(
     merged = list(skaters) + list(goalies)
     merged.sort(key=key, reverse=True)
     return merged[:limit]
+
+
+# --- Trade tool: contract surplus board (Trade tool P4/P7) -----------------------------------
+def _surplus_sync(order: str, limit: int) -> List[TradeableAsset]:
+    assets = bq_service.get_full_table_id("mart_tradeable_assets")
+    direction = "ASC" if order == "overpaid" else "DESC"
+    rows = bq_service.query(f"""
+        SELECT asset_id, asset_type, player_id, label, org_team, pos_or_slot,
+               value_war, value_war_low, value_war_high, value_dollars, cost_dollars,
+               surplus_dollars, surplus_low, surplus_high, confidence, note
+        FROM {assets}
+        WHERE asset_type = 'player' AND surplus_dollars IS NOT NULL
+        ORDER BY surplus_dollars {direction}
+        LIMIT {int(limit)}
+    """)
+    return [TradeableAsset(**{k: r.get(k) for k in TradeableAsset.model_fields}) for r in rows]
+
+
+@router.get("/surplus", response_model=List[TradeableAsset])
+@cache(ttl=1800)
+async def get_surplus_rankings(
+    order: str = Query("surplus", description="surplus (best value first) | overpaid (worst first)"),
+    limit: int = Query(25, ge=1, le=100),
+) -> List[TradeableAsset]:
+    """Players ranked by present-valued contract surplus (best value, or most overpaid)."""
+    return await run_in_threadpool(_surplus_sync, order, limit)

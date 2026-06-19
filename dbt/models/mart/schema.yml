@@ -263,3 +263,28 @@ models:
         description: How player_id was resolved (auditable)
       - name: match_confidence
         description: high (direct/override) or medium (surname tier)
+
+  - name: mart_tradeable_assets
+    description: >
+      The unified tradeable-asset layer (Trade tool P7): every player, prospect, and draft pick as
+      one row with one interface (asset_id, asset_type, label, org, value+band, cost, surplus,
+      confidence) in the same WAR + dollar currency. Players come from contract surplus; prospects
+      and picks from the futures proxy. A prospect who is also a rostered player appears once (as the
+      player). The grain key is asset_id.
+    columns:
+      - name: asset_id
+        description: Stable key (player:<id> / prospect:<id> / pick:<team>:<year>:R<round>)
+        tests: [not_null, unique]
+      - name: asset_type
+        description: player | prospect | pick
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['player', 'prospect', 'pick']
+      - name: label
+        description: Display name (player/prospect name, or pick label)
+        tests: [not_null]
+      - name: surplus_dollars
+        description: Headline tradeable surplus in dollars (value minus cost)
+      - name: confidence
+        description: high / medium / proxy

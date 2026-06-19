@@ -20,6 +20,7 @@ from models.schemas import (
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
+    PlayerContract,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -1250,3 +1251,42 @@ async def get_player_situational(
         situational_stats.append(stat)
 
     return situational_stats
+
+
+def _player_contract_sync(player_id: int) -> PlayerContract:
+    """Latest contract + present-valued surplus for one player (Trade tool P3/P4)."""
+    contracts = bq_service.get_full_table_id("mart_player_contracts")
+    value = bq_service.get_models_table_id("player_contract_value")
+    rows = bq_service.query(f"""
+        SELECT c.player_id, c.as_of_date, c.season, c.contract_team, c.cap_hit, c.aav,
+               c.remaining_years, c.expiry_year, c.is_ufa, c.contract_type, c.match_method,
+               v.war_now, v.value_war, v.expected_aav_now, v.surplus_current,
+               v.total_discounted_surplus, v.surplus_low, v.surplus_high,
+               v.confidence, v.is_grounded
+        FROM {contracts} c
+        LEFT JOIN {value} v ON c.player_id = v.player_id AND c.as_of_date = v.as_of_date
+        WHERE c.player_id = {int(player_id)}
+        ORDER BY c.as_of_date DESC
+        LIMIT 1
+    """)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No contract on file for this player.")
+    r = rows[0]
+    return PlayerContract(
+        player_id=int(r["player_id"]), as_of_date=r.get("as_of_date"), season=r.get("season"),
+        contract_team=r.get("contract_team"), cap_hit=r.get("cap_hit"), aav=r.get("aav"),
+        remaining_years=r.get("remaining_years"), expiry_year=r.get("expiry_year"),
+        is_ufa=r.get("is_ufa"), contract_type=r.get("contract_type"), match_method=r.get("match_method"),
+        war_now=r.get("war_now"), value_war=r.get("value_war"),
+        expected_aav_now=r.get("expected_aav_now"), surplus_current=r.get("surplus_current"),
+        total_discounted_surplus=r.get("total_discounted_surplus"),
+        surplus_low=r.get("surplus_low"), surplus_high=r.get("surplus_high"),
+        confidence=r.get("confidence"), is_grounded=r.get("is_grounded"),
+    )
+
+
+@router.get("/{player_id}/contract", response_model=PlayerContract)
+@cache(ttl=1800)
+async def get_player_contract(player_id: int) -> PlayerContract:
+    """A player's parsed contract and present-valued surplus (with a confidence band)."""
+    return await run_in_threadpool(_player_contract_sync, player_id)
