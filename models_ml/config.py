@@ -423,3 +423,33 @@ DEPLOYMENT = {
     "DEF_SD_GATE_PCTILE": 0.5,
     "MODEL_VERSION": "deployment_v1",
 }
+
+# ---------------------------------------------------------------------------------------------
+# Trade tool — contract surplus (models_ml/compute_contract_value.py -> nhl_models.player_contract_value)
+# Surplus = market value of a player's PROJECTED on-ice production minus their fixed cap hit, summed
+# over the contract's remaining years and discounted to present value. Every number traces to a
+# computed column (current WAR -> aging projection -> position market curve -> surplus).
+CONTRACT_VALUE = {
+    # Present-value discount applied to each future season's surplus (a win next year is worth less
+    # than a win now: aging risk, injury risk, money's time value). 0.90/yr.
+    "DISCOUNT": 0.90,
+    # Aging: project WAR forward by the per-archetype aging curve (nhl_models.aging_curves, a
+    # points/82 LEVEL by age) used as a RATIO vs the player's current age. Ages outside a curve's
+    # support are clamped to its covered range (no extrapolation past observed aging).
+    "AGE_FALLBACK": {"F": "All Forwards", "D": "All Defensemen"},
+    # Goalies have no aging curve here (curves are skater points/82); hold goalie WAR flat across
+    # remaining years and tag it lower-confidence. Documented gap, revisited when a goalie curve exists.
+    "GOALIE_AGING_FLAT": True,
+    # Market curve: monotone (isotonic) AAV-as-a-function-of-WAR fit PER position group on the
+    # league's matched contracts. Needs a minimum sample; below it, pool all skaters.
+    "MARKET_MIN_N": 60,
+    # A player with no current-season WAR (injured, just called up, too few games) cannot be
+    # grounded: floor their production NEAR REPLACEMENT (war_floor) with a WIDE band and a proxy
+    # tag, never a fabricated point estimate.
+    "REPLACEMENT_WAR": 0.0,      # GAR is above-replacement, so replacement ≈ 0 WAR by construction
+    "PROXY_WAR_BAND": 1.0,       # ± WAR band on a floored (proxy) player — deliberately wide
+    "GROUNDED_MIN_GAMES": 25,    # current-season games to call a WAR estimate "grounded"/high-confidence
+    # Band on grounded players: propagate the GAR war_sd through the projection (± this many SDs).
+    "BAND_SDS": 1.0,
+    "MODEL_VERSION": "contract_value_v1",
+}
