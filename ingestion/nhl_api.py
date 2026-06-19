@@ -262,6 +262,20 @@ def get_player_landing(player_id: str) -> dict:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_prospects(team_abbrev: str) -> dict:
+    """Fetch a team's official prospect list (Trade tool futures layer).
+
+    Source: api-web.nhle.com/v1/prospects/{TEAM}. Returns forwards/defensemen/goalies
+    arrays of the org's controlled prospects (id, name, positionCode, birthDate,
+    height/weight). Bounds the prospect universe to each org's published list.
+    """
+    url = f"{BASE_URL}/v1/prospects/{team_abbrev}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_game_right_rail(game_id: str) -> dict:
     """Fetch the gamecenter right-rail payload for a game.
 

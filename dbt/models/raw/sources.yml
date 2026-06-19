@@ -293,6 +293,41 @@ sources:
           - name: season
             description: Season STRING the snapshot belongs to (e.g. "2025-26")
 
+      - name: raw_prospects
+        description: >
+          Org prospect lists (Trade tool P5; scripts/ingest_futures.py -> /v1/prospects/{TEAM}).
+          One row per prospect, bounded to each team's published list, enriched with draft pedigree
+          (overall pick) from the player landing payload. Dated snapshot (as_of_date + season);
+          birth_date kept as a source string, cast in stg_prospects.
+        columns:
+          - name: player_id
+            description: Canonical NHL player id
+          - name: org_team
+            description: Team abbreviation whose prospect list the player appears on
+          - name: draft_overall
+            description: Overall draft pick number (null if undrafted)
+          - name: as_of_date
+            description: Snapshot date
+
+      - name: raw_draft_picks
+        description: >
+          Future draft picks as tradeable assets (Trade tool P5; scripts/ingest_futures.py). One row
+          per (original_team, draft_year, round). PICK OWNERSHIP IS NOT IN ANY FEED — every pick is
+          assumed to belong to its original team (ownership_source='assumed_own') unless a manual
+          override (models_ml/data/draft_pick_overrides.csv) reassigns it. Known gap, carried in a
+          column not baked in silently. Dated snapshot (as_of_date + season).
+        columns:
+          - name: draft_year
+            description: Draft year the pick is for
+          - name: round
+            description: Draft round (1-7)
+          - name: original_team
+            description: Team whose native pick this is
+          - name: owner_team
+            description: Team assumed/known to control the pick
+          - name: ownership_source
+            description: assumed_own (default) or override (from the manual file)
+
       - name: raw_ppt_replay
         description: >
           ppt-replay goal tracking, one row per (game_id, event_id) goal. Real per-frame

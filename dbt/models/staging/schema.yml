@@ -466,3 +466,45 @@ models:
         description: True if the contract expires to unrestricted free agency
       - name: is_elc
         description: True for entry-level contracts
+
+  - name: stg_prospects
+    description: >
+      Typed org prospect lists (Trade tool P5), one row per prospect on the latest snapshot with
+      draft pedigree (overall pick) and a computed age. Bounded to org lists.
+    columns:
+      - name: player_id
+        description: Canonical NHL player id
+        tests: [not_null, unique]
+      - name: org_team
+        description: Team whose prospect list the player is on
+        tests: [not_null]
+      - name: pos_group
+        description: F / D / G
+        tests:
+          - accepted_values:
+              values: ['F', 'D', 'G']
+      - name: draft_overall
+        description: Overall draft pick (null if undrafted)
+      - name: as_of_date
+        description: Snapshot date
+        tests: [not_null]
+
+  - name: stg_draft_picks
+    description: >
+      Future draft picks as tradeable assets (Trade tool P5), one row per (owner_team, draft_year,
+      round) on the latest snapshot. ownership_source flags the own-picks assumption.
+    columns:
+      - name: draft_year
+        description: Draft year
+        tests: [not_null]
+      - name: round
+        description: Draft round 1-7
+        tests: [not_null]
+      - name: owner_team
+        description: Team assumed/known to control the pick
+        tests: [not_null]
+      - name: ownership_source
+        description: assumed_own or override
+        tests:
+          - accepted_values:
+              values: ['assumed_own', 'override']
