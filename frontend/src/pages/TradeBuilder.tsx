@@ -7,7 +7,7 @@
  * verdict is a per-team decomposition (talent / cost-efficiency / fit) — never a single grade.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, RotateCcw, Loader2 } from 'lucide-react'
 import { PageLayout, PageHeader, Select, SkeletonLoader } from '../components/common'
 import { TradeableAsset, TradeEvaluateRequest, TradeEvaluateResponse } from '../api/types'
 import { DIVISIONS, getTeamName } from '../utils/teams'
@@ -126,7 +126,15 @@ export default function TradeBuilder() {
               />
             </div>
           )}
-          <span className="trade-builder__teamcount">{teams.length} teams</span>
+          <span className="trade-builder__teamcount">{teams.length} teams · {items.length} assets</span>
+          {loading && result && (
+            <span className="trade-builder__updating"><Loader2 size={13} className="spin" /> Evaluating…</span>
+          )}
+          {(items.length > 0 || teams.length > 2) && (
+            <button className="trade-builder__reset" onClick={() => { setItems([]); setTeams([ALL_TEAMS[0].id, ALL_TEAMS[1].id]) }}>
+              <RotateCcw size={14} /> Reset
+            </button>
+          )}
         </div>
 
         {error && <p className="trade-builder__error">{error}</p>}

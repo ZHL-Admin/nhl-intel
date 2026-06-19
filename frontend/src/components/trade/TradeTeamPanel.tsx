@@ -31,7 +31,7 @@ function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, 
   const isPlayer = a.asset_type === 'player' && a.player_id != null
   const dstAbbrev = item.toTeam != null ? getTeamAbbrev(item.toTeam) : null
   return (
-    <div className={`asset-chip asset-chip--${a.asset_type}`}>
+    <div className={`asset-chip asset-chip--${a.asset_type}${item.toTeam == null ? ' asset-chip--unassigned' : ''}`}>
       <div className="asset-chip__id">
         {a.asset_type === 'player' && a.player_id
           ? <PlayerAvatar id={a.player_id} team={a.org_team} name={a.label} size={30} />
@@ -71,6 +71,7 @@ function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, 
                     ...dests.map((t) => ({ value: String(t), label: getTeamName(getTeamAbbrev(t)) }))]}
           onChange={(v) => v && onSetDestination(a.asset_id, Number(v))}
         />
+        {item.toTeam == null && <span className="asset-chip__needs">needs a destination</span>}
       </div>
 
       {isPlayer && (retentionAllowed ? (

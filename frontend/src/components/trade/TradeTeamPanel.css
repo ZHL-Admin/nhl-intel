@@ -32,6 +32,10 @@
 .asset-chip--player  { border-left-color: var(--color-accent); }
 .asset-chip--prospect { border-left-color: var(--color-data-positive); }
 .asset-chip--pick    { border-left-color: var(--color-warning); }
+.asset-chip--unassigned { border-style: dashed; }
+.asset-chip__needs {
+  font-size: var(--text-xs); color: var(--color-warning); font-style: italic; white-space: nowrap;
+}
 
 .asset-chip__id { display: flex; align-items: center; gap: var(--space-2); }
 .asset-chip__badge {

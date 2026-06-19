@@ -91,6 +91,13 @@ export function TeamDecomposition({ result, domains }: { result: TeamTradeResult
         </span>
       </div>
 
+      {t.incoming.length > 0 && (
+        <p className="trade-verdict__acquires">
+          <span className="trade-verdict__acquires-lbl">Acquires</span>
+          {t.incoming.map((p) => p.label).join(', ')}
+        </p>
+      )}
+
       <Axis label="Talent" total={t.talent_delta_war} se={talentSe} domain={domains.talent}
         valueText={`${fmtWar(t.talent_delta_war)} WAR`}
         sub={fmtWarBand(t.talent_delta_war_low, t.talent_delta_war_high)
