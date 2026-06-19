@@ -1682,3 +1682,5 @@ class TradeEvaluateResponse(BaseModel):
     teams: List[TeamTradeResult] = Field(default_factory=list)
     summary: List[TradeSummaryLine] = Field(default_factory=list)
     caveats: List[str] = Field(default_factory=list)
+    # Reference-cap basis for EVERY dollar figure in this response (projected-cap PV, not today's $).
+    dollar_basis: Optional[str] = None

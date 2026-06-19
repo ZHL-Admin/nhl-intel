@@ -23,6 +23,11 @@ from models_ml import config
 MAX_RETAINED_PCT = 0.50
 MAX_RETAINED_CONTRACTS = 3
 CAP_CAVEAT = "Approximate: sums cap hits only; LTIR, bonuses, and roster size are not modeled."
+# Every displayed dollar value/surplus is present-valued across a deal's remaining term using the
+# PROJECTED (rising) cap each season, so long-deal dollars are larger than today's-cap dollars.
+DOLLAR_BASIS = ("Dollar figures are present value across each contract's remaining term in projected-cap "
+                "dollars (the cap rises each season: $95.5M in 2025-26, $104.0M in 2026-27, and onward); "
+                "they are NOT today's 2025-26 dollars. Cap-share is the era-neutral efficiency lens.")
 
 
 def _season() -> str:
@@ -366,8 +371,10 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
 
     summary = _finalize(teams)
     caveats = [
+        DOLLAR_BASIS,
         "Cap compliance is approximate (cap hits only; no LTIR, bonuses, or roster size).",
         "Prospect and pick values are wide-band proxies; bands widen confidence on those sides.",
         "Talent, cost-efficiency, and fit are separate axes — read the decomposition, not one number.",
     ]
-    return {"season": season, "teams": teams, "summary": summary, "caveats": caveats}
+    return {"season": season, "teams": teams, "summary": summary, "caveats": caveats,
+            "dollar_basis": DOLLAR_BASIS}
