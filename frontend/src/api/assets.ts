@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { TradeableAsset, PlayerContract } from './types'
+import { TradeableAsset, PlayerContract, TradeEvaluateRequest, TradeEvaluateResponse } from './types'
 
 /**
  * Trade tool access layer (P7). Searches the unified tradeable-asset layer (players, prospects,
@@ -41,5 +41,11 @@ export async function getTalentRankings(
   limit = 25,
 ): Promise<TradeableAsset[]> {
   const r = await apiClient.get<TradeableAsset[]>('/rankings/talent', { params: { type, limit } })
+  return r.data
+}
+
+/** Evaluate a proposed multi-team trade -> per-team talent/surplus/fit/cap decomposition. */
+export async function evaluateTrade(req: TradeEvaluateRequest): Promise<TradeEvaluateResponse> {
+  const r = await apiClient.post<TradeEvaluateResponse>('/tools/trade-evaluate', req)
   return r.data
 }

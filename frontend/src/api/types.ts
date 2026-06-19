@@ -1202,6 +1202,90 @@ export interface TradeableAsset {
   surplus_dollars?: number | null
   surplus_low?: number | null
   surplus_high?: number | null
+  surplus_capshare?: number | null
   confidence?: string | null
   note?: string | null
+}
+
+// --- Trade engine (POST /tools/trade-evaluate) — mirrors docs/methodology/trade-engine.md --------
+export interface AssetMovement { asset_id: string; from_team_id: number; to_team_id: number }
+export interface RetentionElection { player_id: number; retaining_team_id: number; retained_pct: number }
+export interface TradeEvaluateRequest {
+  team_ids: number[]
+  movements: AssetMovement[]
+  retentions?: RetentionElection[]
+  season?: string | null
+}
+
+export interface AssetValuePart {
+  asset_id: string
+  asset_type: 'player' | 'prospect' | 'pick'
+  label: string
+  direction: 'in' | 'out'
+  value_war?: number | null
+  value_war_low?: number | null
+  value_war_high?: number | null
+  surplus_dollars?: number | null
+  surplus_capshare?: number | null
+  confidence?: string | null
+  note?: string | null
+}
+
+export interface FitDetail {
+  player_id: number
+  player_name?: string | null
+  fit_score?: number | null
+  grade?: string | null
+  summary?: string | null
+}
+
+export interface CapImpact {
+  committed_before?: number | null
+  cap_hit_change?: number | null
+  committed_after?: number | null
+  ceiling?: number | null
+  margin?: number | null
+  over_cap?: boolean | null
+  approximate: boolean
+  caveat: string
+}
+
+export interface TeamTradeResult {
+  team_id: number
+  team_abbrev?: string | null
+  // talent (WAR + band)
+  talent_delta_war?: number | null
+  talent_delta_war_low?: number | null
+  talent_delta_war_high?: number | null
+  // cost-efficiency (dollars + cap-share, each + band)
+  surplus_delta_dollars?: number | null
+  surplus_delta_dollars_low?: number | null
+  surplus_delta_dollars_high?: number | null
+  surplus_delta_capshare?: number | null
+  surplus_delta_capshare_low?: number | null
+  surplus_delta_capshare_high?: number | null
+  // fit
+  fit_delta?: number | null
+  fit_details: FitDetail[]
+  // soft cap
+  cap?: CapImpact | null
+  confidence?: string | null
+  incoming: AssetValuePart[]
+  outgoing: AssetValuePart[]
+  summary?: string | null
+}
+
+export interface TradeSummaryLine {
+  team_id: number
+  team_abbrev?: string | null
+  headline?: string | null
+  gains: string[]
+}
+
+export interface TradeEvaluateResponse {
+  season?: string | null
+  teams: TeamTradeResult[]
+  summary: TradeSummaryLine[]
+  caveats: string[]
+  dollar_basis?: string | null
 }

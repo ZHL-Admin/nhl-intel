@@ -129,6 +129,14 @@ export function getTeamColor(teamAbbrev: string): string {
   return TEAM_COLORS[teamAbbrev] || 'var(--color-accent)'
 }
 
+/** Stable franchise id -> abbreviation (from the division alignment). */
+const TEAM_ID_TO_ABBREV: Record<number, string> = Object.fromEntries(
+  DIVISIONS.flatMap((d) => d.teams).map((t) => [t.id, t.abbrev]),
+)
+export function getTeamAbbrev(teamId: number): string {
+  return TEAM_ID_TO_ABBREV[teamId] || String(teamId)
+}
+
 /**
  * Get team color with wash treatment for large background areas.
  * Uses 10% team color mixed with page background for subtle tints.
