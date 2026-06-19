@@ -1,108 +1,121 @@
-# Trade Fit — multi-dimension fit
+# Player Fit — quality floors fit, need is the core
 
-"Fit" is not one number. The original tool scored fit as a single cosine of the player's
-profile against the team's *need* vector (positive gaps only), floored at 0. That collapsed
-three different questions into one and produced a now-famous bug: **a defenseman who addresses a
-defensive need at a defense-STRONG team scored ~0** — position was never a term, and a surplus
-team's need vector was empty exactly where the player was strong, so the cosine went to zero.
+"Fit" answers one question: **how well does a player's profile serve a team?** It is deliberately
+**separate from how good the player is.** The previous versions of this tool made talent the master
+term — a single cosine, then a quality-weighted blend — so player quality acted as a *ceiling* on
+fit. That is backwards. A low-value specialist who matches a team's exact hole should be able to
+score a high fit, and an elite player should never be capped or rated a poor fit.
 
-The rebuild measures fit on **five separate dimensions**, shows them all, and combines them into a
-single letter grade that is *always* decomposable into its parts (the same discipline as the
-player-card Overall). `models_ml/score_team_fit.py` → `POST /tools/trade-fit`.
+This rebuild makes **quality a FLOOR, never a cap**, and makes **need the core of the match**. The
+model lives in `models_ml/score_team_fit.py` (→ `POST /tools/trade-fit`); team needs are precomputed
+by `models_ml/compute_team_needs.py` (→ `nhl_models.team_needs`).
 
-## The five dimensions
+## The composition
 
-Each is a real spectrum in [0, 1]. **None floors at 0 for a relevant player**, and there is no
-`max(0, …)` clamp on the cosine anywhere.
-
-1. **Positional fit (the gate).** Does the player's position + handedness + role slot into the
-   team? Every NHL team ices forwards and defensemen, so any skater starts from a high base
-   (0.82), nudged ±0.12 by the team's handedness balance at his position (a right-shot D is worth
-   more to a team light on right-shot D). The result is **bounded in `[GATE_FLOOR=0.55, 1]`** and
-   *multiplies* the blend below — so a positionally-relevant player can **never** be zeroed.
-2. **Need fit — an asymmetric ADDITIVE bonus, not an averaged term.** The team's `team_needs`
-   gap, **weighted by where the player provides value** (his composite-component profile). Need is
-   **not** blended into the base score; it is added on top (see *Combined headline*): a real gap
-   adds up to `NEED_BONUS_MAX = 0.12`, while a surplus / no gap adds **exactly 0**. So need can
-   only **help** — it never drags a score down. (The breakdown still shows a Need *level*
-   `max(NEED_FLOOR, sigmoid(gap/SCALE))` for the bar, but that display value no longer enters the
-   score.) This fixes the prior structure where need was a 4th averaged, floored term: a top-5
-   player going to a team already strong at his position was mathematically *demoted* purely for
-   the absence of a gap, which is wrong — a great player is a great add regardless of need.
-3. **Style fit.** Does the player generate offense the way the team does? The comparable axis is
-   the **rush-vs-(forecheck/cycle) orientation** — each entity's own balance (a within-entity
-   ratio), which sidesteps the player-percentile-within-position vs team-percentile-within-league
-   scale mismatch. A transition/rush creator into a rush team fits; into a grind-it-out cycle team
-   it's a partial mismatch; a balanced team reads neutral. Reuses `mart_team_identity`.
-4. **Line fit.** Would he improve the line/pair he'd slot into? We take the team's current top
-   unit for his position over its last 10 games, swap him in for the lowest-WAR member, and project
-   with the line-fit model (`score_line`). A model estimate — it carries its interval as softness.
-5. **Player quality.** His actual level — WAR percentile within position (+ RAPM impact). A good
-   fit who is also good matters more than a good fit who is mediocre. Carries the WAR band.
-
-## Combined headline
-
-The score is a player-and-fit **base** (gated by positional relevance) plus an asymmetric **need
-bonus**:
+Everything is on a 0–1 scale.
 
 ```
-base          = weighted_avg(quality, line, style)          # talent-dominant; n/a dims renormalise
-gated_base    = positional_gate × base                      # gate ∈ [0.55, 1]
-need_bonus    = NEED_BONUS_MAX × max(0, 2·sigmoid(gap/SCALE) − 1)   # ∈ [0, 0.12]; 0 for a surplus
-overall       = clamp(gated_base + need_bonus, 0, 1)
+match = weighted(need, style, line)                  # how well he MATCHES the team
+floor = FLOOR_CAP × overall_quality_percentile       # talent floors fit, never caps it
+fit   = floor + (1 − floor) × match                  # match drives the upside, UNCAPPED
 ```
 
-with base weights `quality 0.45 / line 0.30 / style 0.25` (quality dominant — talent is good
-regardless of need; line is the most concrete value-in-context; style third). `NEED_BONUS_MAX =
-0.12` is large enough that filling a real hole visibly lifts the grade (≈ a B→A- bump) yet small
-enough it can **never rescue a bad player** (0.30 base + 0.12 = 0.42 is still C/D). The 0-1 score
-maps to a letter via `GRADE_BANDS` (**A ≥ 0.70, B ≥ 0.56, C ≥ 0.42, D ≥ 0.30, else F** — re-tuned
-to the post-change distribution, which removing the need drag lifted; see *Validation*). All
-constants live in `config.TRADE_FIT`.
+- **`match`** is the weighted blend of the three match dimensions, weights
+  `config.TRADE_FIT["MATCH_WEIGHTS"]` = **need 0.55 / style 0.20 / line 0.25** (need is the core).
+  Renormalises over whatever dimensions are available.
+- **`floor = FLOOR_CAP × quality_pctile`**, `FLOOR_CAP = 0.55`. The quality percentile is the
+  player's within-position-group **Overall** (`nhl_models.player_overall`, goalies
+  `goalie_overall`), the same number the player card shows. An elite player (pctile ≈ 1.0) floors at
+  ≈ 0.55 → he is **never** a poor fit anywhere; a depth player (pctile ≈ 0.1) floors ≈ 0.06 → his
+  fit is driven almost entirely by whether he matches.
+- **`fit = floor + (1 − floor) × match`**. With `match → 1`, fit → 1 regardless of talent, so a
+  need-serving specialist can grade high; with `match` low, fit falls back toward the floor, so a
+  star still lands respectably. Quality only ever *raises the floor*.
 
-Need is **asymmetric**: a big gap is a large positive, low need is **neutral** (no bonus, no
-penalty). Because the gate ≥ 0.55 and quality dominates the base, **the headline never reads 0/F
-for a positionally-relevant contributor**, and a great player to a team with no gap still grades A
-(talent carries; the missing need simply adds nothing). A *below-replacement* player still grades
-F — correctly, he is not a contributor, and no amount of need rescues him.
+**Quality is exposed as its own axis** beside fit (`quality`: percentile, WAR, label), never folded
+into `match`. The readout therefore shows both, independently: *"elite player, mediocre fit here"* or
+*"depth player, ideal fit here."* Neither masks the other.
 
-The `verdict_sentence` is deterministic, names the tangible drivers, and **explicitly states the
-model can't see injury / cap / roster context** so the user integrates it. The grade is always
-rendered *with* the five dimensions beneath it — the decomposition is the product; the grade is the
-glance.
+A letter grade is derived from the composed fit (`GRADE_BANDS`) for carding only — the API and UI
+**always** render the full decomposition plus the quality axis, never a lone grade.
 
-## Why these design choices
+## The three match dimensions
 
-- **Need is an asymmetric bonus, not an averaged term.** Need is *relative to talent*, not a flat
-  contributor to a mean. Averaging it in (the old structure) dragged every low-need trade toward the
-  floor, so a top-5 player to a team strong at his position scored *lower* than the identical player
-  to a needy team — penalising the absence of a gap. As an additive bonus, filling a hole is upside
-  and low need is neutral: a great player is a great add regardless of need.
-- **Bonus capped so it can't rescue a bad player.** `NEED_BONUS_MAX = 0.12` lifts a real-need fit by
-  about one grade step but cannot turn a below-average player into a good fit (validated below).
-- **Quality dominates the base.** Talent is the largest base weight (0.45); when a grade is held
-  down it's attributed to the player's value, not to a lack of need (the verdict says so).
-- **Colour discipline (UI).** Low need uses a neutral tone, never red — low need is "not a gap,"
-  not a failure. A genuine stylistic mismatch is amber-orange, not red.
+### 1. Need — the core (it absorbs position)
+
+Position is **not** a separate dimension; it is the **role axis of need**. `compute_team_needs.py`
+measures, for every team, its current depth strength at each **(role × component)** and benchmarks it
+against the **team's own league standing**, not the league's top teams (the old top-8 benchmark is
+gone):
+
+- **Roles**: `C` / `W` (wings) / `D` for skaters, `G` for goalies.
+- **Components**: even-strength offense, even-strength defense, power play, penalty kill, finishing
+  (skaters, from `nhl_models.player_composite`); goaltending (goalies, from composite GSAx).
+- `team_strength[role][component]` = the **sum** of that composite component over the team's current
+  players at that role (the sum captures both quality *and* depth — several good centers sum high,
+  one good center and scrubs sums low).
+- `need = 1 − league_percentile` of that strength across the 32 teams at the same (role, component):
+  **weak own depth → high need.**
+
+A candidate scores need only at **his own role**, so a center is measured against the team's center
+depth — position is absorbed. Per component, `opportunity_c = team_need_c × player_strength_c`
+(the team is weak there **and** the player is strong there; `player_strength_c` is his percentile in
+that component *within his role*). The dimension blends the single best opportunity with breadth:
+
+```
+need_score = NEED_PRIMARY_W · max_c(opportunity_c) + (1 − NEED_PRIMARY_W) · mean_c(opportunity_c)
+```
+
+`NEED_PRIMARY_W = 0.7` — the `max` term rewards a **specialist** who nails the team's biggest hole;
+the `mean` term rewards an **all-rounder** who addresses several. **Handedness** is a small modifier
+*inside* need (bump if the team is short the player's shot at his position, trim if over-supplied;
+bounded by `HAND_MOD`), not a separate dimension. The API returns the full **component-by-role
+breakdown** (`need_breakdown`): each component's team-need beside the player's strength.
+
+This is what makes the four behaviors hold: a strong player at a team **already deep** at his role
+scores **low** need (their depth strength is high → need low), so a star's fit genuinely varies by
+destination; a specialist strong in the one component a team lacks scores **high** need regardless of
+his overall value.
+
+### 2. Style
+
+The player's **rush-vs-(forecheck/cycle) orientation** (a within-entity ratio, from the radar) vs
+the team's identity orientation (`mart_team_identity`). `level = 1 − |player_lean − team_lean|`. A
+**match** of generation style, not a magnitude — it does not scale with the player's value.
+
+### 3. Line — complementarity, not magnitude
+
+The player is slotted into the team's current top unit for his role (replacing the lowest-WAR
+member) and projected with the line-fit model (`score_line`). The dimension is the **complementarity**
+signal only: the sum of the model's **pairwise** feature contributions (archetype overlap, shot-
+location variety, handedness balance, pace spread, territorial tilt), mapped through a sigmoid
+(`LINE_COMP_SCALE`; 0.5 = neutral). The member-level contributions — which carry each player's
+*individual* quality — are deliberately **excluded**, so line measures how the pieces fit together,
+not how good the incoming player is (that already lives in the floor). A higher pairwise contribution
+can mean *complementary* (varied roles / shot locations) rather than *similar*; the model learned the
+direction from real line outcomes, so complementary pairs are credited where the data supports it.
+
+## Goalies
+
+Goalies take a simplified path: **need only** (the team's goaltending weakness × the goalie's quality
+percentile), the **same quality floor**, and the **separate quality axis** — no skater style or line
+dimension. The skater framework is not forced onto them.
 
 ## Validation (`models_ml/validate_trade_fit.py`)
 
-The script prints the decomposition (gate, base, need_bonus, final, grade) per case and asserts the
-asymmetry. The must-hold property: **low need never lowers a grade (bonus ≥ 0); need can only help;
-a bad player is never rescued by need alone.** Results (2025-26):
+`make trade-fit-validate` asserts the four behaviors hold **at once** for 2025-26:
 
-| case | gated_base | need_bonus | final | grade | the point |
-|---|---|---|---|---|---|
-| Top-5 (McDavid) → **strong / low-need** team | 0.746 | **+0.00** | 0.746 | **A** | the key test — talent carries, no gap adds nothing and does **not** penalise |
-| Top-5 (McDavid) → **big-need** team | 0.741 | +0.077 | 0.818 | **A** | same player, real hole → a bonus on top (the highest grade) |
-| Below-avg D (Kesselring) → ANA (low need) | 0.452 | +0.00 | 0.452 | **C** | elite line/style fit, **dragged only by below-average value** — not D, and need doesn't drag it |
-| Mediocre D → big-need team | 0.411 | +0.079 | 0.491 | **C** | the bonus lifts a middling player a step, but can't make him good |
-| Bad D → low-need team | 0.233 | +0.00 | 0.233 | **F** | bad player, no help |
-| Bad D → **big-need** team | 0.202 | +0.072 | 0.274 | **F** | full need bonus **cannot rescue** a below-replacement player |
+1. **A low-value specialist scores a high fit for the need he serves** — uncapped by his low quality.
+2. **A star's fit varies meaningfully across teams** (not pinned high everywhere).
+3. **A star is never a poor fit anywhere** — the floor holds (worst destination ≥ the B band).
+4. **A low-value player nobody needs scores low.**
 
-The asymmetry is confirmed: removing the need bonus never raises a grade (it's ≥ 0), low/no need
-contributes exactly 0, and need-driven lift can never carry a bad player to a good grade.
+Representative 2025-26 reads: McDavid → MTL (thin at center even-strength offense, his exact strength)
+grades **A (≈ 90)**; McDavid → CAR (deep down the middle) falls to **B (≈ 75)** on low need — a ~19
+point spread across the league with the floor never breached. Quality is reported beside fit in every
+case, so "elite player, weak fit here" reads honestly.
 
-No dimension floors at 0 inappropriately, no `max(0,)` clamp remains, and the headline never reads
-0/F for a positionally-relevant contributor. RAPM / GAR / composite / archetype-v2 are reused, not
-retrained.
+The fit term also feeds the trade engine's fit overlay (`backend/services/trade_engine.py`,
+`_fit`), which is re-validated by `make trade-engine-validate` after any change here.
+
+All constants live in `config.TRADE_FIT`.

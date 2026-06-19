@@ -47,7 +47,7 @@ is the single source for player labels. docs/methodology/{archetypes.md (v2 sect
 `player_archetypes` (or `player_radar` labels via getPlayerLabels). `team_needs` regenerated on v2.
 **Two deferred-to-Phase-6 items:** (1) ConceptTip per radar spoke — SkillRadar currently uses its
 own hover tooltip; retrofit ConceptTip in 6.3. (2) list surfaces (PlayerPicker chip, Players index,
-line/trade fit) read the offensive sub-label from their batch payloads (same v2 source, no drift,
+line/player fit) read the offensive sub-label from their batch payloads (same v2 source, no drift,
 no N+1) rather than calling getPlayerLabels per row — intentional.
 
 **Build/regenerate cadence:** `make archetypes-v2` (refit+write), `make radar` (both radars).
@@ -591,7 +591,7 @@ Olympic games to national team_ids — clean those the same way during Phase 4 i
   labels, depth-3 member table, limitations footer), **LineSwapWidget** (components/common).
   /tools index + /tools/lineup-lab (lazy-loaded via React.lazy/Suspense in App.tsx). LineSwapWidget
   embedded on TeamProfile **Lines tab**. NavBar Tools link. tsc + build green.
-- **5.3 Trade fit + matchup previews (COMPLETE, validated; commit 956d013).**
+- **5.3 Player fit + matchup previews (COMPLETE, validated; commit 956d013).**
   - `models_ml/compute_team_needs.py` -> **nhl_models.team_needs** (long format: team_id, season,
     need_type archetype|component, key, label, team_value, reference_value, gap=ref-team). Team
     archetype mix = TOI-weighted player mixes; component totals = summed composite; reference =
@@ -781,7 +781,7 @@ carrying huge bands. Fixed at the ROOT (shrink) + PRESENTATION (confidence sort 
   consolidated toolbar card to match the Player-Rankings tab. `DeploymentBoard` now takes `situation`
   as a controlled prop; `DEPLOYMENT_SITUATIONS` exported as the single source.
 
-## VALUE PART 4 — Trade Fit rebuilt as MULTI-DIMENSION fit
+## VALUE PART 4 — Player Fit rebuilt as MULTI-DIMENSION fit
 Old tool = single cosine(player-profile, team need-vector) with positive-gaps-only + cosine floored
 at 0 → a D addressing a defensive need at a defense-STRONG team scored ~0 (position was never a term;
 a surplus team's need vector was empty where the player was strong). **Rebuilt** (`score_team_fit.py`
@@ -803,9 +803,42 @@ a surplus team's need vector was empty where the player was strong). **Rebuilt**
   dimensions[]); `BestTeamFit` gains `grade`; `best_team_fits` is a lightweight no-line variant.
 - FE `TradeFit.tsx`: headline card (grade + verdict) + 5 decomposed dimension rows (label · level bar
   + tangible-driver note · value); colour discipline (low-need amber, mismatch orange, never red);
-  model-estimate softness band on line/quality. docs/methodology/trade-fit.md. **No retrain** of
+  model-estimate softness band on line/quality. docs/methodology/player-fit.md. **No retrain** of
   RAPM/GAR/composite/archetype. tsc+build+pytest(6)+dbt compile green.
 - **Gotcha this session:** the harness temp fs (`/private/tmp/claude-501/.../tasks`) kept hitting
   ENOSPC, swallowing Bash stdout — route long output to a repo file and Read it. Also a parallel
   agent's `SkillRadar.tsx` compact-mode work left an unused-var that blocked the build; removed it in
   the working tree (left unstaged for that change's owner).
+
+## PLAYER FIT REBUILD (v3 — supersedes VALUE PART 4 above; quality FLOORS fit, never caps)
+Re-architected from first principles: quality was still acting as a *ceiling* (a quality-weighted
+blend). Now **quality FLOORS fit, never caps it**, and **need is the core** (it absorbs position).
+- **Composition** (`models_ml/score_team_fit.py`): `match = weighted(need .55 / style .20 / line .25)`;
+  `floor = FLOOR_CAP(0.55) * overall_quality_pctile`; `fit = floor + (1-floor)*match`. So match drives
+  the upside UNCAPPED (a need-serving specialist can grade high) and talent only raises the floor (a
+  star is never a poor fit). **Quality is a SEPARATE axis** in the payload, never folded into match.
+  The positional gate and the quality-weighted dimension are GONE.
+- **Need by component-and-role vs OWN depth** (`models_ml/compute_team_needs.py` → `team_needs`
+  **team_needs_v2**, 480 rows): role (C/W/D/G) × component (EV off/def, PP, PK, finishing; goaltending
+  for G). `team_strength = Σ composite component over the team's players at that role`;
+  `need = 1 - league_pctile`. Replaces the top-8 benchmark. `opp_c = team_need_c × player_strength_c`
+  (within-role pctile); `need_score = 0.7·max(opp) + 0.3·mean(opp)` (specialist + breadth). Handedness
+  is a small modifier inside need. **Finishing is EXCLUDED for D** (tiny shrunk sample → noise that
+  spiked lucky-goal depth-D need). Position is absorbed — a center scores vs the team's center depth.
+- **Line = complementarity** (talent-independent): sum of the line model's PAIRWISE pred_contribs
+  (arch overlap, shot-loc variety, handedness, pace spread, tilt) via sigmoid, NOT the absolute xGF.
+- **Goalies**: need-only (goaltending depth × goalie quality) + the same floor; no style/line.
+- **Surface**: `TradeFitResult` now carries `quality` (FitQualityAxis), `dimensions` (need w/
+  `breakdown`, style, line), `need_breakdown`, `role` — kept `overall_grade/score/verdict` for the
+  trade engine. FE `TradeFit.tsx`: TWO axes (Fit grade+score | Quality pctile/label) side by side,
+  then the decomposition with the need component-by-role breakdown bars. docs/methodology/player-fit.md
+  rewritten.
+- **Validated** (`make trade-fit-validate`, 2025-26, ALL FOUR hold): specialist Mikheyev (depth, 44th)
+  → A 80.2 at PK-needy WSH; McDavid varies A 89.8 (MTL) → B 75.3 (CAR), floor never breached (min 74.5
+  ≥ B); Chiarot (below-replacement) → F 38.6 even at his best team; goalie Swayman → A 95.2 at
+  goalie-needy VGK. Trade engine re-validated (`make trade-engine-validate`) — fit overlay reads sane,
+  shape unchanged. pytest 15 / tsc / dbt compile green. **No retrain** of RAPM/GAR/composite/archetype.
+- **Ops**: `team_needs` schema changed → re-export to the serving file after recompute
+  (`python -m scripts.export_to_duckdb --only team_needs`; needs the backend stopped to unlock duckdb).
+  Validation runs FAST in `SERVING_BACKEND=duckdb` (line_member_features precomputed); compute mode is
+  slow (live feature build). DuckDB gotcha: `position` is reserved — never use it as an output alias.

@@ -1,167 +1,159 @@
-"""Validation for Trade Fit: NEED is an asymmetric ADDITIVE bonus, not an averaged term.
+"""Validation for the rebuilt Player Fit: quality FLOORS fit (never caps), need is the core.
 
-Prints, per case, the score decomposition (gate, base, need_bonus, final, grade) and asserts the
-asymmetry must-holds:
-  - low need NEVER lowers the grade vs the same trade with the need bonus removed (bonus >= 0);
-  - need can only help; a bad player can never be rescued to a good grade by need alone;
-  - a top-5 player to a team ALREADY STRONG at his position still grades A (talent carries; low
-    need adds nothing but does not penalise).
-Also prints the score distribution over a sample so the GRADE_BANDS can be tuned to it.
+The four behaviors that must ALL hold at once (blueprint of this rebuild):
+  1. A low-value SPECIALIST scores a HIGH fit for the need he serves — uncapped by his low quality.
+  2. A STAR's fit VARIES meaningfully across teams (it is not pinned high everywhere).
+  3. A STAR is NEVER rated a poor fit anywhere — the quality floor holds.
+  4. A low-value player nobody needs scores LOW.
 
-Run (fast, against the serving file):  SERVING_BACKEND=duckdb python -m models_ml.validate_trade_fit
+Prints the decomposition (quality axis + need/style/line) per case and asserts the four properties.
+
+Run:  python -m models_ml.validate_trade_fit              (compute mode, against BigQuery)
+      SERVING_BACKEND=duckdb python -m models_ml.validate_trade_fit   (fast, against the serving file)
 """
 from __future__ import annotations
 
-import statistics
-
 from models_ml import bq, config
-from models_ml.score_team_fit import score_team_fit, _need_bonus
+from models_ml.score_team_fit import score_team_fit, best_team_fits
 
 CFG = config.TRADE_FIT
+B_FLOOR = dict(CFG["GRADE_BANDS"])["B"]   # the "good fit" threshold (B band floor)
+C_FLOOR = dict(CFG["GRADE_BANDS"])["C"]
 
 
 def _season() -> str:
+    return bq.query_df(f"select max(season) s from `{bq.project()}.nhl_models.team_needs`").iloc[0]["s"]
+
+
+def _elite_skater(season: str) -> int:
+    return int(bq.query_df(f"""select player_id from `{bq.project()}.nhl_models.player_gar`
+        where season_window='{season}' and position in ('C','L','R') order by war desc limit 1""").iloc[0]["player_id"])
+
+
+def _bad_skater(season: str) -> int:
+    return int(bq.query_df(f"""select player_id from `{bq.project()}.nhl_models.player_gar`
+        where season_window='{season}' and toi_5v5>=600 order by war asc limit 1""").iloc[0]["player_id"])
+
+
+def _specialist(season: str) -> tuple[int, str]:
+    """A LOW-overall skater who is ELITE in one component within his role (a true specialist), and
+    the component he's elite at."""
     p = bq.project()
-    return bq.query_df(f"select max(season) s from `{p}.nhl_models.team_needs`").iloc[0]["s"]
+    df = bq.query_df(f"""
+        with base as (
+          select c.player_id,
+            case when c.position='C' then 'C' when c.position in ('L','R') then 'W'
+                 when c.position='D' then 'D' else c.position end as role,
+            c.ev_offense, c.ev_defense, c.pp, c.pk, c.finishing
+          from `{p}.nhl_models.player_composite` c
+          where c.season_window='{season}' and c.toi_5v5>=400),
+        r as (
+          select player_id, role,
+            percent_rank() over (partition by role order by ev_offense) as ev_offense,
+            percent_rank() over (partition by role order by ev_defense) as ev_defense,
+            percent_rank() over (partition by role order by pk) as pk,
+            percent_rank() over (partition by role order by finishing) as finishing
+          from base),
+        ov as (select player_id, overall_percentile from `{p}.nhl_models.player_overall`
+               where season_window='{season}'),
+        m as (
+          select r.player_id, r.role, o.overall_percentile,
+            greatest(r.ev_defense, r.pk) as def_spec
+          from r join ov o using (player_id))
+        select player_id, role, def_spec from m
+        where overall_percentile < 0.45 and def_spec >= 0.85
+        order by def_spec desc limit 1""")
+    if df.empty:
+        return _bad_skater(season), "ev_defense"
+    return int(df.iloc[0]["player_id"]), "ev_defense"
 
 
-def _lowest_war(position_clause: str) -> int:
-    """Lowest-WAR qualified skater (the 'bad player' case)."""
-    p = bq.project(); s = _season()
-    df = bq.query_df(f"""select player_id from `{p}.nhl_models.player_gar`
-        where season_window='{s}' and toi_5v5>=600 {position_clause} order by war asc limit 1""")
-    return int(df.iloc[0]["player_id"])
+def _starter_goalie(season: str) -> int:
+    return int(bq.query_df(f"""select goalie_id from `{bq.project()}.nhl_models.goalie_gar`
+        where season_window='{season}' order by war desc limit 1""").iloc[0]["goalie_id"])
 
 
-def _mid_war(position_clause: str, target_pctile: float = 0.30) -> int:
-    """A below-average-but-rosterable skater (~target WAR percentile) — the 'mediocre, addresses a
-    need' case (default ~30th pctile so the need bump visibly lifts him toward C without making him
-    good)."""
-    p = bq.project(); s = _season()
-    df = bq.query_df(f"""with q as (
-            select player_id, percent_rank() over (order by war) pr
-            from `{p}.nhl_models.player_gar` where season_window='{s}' and toi_5v5>=600 {position_clause})
-        select player_id from q order by abs(pr - {target_pctile}) asc limit 1""")
-    return int(df.iloc[0]["player_id"])
-
-
-def decompose(r: dict) -> dict:
-    """Recompute gate / base / gated_base / need_bonus / final from a scored result's dims."""
-    by = {d["key"]: d for d in r["dimensions"]}
-    gate = by["positional"]["level"] or CFG["GATE_FLOOR"]
-    w = CFG["WEIGHTS"]; num = den = 0.0
-    for k in ("quality", "line", "style"):
-        lv = by[k]["level"]
-        if lv is not None:
-            num += w[k] * lv; den += w[k]
-    base = (num / den) if den > 0 else 0.5
-    gated = gate * base
-    bonus = _need_bonus(by["need"].get("gap"))
-    return {"gate": gate, "base": base, "gated_base": gated, "need_bonus": bonus,
-            "need_gap": by["need"].get("gap"), "need_level": by["need"]["level"],
-            "quality": by["quality"]["level"], "line": by["line"]["level"], "style": by["style"]["level"],
-            "final": round(gated + bonus, 4), "grade": r["overall_grade"]}
-
-
-def _extreme_need_teams(player_id: int, season: str) -> tuple[int, int]:
-    """For a player, the team with the LOWEST and HIGHEST need-gap in his area (data-driven)."""
-    teams = bq.query_df(f"""select distinct team_id from `{bq.project()}.nhl_mart.mart_team_game_stats`
-        where season='{season}'""")["team_id"].astype(int).tolist()
-    gaps = []
-    for tid in teams:
-        try:
-            r = score_team_fit(player_id, tid, season)
-        except Exception:
-            continue
-        g = {d["key"]: d for d in r["dimensions"]}["need"].get("gap") or 0.0
-        gaps.append((g, tid))
-    gaps.sort()
-    return gaps[0][1], gaps[-1][1]  # (lowest-need team, highest-need team)
-
-
-def _row(title, pid, tid, season):
+def _show(pid: int, tid: int, season: str, title: str) -> dict:
     r = score_team_fit(pid, tid, season)
-    d = decompose(r)
+    q = r["quality"]
+    dims = {d["key"]: d.get("level") for d in r["dimensions"]}
+    qpct = None if q["percentile"] is None else round(q["percentile"], 2)
     print(f"\n{title}")
-    print(f"  player={pid} team={tid}  gate={d['gate']:.2f} base={d['base']:.2f} "
-          f"gated_base={d['gated_base']:.3f}  need_gap={d['need_gap']} need_bonus=+{d['need_bonus']:.3f}"
-          f"  -> final={d['final']:.3f}  grade={d['grade']}")
-    print(f"     dims: quality={d['quality']} line={d['line']} style={d['style']} need_level={d['need_level']}")
+    print(f"  {r['player_name']} ({r['role']}) -> {tid}: FIT={r['overall_score']:.1f} {r['overall_grade']}"
+          f"   quality_pctile={qpct} ({q['label']})")
+    print(f"     dims: " + "  ".join(f"{k}={'n/a' if v is None else round(v,2)}" for k, v in dims.items()))
+    top_bd = sorted(r["need_breakdown"], key=lambda b: -b["opportunity"])[:3]
+    nb = ", ".join(f"{b['label'].split('· ')[-1]}: need {b['team_need']} x str {b['player_strength']}"
+                   for b in top_bd)
+    print(f"     need breakdown: {nb}")
     print(f"     verdict: {r['verdict_sentence']}")
-    return r, d
+    return r
 
 
 def main() -> None:
     season = _season()
-    MCDAVID = 8478402            # top-5 player
-    KESSELRING = 8480891         # the reported case (below-avg D)
-    ANA = 24
-    low_need_team, high_need_team = _extreme_need_teams(MCDAVID, season)
-    bad = _lowest_war("and position='D'")
-    mediocre = _mid_war("and position='D'", target_pctile=0.38)
-    print(f"season={season}  McDavid low-need team={low_need_team} high-need team={high_need_team}  "
-          f"mediocre D={mediocre}  bad D={bad}")
+    elite = _elite_skater(season)
+    bad = _bad_skater(season)
+    spec, spec_comp = _specialist(season)
+    goalie = _starter_goalie(season)
+    print(f"season={season}  elite={elite}  specialist={spec} (def)  bad={bad}  goalie={goalie}")
 
-    results = []
-    results.append(_row("KESSELRING -> ANA (reported: low need, good fit, below-avg value) — expect B/C not D",
-                        KESSELRING, ANA, season))
-    results.append(_row("TOP-5 (McDavid) -> ALREADY-STRONG/low-need team — KEY asymmetry test: expect A",
-                        MCDAVID, low_need_team, season))
-    results.append(_row("TOP-5 (McDavid) -> BIG-need team — high base + full need bonus: expect highest A",
-                        MCDAVID, high_need_team, season))
-    results.append(_row("MEDIOCRE D -> BIG-need team — bonus lifts a middling player toward ~C",
-                        mediocre, high_need_team, season))
-    results.append(_row("BAD D -> low-need team — low base, no bonus: expect D/F",
-                        bad, low_need_team, season))
-    results.append(_row("BAD D -> BIG-need team — full bonus still can't rescue: expect D/F",
-                        bad, high_need_team, season))
+    # ---- star spread (cases 2 & 3): lightweight fit across all 32 teams ----
+    star_fits = best_team_fits(elite, season, top_n=99)
+    star_scores = sorted(f["fit_score"] for f in star_fits)
+    star_min, star_max = star_scores[0], star_scores[-1]
+    print(f"\n[STAR spread] {len(star_scores)} teams: min={star_min:.1f} max={star_max:.1f} "
+          f"spread={star_max - star_min:.1f}  (B floor={B_FLOOR*100:.0f})")
 
-    # ---- asymmetry assertions -------------------------------------------------
-    print("\n=== ASYMMETRY CHECKS ===")
+    # detailed decompositions at the star's best and worst fit teams
+    best_t = max(star_fits, key=lambda f: f["fit_score"])["team_id"]
+    worst_t = min(star_fits, key=lambda f: f["fit_score"])["team_id"]
+    _show(elite, best_t, season, "STAR -> BEST-fit team (expect A)")
+    _show(elite, worst_t, season, "STAR -> WORST-fit team (still >= B: floor holds)")
+
+    # ---- specialist (case 1): his best team should be a HIGH fit despite low quality ----
+    spec_fits = best_team_fits(spec, season, top_n=99)
+    spec_best = max(spec_fits, key=lambda f: f["fit_score"])
+    r_spec = _show(spec, spec_best["team_id"], season,
+                   "SPECIALIST -> his best-need team (expect HIGH fit, uncapped by low quality)")
+
+    # ---- bad player (case 4): even his best team is a LOW fit ----
+    bad_fits = best_team_fits(bad, season, top_n=99)
+    bad_best = max(bad_fits, key=lambda f: f["fit_score"])
+    r_bad = _show(bad, bad_best["team_id"], season, "BAD player -> his best team (expect LOW fit)")
+
+    # ---- goalie (Phase 5): need-only path + floor ----
+    g_fits = best_team_fits(goalie, season, top_n=99)
+    if g_fits:
+        _show(goalie, max(g_fits, key=lambda f: f["fit_score"])["team_id"], season,
+              "GOALIE -> most goalie-needy team (need-only + floor)")
+
+    # ---------------------------------------------------------------- assertions
+    print("\n=== BEHAVIOR CHECKS ===")
     ok = True
-    for r, d in results:
-        if d["need_bonus"] < -1e-9:
-            print(f"  FAIL: negative need bonus {d['need_bonus']}"); ok = False
-        if (d["need_gap"] or 0) <= 0 and d["need_bonus"] > 1e-9:
-            print(f"  FAIL: low/no need added a bonus {d['need_bonus']}"); ok = False
-
-    _, d_low = results[1]; _, d_high = results[2]
-    if abs(d_low["need_bonus"]) > 1e-9:
-        print(f"  FAIL: McDavid low-need team still got a need bonus {d_low['need_bonus']}"); ok = False
-    if d_high["final"] < d_low["final"] - 1e-9:
-        print("  FAIL: high-need team scored LOWER than low-need for the same player"); ok = False
-    if d_low["grade"] != "A":
-        print(f"  WARN: McDavid->strong team graded {d_low['grade']} (expected A) — check weights/bands")
-    # the bad player WITH a full need bonus (results[5]) must still grade D/F — need can't rescue
-    _, d_bad_bigneed = results[5]
-    if d_bad_bigneed["grade"] in ("A", "B", "C"):
-        print(f"  FAIL: bad player rescued to {d_bad_bigneed['grade']} by need"); ok = False
-    # Kesselring (results[0]) must not be D/F (good fit, only dragged by value)
-    _, d_kess = results[0]
-    if d_kess["grade"] in ("D", "F"):
-        print(f"  WARN: Kesselring graded {d_kess['grade']} (expected B/C, not D)")
-    print("  asymmetry holds." if ok else "  *** ASYMMETRY VIOLATED ***")
-
-    # ---- score distribution (for band tuning) --------------------------------
-    print("\n=== SCORE DISTRIBUTION (sample of player x team) ===")
-    players = bq.query_df(f"""select player_id from `{bq.project()}.nhl_models.player_gar`
-        where season_window='{season}' and toi_5v5>=400 order by war desc limit 6""")["player_id"].astype(int).tolist()
-    players += bq.query_df(f"""select player_id from `{bq.project()}.nhl_models.player_gar`
-        where season_window='{season}' and toi_5v5>=400 order by war asc limit 6""")["player_id"].astype(int).tolist()
-    team_sample = [ANA, low_need_team, high_need_team, 22, 10, 54]
-    scores = []
-    for pid in players:
-        for tid in team_sample:
-            try:
-                scores.append(score_team_fit(pid, tid, season)["overall_score"] / 100.0)
-            except Exception:
-                pass
-    scores.sort()
-    if scores:
-        qs = {p: scores[min(len(scores) - 1, int(p / 100 * len(scores)))] for p in (5, 10, 25, 50, 75, 90, 95)}
-        print(f"  n={len(scores)} min={scores[0]:.3f} max={scores[-1]:.3f} mean={statistics.mean(scores):.3f}")
-        print("  percentiles:", {k: round(v, 3) for k, v in qs.items()})
-        print("  current bands:", CFG["GRADE_BANDS"])
+    # 1. specialist reaches a high (>= B) fit somewhere
+    if r_spec["overall_score"] / 100.0 < B_FLOOR:
+        print(f"  FAIL (1): specialist best fit {r_spec['overall_score']:.1f} < B ({B_FLOOR*100:.0f}) "
+              f"— a need-serving specialist should reach a high fit"); ok = False
+    else:
+        print(f"  OK (1): specialist reaches {r_spec['overall_grade']} ({r_spec['overall_score']:.1f}) "
+              f"despite {r_spec['quality']['label']} quality")
+    # 2. star fit varies meaningfully across teams
+    if star_max - star_min < 8.0:
+        print(f"  FAIL (2): star spread only {star_max - star_min:.1f} pts — fit barely varies"); ok = False
+    else:
+        print(f"  OK (2): star fit varies {star_max - star_min:.1f} pts across teams")
+    # 3. star never a poor fit (worst >= B floor)
+    if star_min / 100.0 < B_FLOOR - 1e-9:
+        print(f"  FAIL (3): star worst fit {star_min:.1f} < B floor — the quality floor did not hold"); ok = False
+    else:
+        print(f"  OK (3): star worst fit {star_min:.1f} >= B floor — floor holds")
+    # 4. bad player's best fit is low (< C)
+    if r_bad["overall_score"] / 100.0 >= C_FLOOR:
+        print(f"  FAIL (4): bad player's best fit {r_bad['overall_score']:.1f} >= C — too high"); ok = False
+    else:
+        print(f"  OK (4): bad player's best fit {r_bad['overall_score']:.1f} < C")
+    print("\n  ALL FOUR BEHAVIORS HOLD." if ok else "\n  *** ONE OR MORE BEHAVIORS VIOLATED ***")
 
 
 if __name__ == "__main__":
