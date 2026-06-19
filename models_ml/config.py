@@ -453,3 +453,37 @@ CONTRACT_VALUE = {
     "BAND_SDS": 1.0,
     "MODEL_VERSION": "contract_value_v1",
 }
+
+# ---------------------------------------------------------------------------------------------
+# Trade tool — futures value (models_ml/compute_futures_value.py -> nhl_models.futures_value)
+# Prospects and draft picks valued in the SAME currency as contracts (WAR + dollars), but as
+# explicit PROXIES with wide bands and a proxy confidence tag — never a bare precise estimate. The
+# spine is a slot curve: expected career WAR-above-replacement as a function of overall draft pick.
+FUTURES = {
+    # Slot curve V(p) = a / (p + c)^b, floored at a small positive WAR. A documented PROXY
+    # calibrated to public draft-value research (round-1 picks dominate; value decays as a power
+    # law; late picks regress to ~replacement). Anchors: V(1)≈22, V(31)≈3.5, V(100)≈1.2, V(200)≈0.5
+    # career WAR — EXPECTED over all picks at that slot, so busts are already priced in.
+    "SLOT_A": 100.0,
+    "SLOT_C": 4.0,
+    "SLOT_B": 0.95,
+    "SLOT_FLOOR_WAR": 0.3,        # never below ~replacement, even for the last pick / undrafted
+    "UNDRAFTED_WAR": 0.4,         # an undrafted org prospect: floored near replacement, wide band
+    # Time value: a future win is discounted per season until it is expected to arrive in the NHL.
+    "DISCOUNT": 0.90,
+    "NHL_READY_AGE": 23.0,        # time_to_NHL for a prospect ≈ max(0, this - current age)
+    "DRAFT_TO_NHL_YEARS": 3.0,    # a not-yet-drafted future pick adds ~3 dev years on top of years_out
+    # Development risk for a prospect lingering past the typical breakout age without an NHL footprint:
+    # discount value once age exceeds NHL_READY_AGE (older un-broken-through => more bust-like).
+    "DEV_DECAY_PER_YEAR": 0.85,
+    # Dollars per win — the market price of a WAR in the cap era (public estimate ≈ $3.0M/WAR).
+    # Documented proxy used to express futures value in dollars alongside contract surplus.
+    "DOLLARS_PER_WAR": 3_000_000,
+    # Wide multiplicative band on every futures point estimate (these are proxies): [lo, hi] x value.
+    "BAND_LO": 0.45,
+    "BAND_HI": 1.9,
+    # ELC cost proxy for a SIGNED prospect with no parsed contract (cap hit unknown but small).
+    "ELC_COST": 900_000,
+    "PICKS_PER_ROUND": 32,        # representative overall = (round-1)*32 + 16; band spans the round
+    "MODEL_VERSION": "futures_value_v1",
+}
