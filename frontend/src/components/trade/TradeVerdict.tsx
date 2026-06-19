@@ -18,8 +18,6 @@ import './TradeVerdict.css'
 
 export interface Domains { talent: [number, number]; surplus: [number, number] }
 
-const CONF_LABEL: Record<string, string> = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }
-
 function barColor(v: number | null | undefined): string {
   if (v == null || Math.abs(v) < 1e-9) return 'var(--color-data-neutral)'
   return v > 0 ? 'var(--color-data-positive)' : 'var(--color-data-negative)'
@@ -49,7 +47,7 @@ export function TradeSummaryBand({ teams }: { teams: TeamTradeResult[] }) {
   if (!teams.length) return null
   return (
     <div className="trade-verdict__summary">
-      <h2 className="trade-verdict__summary-title">Who gains what</h2>
+      <h2 className="trade-verdict__summary-title">The Numbers</h2>
       <div className="trade-verdict__summary-grid">
         {teams.map((t) => (
           <div key={t.team_id} className="trade-verdict__summary-team">
@@ -119,9 +117,6 @@ export function TeamDecomposition({ result, domains }: { result: TeamTradeResult
     <div className="trade-verdict__team">
       <div className="trade-verdict__team-head">
         <span className={`trade-verdict__lean trade-verdict__lean--${lean.tone}`}>{lean.label}</span>
-        <span className={`trade-verdict__conf trade-verdict__conf--${t.confidence}`}>
-          {CONF_LABEL[t.confidence ?? ''] ?? t.confidence}
-        </span>
       </div>
 
       {t.summary && <p className="trade-verdict__why">{t.summary}</p>}

@@ -36,13 +36,6 @@
 .trade-verdict__why {
   font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.45; margin: 0;
 }
-.trade-verdict__conf {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 2px 8px; border-radius: var(--radius-full);
-}
-.trade-verdict__conf--high { background: var(--color-success-bg); color: var(--color-success); }
-.trade-verdict__conf--medium { background: var(--color-warning-bg); color: var(--color-warning); }
-.trade-verdict__conf--low { background: var(--color-danger-bg); color: var(--color-danger); }
 
 .trade-verdict__acquires { font-size: var(--text-xs); color: var(--color-text-secondary); margin: 0; line-height: 1.4; }
 .trade-verdict__acquires-lbl {
