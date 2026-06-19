@@ -24,11 +24,22 @@ export async function getPlayerContract(playerId: number): Promise<PlayerContrac
   return r.data
 }
 
-/** Players ranked by contract surplus — best value first, or 'overpaid' for the worst first. */
+/** EFFICIENCY axis: players ranked by contract surplus — best value first, or 'overpaid' worst first. */
 export async function getSurplusRankings(
   order: 'surplus' | 'overpaid' = 'surplus',
   limit = 25,
 ): Promise<TradeableAsset[]> {
   const r = await apiClient.get<TradeableAsset[]>('/rankings/surplus', { params: { order, limit } })
+  return r.data
+}
+
+/** TALENT axis: assets ranked by projected on-ice value in dollars (a fairly paid star ranks high
+ * here even with near-zero surplus). Optionally filter to player | prospect | pick.
+ * (Path is /rankings/talent — /rankings/value is the separate GAR leaderboard.) */
+export async function getTalentRankings(
+  type?: 'player' | 'prospect' | 'pick',
+  limit = 25,
+): Promise<TradeableAsset[]> {
+  const r = await apiClient.get<TradeableAsset[]>('/rankings/talent', { params: { type, limit } })
   return r.data
 }

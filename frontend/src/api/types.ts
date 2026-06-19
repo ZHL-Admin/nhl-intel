@@ -1147,9 +1147,18 @@ export interface PlayerContract {
   expiry_year?: number | null
   is_ufa?: boolean | null
   contract_type?: string | null
+  // talent axis (value + band, both currencies)
   war_now?: number | null
   value_war?: number | null
+  value_war_low?: number | null
+  value_war_high?: number | null
+  value_dollars?: number | null
+  value_dollars_low?: number | null
+  value_dollars_high?: number | null
   expected_aav_now?: number | null
+  // cost axis
+  cost_dollars?: number | null
+  // surplus (value minus cost) + band
   surplus_current?: number | null
   total_discounted_surplus?: number | null
   surplus_low?: number | null
@@ -1166,11 +1175,18 @@ export interface TradeableAsset {
   label: string
   org_team?: string | null
   pos_or_slot?: string | null
+  // talent axis (value + band, both currencies)
   value_war?: number | null
   value_war_low?: number | null
   value_war_high?: number | null
   value_dollars?: number | null
+  value_dollars_low?: number | null
+  value_dollars_high?: number | null
+  // cost axis (cap hit + remaining years for players; ~0 for prospects/picks)
+  cap_hit?: number | null
+  remaining_years?: number | null
   cost_dollars?: number | null
+  // surplus (value minus cost) + band
   surplus_dollars?: number | null
   surplus_low?: number | null
   surplus_high?: number | null

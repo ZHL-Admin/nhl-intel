@@ -1260,7 +1260,9 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
     rows = bq_service.query(f"""
         SELECT c.player_id, c.as_of_date, c.season, c.contract_team, c.cap_hit, c.aav,
                c.remaining_years, c.expiry_year, c.is_ufa, c.contract_type, c.match_method,
-               v.war_now, v.value_war, v.expected_aav_now, v.surplus_current,
+               v.war_now, v.value_war, v.value_war_low, v.value_war_high,
+               v.value_dollars, v.value_dollars_low, v.value_dollars_high,
+               v.expected_aav_now, v.cost_dollars, v.surplus_current,
                v.total_discounted_surplus, v.surplus_low, v.surplus_high,
                v.confidence, v.is_grounded
         FROM {contracts} c
@@ -1278,7 +1280,11 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
         remaining_years=r.get("remaining_years"), expiry_year=r.get("expiry_year"),
         is_ufa=r.get("is_ufa"), contract_type=r.get("contract_type"), match_method=r.get("match_method"),
         war_now=r.get("war_now"), value_war=r.get("value_war"),
-        expected_aav_now=r.get("expected_aav_now"), surplus_current=r.get("surplus_current"),
+        value_war_low=r.get("value_war_low"), value_war_high=r.get("value_war_high"),
+        value_dollars=r.get("value_dollars"), value_dollars_low=r.get("value_dollars_low"),
+        value_dollars_high=r.get("value_dollars_high"),
+        expected_aav_now=r.get("expected_aav_now"), cost_dollars=r.get("cost_dollars"),
+        surplus_current=r.get("surplus_current"),
         total_discounted_surplus=r.get("total_discounted_surplus"),
         surplus_low=r.get("surplus_low"), surplus_high=r.get("surplus_high"),
         confidence=r.get("confidence"), is_grounded=r.get("is_grounded"),

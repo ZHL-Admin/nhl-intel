@@ -19,22 +19,15 @@ router = APIRouter()
 
 _COLS = (
     "asset_id, asset_type, player_id, label, org_team, pos_or_slot, "
-    "value_war, value_war_low, value_war_high, value_dollars, cost_dollars, "
+    "value_war, value_war_low, value_war_high, "
+    "value_dollars, value_dollars_low, value_dollars_high, "
+    "cap_hit, remaining_years, cost_dollars, "
     "surplus_dollars, surplus_low, surplus_high, confidence, note"
 )
 
 
 def _row(r: dict) -> TradeableAsset:
-    return TradeableAsset(
-        asset_id=r["asset_id"], asset_type=r["asset_type"],
-        player_id=int(r["player_id"]) if r.get("player_id") is not None else None,
-        label=r["label"], org_team=r.get("org_team"), pos_or_slot=r.get("pos_or_slot"),
-        value_war=r.get("value_war"), value_war_low=r.get("value_war_low"),
-        value_war_high=r.get("value_war_high"), value_dollars=r.get("value_dollars"),
-        cost_dollars=r.get("cost_dollars"), surplus_dollars=r.get("surplus_dollars"),
-        surplus_low=r.get("surplus_low"), surplus_high=r.get("surplus_high"),
-        confidence=r.get("confidence"), note=r.get("note"),
-    )
+    return TradeableAsset(**{k: r.get(k) for k in TradeableAsset.model_fields})
 
 
 def _search_sync(q: str, asset_type: Optional[str], org: Optional[str], limit: int) -> List[TradeableAsset]:

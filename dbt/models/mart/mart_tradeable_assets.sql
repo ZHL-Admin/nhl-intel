@@ -1,12 +1,15 @@
 {{ config(materialized='table') }}
 
 -- The unified tradeable-asset layer (Trade tool P7): every rostered player, prospect, and draft
--- pick as ONE row with ONE interface — an identity, a value with a band, a cost, a surplus, and a
--- confidence tag, all in the same WAR + dollar currency — so a future trade engine can net any mix
--- of them cleanly. Three sources, harmonized:
+-- pick as ONE row with ONE interface, all in the same WAR + dollar currency, so a future trade
+-- engine can net any mix of them cleanly. Value and cost are kept as TWO SEPARATE AXES (not
+-- collapsed into surplus alone): the TALENT axis (value_war / value_dollars + band) is what a player
+-- is worth, the COST axis (cap_hit, remaining_years, cost_dollars) is what they are owed, and
+-- surplus is the convenience difference. A fairly paid star has near-zero surplus but a large talent
+-- value — both must be visible.
 --   player   <- player_contract_value (projected value vs cap surplus; high/medium/proxy confidence)
 --   prospect <- futures_value (asset_kind='prospect'; proxy)   -- deduped against players below
---   pick     <- futures_value (asset_kind='pick'; proxy)
+--   pick     <- futures_value (asset_kind='pick'; proxy; cost ≈ 0)
 -- A prospect who is also a rostered player (has a contract value row) is represented ONCE, as the
 -- player — the grounded contract value supersedes the proxy prospect value, so no double counting.
 
@@ -25,9 +28,12 @@ players as (
         coalesce(n.name, cast(v.player_id as string))        as label,
         c.contract_team                                      as org_team,
         v.pos_group || ' · ' || cast(v.age as string) || 'y' as pos_or_slot,
+        -- talent axis (value + band, WAR and dollars)
         v.value_war, v.value_war_low, v.value_war_high,
-        v.value_dollars,
-        v.cost_dollars,
+        v.value_dollars, v.value_dollars_low, v.value_dollars_high,
+        -- cost axis
+        v.cap_hit, v.remaining_years, v.cost_dollars,
+        -- surplus (value minus cost) + band
         v.total_discounted_surplus                           as surplus_dollars,
         v.surplus_low, v.surplus_high,
         v.confidence,
@@ -43,7 +49,8 @@ prospects as (
         f.asset_id, 'prospect' as asset_type, f.player_id,
         f.label, f.org_team, f.pos_or_slot,
         f.value_war, f.value_war_low, f.value_war_high,
-        f.value_dollars, f.cost_dollars,
+        f.value_dollars, f.value_dollars_low, f.value_dollars_high,
+        cast(null as int64) as cap_hit, cast(null as int64) as remaining_years, f.cost_dollars,
         f.surplus_dollars,
         f.value_dollars_low  as surplus_low,
         f.value_dollars_high as surplus_high,
@@ -59,7 +66,8 @@ picks as (
         f.asset_id, 'pick' as asset_type, cast(null as int64) as player_id,
         f.label, f.org_team, f.pos_or_slot,
         f.value_war, f.value_war_low, f.value_war_high,
-        f.value_dollars, f.cost_dollars,
+        f.value_dollars, f.value_dollars_low, f.value_dollars_high,
+        cast(null as int64) as cap_hit, cast(null as int64) as remaining_years, f.cost_dollars,
         f.surplus_dollars,
         f.value_dollars_low  as surplus_low,
         f.value_dollars_high as surplus_high,

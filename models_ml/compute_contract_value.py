@@ -254,6 +254,7 @@ def compute() -> pd.DataFrame:
             "value_war": round(mid["value_war"], 2),
             "value_war_low": round(lo["value_war"], 2), "value_war_high": round(hi["value_war"], 2),
             "value_dollars": round(mid["value_dollars"]),
+            "value_dollars_low": round(lo["value_dollars"]), "value_dollars_high": round(hi["value_dollars"]),
             "cost_dollars": round(mid["cost_dollars"]),
             "total_surplus": round(mid["total_surplus"]),
             "total_discounted_surplus": round(mid["total_discounted_surplus"]),

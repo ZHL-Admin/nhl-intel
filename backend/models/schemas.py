@@ -1513,10 +1513,19 @@ class PlayerContract(BaseModel):
     expiry_year: Optional[int] = None
     is_ufa: Optional[bool] = None
     contract_type: Optional[str] = None
-    # surplus (from player_contract_value); absent if the player has no value row
+    # --- two axes (from player_contract_value); absent if the player has no value row ---
+    # TALENT axis: projected on-ice value over the control window (WAR + dollars, discounted, banded)
     war_now: Optional[float] = None
     value_war: Optional[float] = None
+    value_war_low: Optional[float] = None
+    value_war_high: Optional[float] = None
+    value_dollars: Optional[int] = None
+    value_dollars_low: Optional[int] = None
+    value_dollars_high: Optional[int] = None
     expected_aav_now: Optional[int] = None
+    # COST axis: what the player is owed (cap_hit/remaining_years above; cost_dollars = discounted PV)
+    cost_dollars: Optional[int] = None
+    # SURPLUS: value minus cost (the convenience difference), with its band
     surplus_current: Optional[int] = None
     total_discounted_surplus: Optional[int] = None
     surplus_low: Optional[int] = None
@@ -1535,11 +1544,18 @@ class TradeableAsset(BaseModel):
     label: str
     org_team: Optional[str] = None
     pos_or_slot: Optional[str] = None
+    # TALENT axis (value + band, both currencies)
     value_war: Optional[float] = None
     value_war_low: Optional[float] = None
     value_war_high: Optional[float] = None
     value_dollars: Optional[int] = None
+    value_dollars_low: Optional[int] = None
+    value_dollars_high: Optional[int] = None
+    # COST axis (cap hit + remaining years for players; ~0 for prospects/picks)
+    cap_hit: Optional[int] = None
+    remaining_years: Optional[int] = None
     cost_dollars: Optional[int] = None
+    # SURPLUS (value minus cost) + band
     surplus_dollars: Optional[int] = None
     surplus_low: Optional[int] = None
     surplus_high: Optional[int] = None
