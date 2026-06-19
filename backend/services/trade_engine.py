@@ -205,6 +205,48 @@ def _net(req: dict, assets: dict[str, dict], retentions: list[dict]) -> dict[int
     return out
 
 
+# ------------------------------------------------------------------------------------- cap flag (P4)
+def _committed_caps(abbrevs: list[str]) -> dict[str, int]:
+    """Each team's currently committed cap = sum of cap hits on the latest contract snapshot."""
+    abbrevs = [a for a in set(abbrevs) if a]
+    if not abbrevs:
+        return {}
+    quoted = ",".join("'" + a.replace("'", "''") + "'" for a in abbrevs)
+    mpc = bq_service.get_full_table_id("mart_player_contracts")
+    rows = bq_service.query(f"""
+        SELECT contract_team, SUM(cap_hit) AS committed FROM {mpc}
+        WHERE as_of_date = (SELECT MAX(as_of_date) FROM {mpc}) AND contract_team IN ({quoted})
+        GROUP BY contract_team""")
+    return {r["contract_team"]: int(r["committed"] or 0) for r in rows}
+
+
+def _cap(req: dict, assets: dict[str, dict], retentions: list[dict], abbr: dict[int, str],
+         season: str) -> dict[int, dict]:
+    """SOFT, approximate cap flag per team. Net current-year cap-hit change (an incoming player adds
+    (1-X) of their cap hit; the source sheds (1-X) and keeps X*cap_hit dead money; prospects/picks
+    are treated as cap-neutral) applied to the committed cap, vs the season ceiling. Never a gate."""
+    pct = {r["player_id"]: r["pct"] for r in retentions}
+    ceiling = int(config.CAP_UPPER_LIMIT_BY_SEASON.get(season, config.CAP_UPPER_LIMIT_BY_SEASON["2025-26"]))
+    committed = _committed_caps([abbr.get(int(t)) for t in req["team_ids"]])
+    change = {int(t): 0.0 for t in req["team_ids"]}
+    for m in req["movements"]:
+        a = assets[m["asset_id"]]
+        eff = (1.0 - float(pct.get(a.get("player_id"), 0.0))) * float(a.get("cap_hit") or 0.0)
+        change[int(m["to_team_id"])] += eff
+        change[int(m["from_team_id"])] -= eff
+    out = {}
+    for tid in req["team_ids"]:
+        tid = int(tid)
+        before = committed.get(abbr.get(tid), 0)
+        after = round(before + change[tid])
+        out[tid] = {
+            "committed_before": before, "cap_hit_change": round(change[tid]),
+            "committed_after": after, "ceiling": ceiling, "margin": ceiling - after,
+            "over_cap": after > ceiling, "approximate": True, "caveat": CAP_CAVEAT,
+        }
+    return out
+
+
 # ------------------------------------------------------------------------------------- orchestration
 def evaluate(req: dict, season: Optional[str] = None) -> dict:
     """Evaluate a proposed trade -> the multi-team, multi-axis decomposition (see schemas)."""
@@ -217,16 +259,17 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
     retentions = _retentions(req, assets)
     ledgers = _team_ledgers(req, assets, retentions)
     nets = _net(req, assets, retentions)
+    caps = _cap(req, assets, retentions, abbr, season)
 
     teams = []
     for tid in req["team_ids"]:
         tid = int(tid)
         teams.append({
             "team_id": tid, "team_abbrev": abbr.get(tid),
-            **nets[tid],                              # talent + surplus deltas with bands (P2)
+            **nets[tid],                              # talent + surplus deltas with bands (P2/P3)
+            "cap": caps[tid],                         # soft, approximate cap flag (P4)
             "incoming": ledgers[tid]["incoming"], "outgoing": ledgers[tid]["outgoing"],
-            # remaining axes filled by later phases (P3 retention, P4 cap, P5 fit, P6 verdict)
-            "cap": {"approximate": True, "caveat": CAP_CAVEAT},
+            # remaining axes filled by later phases (P5 fit, P6 verdict)
         })
 
     caveats = [
