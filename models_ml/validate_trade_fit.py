@@ -73,6 +73,40 @@ def _starter_goalie(season: str) -> int:
         where season_window='{season}' order by war desc limit 1""").iloc[0]["goalie_id"])
 
 
+def tempering_report(season: str) -> bool:
+    """The projection must temper an OLDER player's spike MORE than a YOUNG player's (proj/last lower
+    for old). Reads the same projection the fit floor uses."""
+    import statistics
+    from models_ml.score_team_fit import _skater_projection
+    proj = _skater_projection(bq.project(), season)
+    young = [(d["proj_war"] / d["last_war"], d) for d in proj.values()
+             if d["last_war"] and d["last_war"] >= 1.0 and (d["age"] or 99) <= 23]
+    old = [(d["proj_war"] / d["last_war"], d) for d in proj.values()
+           if d["last_war"] and d["last_war"] >= 1.0 and (d["age"] or 0) >= 31]
+    print("\n=== Projection tempering (proj/last WAR; < 1.0 = regressed below last season) ===")
+    my = statistics.mean(t for t, _ in young) if young else None
+    mo = statistics.mean(t for t, _ in old) if old else None
+    if my is not None:
+        print(f"  young (<=23): n={len(young)} mean proj/last = {my:.2f}")
+    if mo is not None:
+        print(f"  old   (>=31): n={len(old)} mean proj/last = {mo:.2f}")
+    names = bq.query_df(f"""select player_id, any_value(first_name||' '||last_name) nm
+        from `{bq.project()}.nhl_staging.stg_rosters` group by 1""")
+    nm = dict(zip(names["player_id"], names["nm"]))
+    # illustrative ends: the most-regressed OLD spike vs the least-regressed YOUNG player
+    for tag, grp, pick in (("OLD most-regressed spike", old, min),
+                           ("YOUNG projection holds  ", young, max)):
+        if grp:
+            t, d = pick(grp, key=lambda x: x[0])
+            pid = next(k for k, v in proj.items() if v is d)
+            print(f"  {tag}: {nm.get(pid, pid)} age {d['age']}  last {d['last_war']:+.1f} -> "
+                  f"proj {d['proj_war']:+.1f} (±{d['proj_war_sd']:.1f}, {t:.2f}x)")
+    ok = (mo is None or my is None or mo <= my)
+    print("  OK: older spikes regressed more than young." if ok
+          else "  FAIL: older NOT regressed more than young.")
+    return ok
+
+
 def _show(pid: int, tid: int, season: str, title: str) -> dict:
     r = score_team_fit(pid, tid, season)
     q = r["quality"]
@@ -97,6 +131,8 @@ def main() -> None:
     spec, spec_comp = _specialist(season)
     goalie = _starter_goalie(season)
     print(f"season={season}  elite={elite}  specialist={spec} (def)  bad={bad}  goalie={goalie}")
+
+    temper_ok = tempering_report(season)
 
     # ---- star spread (cases 2 & 3): lightweight fit across all 32 teams ----
     star_fits = best_team_fits(elite, season, top_n=99)
@@ -153,7 +189,9 @@ def main() -> None:
         print(f"  FAIL (4): bad player's best fit {r_bad['overall_score']:.1f} >= C — too high"); ok = False
     else:
         print(f"  OK (4): bad player's best fit {r_bad['overall_score']:.1f} < C")
-    print("\n  ALL FOUR BEHAVIORS HOLD." if ok else "\n  *** ONE OR MORE BEHAVIORS VIOLATED ***")
+    ok = ok and temper_ok
+    print("\n  ALL CHECKS HOLD (4 behaviors + projection tempering)." if ok
+          else "\n  *** ONE OR MORE CHECKS VIOLATED ***")
 
 
 if __name__ == "__main__":

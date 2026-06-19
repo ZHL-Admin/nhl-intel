@@ -24,17 +24,38 @@ fit   = floor + (1 − floor) × match                  # match drives the upsid
   `config.TRADE_FIT["MATCH_WEIGHTS"]` = **need 0.55 / style 0.20 / line 0.25** (need is the core).
   Renormalises over whatever dimensions are available.
 - **`floor = FLOOR_CAP × quality_pctile`**, `FLOOR_CAP = 0.55`. The quality percentile is the
-  player's within-position-group **Overall** (`nhl_models.player_overall`, goalies
-  `goalie_overall`), the same number the player card shows. An elite player (pctile ≈ 1.0) floors at
-  ≈ 0.55 → he is **never** a poor fit anywhere; a depth player (pctile ≈ 0.1) floors ≈ 0.06 → his
-  fit is driven almost entirely by whether he matches.
+  player's **projected** within-position talent (see *Projected talent* below) — **not** last
+  season's result, so a contract-year or one-off spike does not inflate the floor. An elite player
+  (pctile ≈ 1.0) floors at ≈ 0.55 → he is **never** a poor fit anywhere; a depth player (pctile ≈
+  0.1) floors ≈ 0.06 → his fit is driven almost entirely by whether he matches.
 - **`fit = floor + (1 − floor) × match`**. With `match → 1`, fit → 1 regardless of talent, so a
   need-serving specialist can grade high; with `match` low, fit falls back toward the floor, so a
   star still lands respectably. Quality only ever *raises the floor*.
 
-**Quality is exposed as its own axis** beside fit (`quality`: percentile, WAR, label), never folded
-into `match`. The readout therefore shows both, independently: *"elite player, mediocre fit here"* or
-*"depth player, ideal fit here."* Neither masks the other.
+**Quality is exposed as its own axis** beside fit (`quality`: projected percentile, projected WAR,
+band, `last_war`, label), never folded into `match`. The readout shows both independently: *"elite
+player, mediocre fit here"* or *"depth player, ideal fit here."* When last season sits well above the
+projection, the band widens and the note says *"projects to X, last season Y"* — a spike never reads
+as a clean elite.
+
+### Projected talent (the quality input)
+
+The talent that floors fit is a forward **projection**, derived the way the trade talent axis projects
+(reuse, not a new model), in `score_team_fit._skater_projection` / `_goalie_projection`:
+
+1. **Recency-weight** the last ~3 seasons of WAR (`player_gar` / `goalie_gar`), weights
+   `[1.0, 0.6, 0.3]` newest→oldest, **also weighted by games** (sample). A one-season spike is diluted
+   by the player's established seasons — and a young player with little history has little to dilute.
+2. **Regress** the weighted level toward replacement (0 WAR, the GAR baseline) by **sample size and
+   volatility**: `reliability = n_eff / (n_eff + K·(1 + vol))`, `K = REGRESS_GAMES_K`. Small or
+   volatile samples regress hard; a full-sample star barely moves.
+3. **Age it forward** one season on the player's archetype aging curve (`aging_curves`; flat for
+   goalies). A young breakout ages **up** (tempered little); an older spike ages **down** (more).
+
+The projected WAR is percentiled within position to give the floor input and the displayed percentile;
+`last_war` is carried for the honest spike note. Validated (`make trade-fit-validate`): older spikes
+regress more than young (mean proj/last ≈ 0.71 vs 0.80, 2025-26). Constants in
+`config.PLAYER_FIT_PROJECTION`.
 
 A letter grade is derived from the composed fit (`GRADE_BANDS`) for carding only — the API and UI
 **always** render the full decomposition plus the quality axis, never a lone grade.

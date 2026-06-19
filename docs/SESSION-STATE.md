@@ -842,3 +842,21 @@ blend). Now **quality FLOORS fit, never caps it**, and **need is the core** (it 
   (`python -m scripts.export_to_duckdb --only team_needs`; needs the backend stopped to unlock duckdb).
   Validation runs FAST in `SERVING_BACKEND=duckdb` (line_member_features precomputed); compute mode is
   slow (live feature build). DuckDB gotcha: `position` is reserved — never use it as an output alias.
+
+## PLAYER FIT — projected talent + UI/narrative fixes (follow-up pass)
+The quality FLOOR (and the displayed quality) now uses a forward PROJECTION, not last season — so a
+contract-year/one-off spike no longer inflates fit. `score_team_fit._skater_projection /
+_goalie_projection` (cached): recency-weight last ~3 GAR seasons (1.0/0.6/0.3, also by games) ->
+regress toward 0 by sample+volatility (`REGRESS_GAMES_K=22`) -> age forward one season on the
+archetype curve (flat for goalies) -> percentile within position. Constants
+`config.PLAYER_FIT_PROJECTION`. Reads only serving tables (player_gar/goalie_gar/stg_player_bio/
+player_archetypes/aging_curves) — **no new table, no serving re-export needed** this pass. Quality axis
+gains `last_war`; the note says "Projects to Nth … last season Y" on a spike, and the band widens.
+- Validated: older spikes regress more than young (mean proj/last 0.71 vs 0.80); the 4 fit behaviors
+  still hold (McDavid A→B, specialist A, Chiarot F, Swayman A); trade-engine fit overlay sane; pytest 15.
+- **UI/narrative fixes (same pass):** central ordinal fixed (`92th`→`92nd`) — `models_ml/textfmt.ordinal`
+  (backend prose) + `frontend/src/utils/format.ordinal` (SkillRadar, TeamRadar, PlayerProfile, TradeFit,
+  matchup fingerprint). Need-breakdown labels show FULL component names (was CSS-truncated to an
+  ambiguous "Even-stren…"). Need caption anchors on the INTERSECTION (max need×strength), not biggest-
+  need + biggest-strength glued together; honest "doesn't address their hole" when no overlap. Verdict
+  is now player-specific only; the fit-vs-quality + "can't see" caveat lives ONCE in the UI footnote.
