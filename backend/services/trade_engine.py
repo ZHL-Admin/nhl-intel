@@ -247,6 +247,37 @@ def _cap(req: dict, assets: dict[str, dict], retentions: list[dict], abbr: dict[
     return out
 
 
+# ------------------------------------------------------------------------------------- fit (P5)
+def _fit(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
+    """Per team, overlay how the INCOMING PLAYERS fit that team's needs (models_ml.score_team_fit
+    vs nhl_models.team_needs). Picks and prospects carry no immediate fit (no current profile), so
+    they are skipped and noted. fit_delta is the mean incoming fit centered at 50 (neutral)."""
+    from models_ml.score_team_fit import score_team_fit
+
+    incoming_players: dict[int, list[int]] = {int(t): [] for t in req["team_ids"]}
+    for m in req["movements"]:
+        a = assets[m["asset_id"]]
+        if a.get("asset_type") == "player" and a.get("player_id") is not None:
+            incoming_players[int(m["to_team_id"])].append(int(a["player_id"]))
+
+    out = {}
+    for tid in req["team_ids"]:
+        tid = int(tid)
+        details, scores = [], []
+        for pid in incoming_players[tid]:
+            try:
+                f = score_team_fit(pid, tid, None)   # None -> score_team_fit's latest team_needs season
+            except Exception:
+                continue                              # no current profile (e.g. a listed prospect) -> no fit
+            scores.append(float(f["overall_score"]))
+            details.append({"player_id": pid, "player_name": f.get("player_name"),
+                            "fit_score": round(float(f["overall_score"]), 1), "grade": f.get("overall_grade"),
+                            "summary": f.get("verdict_sentence")})
+        fit_delta = round(sum(scores) / len(scores) - 50.0, 1) if scores else None
+        out[tid] = {"fit_delta": fit_delta, "fit_details": details}
+    return out
+
+
 # ------------------------------------------------------------------------------------- orchestration
 def evaluate(req: dict, season: Optional[str] = None) -> dict:
     """Evaluate a proposed trade -> the multi-team, multi-axis decomposition (see schemas)."""
@@ -260,6 +291,7 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
     ledgers = _team_ledgers(req, assets, retentions)
     nets = _net(req, assets, retentions)
     caps = _cap(req, assets, retentions, abbr, season)
+    fits = _fit(req, assets)
 
     teams = []
     for tid in req["team_ids"]:
@@ -267,9 +299,10 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
         teams.append({
             "team_id": tid, "team_abbrev": abbr.get(tid),
             **nets[tid],                              # talent + surplus deltas with bands (P2/P3)
+            **fits[tid],                              # fit delta + per-player fit detail (P5)
             "cap": caps[tid],                         # soft, approximate cap flag (P4)
             "incoming": ledgers[tid]["incoming"], "outgoing": ledgers[tid]["outgoing"],
-            # remaining axes filled by later phases (P5 fit, P6 verdict)
+            # confidence + summary filled by P6
         })
 
     caveats = [
