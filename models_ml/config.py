@@ -154,10 +154,10 @@ TRADE_FIT = {
     "LINE_COMP_SCALE": 0.03,
     "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,   # kept for the line note's grade context
     # letter grade off the COMPOSED fit (carding only). The API and UI ALWAYS render the
-    # decomposition + the separate quality axis — never a lone grade. Tuned to the floor+match
-    # distribution in validate_trade_fit (a star floors ~0.55 -> B even at a poor-fit team; a
-    # low-value player nobody needs lands D/F; a specialist on a real need reaches B+).
-    "GRADE_BANDS": [("A", 0.80), ("B", 0.68), ("C", 0.56), ("D", 0.44), ("F", 0.0)],
+    # decomposition + the separate quality axis — never a lone grade. Conventional-feeling bands so
+    # the letter matches the /100 (≈85+ A, 70s B, 55+ C, ...): a star floors at ≥ B even at a poor-fit
+    # team; a low-value player nobody needs lands D/F; a specialist on a real need reaches A/B.
+    "GRADE_BANDS": [("A", 0.85), ("B", 0.70), ("C", 0.55), ("D", 0.40), ("F", 0.0)],
 }
 
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------

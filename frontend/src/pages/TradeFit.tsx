@@ -7,7 +7,7 @@
  * the teams whose gaps this player best fills.
  */
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { Check, Info, ArrowRight, RotateCcw, Share2, Zap, Sparkles, Search, X } from 'lucide-react'
 import { PageLayout, PageHeader, SkeletonLoader } from '../components/common'
 import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
@@ -35,12 +35,15 @@ function gradeColor(grade?: string | null): string {
  * penalty), per the asymmetric-need model — so a low-need bar must not look like a weakness.
  */
 const LEVEL_STRONG = 0.60
-const LEVEL_MIDDLING = 0.40
+const LEVEL_MIDDLING = 0.42
+// Calm, semantic ramp: green = a real strength, neutral slate = moderate (NOT a warning — most fits
+// are moderate and shouldn't read as orange alarms), amber = the genuine soft spot. One accent colour
+// at a time keeps the card from looking like a wall of orange.
 function levelColor(level?: number | null): string {
   if (level == null) return '#94a3b8'            // n/a — slate
   if (level >= LEVEL_STRONG) return '#16a34a'    // strong — green
-  if (level >= LEVEL_MIDDLING) return '#d97706'  // middling — amber
-  return '#b1442e'                               // weak — muted burnt-red (the soft spot)
+  if (level >= LEVEL_MIDDLING) return '#64748b'  // moderate — neutral slate
+  return '#d97706'                               // weak — amber (the soft spot)
 }
 
 /** Share the current fit — Web Share API on mobile, clipboard link otherwise. */
@@ -442,15 +445,19 @@ function Hero({ result, player, team }: {
 
   return (
     <div className="tf-hero" style={{ ['--tf-grade' as string]: color } as React.CSSProperties}>
-      {/* player -> team inputs */}
+      {/* player -> team inputs (each links to its profile) */}
       <div className="tf-hero__io">
-        {faceSrc
-          ? <img className="tf-hero__face" src={faceSrc} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
-          : <span className="tf-hero__face tf-hero__face--blank" />}
-        <span className="tf-hero__io-name">{name}</span>
+        <Link className="tf-hero__io-link" to={`/players/${result.player_id}`}>
+          {faceSrc
+            ? <img className="tf-hero__face" src={faceSrc} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
+            : <span className="tf-hero__face tf-hero__face--blank" />}
+          <span className="tf-hero__io-name">{name}</span>
+        </Link>
         <ArrowRight size={18} className="tf-hero__viz-arrow" />
-        {team && <img className="tf-hero__logo" src={getTeamLogoUrl(team.abbrev)} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />}
-        <span className="tf-hero__io-name">{team?.name ?? ''}</span>
+        <Link className="tf-hero__io-link" to={`/teams/${result.team_id}`}>
+          {team && <img className="tf-hero__logo" src={getTeamLogoUrl(team.abbrev)} alt="" onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />}
+          <span className="tf-hero__io-name">{team?.name ?? ''}</span>
+        </Link>
       </div>
 
       {/* tangible player facts (what the API gives us; no cap/contract) */}
