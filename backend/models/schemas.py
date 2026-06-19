@@ -1576,3 +1576,109 @@ class TradeableAsset(BaseModel):
     surplus_high: Optional[int] = None
     confidence: Optional[str] = None
     note: Optional[str] = None                  # e.g. own-picks ownership caveat
+
+
+# --- Trade engine: multi-team trade evaluation (request + response contract) ------------------
+# A trade is a set of asset MOVEMENTS among N teams; each team gets its own multi-axis result. The
+# verdict is never a single grade — talent, cost-efficiency (surplus), and fit stay separate, with
+# confidence bands first-class. Cap compliance is a SOFT, approximate flag, never a gate.
+class AssetMovement(BaseModel):
+    """One asset moving from a source team to a destination team."""
+    asset_id: str = Field(description="asset_id from mart_tradeable_assets (player:<id> / prospect:<id> / pick:<...>)")
+    from_team_id: int
+    to_team_id: int
+
+
+class RetentionElection(BaseModel):
+    """A team retaining salary on a traded contract (a value lever, modeled at evaluation time)."""
+    player_id: int
+    retaining_team_id: int = Field(description="the team keeping salary on its books (the player's source team)")
+    retained_pct: float = Field(description="fraction of cap hit retained, 0 < pct <= 0.50")
+
+
+class TradeEvaluateRequest(BaseModel):
+    """Propose a trade: the involved teams, the asset movements, and any retention elections."""
+    team_ids: List[int] = Field(description="all teams involved (N >= 2)")
+    movements: List[AssetMovement]
+    retentions: List[RetentionElection] = Field(default_factory=list)
+    season: Optional[str] = None
+
+
+class AssetValuePart(BaseModel):
+    """One asset on a team's ledger (incoming or outgoing), carried for transparency."""
+    asset_id: str
+    asset_type: str
+    label: str
+    direction: str                              # 'in' | 'out'
+    value_war: Optional[float] = None
+    value_war_low: Optional[float] = None
+    value_war_high: Optional[float] = None
+    surplus_dollars: Optional[int] = None
+    surplus_capshare: Optional[float] = None
+    confidence: Optional[str] = None
+    note: Optional[str] = None                  # e.g. retention applied, pick-ownership caveat
+
+
+class FitDetail(BaseModel):
+    """How one incoming player fits the receiving team's needs (from score_team_fit)."""
+    player_id: int
+    player_name: Optional[str] = None
+    fit_score: Optional[float] = None           # 0-100
+    grade: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class CapImpact(BaseModel):
+    """APPROXIMATE cap-compliance read for a team — a soft flag, never a gate. LTIR, performance
+    bonuses, and roster size are not modeled."""
+    committed_before: Optional[int] = None
+    cap_hit_change: Optional[int] = None        # net change incl. retention
+    committed_after: Optional[int] = None
+    ceiling: Optional[int] = None
+    margin: Optional[int] = None                # ceiling - committed_after (negative = over)
+    over_cap: Optional[bool] = None
+    approximate: bool = True
+    caveat: str = "Approximate: sums cap hits only; LTIR, bonuses, and roster size are not modeled."
+
+
+class TeamTradeResult(BaseModel):
+    """One team's multi-axis decomposition of the trade. The three considerations are kept separate."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    # TALENT — net projected value in WAR over the control window (+ band)
+    talent_delta_war: Optional[float] = None
+    talent_delta_war_low: Optional[float] = None
+    talent_delta_war_high: Optional[float] = None
+    # COST-EFFICIENCY — net surplus, in dollars and cap-share (+ bands)
+    surplus_delta_dollars: Optional[int] = None
+    surplus_delta_dollars_low: Optional[int] = None
+    surplus_delta_dollars_high: Optional[int] = None
+    surplus_delta_capshare: Optional[float] = None
+    surplus_delta_capshare_low: Optional[float] = None
+    surplus_delta_capshare_high: Optional[float] = None
+    # FIT — aggregate fit of incoming players to this team's needs
+    fit_delta: Optional[float] = None
+    fit_details: List[FitDetail] = Field(default_factory=list)
+    # CAP — soft, approximate flag
+    cap: Optional[CapImpact] = None
+    # confidence driven by the band widths (wide -> low), especially prospect/pick-heavy sides
+    confidence: Optional[str] = None
+    incoming: List[AssetValuePart] = Field(default_factory=list)
+    outgoing: List[AssetValuePart] = Field(default_factory=list)
+    summary: Optional[str] = None
+
+
+class TradeSummaryLine(BaseModel):
+    """A 'who gains what' line for one team — parts, not a single grade."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    headline: Optional[str] = None
+    gains: List[str] = Field(default_factory=list)
+
+
+class TradeEvaluateResponse(BaseModel):
+    """The full multi-team evaluation: a per-team decomposition plus a structured cross-team summary."""
+    season: Optional[str] = None
+    teams: List[TeamTradeResult] = Field(default_factory=list)
+    summary: List[TradeSummaryLine] = Field(default_factory=list)
+    caveats: List[str] = Field(default_factory=list)

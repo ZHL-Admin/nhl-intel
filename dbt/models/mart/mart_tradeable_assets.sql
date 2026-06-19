@@ -33,9 +33,12 @@ players as (
         v.value_dollars, v.value_dollars_low, v.value_dollars_high,
         -- cost axis
         v.cap_hit, v.remaining_years, v.cost_dollars,
-        -- surplus (value minus cost) + band
+        -- surplus (value minus cost) + band — DOLLARS (cap-aware) and CAP-SHARE (era-neutral)
         v.total_discounted_surplus                           as surplus_dollars,
         v.surplus_low, v.surplus_high,
+        v.total_discounted_surplus_share                     as surplus_capshare,
+        v.surplus_share_low                                  as surplus_capshare_low,
+        v.surplus_share_high                                 as surplus_capshare_high,
         v.confidence,
         cast(null as string)                                 as note
     from {{ source('nhl_models', 'player_contract_value') }} v
@@ -54,6 +57,10 @@ prospects as (
         f.surplus_dollars,
         f.value_dollars_low  as surplus_low,
         f.value_dollars_high as surplus_high,
+        -- futures carry ~no cap cost, so their cap-share surplus is a NOMINAL value/cap (2025-26 cap)
+        f.surplus_dollars    / 95500000.0 as surplus_capshare,
+        f.value_dollars_low  / 95500000.0 as surplus_capshare_low,
+        f.value_dollars_high / 95500000.0 as surplus_capshare_high,
         f.confidence, f.ownership_note as note
     from {{ source('nhl_models', 'futures_value') }} f
     where f.asset_kind = 'prospect'
@@ -71,6 +78,9 @@ picks as (
         f.surplus_dollars,
         f.value_dollars_low  as surplus_low,
         f.value_dollars_high as surplus_high,
+        f.surplus_dollars    / 95500000.0 as surplus_capshare,
+        f.value_dollars_low  / 95500000.0 as surplus_capshare_low,
+        f.value_dollars_high / 95500000.0 as surplus_capshare_high,
         f.confidence, f.ownership_note as note
     from {{ source('nhl_models', 'futures_value') }} f
     where f.asset_kind = 'pick'

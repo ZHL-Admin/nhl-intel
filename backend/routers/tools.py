@@ -8,11 +8,28 @@ from fastapi.concurrency import run_in_threadpool
 from models.schemas import (
     LineFitRequest, LineFitProjection, LineSuggestionsResponse,
     TradeFitRequest, TradeFitResult, BestTeamFit,
+    TradeEvaluateRequest, TradeEvaluateResponse,
 )
 from services import tools as tool_svc
+from services import trade_engine
 from services.cache import cache
 
 router = APIRouter()
+
+
+# Registered with the literal path /trade-evaluate; tools has no /{id} route, so no shadowing.
+@router.post("/trade-evaluate", response_model=TradeEvaluateResponse)
+async def post_trade_evaluate(req: TradeEvaluateRequest) -> TradeEvaluateResponse:
+    """Evaluate a proposed multi-team trade: per-team talent / surplus / fit / cap decomposition.
+
+    Stateless. A trade is a set of asset movements among N teams (two-team is the common case), with
+    optional retention elections. The verdict is a multi-axis decomposition, never a single grade;
+    cap compliance is a soft, approximate flag, never a gate."""
+    try:
+        payload = await run_in_threadpool(trade_engine.evaluate, req.model_dump(), req.season)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return TradeEvaluateResponse(**payload)
 
 
 @router.post("/line-fit", response_model=LineFitProjection)
