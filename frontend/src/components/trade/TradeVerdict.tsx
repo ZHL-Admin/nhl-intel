@@ -88,9 +88,27 @@ function Axis({ label, valueText, sub, total, se, domain, subdued }: {
   )
 }
 
+/** A categorical lean per team — the ANSWER (does this side gain?), backed by the decomposition
+ * below and the engine's reasoning sentence. Derived transparently from the talent + surplus signs;
+ * it is a qualitative read, not a single numeric score. */
+function teamLean(t: TeamTradeResult): { label: string; tone: 'pos' | 'neg' | 'zero' } {
+  const war = t.talent_delta_war ?? 0
+  const sur = t.surplus_delta_dollars ?? 0
+  const warUp = war >= 0.5, warDn = war <= -0.5
+  const surUp = sur >= 2_000_000, surDn = sur <= -2_000_000
+  if (warUp && !surDn) return { label: 'Wins the trade', tone: 'pos' }
+  if (warUp && surDn) return { label: 'Win-now — pays a premium', tone: 'zero' }
+  if (warDn && surUp) return { label: 'Retools — sheds cost for futures', tone: 'zero' }
+  if (warDn && surDn) return { label: 'Loses the trade', tone: 'neg' }
+  if (surUp) return { label: 'Gains value', tone: 'pos' }
+  if (surDn) return { label: 'Loses value', tone: 'neg' }
+  return { label: 'Roughly even', tone: 'zero' }
+}
+
 export function TeamDecomposition({ result, domains }: { result: TeamTradeResult; domains: Domains }) {
   const t = result
   const futures = isFuturesHeavy(t)
+  const lean = teamLean(t)
   const talentSe = t.talent_delta_war_low != null && t.talent_delta_war_high != null
     ? (t.talent_delta_war_high - t.talent_delta_war_low) / 2 : null
   const surplusSe = t.surplus_delta_dollars_low != null && t.surplus_delta_dollars_high != null
@@ -100,11 +118,13 @@ export function TeamDecomposition({ result, domains }: { result: TeamTradeResult
   return (
     <div className="trade-verdict__team">
       <div className="trade-verdict__team-head">
-        <span className="trade-verdict__team-label">Verdict</span>
+        <span className={`trade-verdict__lean trade-verdict__lean--${lean.tone}`}>{lean.label}</span>
         <span className={`trade-verdict__conf trade-verdict__conf--${t.confidence}`}>
           {CONF_LABEL[t.confidence ?? ''] ?? t.confidence}
         </span>
       </div>
+
+      {t.summary && <p className="trade-verdict__why">{t.summary}</p>}
 
       {t.incoming.length > 0 && (
         <p className="trade-verdict__acquires">

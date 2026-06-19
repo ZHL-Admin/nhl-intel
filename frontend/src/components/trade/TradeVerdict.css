@@ -26,10 +26,15 @@
   display: flex; flex-direction: column; gap: var(--space-3);
   border-top: 1px solid var(--color-border-subtle); margin-top: var(--space-2); padding-top: var(--space-3);
 }
-.trade-verdict__team-head { display: flex; align-items: center; justify-content: space-between; }
-.trade-verdict__team-label {
-  font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--color-text-secondary);
+.trade-verdict__team-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.trade-verdict__lean {
+  font-size: var(--text-base); font-weight: 800; letter-spacing: -0.01em;
+}
+.trade-verdict__lean--pos { color: var(--color-data-positive); }
+.trade-verdict__lean--neg { color: var(--color-data-negative); }
+.trade-verdict__lean--zero { color: var(--color-text-primary); }
+.trade-verdict__why {
+  font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.45; margin: 0;
 }
 .trade-verdict__conf {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;

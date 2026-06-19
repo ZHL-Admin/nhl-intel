@@ -59,8 +59,9 @@ export default function TradeBuilder() {
   // No teams are preselected — the board starts empty and the user chooses each side.
   const [teams, setTeams] = useState<number[]>([])
   const [items, setItems] = useState<BuilderItem[]>([])
+  const [addingTeam, setAddingTeam] = useState(false)   // an extra empty column the user opened
 
-  const addTeam = (id: number) => setTeams((t) => (t.includes(id) ? t : [...t, id]))
+  const addTeam = (id: number) => { setTeams((t) => (t.includes(id) ? t : [...t, id])); setAddingTeam(false) }
   const removeTeam = (id: number) => {
     setTeams((t) => t.filter((x) => x !== id))
     // drop that team's sent assets, and clear destinations pointing at it
@@ -93,10 +94,24 @@ export default function TradeBuilder() {
       .map((i) => ({ player_id: i.asset.player_id as number, retaining_team_id: i.fromTeam, retained_pct: i.retainedPct as number })),
   }), [teams, items])
 
+  // with exactly two teams the destination is unambiguous — keep every asset pointed at the other side
+  useEffect(() => {
+    if (teams.length !== 2) return
+    setItems((its) => {
+      let changed = false
+      const next = its.map((i) => {
+        const other = teams.find((t) => t !== i.fromTeam) ?? null
+        if (i.toTeam !== other) { changed = true; return { ...i, toTeam: other } }
+        return i
+      })
+      return changed ? next : its
+    })
+  }, [teams])
+
   const availableToAdd = ALL_TEAMS.filter((t) => !teams.includes(t.id))
   const hasMovements = request.movements.length > 0
-  // show empty team slots: at least two cards on an empty board, then one trailing "add" slot
-  const slotCount = availableToAdd.length === 0 ? 0 : Math.max(2 - teams.length, 1)
+  // empty team slots only fill UP TO the required two; a 3rd+ column is added on demand via a button
+  const slotCount = Math.min(Math.max(2 - teams.length, 0) + (addingTeam ? 1 : 0), availableToAdd.length)
 
   // re-evaluate on any change to the trade (debounced); the verdict updates live
   const [result, setResult] = useState<TradeEvaluateResponse | null>(null)
@@ -140,8 +155,13 @@ export default function TradeBuilder() {
           {loading && result && (
             <span className="trade-builder__updating"><Loader2 size={13} className="spin" /> Evaluating…</span>
           )}
-          {(items.length > 0 || teams.length > 0) && (
-            <button className="trade-builder__reset" onClick={() => { setItems([]); setTeams([]) }}>
+          {teams.length >= 2 && availableToAdd.length > 0 && !addingTeam && (
+            <button className="trade-builder__addteam" onClick={() => setAddingTeam(true)}>
+              <Plus size={14} /> Add team
+            </button>
+          )}
+          {(items.length > 0 || teams.length > 0 || addingTeam) && (
+            <button className="trade-builder__reset" onClick={() => { setItems([]); setTeams([]); setAddingTeam(false) }}>
               <RotateCcw size={14} /> Reset
             </button>
           )}

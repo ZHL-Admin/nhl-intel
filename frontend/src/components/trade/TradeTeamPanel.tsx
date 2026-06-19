@@ -29,12 +29,14 @@ function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, 
   const dests = teams.filter((t) => t !== item.fromTeam)
   const band = fmtWarBand(a.value_war_low, a.value_war_high)
   const isPlayer = a.asset_type === 'player' && a.player_id != null
-  const dstAbbrev = item.toTeam != null ? getTeamAbbrev(item.toTeam) : null
+  const twoTeam = teams.length === 2            // with two teams the destination is unambiguous
+  const effectiveDest = twoTeam ? dests[0] ?? null : item.toTeam
+  const dstAbbrev = effectiveDest != null ? getTeamAbbrev(effectiveDest) : null
   return (
-    <div className={`asset-chip asset-chip--${a.asset_type}${item.toTeam == null ? ' asset-chip--unassigned' : ''}`}>
+    <div className={`asset-chip asset-chip--${a.asset_type}${effectiveDest == null ? ' asset-chip--unassigned' : ''}`}>
       <div className="asset-chip__id">
-        {a.asset_type === 'player' && a.player_id
-          ? <PlayerAvatar id={a.player_id} team={a.org_team} name={a.label} size={30} />
+        {a.asset_type !== 'pick' && a.player_id
+          ? <PlayerAvatar id={a.player_id} team={a.org_team} name={a.label} size={30} showTeamLogo={false} />
           : <span className={`asset-chip__badge asset-chip__badge--${a.asset_type}`}>{a.asset_type === 'pick' ? 'PK' : 'PR'}</span>}
         <div className="asset-chip__meta">
           <span className="asset-chip__name">{a.label}</span>
@@ -64,14 +66,18 @@ function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, 
 
       <div className="asset-chip__dest">
         <ArrowRight size={14} className="asset-chip__dest-arrow" />
-        <Select
-          ariaLabel={`Destination for ${a.label}`}
-          value={item.toTeam != null ? String(item.toTeam) : ''}
-          options={[{ value: '', label: 'Send to…' },
-                    ...dests.map((t) => ({ value: String(t), label: getTeamName(getTeamAbbrev(t)) }))]}
-          onChange={(v) => v && onSetDestination(a.asset_id, Number(v))}
-        />
-        {item.toTeam == null && <span className="asset-chip__needs">needs a destination</span>}
+        {twoTeam ? (
+          <span className="asset-chip__dest-static">{dstAbbrev ? getTeamName(dstAbbrev) : '—'}</span>
+        ) : (
+          <Select
+            ariaLabel={`Destination for ${a.label}`}
+            value={item.toTeam != null ? String(item.toTeam) : ''}
+            options={[{ value: '', label: 'Send to…' },
+                      ...dests.map((t) => ({ value: String(t), label: getTeamName(getTeamAbbrev(t)) }))]}
+            onChange={(v) => v && onSetDestination(a.asset_id, Number(v))}
+          />
+        )}
+        {!twoTeam && item.toTeam == null && <span className="asset-chip__needs">needs a destination</span>}
       </div>
 
       {isPlayer && (retentionAllowed ? (

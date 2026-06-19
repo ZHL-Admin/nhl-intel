@@ -18,9 +18,11 @@ interface Props {
   team?: string | null
   name?: string | null
   size?: number
+  /** Team-logo badge on the headshot (default true; off where the team is already obvious). */
+  showTeamLogo?: boolean
 }
 
-export default function PlayerAvatar({ id, team, name, size = 40 }: Props) {
+export default function PlayerAvatar({ id, team, name, size = 40, showTeamLogo = true }: Props) {
   const [err, setErr] = useState(false)
   const src = !err && team ? getPlayerHeadshotUrl(id, team) : ''
   return (
@@ -28,7 +30,7 @@ export default function PlayerAvatar({ id, team, name, size = 40 }: Props) {
       {src
         ? <img className="pav__img" src={src} alt="" onError={() => setErr(true)} />
         : <span className="pav__ini">{initials(name)}</span>}
-      {team && (
+      {showTeamLogo && team && (
         <img className="pav__logo" src={getTeamLogoUrl(team)} alt=""
           onError={(e) => ((e.currentTarget.style.display = 'none'))} />
       )}
