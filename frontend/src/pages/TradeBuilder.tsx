@@ -6,13 +6,24 @@
  * asset, and any retention elections. Multi-team from the start (the engine is N-team). The
  * verdict is a per-team decomposition (talent / cost-efficiency / fit) — never a single grade.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { PageLayout, PageHeader, Select } from '../components/common'
-import { TradeableAsset, TradeEvaluateRequest } from '../api/types'
+import { PageLayout, PageHeader, Select, SkeletonLoader } from '../components/common'
+import { TradeableAsset, TradeEvaluateRequest, TradeEvaluateResponse } from '../api/types'
 import { DIVISIONS, getTeamName } from '../utils/teams'
+import { evaluateTrade } from '../api/assets'
 import TradeTeamPanel from '../components/trade/TradeTeamPanel'
+import { TradeSummaryBand, Domains } from '../components/trade/TradeVerdict'
 import './TradeBuilder.css'
+
+function computeDomains(res: TradeEvaluateResponse | null): Domains {
+  let tD = 2, sD = 5_000_000
+  for (const t of res?.teams ?? []) {
+    tD = Math.max(tD, Math.abs(t.talent_delta_war ?? 0), Math.abs(t.talent_delta_war_low ?? 0), Math.abs(t.talent_delta_war_high ?? 0))
+    sD = Math.max(sD, Math.abs(t.surplus_delta_dollars ?? 0), Math.abs(t.surplus_delta_dollars_low ?? 0), Math.abs(t.surplus_delta_dollars_high ?? 0))
+  }
+  return { talent: [-tD, tD], surplus: [-sD, sD] }
+}
 
 /** One asset placed into the trade: who sends it, where it goes, and any retained salary. */
 export interface BuilderItem {
@@ -65,6 +76,35 @@ export default function TradeBuilder() {
   const availableToAdd = ALL_TEAMS.filter((t) => !teams.includes(t.id))
   const hasMovements = request.movements.length > 0
 
+  // re-evaluate on any change to the trade (debounced); the verdict updates live
+  const [result, setResult] = useState<TradeEvaluateResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!hasMovements) { setResult(null); setError(null); return }
+    let cancel = false
+    setLoading(true)
+    const t = setTimeout(async () => {
+      try {
+        const res = await evaluateTrade(request)
+        if (!cancel) { setResult(res); setError(null) }
+      } catch (e: unknown) {
+        const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        if (!cancel) { setResult(null); setError(detail ?? 'Could not evaluate this trade.') }
+      } finally {
+        if (!cancel) setLoading(false)
+      }
+    }, 280)
+    return () => { cancel = true; clearTimeout(t) }
+  }, [request, hasMovements])
+
+  const domains = useMemo(() => computeDomains(result), [result])
+  const resultByTeam = useMemo(() => {
+    const m = new Map<number, TradeEvaluateResponse['teams'][number]>()
+    for (const t of result?.teams ?? []) m.set(t.team_id, t)
+    return m
+  }, [result])
+
   return (
     <PageLayout>
       <div className="trade-builder">
@@ -89,6 +129,10 @@ export default function TradeBuilder() {
           <span className="trade-builder__teamcount">{teams.length} teams</span>
         </div>
 
+        {error && <p className="trade-builder__error">{error}</p>}
+        {hasMovements && loading && !result && <SkeletonLoader />}
+        {result && <TradeSummaryBand summary={result.summary} />}
+
         <div className="trade-builder__panels" data-count={teams.length}>
           {teams.map((tid) => (
             <TradeTeamPanel
@@ -98,6 +142,8 @@ export default function TradeBuilder() {
               items={items.filter((i) => i.fromTeam === tid)}
               usedIds={usedIds}
               canRemove={teams.length > 2}
+              result={resultByTeam.get(tid)}
+              domains={result ? domains : null}
               onRemoveTeam={() => removeTeam(tid)}
               onAddAsset={(asset) => addItem(tid, asset)}
               onRemoveAsset={removeItem}
@@ -112,6 +158,9 @@ export default function TradeBuilder() {
             Add assets to each team and assign where they go. The verdict appears here as soon as the
             first asset has a destination.
           </p>
+        )}
+        {result?.dollar_basis && (
+          <p className="trade-builder__basis">{result.dollar_basis}</p>
         )}
       </div>
     </PageLayout>

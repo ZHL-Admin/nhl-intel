@@ -5,10 +5,11 @@
  */
 import { ArrowRight, X } from 'lucide-react'
 import { PlayerAvatar, Select } from '../common'
-import { TradeableAsset } from '../../api/types'
+import { TradeableAsset, TeamTradeResult } from '../../api/types'
 import { getTeamName, getTeamLogoUrl, getTeamAbbrev } from '../../utils/teams'
 import { fmtWar, fmtWarBand, fmtDollarsM, CAP_DOLLAR_TAG } from '../../utils/format'
 import AssetPicker from './AssetPicker'
+import { TeamDecomposition, Domains } from './TradeVerdict'
 import type { BuilderItem } from '../../pages/TradeBuilder'
 import './TradeTeamPanel.css'
 
@@ -96,13 +97,16 @@ function AssetChip({ item, teams, retentionAllowed, onRemove, onSetDestination, 
 const MAX_RETAINED = 3
 
 export default function TradeTeamPanel({
-  teamId, teams, items, usedIds, canRemove, onRemoveTeam, onAddAsset, onRemoveAsset, onSetDestination, onSetRetention,
+  teamId, teams, items, usedIds, canRemove, result, domains,
+  onRemoveTeam, onAddAsset, onRemoveAsset, onSetDestination, onSetRetention,
 }: {
   teamId: number
   teams: number[]
   items: BuilderItem[]
   usedIds: Set<string>
   canRemove: boolean
+  result?: TeamTradeResult | null
+  domains?: Domains | null
   onRemoveTeam: () => void
   onAddAsset: (asset: TradeableAsset) => void
   onRemoveAsset: (assetId: string) => void
@@ -137,6 +141,8 @@ export default function TradeTeamPanel({
                          onSetRetention={onSetRetention} />
             ))}
       </div>
+
+      {result && domains && <TeamDecomposition result={result} domains={domains} />}
     </section>
   )
 }
