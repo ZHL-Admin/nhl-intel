@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data
+.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -96,6 +96,11 @@ team-needs:
 # and confirm the defenseman-to-strong-defense team no longer scores ~0. Reads only; no writes.
 trade-fit-validate:
 	python -m models_ml.validate_trade_fit
+
+# Validate the multi-team trade EVALUATION engine on three archetypes (star-for-picks, hockey trade,
+# cap dump with retention) and print a pasteable per-team decomposition report. Reads the serving file.
+trade-engine-validate:
+	SERVING_BACKEND=duckdb python -m backend.validate_trade_engine
 
 # Refit archetypes v2 (enriched vector) then emit player_archetypes. Single-threaded for a
 # reproducible fit. Run without --write first to refresh the trait audit, confirm names, then --write.

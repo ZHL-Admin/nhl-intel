@@ -221,13 +221,12 @@ def _committed_caps(abbrevs: list[str]) -> dict[str, int]:
 
 
 def _cap(req: dict, assets: dict[str, dict], retentions: list[dict], abbr: dict[int, str],
-         season: str) -> dict[int, dict]:
+         season: str, committed: dict[str, int]) -> dict[int, dict]:
     """SOFT, approximate cap flag per team. Net current-year cap-hit change (an incoming player adds
     (1-X) of their cap hit; the source sheds (1-X) and keeps X*cap_hit dead money; prospects/picks
     are treated as cap-neutral) applied to the committed cap, vs the season ceiling. Never a gate."""
     pct = {r["player_id"]: r["pct"] for r in retentions}
     ceiling = int(config.CAP_UPPER_LIMIT_BY_SEASON.get(season, config.CAP_UPPER_LIMIT_BY_SEASON["2025-26"]))
-    committed = _committed_caps([abbr.get(int(t)) for t in req["team_ids"]])
     change = {int(t): 0.0 for t in req["team_ids"]}
     for m in req["movements"]:
         a = assets[m["asset_id"]]
@@ -349,7 +348,8 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
     retentions = _retentions(req, assets)
     ledgers = _team_ledgers(req, assets, retentions)
     nets = _net(req, assets, retentions)
-    caps = _cap(req, assets, retentions, abbr, season)
+    committed = _committed_caps([abbr.get(int(t)) for t in req["team_ids"]])
+    caps = _cap(req, assets, retentions, abbr, season, committed)
     fits = _fit(req, assets)
 
     teams = []
