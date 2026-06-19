@@ -1500,6 +1500,16 @@ class GoaliePreview(BaseModel):
 
 
 # --- Trade tool: contracts, surplus, and the unified tradeable-asset layer --------------------
+class CapShareYear(BaseModel):
+    """One season of a contract's cap-share schedule (Trade tool cap pass). actual_share declines
+    over the term as the cap rises against a flat cap hit; surplus_share = expected - actual."""
+    season: str
+    cap: int
+    actual_share: float
+    expected_share: float
+    surplus_share: float
+
+
 class PlayerContract(BaseModel):
     """A player's parsed contract + present-valued surplus (Trade tool P3/P4). Every dollar
     traces to a computed column; the surplus carries a confidence band, never a bare number."""
@@ -1525,11 +1535,16 @@ class PlayerContract(BaseModel):
     expected_aav_now: Optional[int] = None
     # COST axis: what the player is owed (cap_hit/remaining_years above; cost_dollars = discounted PV)
     cost_dollars: Optional[int] = None
-    # SURPLUS: value minus cost (the convenience difference), with its band
+    # SURPLUS: value minus cost (the convenience difference), with its band — DOLLARS (cap-aware)
     surplus_current: Optional[int] = None
     total_discounted_surplus: Optional[int] = None
     surplus_low: Optional[int] = None
     surplus_high: Optional[int] = None
+    # SURPLUS in cap-share (era-neutral) + the flat-cap baseline (cap frozen at current) so the
+    # forward cap-projection effect is visible, plus the per-year cap-share schedule (declining).
+    total_discounted_surplus_capshare: Optional[float] = None
+    surplus_flat_dollars: Optional[int] = None
+    cap_share_schedule: List[CapShareYear] = Field(default_factory=list)
     confidence: Optional[str] = None          # high | medium | proxy
     is_grounded: Optional[bool] = None
     match_method: Optional[str] = None        # how the contract resolved to this player_id (auditable)

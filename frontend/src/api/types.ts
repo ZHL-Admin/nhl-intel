@@ -1158,14 +1158,26 @@ export interface PlayerContract {
   expected_aav_now?: number | null
   // cost axis
   cost_dollars?: number | null
-  // surplus (value minus cost) + band
+  // surplus (value minus cost) + band — dollars (cap-aware)
   surplus_current?: number | null
   total_discounted_surplus?: number | null
   surplus_low?: number | null
   surplus_high?: number | null
+  // surplus in cap-share (era-neutral) + flat-cap baseline + per-year cap-share schedule
+  total_discounted_surplus_capshare?: number | null
+  surplus_flat_dollars?: number | null
+  cap_share_schedule?: CapShareYear[]
   confidence?: string | null
   is_grounded?: boolean | null
   match_method?: string | null
+}
+
+export interface CapShareYear {
+  season: string
+  cap: number
+  actual_share: number
+  expected_share: number
+  surplus_share: number
 }
 
 export interface TradeableAsset {

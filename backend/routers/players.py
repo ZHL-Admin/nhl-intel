@@ -20,7 +20,7 @@ from models.schemas import (
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
-    PlayerContract,
+    PlayerContract, CapShareYear,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -1262,8 +1262,9 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
                c.remaining_years, c.expiry_year, c.is_ufa, c.contract_type, c.match_method,
                v.war_now, v.value_war, v.value_war_low, v.value_war_high,
                v.value_dollars, v.value_dollars_low, v.value_dollars_high,
-               v.expected_aav_now, v.cost_dollars, v.surplus_current,
+               v.expected_value_now AS expected_aav_now, v.cost_dollars, v.surplus_current,
                v.total_discounted_surplus, v.surplus_low, v.surplus_high,
+               v.total_discounted_surplus_share, v.surplus_flat_dollars, v.cap_share_schedule,
                v.confidence, v.is_grounded
         FROM {contracts} c
         LEFT JOIN {value} v ON c.player_id = v.player_id AND c.as_of_date = v.as_of_date
@@ -1274,6 +1275,9 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
     if not rows:
         raise HTTPException(status_code=404, detail="No contract on file for this player.")
     r = rows[0]
+    sched = []
+    if r.get("cap_share_schedule"):
+        sched = [CapShareYear(**y) for y in json.loads(r["cap_share_schedule"])]
     return PlayerContract(
         player_id=int(r["player_id"]), as_of_date=r.get("as_of_date"), season=r.get("season"),
         contract_team=r.get("contract_team"), cap_hit=r.get("cap_hit"), aav=r.get("aav"),
@@ -1287,6 +1291,9 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
         surplus_current=r.get("surplus_current"),
         total_discounted_surplus=r.get("total_discounted_surplus"),
         surplus_low=r.get("surplus_low"), surplus_high=r.get("surplus_high"),
+        total_discounted_surplus_capshare=r.get("total_discounted_surplus_share"),
+        surplus_flat_dollars=r.get("surplus_flat_dollars"),
+        cap_share_schedule=sched,
         confidence=r.get("confidence"), is_grounded=r.get("is_grounded"),
     )
 
