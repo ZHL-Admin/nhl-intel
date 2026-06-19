@@ -51,7 +51,7 @@ def _load_assets(asset_ids: list[str]) -> dict[str, dict]:
                value_war, value_war_low, value_war_high,
                surplus_dollars, surplus_low, surplus_high,
                surplus_capshare, surplus_capshare_low, surplus_capshare_high,
-               cap_hit, remaining_years, confidence, note
+               cap_hit, remaining_years, cost_dollars, confidence, note
         FROM {bq_service.get_full_table_id('mart_tradeable_assets')}
         WHERE asset_id IN ({quoted})""")
     return {r["asset_id"]: r for r in rows}
@@ -112,14 +112,49 @@ def _as_int(x):
     return int(x) if x is not None else None
 
 
-def _team_ledgers(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
-    """Per team: the incoming and outgoing AssetValuePart lists."""
+def _team_ledgers(req: dict, assets: dict[str, dict], retentions: list[dict]) -> dict[int, dict]:
+    """Per team: the incoming and outgoing AssetValuePart lists (retained players annotated)."""
+    ret_by_player = {r["player_id"]: r for r in retentions}
+    abbr = _abbrevs([r["from_team"] for r in retentions])
     ledgers = {int(t): {"incoming": [], "outgoing": []} for t in req["team_ids"]}
     for m in req["movements"]:
         a = assets[m["asset_id"]]
-        ledgers[m["to_team_id"]]["incoming"].append(_part(a, "in"))
-        ledgers[m["from_team_id"]]["outgoing"].append(_part(a, "out"))
+        rin, rout = _part(a, "in"), _part(a, "out")
+        r = ret_by_player.get(a.get("player_id"))
+        if r:
+            tag = f"{int(r['pct']*100)}% retained by {abbr.get(r['from_team'], r['from_team'])}"
+            # receiver pays less (surplus up); retainer carries dead money (surplus down)
+            rin["surplus_dollars"] = _as_int((rin["surplus_dollars"] or 0) + r["retained_dollars"])
+            rin["note"] = tag
+            rout["note"] = tag
+        ledgers[m["to_team_id"]]["incoming"].append(rin)
+        ledgers[m["from_team_id"]]["outgoing"].append(rout)
     return ledgers
+
+
+# ------------------------------------------------------------------------------------- retention (P3)
+def _retentions(req: dict, assets: dict[str, dict]) -> list[dict]:
+    """Resolve each retention election into a value shift. When the SOURCE team retains X% of a
+    traded contract, the receiving team pays only (1-X) of the cost (its surplus improves by X*cost)
+    and the retaining team keeps X*cost as DEAD MONEY with no player (its surplus drops by X*cost).
+    Talent is unaffected (it moves fully with the player)."""
+    move_to = {m["asset_id"]: int(m["to_team_id"]) for m in req["movements"]}
+    out = []
+    for ret in req.get("retentions", []):
+        aid = f"player:{ret['player_id']}"
+        a = assets[aid]
+        pct = float(ret["retained_pct"])
+        cost = float(a.get("cost_dollars") or 0.0)
+        retained_dollars = pct * cost
+        out.append({
+            "player_id": int(ret["player_id"]), "label": a.get("label"),
+            "pct": pct, "from_team": int(ret["retaining_team_id"]), "to_team": move_to[aid],
+            "retained_dollars": retained_dollars,
+            "retained_capshare": retained_dollars / config.CAP_UPPER_LIMIT_BY_SEASON["2025-26"],
+            # current-year cap hit retained (for the cap soft-flag in P4)
+            "retained_cap_hit": pct * float(a.get("cap_hit") or 0.0),
+        })
+    return out
 
 
 # ------------------------------------------------------------------------------------- netting (P2)
@@ -130,10 +165,11 @@ def _hw(lo, hi) -> float:
     return abs(float(hi) - float(lo)) / 2.0
 
 
-def _net(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
+def _net(req: dict, assets: dict[str, dict], retentions: list[dict]) -> dict[int, dict]:
     """Per team, net incoming minus outgoing on TWO separate axes — talent (WAR) and surplus (dollars
     and cap-share) — propagating each asset's uncertainty band by combining VARIANCES (incoming and
-    outgoing both add uncertainty), so a prospect/pick-heavy side shows a wide net band."""
+    outgoing both add uncertainty), so a prospect/pick-heavy side shows a wide net band. Retention
+    then shifts surplus only: the receiver saves X*cost, the retaining team eats X*cost dead money."""
     acc = {int(t): {"war": 0.0, "war_var": 0.0, "sd": 0.0, "sd_var": 0.0, "sc": 0.0, "sc_var": 0.0}
            for t in req["team_ids"]}
     for m in req["movements"]:
@@ -148,6 +184,10 @@ def _net(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
             d = acc[tid]
             d["war"] += sign * war; d["sd"] += sign * sd; d["sc"] += sign * sc
             d["war_var"] += war_v; d["sd_var"] += sd_v; d["sc_var"] += sc_v
+    # retention: receiver saves the retained cost, retainer carries it as dead money (no talent shift)
+    for r in retentions:
+        acc[r["to_team"]]["sd"] += r["retained_dollars"]; acc[r["to_team"]]["sc"] += r["retained_capshare"]
+        acc[r["from_team"]]["sd"] -= r["retained_dollars"]; acc[r["from_team"]]["sc"] -= r["retained_capshare"]
     out = {}
     for tid, d in acc.items():
         war_hw, sd_hw, sc_hw = math.sqrt(d["war_var"]), math.sqrt(d["sd_var"]), math.sqrt(d["sc_var"])
@@ -174,8 +214,9 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
     _validate(req, assets)
 
     abbr = _abbrevs(req["team_ids"])
-    ledgers = _team_ledgers(req, assets)
-    nets = _net(req, assets)
+    retentions = _retentions(req, assets)
+    ledgers = _team_ledgers(req, assets, retentions)
+    nets = _net(req, assets, retentions)
 
     teams = []
     for tid in req["team_ids"]:
