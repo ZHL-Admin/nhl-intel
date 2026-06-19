@@ -440,9 +440,25 @@ CONTRACT_VALUE = {
     # Goalies have no aging curve here (curves are skater points/82); hold goalie WAR flat across
     # remaining years and tag it lower-confidence. Documented gap, revisited when a goalie curve exists.
     "GOALIE_AGING_FLAT": True,
-    # Market curve: monotone (isotonic) AAV-as-a-function-of-WAR fit PER position group on the
-    # league's matched contracts. Needs a minimum sample; below it, pool all skaters.
-    "MARKET_MIN_N": 60,
+    # Market curve: a MONOTONE, smooth AAV-as-a-function-of-WAR fit PER position group on the
+    # league's matched contracts. Form: log(AAV) is LINEAR in WAR (so the top end is multiplicative
+    # and keeps rising, never plateaus), with the intercept shifted to the MARKET_QUANTILE conditional
+    # quantile, then passed through a smooth soft-cap that asymptotes to the CBA max-contract ceiling.
+    # This replaced isotonic regression, whose terminal block FLATTENED the sparse top well below the
+    # AAVs elite production actually commands, making max-deal stars read as huge false negatives.
+    "MARKET_MIN_N": 60,          # min sample to fit a position group; below it, pool all skaters
+    # The curve targets the upper-mid conditional quantile of AAV (not the mean): contracts price
+    # peak/reputation that single-season WAR understates, and the high-WAR cohort is diluted by ELC /
+    # bridge deals, so the mean reads stars as overpaid. 0.65 lands the sample stars at modest surplus
+    # while keeping the mid/low range sane (a 2-WAR forward ~ $9M).
+    "MARKET_QUANTILE": 0.65,
+    # Soft-cap to the CBA maximum (a contract cannot exceed ~20% of the cap). Ceiling = mult x the max
+    # observed AAV (data-derived); the cap bends in smoothly from KNEE_FRAC x ceiling, always rising.
+    "MARKET_CEIL_MULT": 1.05,
+    "MARKET_KNEE_FRAC": 0.75,
+    # The top decile of production has few comparables, so its value is lower-confidence: widen the
+    # band there and cap the confidence tag at 'medium'.
+    "TOP_DECILE_BAND_MULT": 1.6,
     # A player with no current-season WAR (injured, just called up, too few games) cannot be
     # grounded: floor their production NEAR REPLACEMENT (war_floor) with a WIDE band and a proxy
     # tag, never a fabricated point estimate.

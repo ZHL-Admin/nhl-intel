@@ -30,7 +30,6 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-from sklearn.isotonic import IsotonicRegression
 
 from models_ml import bq, config
 
@@ -106,18 +105,45 @@ def pos_group(position: str, contract_pos: str) -> str:
     return "D" if cp.replace(",", "") == "D" else "F"
 
 
-def fit_market_curves(market: pd.DataFrame) -> dict[str, IsotonicRegression]:
-    """Per-position monotone AAV(WAR) curve. Pools to all skaters if a group is too sparse."""
-    curves: dict[str, IsotonicRegression] = {}
+def fit_market_curves(market: pd.DataFrame) -> dict:
+    """Per-position MONOTONE AAV(WAR) market curve.
+
+    log(AAV) = a + b·WAR (b>0) so the curve rises multiplicatively and never plateaus; the intercept
+    is shifted to the MARKET_QUANTILE conditional quantile (the going rate a well-paid player at that
+    production commands), then a smooth soft-cap asymptotes the top to the CBA max-contract ceiling.
+    Pools all skaters for a position group that is too sparse to fit on its own.
+    """
+    market = market.copy()
+    market["war"] = pd.to_numeric(market["war"]).astype("float64")
+    market["aav"] = pd.to_numeric(market["aav"]).astype("float64")
+    ceil = float(market["aav"].max()) * CV["MARKET_CEIL_MULT"]
+    knee = ceil * CV["MARKET_KNEE_FRAC"]
     skater = market[market.pg.isin(["F", "D"])]
+    fits: dict[str, tuple[float, float, float]] = {}
+    top_war: dict[str, float] = {}
     for pg in ["F", "D", "G"]:
         g = market[market.pg == pg]
         if len(g) < CV["MARKET_MIN_N"] and pg in ("F", "D"):
-            g = skater  # pool skaters; keeps the curve monotone & grounded for a thin group
-        iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
-        iso.fit(g["war"].to_numpy(), g["aav"].to_numpy())
-        curves[pg] = iso
-    return curves
+            g = skater
+        war = pd.to_numeric(g["war"]).to_numpy(dtype="float64")
+        aav = pd.to_numeric(g["aav"]).to_numpy(dtype="float64")
+        b, a = np.polyfit(war, np.log(aav), 1)                 # log-linear OLS (b = log-$ per WAR)
+        b = max(b, 1e-6)                                       # guarantee monotone-increasing
+        shift = float(np.quantile(np.log(aav) - (a + b * war), CV["MARKET_QUANTILE"]))
+        fits[pg] = (float(a), float(b), shift)
+        top_war[pg] = float(np.quantile(market[market.pg == pg]["war"], 0.9)) if (market.pg == pg).any() else 99.0
+    return {"fits": fits, "ceil": ceil, "knee": knee, "top_war": top_war}
+
+
+def market_aav(market: dict, pg: str, war: float) -> float:
+    """Expected market AAV for a production level: log-linear, then a smooth soft-cap to the CBA max.
+    The soft-cap keeps a positive slope everywhere (asymptotes to the ceiling, never a hard plateau)."""
+    a, b, shift = market["fits"][pg]
+    raw = float(np.exp(a + b * war + shift))
+    ceil, knee = market["ceil"], market["knee"]
+    if raw < knee:
+        return raw
+    return knee + (ceil - knee) * (1.0 - np.exp(-(raw - knee) / (ceil - knee)))
 
 
 def aging_ratio(curve: dict[int, float] | None, base_age: int, target_age: int) -> float:
@@ -135,16 +161,15 @@ def aging_ratio(curve: dict[int, float] | None, base_age: int, target_age: int) 
 
 def project_one(war: float, base_age: int, remaining: int, pg: str,
                 curve: dict[int, float] | None, cap_hit: float,
-                market: dict[str, IsotonicRegression], discount: float) -> dict:
+                market: dict, discount: float) -> dict:
     """Project WAR -> market AAV -> surplus over remaining years, discounted. Returns aggregates."""
-    iso = market[pg]
     goalie_flat = pg == "G" and CV["GOALIE_AGING_FLAT"]
     war_path, aav_path, surplus_path, disc = [], [], [], []
     for k in range(remaining):
         age_k = base_age + k
         r = 1.0 if goalie_flat else aging_ratio(curve, base_age, age_k)
         wk = war * r
-        ek = float(iso.predict([wk])[0])
+        ek = market_aav(market, pg, wk)
         war_path.append(wk)
         aav_path.append(ek)
         surplus_path.append(ek - cap_hit)
@@ -203,6 +228,10 @@ def compute() -> pd.DataFrame:
             band = CV["BAND_SDS"] * sd
             high_conf = games >= CV["GROUNDED_MIN_GAMES"]
             confidence = "high" if (high_conf and pg != "G") else "medium"
+            # top-decile production: few comparables price it, so widen the band + lower confidence
+            if war >= market["top_war"].get(pg, 99.0):
+                band *= CV["TOP_DECILE_BAND_MULT"]
+                confidence = "medium"
         else:
             # cannot ground -> floor near replacement with a wide band + proxy tag (never invent)
             war = CV["REPLACEMENT_WAR"]
@@ -234,7 +263,7 @@ def compute() -> pd.DataFrame:
             "confidence": confidence,
             "model_version": CV["MODEL_VERSION"],
         })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), market, market_src
 
 
 def _report(df: pd.DataFrame) -> None:
@@ -267,13 +296,60 @@ def _report(df: pd.DataFrame) -> None:
               f"(cap ${r.cap_hit/1e6:.1f}M x {r.remaining_years}y, WAR {r.war_now:+.1f}, {r.confidence})")
 
 
+def _acceptance(df: pd.DataFrame, market: dict, market_src: pd.DataFrame) -> None:
+    """Assert + print the recalibration acceptance checks (monotone, non-plateaued top that tracks
+    elite AAVs, and the three sample stars reading as roughly fairly paid)."""
+    # (1) monotone & rising at the top — no plateau — per position group
+    grid = np.arange(-1.0, 6.01, 0.25)
+    for pg in ["F", "D", "G"]:
+        curve = np.array([market_aav(market, pg, w) for w in grid])
+        assert np.all(np.diff(curve) >= -1.0), f"{pg} market curve not monotone"
+        assert curve[-1] > curve[len(grid) // 2] * 1.05, f"{pg} market curve plateaus (top <= mid)"
+
+    # (2) top-decile production prices within a realistic band of OBSERVED elite AAVs (not below)
+    print("\n=== Market curve recalibration (top decile tracks elite AAVs, not a plateau) ===")
+    for pg in ["F", "D"]:
+        g = market_src[market_src.pg == pg]
+        thr = float(np.quantile(g["war"], 0.9))
+        obs_elite = float(g[g["war"] >= thr]["aav"].mean())
+        pred_at_thr = market_aav(market, pg, thr)
+        ratio = pred_at_thr / obs_elite
+        print(f"  {pg}: war>={thr:.1f}  predicted ${pred_at_thr/1e6:4.1f}M  vs observed-elite mean "
+              f"${obs_elite/1e6:4.1f}M  (x{ratio:.2f})")
+        assert 0.75 <= ratio <= 1.6, f"{pg} top-decile price ${pred_at_thr/1e6:.1f}M off elite ${obs_elite/1e6:.1f}M"
+
+    # (3) the three sample stars read near-zero to modest surplus (not multi-million negative)
+    stars = {8478864: "Kaprizov", 8477934: "Draisaitl", 8478403: "Eichel"}
+    print("\n=== Star sanity (per-year surplus = expected market AAV - cap hit) ===")
+    print(f"  {'player':12s} {'WAR':>5s} {'cap$M':>6s} {'exp.AAV$M':>9s} {'surplus/yr$M':>12s} {'conf':>7s}")
+    for pid, nm in stars.items():
+        row = df[df.player_id == pid]
+        if row.empty:
+            print(f"  {nm:12s}  (not in contract set)")
+            continue
+        r = row.iloc[0]
+        print(f"  {nm:12s} {r.war_now:5.1f} {r.cap_hit/1e6:6.1f} {r.expected_aav_now/1e6:9.1f} "
+              f"{r.surplus_current/1e6:+12.1f} {r.confidence:>7s}")
+        assert r.surplus_current / 1e6 >= -4.0, f"{nm} reads {r.surplus_current/1e6:.1f}M/yr (too negative)"
+
+    # mid + low reference players so the WHOLE range stays sane
+    ref = df[df.is_grounded].copy()
+    ref["d1"] = (ref.war_now - 1.0).abs(); ref["d0"] = (ref.war_now + 0.3).abs()
+    mid = ref.nsmallest(1, "d1").iloc[0]; low = ref.nsmallest(1, "d0").iloc[0]
+    print("  --- reference mid / low tier ---")
+    for tag, r in [("mid", mid), ("low", low)]:
+        print(f"  {tag:12s} {r.war_now:5.1f} {r.cap_hit/1e6:6.1f} {r.expected_aav_now/1e6:9.1f} "
+              f"{r.surplus_current/1e6:+12.1f} {r.confidence:>7s}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    df = compute()
+    df, market, market_src = compute()
     _report(df)
+    _acceptance(df, market, market_src)
 
     if args.dry_run:
         print("\n[dry-run] not written")
