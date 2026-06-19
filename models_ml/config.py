@@ -424,11 +424,27 @@ DEPLOYMENT = {
     "MODEL_VERSION": "deployment_v1",
 }
 
+# NHL salary-cap UPPER LIMIT by season (announced NHL/NHLPA figures). Cost is measured as a SHARE of
+# the cap (era-neutral), and the cap is projected FORWARD across a contract's remaining years, so a
+# fixed-dollar cap hit correctly becomes a shrinking share of a rising cap over the life of the deal.
+CAP_UPPER_LIMIT_BY_SEASON = {
+    "2024-25":  88_000_000,
+    "2025-26":  95_500_000,
+    "2026-27": 104_000_000,
+    "2027-28": 113_500_000,
+}
+# Past the announced window the cap is unknown (the CBA comes up around then), so project each later
+# season as the prior one x (1 + this). A MODERATE default — the current 8-9%/yr jumps are post-
+# pandemic catch-up, not a durable rate. This is the single most important assumption for long deals;
+# it is deliberately adjustable. Documented in docs/methodology/contract-surplus.md.
+CAP_GROWTH_BEYOND_KNOWN = 0.05
+
 # ---------------------------------------------------------------------------------------------
 # Trade tool — contract surplus (models_ml/compute_contract_value.py -> nhl_models.player_contract_value)
-# Surplus = market value of a player's PROJECTED on-ice production minus their fixed cap hit, summed
-# over the contract's remaining years and discounted to present value. Every number traces to a
-# computed column (current WAR -> aging projection -> position market curve -> surplus).
+# Surplus = market value of a player's PROJECTED on-ice production minus their cap COST, measured in
+# CAP SHARE (era-neutral) across the remaining years with the cap projected forward, then discounted
+# to present value. Every number traces to a computed column (current WAR -> aging projection ->
+# position market curve in cap-share -> per-year surplus).
 CONTRACT_VALUE = {
     # Present-value discount applied to each future season's surplus (a win next year is worth less
     # than a win now: aging risk, injury risk, money's time value). 0.90/yr.
