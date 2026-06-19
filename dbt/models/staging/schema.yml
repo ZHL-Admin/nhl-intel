@@ -432,3 +432,37 @@ models:
         description: Puck/skater x in standard feet (center-origin; goal line ±89)
       - name: is_puck
         description: True for the puck entity (entityKey '1')
+
+  - name: stg_contracts
+    description: >
+      Typed/parsed view over the dated contract snapshot (raw_contracts). Dollars become
+      INT64, "8 yrs" becomes term_years, "Yes"/"No" becomes a bool. Season-aware:
+      remaining_years counts down from the snapshot's season. One row per player-contract
+      per snapshot; prospects are still present here (matching to player_id happens in
+      mart_player_contracts).
+    columns:
+      - name: player_name_src
+        description: Contract name ("Last, First"); join key to contract_player_map
+        tests: [not_null]
+      - name: season
+        description: Season STRING the snapshot belongs to
+        tests: [not_null]
+      - name: as_of_date
+        description: Snapshot date
+        tests: [not_null]
+      - name: cap_hit
+        description: Annual cap charge in dollars (INT64)
+        tests: [not_null]
+      - name: aav
+        description: Average annual value in dollars (INT64)
+        tests: [not_null]
+      - name: term_years
+        description: Contract length in years (parsed from "N yrs")
+      - name: expiry_year
+        description: Calendar year the contract expires (July)
+      - name: remaining_years
+        description: Seasons left counting the snapshot season (>= 0)
+      - name: is_ufa
+        description: True if the contract expires to unrestricted free agency
+      - name: is_elc
+        description: True for entry-level contracts

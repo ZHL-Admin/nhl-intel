@@ -233,3 +233,33 @@ models:
         tests: [not_null]
       - name: season
         tests: [not_null]
+
+  - name: mart_player_contracts
+    description: >
+      One row per matched player per contract snapshot (Trade tool P3): the parsed contract
+      joined to the canonical player_id. The PLAYER contract layer — prospects without an NHL
+      id are absent by design (valued in the futures layer). Carries the cap hit, the flat cap
+      schedule over remaining years, cash split, UFA/RFA status, and the match provenance.
+      Tested for cap_hit >= league min and 0 <= remaining_years <= 8 (singular tests).
+    columns:
+      - name: player_id
+        description: Canonical NHL player id
+        tests: [not_null]
+      - name: as_of_date
+        description: Snapshot date (with player_id, the grain key)
+        tests: [not_null]
+      - name: cap_hit
+        description: Annual cap charge in dollars
+        tests: [not_null]
+      - name: aav
+        description: Average annual value in dollars
+      - name: remaining_years
+        description: Seasons left on the deal counting the snapshot season
+      - name: total_remaining_cap
+        description: cap_hit * remaining_years (flat cap schedule)
+      - name: is_ufa
+        description: Expires to unrestricted free agency
+      - name: match_method
+        description: How player_id was resolved (auditable)
+      - name: match_confidence
+        description: high (direct/override) or medium (surname tier)

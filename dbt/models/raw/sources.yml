@@ -82,6 +82,23 @@ sources:
           season) soft archetype memberships from per-position Gaussian mixtures. Names are
           hand-assigned (config.ARCHETYPE_NAMES) from the labeling report.
 
+      - name: contract_player_map
+        description: >
+          Contract -> canonical player_id resolution (Trade tool P2;
+          scripts/match_contracts.py). One row per matched (player_name_src, team, season,
+          as_of_date) with the player_id, match_method, and confidence. Conservative: only
+          rows resolvable to exactly one player are present; prospects/ambiguous land in the
+          unmatched report, not here. Surname-tier matches carry confidence='medium'.
+        columns:
+          - name: player_name_src
+            description: Source contract name ("Last, First"), the join key back to raw_contracts
+          - name: player_id
+            description: Canonical NHL player id used across the marts
+          - name: match_method
+            description: How the row matched (name+team+pos, lastname+initial+team+age, override, ...)
+          - name: confidence
+            description: high (direct name match / override) or medium (surname-tier)
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw
@@ -256,6 +273,25 @@ sources:
           - name: player_id
           - name: birth_date
           - name: ingestion_date
+
+      - name: raw_contracts
+        description: >
+          Player-contract snapshot (Trade tool P1; scripts/load_contracts.py). A DATED
+          snapshot (currently a scraped CSV, schema structured to swap to an API): every
+          row stamped with as_of_date + season. Source-faithful — dollars are strings
+          ("$17,000,000"), term is "8 yrs", waivers_exempt is "Yes"/"No"; all parsing is
+          deferred to stg_contracts. One row per player-contract per snapshot.
+        columns:
+          - name: player_name_src
+            description: Contract name as scraped ("Last, First")
+          - name: team
+            description: Team abbreviation on the contract
+          - name: cap_hit
+            description: Annual cap charge as a dollar string ("$17,000,000")
+          - name: as_of_date
+            description: Snapshot date (DATE) — everything downstream is stamped with it
+          - name: season
+            description: Season STRING the snapshot belongs to (e.g. "2025-26")
 
       - name: raw_ppt_replay
         description: >
