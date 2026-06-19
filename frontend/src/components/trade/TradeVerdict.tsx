@@ -11,7 +11,7 @@
  * semantically muddy.
  */
 import { ComponentStackBar } from '../common'
-import { TeamTradeResult, TradeSummaryLine } from '../../api/types'
+import { TeamTradeResult } from '../../api/types'
 import { getTeamAbbrev, getTeamLogoUrl, getTeamName } from '../../utils/teams'
 import { fmtWar, fmtWarBand, fmtDollarsM, fmtCapShare, deltaClass, CAP_DOLLAR_TAG } from '../../utils/format'
 import './TradeVerdict.css'
@@ -30,20 +30,35 @@ function isFuturesHeavy(t: TeamTradeResult): boolean {
   return [...t.incoming, ...t.outgoing].some((p) => p.asset_type !== 'player')
 }
 
-export function TradeSummaryBand({ summary }: { summary: TradeSummaryLine[] }) {
-  if (!summary.length) return null
+/** The cross-team parts for one team — built from typed fields so the axis rule (lead talent +
+ * dollars; cap-share only for player-for-player sides) is applied consistently with the per-team
+ * decomposition, rather than from the engine's pre-baked gains string (which always names cap-share). */
+function summaryParts(t: TeamTradeResult): string[] {
+  const parts: string[] = []
+  if (t.talent_delta_war != null) parts.push(`${fmtWar(t.talent_delta_war)} WAR talent`)
+  if (t.surplus_delta_dollars != null) {
+    const cs = isFuturesHeavy(t) || t.surplus_delta_capshare == null ? '' : ` · ${fmtCapShare(t.surplus_delta_capshare)}`
+    parts.push(`${fmtDollarsM(t.surplus_delta_dollars, true)} surplus${cs}`)
+  }
+  if (t.fit_delta != null) parts.push(`fit ${t.fit_delta >= 0 ? '+' : '−'}${Math.abs(t.fit_delta).toFixed(1)}`)
+  if (t.cap?.cap_hit_change != null) parts.push(`cap ${fmtDollarsM(t.cap.cap_hit_change, true)}${t.cap.over_cap ? ' · over' : ''}`)
+  return parts
+}
+
+export function TradeSummaryBand({ teams }: { teams: TeamTradeResult[] }) {
+  if (!teams.length) return null
   return (
     <div className="trade-verdict__summary">
       <h2 className="trade-verdict__summary-title">Who gains what</h2>
       <div className="trade-verdict__summary-grid">
-        {summary.map((s) => (
-          <div key={s.team_id} className="trade-verdict__summary-team">
-            <img className="trade-verdict__summary-logo" src={getTeamLogoUrl(getTeamAbbrev(s.team_id))} alt=""
+        {teams.map((t) => (
+          <div key={t.team_id} className="trade-verdict__summary-team">
+            <img className="trade-verdict__summary-logo" src={getTeamLogoUrl(getTeamAbbrev(t.team_id))} alt=""
                  onError={(e) => ((e.currentTarget.style.visibility = 'hidden'))} />
             <div className="trade-verdict__summary-body">
-              <span className="trade-verdict__summary-name">{getTeamName(getTeamAbbrev(s.team_id))}</span>
+              <span className="trade-verdict__summary-name">{getTeamName(getTeamAbbrev(t.team_id))}</span>
               <div className="trade-verdict__summary-parts">
-                {s.gains.map((g, i) => <span key={i} className="trade-verdict__part">{g}</span>)}
+                {summaryParts(t).map((g, i) => <span key={i} className="trade-verdict__part">{g}</span>)}
               </div>
             </div>
           </div>

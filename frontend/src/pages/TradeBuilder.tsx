@@ -139,7 +139,7 @@ export default function TradeBuilder() {
 
         {error && <p className="trade-builder__error">{error}</p>}
         {hasMovements && loading && !result && <SkeletonLoader />}
-        {result && <TradeSummaryBand summary={result.summary} />}
+        {result && <TradeSummaryBand teams={result.teams} />}
 
         <div className="trade-builder__panels" data-count={teams.length}>
           {teams.map((tid) => (
