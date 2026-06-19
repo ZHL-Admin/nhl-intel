@@ -278,6 +278,65 @@ def _fit(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
     return out
 
 
+# ------------------------------------------------------------------------------------- verdict (P6)
+def _confidence(team: dict) -> str:
+    """Driven by the asset mix on this team's side: any proxy (prospect/pick) -> low, any medium
+    (e.g. a top-decile star) -> medium, else high. Wide bands on proxy-heavy sides => low."""
+    confs = [p.get("confidence") for p in team["incoming"] + team["outgoing"]]
+    if any(c == "proxy" for c in confs):
+        return "low"
+    if any(c == "medium" for c in confs):
+        return "medium"
+    return "high" if confs else "medium"
+
+
+def _m(v) -> str:
+    return f"${v/1e6:+.1f}M"
+
+
+def _gains(team: dict) -> list[str]:
+    """A 'who gains what' parts list — never a single grade."""
+    g = []
+    if team.get("talent_delta_war") is not None:
+        g.append(f"talent {team['talent_delta_war']:+.1f} WAR "
+                 f"[{team['talent_delta_war_low']:+.1f}, {team['talent_delta_war_high']:+.1f}]")
+    if team.get("surplus_delta_dollars") is not None:
+        g.append(f"surplus {_m(team['surplus_delta_dollars'])} "
+                 f"(cap-share {team['surplus_delta_capshare']:+.3f})")
+    if team.get("fit_delta") is not None:
+        g.append(f"fit {team['fit_delta']:+.1f} vs needs")
+    cap = team.get("cap") or {}
+    if cap.get("cap_hit_change") is not None:
+        flag = " — OVER cap (approx)" if cap.get("over_cap") else ""
+        g.append(f"cap {_m(cap['cap_hit_change'])}{flag}")
+    return g
+
+
+def _summary_sentence(team: dict) -> str:
+    ab = team.get("team_abbrev") or f"team {team['team_id']}"
+    war, sd = team.get("talent_delta_war"), team.get("surplus_delta_dollars")
+    talent = "gains" if (war or 0) > 0 else ("sheds" if (war or 0) < 0 else "holds")
+    surplus = "improves" if (sd or 0) > 0 else ("worsens" if (sd or 0) < 0 else "is flat on")
+    fit = "" if team.get("fit_delta") is None else (
+        " with a strong fit" if team["fit_delta"] >= 10 else
+        " though the fit is weak" if team["fit_delta"] <= -10 else " at a neutral fit")
+    cap = team.get("cap") or {}
+    capnote = f"; cap {_m(cap.get('cap_hit_change', 0))} (approx)" if cap.get("cap_hit_change") is not None else ""
+    return (f"{ab} {talent} talent ({war:+.1f} WAR) and {surplus} cost-efficiency "
+            f"({_m(sd or 0)} surplus){fit}{capnote}. Confidence: {team['confidence']}.")
+
+
+def _finalize(teams: list[dict]) -> list[dict]:
+    """Add per-team confidence + summary, and build the cross-team 'who gains what' lines."""
+    summary = []
+    for t in teams:
+        t["confidence"] = _confidence(t)
+        t["summary"] = _summary_sentence(t)
+        summary.append({"team_id": t["team_id"], "team_abbrev": t.get("team_abbrev"),
+                        "headline": t["summary"], "gains": _gains(t)})
+    return summary
+
+
 # ------------------------------------------------------------------------------------- orchestration
 def evaluate(req: dict, season: Optional[str] = None) -> dict:
     """Evaluate a proposed trade -> the multi-team, multi-axis decomposition (see schemas)."""
@@ -305,8 +364,10 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
             # confidence + summary filled by P6
         })
 
+    summary = _finalize(teams)
     caveats = [
         "Cap compliance is approximate (cap hits only; no LTIR, bonuses, or roster size).",
         "Prospect and pick values are wide-band proxies; bands widen confidence on those sides.",
+        "Talent, cost-efficiency, and fit are separate axes — read the decomposition, not one number.",
     ]
-    return {"season": season, "teams": teams, "summary": [], "caveats": caveats}
+    return {"season": season, "teams": teams, "summary": summary, "caveats": caveats}
