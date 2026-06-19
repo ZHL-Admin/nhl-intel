@@ -15,6 +15,7 @@ import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
 import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, FitComponentNeed, PlayerPreview, ArchetypeRankRow } from '../api/types'
 import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
+import { ordinal } from '../utils/format'
 import './TradeFit.css'
 
 interface TeamOpt { team_id: number; abbrev: string; name: string }
@@ -469,7 +470,7 @@ function Hero({ result, player, team }: {
         </div>
         <div className="tf-axis tf-axis--quality">
           <span className="tf-axis__qval" style={{ color: levelColor(result.quality.percentile) }}>
-            {result.quality.percentile != null ? `${Math.round(result.quality.percentile * 100)}th` : '—'}
+            {result.quality.percentile != null ? ordinal(result.quality.percentile * 100) : '—'}
           </span>
           <span className="tf-axis__meta">
             <span className="tf-axis__name">Player quality<span className="tf-axis__tag">{result.quality.label}</span></span>

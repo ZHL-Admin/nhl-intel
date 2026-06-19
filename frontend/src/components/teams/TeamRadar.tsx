@@ -8,6 +8,7 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
 } from 'recharts'
 import { TeamDetail } from '../../api/types'
+import { ordinal } from '../../utils/format'
 
 const N_TEAMS = 32
 /** rank (1 = best) -> percentile (0-100, higher = better). */
@@ -40,7 +41,7 @@ function RadarTip({ active, payload }: any) {
   return (
     <div className="team-radar__tip">
       <div className="team-radar__tip-label">{a.label}</div>
-      <div className="team-radar__tip-pct">{a.pctile == null ? '—' : `${a.pctile}th percentile`}</div>
+      <div className="team-radar__tip-pct">{a.pctile == null ? '—' : `${ordinal(a.pctile)} percentile`}</div>
       <div className="team-radar__tip-val">{a.value}</div>
     </div>
   )

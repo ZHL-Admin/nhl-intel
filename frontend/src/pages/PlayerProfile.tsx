@@ -33,6 +33,7 @@ import {
   GoalieSeason
 } from '../api/types'
 import { setTeamPrimaryColor, clearTeamPrimaryColor, getTeamColor as getTeamColorByAbbrev } from '../utils/teams'
+import { ordinal } from '../utils/format'
 import './PlayerProfile.css'
 
 // NHL team list for vs opponent dropdown
@@ -605,7 +606,7 @@ function PlayerProfile() {
             {reconciliation.consistency && (
               <div className="reconciliation__consistency">
                 <div className="reconciliation__panel-title">
-                  Consistency · index {(reconciliation.consistency.consistency_index * 100).toFixed(0)}th pctile ·
+                  Consistency · index {ordinal(reconciliation.consistency.consistency_index * 100)} pctile ·
                   good games {(reconciliation.consistency.good_game_share * 100).toFixed(0)}% ·
                   no-shows {(reconciliation.consistency.no_show_share * 100).toFixed(0)}%
                 </div>

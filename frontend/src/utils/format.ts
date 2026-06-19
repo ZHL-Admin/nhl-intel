@@ -7,6 +7,15 @@
 
 const MINUS = '−' // true minus, not hyphen
 
+/** Ordinal suffix done right: 1->1st, 2->2nd, 3->3rd, 11/12/13->th, 21->21st, 92->92nd. Use this
+ * everywhere a percentile or rank renders so "92th" never ships. */
+export function ordinal(n: number): string {
+  const v = Math.round(n)
+  const d = v % 100
+  if (d >= 11 && d <= 13) return `${v}th`
+  return `${v}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[v % 10] ?? 'th'}`
+}
+
 /** Reference-cap basis label for every displayed dollar value/surplus figure. */
 export const CAP_DOLLAR_NOTE =
   'Dollar figures are present value across each deal’s remaining term in projected-cap dollars ' +

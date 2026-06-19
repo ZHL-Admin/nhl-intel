@@ -12,6 +12,7 @@
  */
 import { useState } from 'react'
 import { RadarSpoke } from '../../api/types'
+import { ordinal } from '../../utils/format'
 import './SkillRadar.css'
 
 const TAG_COLOR: Record<string, string> = {
@@ -123,7 +124,7 @@ export default function SkillRadar({ spokes, baseline, size = 420, compact = fal
       {hover != null && (
         <div className="skill-radar__tip">
           <strong>{usable[hover].label}</strong> · {TAG_LABEL[usable[hover].tag]}<br />
-          {Math.round(usable[hover].percentile!)}th percentile
+          {ordinal(usable[hover].percentile!)} percentile
           {usable[hover].sd != null && <span> · noisy estimate (±{usable[hover].sd!.toFixed(2)})</span>}
         </div>
       )}

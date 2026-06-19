@@ -468,9 +468,10 @@ _FINGERPRINT_LABEL = {
 
 
 def _fingerprint_top(ident: dict, n: int = 3) -> list[str]:
+    from models_ml.textfmt import ordinal
     ranked = sorted(((m, ident.get(m)) for m in _IDENTITY_METRICS if ident.get(m) is not None),
                     key=lambda kv: float(kv[1]), reverse=True)
-    return [f"{_FINGERPRINT_LABEL[m]} ({round(float(v) * 100)}th)" for m, v in ranked[:n]
+    return [f"{_FINGERPRINT_LABEL[m]} ({ordinal(round(float(v) * 100))})" for m, v in ranked[:n]
             if float(v) >= 0.5]
 
 
