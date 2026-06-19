@@ -1319,11 +1319,14 @@ class FitDimension(BaseModel):
 
 
 class FitQualityAxis(BaseModel):
-    """The player's overall quality — a SEPARATE axis beside fit (it FLOORS fit, never caps it), so
-    'elite player, mediocre fit here' and 'depth player, ideal fit here' both read cleanly."""
-    percentile: Optional[float] = None   # within-position-group overall percentile (drives the floor)
-    war: Optional[float] = None
+    """The player's PROJECTED quality — a SEPARATE axis beside fit (it FLOORS fit, never caps it), so
+    'elite player, mediocre fit here' and 'depth player, ideal fit here' both read cleanly. The
+    percentile/WAR are the recency-weighted, regressed, aged PROJECTION (not last season); last_war is
+    last season's actual, surfaced when it sits well above the projection (a one-off spike)."""
+    percentile: Optional[float] = None   # projected within-position percentile (drives the floor)
+    war: Optional[float] = None          # projected WAR
     war_sd: Optional[float] = None
+    last_war: Optional[float] = None     # last season's actual WAR (for the honest spike note)
     label: str = ""                      # elite / high-end / solid / depth / below-replacement
     note: str = ""
 

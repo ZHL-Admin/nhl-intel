@@ -996,9 +996,10 @@ export interface FitDimension {
 }
 /** The player's overall quality — a SEPARATE axis beside fit (it FLOORS fit, never caps it). */
 export interface FitQualityAxis {
-  percentile?: number | null   // within-position overall percentile (drives the floor)
-  war?: number | null
+  percentile?: number | null   // PROJECTED within-position percentile (drives the floor)
+  war?: number | null          // projected WAR (recency-weighted, regressed, aged)
   war_sd?: number | null
+  last_war?: number | null     // last season's actual WAR (surfaced when above the projection)
   label: string                // elite / high-end / solid / depth / below-replacement
   note: string
 }

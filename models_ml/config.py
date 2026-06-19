@@ -108,6 +108,25 @@ LINEFIT_GRADE_BANDS = [
 ]
 LINEFIT_ARTIFACT = "linefit_v1"
 
+# --- Player Fit talent projection (the quality FLOOR input) --------------------------------------
+# The talent that floors fit is a forward PROJECTION, not last season's result, so a contract-year
+# or one-off spike doesn't inflate the floor. Derived the way the trade talent axis projects (reuse,
+# not a new model): recency-weight the last ~3 seasons of WAR (also by games = sample), regress the
+# weighted level toward replacement (0 WAR, the GAR baseline) by sample size AND volatility, then age
+# it forward one season on the player's aging curve. A young breakout has little history to dilute and
+# ages UP (tempered little); an older spike is diluted by prior seasons and ages DOWN (tempered more).
+PLAYER_FIT_PROJECTION = {
+    "RECENCY_WEIGHTS": [1.0, 0.6, 0.3],   # most-recent -> 2 seasons prior (normalised over present)
+    "REGRESS_GAMES_K": 22.0,              # games-weighted reliability half-point (small/volatile
+                                          # samples regress hard; a full-sample star barely moves —
+                                          # the spike tempering comes mostly from the multi-year mean)
+    "VOL_INFLATE": 0.8,                   # cross-season volatility (CV) inflates the regression K
+    "BAND_SD_FLOOR": 0.4,                 # floor on the projected-WAR sd (never a too-tight band)
+    "SPIKE_NOTE_GAP_WAR": 0.6,            # show "projects to X, last season Y" when last-proj >= this
+    "SPIKE_BAND_INFLATE": 0.5,            # widen the band by this * (last - proj) on a spike
+    "AGE_DEFAULT": 27,                    # league-ish age when bio is missing
+}
+
 # --- Player Fit (rebuilt: quality FLOORS fit, need is the core, by component-and-role) -----------
 # Fit measures how well a player's profile SERVES a team. Talent never CAPS it — an elite player
 # always floors at a decent fit, and a low-value specialist who lands on a real team need can still
@@ -125,6 +144,7 @@ TRADE_FIT = {
     # player is strong there). Blend the single best opportunity (rewards a specialist who nails the
     # team's biggest hole) with breadth across components (rewards an all-rounder addressing several).
     "NEED_PRIMARY_W": 0.7,       # weight on max(opp_c); (1 - this) on mean(opp_c)
+    "NEED_OVERLAP_MIN": 0.40,    # min opportunity (need x strength) to say "he addresses it"
     # handedness: a SMALL modifier inside need — bump when the team is short the player's shot at his
     # role, trim when over-supplied. Bounded to +/- HAND_MOD/2 so it never dominates.
     "HAND_MOD": 0.10,

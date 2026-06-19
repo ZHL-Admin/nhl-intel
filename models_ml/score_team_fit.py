@@ -31,13 +31,16 @@ as a separate axis — never a lone collapsed grade. See docs/methodology/player
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 
 import numpy as np
+import pandas as pd
 
 from models_ml import bq, config
 from models_ml.compute_team_needs import role_of, SKATER_COMPONENTS, COMPONENT_LABEL, ROLE_LABEL
+from models_ml.textfmt import ordinal
 
 CFG = config.TRADE_FIT
 ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
@@ -110,6 +113,145 @@ def _abbrev_map(p: str, season: str) -> dict:
     return dict(zip(df["team_id"].astype(int), df["a"]))
 
 
+# ------------------------------------------------------------------ talent projection (quality floor)
+# The talent that floors fit is a forward PROJECTION, not last season's result (so a contract-year /
+# one-off spike doesn't inflate the floor). Derived the way the trade talent axis projects: recency-
+# weight the last ~3 seasons of WAR (also by games = sample), regress the weighted level toward
+# replacement (0 WAR) by sample size AND volatility, then age it forward one season on the player's
+# aging curve. A young breakout has little history to dilute and ages UP (tempered little); an older
+# spike is diluted by prior seasons and aged DOWN (tempered more). All inputs are serving tables.
+
+def _recent_seasons(season: str, n: int = 3) -> list[str]:
+    y = int(season[:4])
+    return [f"{yy}-{str(yy + 1)[2:]}" for yy in range(y, y - n, -1)]   # newest -> oldest
+
+
+@functools.lru_cache(maxsize=2)
+def _aging_curves(p: str) -> dict:
+    df = bq.query_df(f"select archetype, age, curve_value from `{p}.nhl_models.aging_curves`")
+    out: dict = {}
+    for arch, g in df.groupby("archetype"):
+        out[arch] = dict(zip(g["age"].astype(int), pd.to_numeric(g["curve_value"]).astype("float64")))
+    return out
+
+
+def _aging_ratio(curve: dict | None, base_age: int, target_age: int) -> float:
+    """curve(target)/curve(base), snapped to the nearest covered age; flat (1.0) if absent."""
+    if not curve:
+        return 1.0
+    ages = sorted(curve)
+    nearest = lambda a: min(ages, key=lambda x: abs(x - a))
+    b, t = curve[nearest(base_age)], curve[nearest(target_age)]
+    return float(t / b) if b > 0 else 1.0
+
+
+def _age_at(birth, season: str):
+    if birth is None or pd.isna(birth):
+        return None
+    return int((pd.Timestamp(int(season[:4]), 10, 1) - pd.Timestamp(birth)).days // 365.25)
+
+
+def _project_war(g: pd.DataFrame, rw: dict, cfg: dict, ratio: float) -> dict:
+    """Project one player's WAR from his (up-to-3-season) GAR rows: recency+games weighted level,
+    regressed toward 0 by sample size and volatility, then aged by `ratio`. Returns proj/last/sd."""
+    g = g.dropna(subset=["war"])
+    if g.empty:
+        return {}
+    w = g["season_window"].map(rw).fillna(0.0).to_numpy()
+    games = g["games"].fillna(0.0).to_numpy().clip(min=0.0)
+    wars = g["war"].to_numpy(dtype="float64")
+    gw = w * games
+    if gw.sum() <= 0:                       # games missing -> recency-only weights
+        gw = w
+    if gw.sum() <= 0:
+        return {}
+    weighted = float(np.dot(wars, gw) / gw.sum())
+    n_eff = float(np.dot(w, games))         # recency-weighted games = effective sample
+    vol = float(np.std(wars)) if len(wars) >= 2 else 0.0
+    cv = vol / (abs(weighted) + 0.5)
+    k_eff = cfg["REGRESS_GAMES_K"] * (1.0 + cfg["VOL_INFLATE"] * cv)
+    reliability = n_eff / (n_eff + k_eff) if (n_eff + k_eff) > 0 else 0.0
+    proj = weighted * reliability * ratio   # regress toward replacement, then age forward
+    newest = g["season_window"].map(rw).idxmax()
+    last_war = float(g.loc[newest, "war"])
+    sd_w = g["war_sd"].fillna(g["war_sd"].mean()).to_numpy(dtype="float64")
+    base_sd = float(np.dot(np.nan_to_num(sd_w), gw) / gw.sum())
+    sd = max(cfg["BAND_SD_FLOOR"], base_sd)
+    if last_war - proj >= cfg["SPIKE_NOTE_GAP_WAR"]:      # widen the band on a one-off spike
+        sd += cfg["SPIKE_BAND_INFLATE"] * (last_war - proj)
+    return {"proj_war": proj, "last_war": last_war, "proj_war_sd": sd}
+
+
+@functools.lru_cache(maxsize=4)
+def _skater_projection(p: str, season: str) -> dict:
+    """Projected WAR + within-position percentile for every skater (the fit quality FLOOR input)."""
+    cfg = config.PLAYER_FIT_PROJECTION
+    seasons = _recent_seasons(season)
+    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons)}
+    qs = ", ".join(f"'{s}'" for s in seasons)
+    gar = bq.query_df(f"""select player_id, season_window, position, war, war_sd, games
+        from `{p}.nhl_models.player_gar`
+        where season_window in ({qs}) and position in ('C','L','R','D')""")
+    if gar.empty:
+        return {}
+    for c in ("war", "war_sd", "games"):
+        gar[c] = pd.to_numeric(gar[c], errors="coerce")
+    bio = bq.query_df(f"select player_id, birth_date from `{p}.nhl_staging.stg_player_bio`")
+    bio_age = {int(r.player_id): _age_at(r.birth_date, season) for r in bio.itertuples()}
+    arch = bq.query_df(f"""select player_id, primary_archetype from `{p}.nhl_models.player_archetypes`
+        where season='{season}'""")
+    arch_by = {int(r.player_id): r.primary_archetype for r in arch.itertuples()}
+    curves = _aging_curves(p)
+
+    rows = []
+    for pid, g in gar.groupby("player_id"):
+        pid = int(pid)
+        pos = g.sort_values("games", ascending=False).iloc[0]["position"]
+        pg = "D" if pos == "D" else "F"
+        age = bio_age.get(pid) or cfg["AGE_DEFAULT"]
+        curve = curves.get(arch_by.get(pid)) or curves.get("All Defensemen" if pg == "D" else "All Forwards")
+        ratio = _aging_ratio(curve, age, age + 1)
+        proj = _project_war(g.set_index("season_window", drop=False), rw, cfg, ratio)
+        if not proj:
+            continue
+        rows.append({"player_id": pid, "pg": pg, "age": age, **proj})
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return {}
+    df["pctile"] = df.groupby("pg")["proj_war"].rank(pct=True)
+    return {int(r.player_id): {"proj_war": float(r.proj_war), "proj_war_sd": float(r.proj_war_sd),
+                               "last_war": float(r.last_war), "pctile": float(r.pctile),
+                               "pos_group": r.pg, "age": int(r.age)} for r in df.itertuples()}
+
+
+@functools.lru_cache(maxsize=4)
+def _goalie_projection(p: str, season: str) -> dict:
+    """Projected WAR + within-goalie percentile for every goalie (no aging — goalie curves are flat)."""
+    cfg = config.PLAYER_FIT_PROJECTION
+    seasons = _recent_seasons(season)
+    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons)}
+    qs = ", ".join(f"'{s}'" for s in seasons)
+    gar = bq.query_df(f"""select goalie_id as player_id, season_window, war, war_sd,
+        games_played as games from `{p}.nhl_models.goalie_gar` where season_window in ({qs})""")
+    if gar.empty:
+        return {}
+    for c in ("war", "war_sd", "games"):
+        gar[c] = pd.to_numeric(gar[c], errors="coerce")
+    rows = []
+    for pid, g in gar.groupby("player_id"):
+        proj = _project_war(g.set_index("season_window", drop=False), rw, cfg, 1.0)   # flat aging
+        if not proj:
+            continue
+        rows.append({"player_id": int(pid), **proj})
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return {}
+    df["pctile"] = df["proj_war"].rank(pct=True)
+    return {int(r.player_id): {"proj_war": float(r.proj_war), "proj_war_sd": float(r.proj_war_sd),
+                               "last_war": float(r.last_war), "pctile": float(r.pctile),
+                               "pos_group": "goalie", "age": None} for r in df.itertuples()}
+
+
 # ------------------------------------------------------------------ player profile
 def _player_profile(p: str, player_id: int, season: str) -> dict:
     """Position/role, per-component within-role percentiles (skater strengths), overall quality
@@ -179,41 +321,31 @@ def _player_profile(p: str, player_id: int, season: str) -> dict:
             "comp_pct": comp_pct, "quality": qual, "style": style, "mix": mix, "primary": primary}
 
 
+def _quality_from_projection(proj: dict | None, pos_group: str) -> dict:
+    """Quality = the PROJECTED talent (the floor input + the separate quality axis). projected WAR,
+    its within-position percentile, the band, and last season's WAR (for the honest spike note)."""
+    if proj is None:
+        return {"percentile": None, "war": None, "war_sd": None, "last_war": None,
+                "pos_group": pos_group}
+    return {"percentile": proj["pctile"], "war": proj["proj_war"], "war_sd": proj["proj_war_sd"],
+            "last_war": proj["last_war"], "pos_group": pos_group}
+
+
 def _skater_quality(p: str, pid: int, season: str) -> dict:
-    """Overall within-position-group percentile (player_overall) + WAR/sd (player_gar). The percentile
-    drives the floor AND is the separate quality axis; WAR is the human number."""
-    ov = bq.query_df(f"""select overall_percentile from `{p}.nhl_models.player_overall`
-        where player_id={pid} and season_window='{season}' limit 1""")
-    pctile = _f(ov.iloc[0]["overall_percentile"]) if not ov.empty else None
-    g = bq.query_df(f"""select war, war_sd from `{p}.nhl_models.player_gar`
-        where player_id={pid} and season_window='{season}' limit 1""")
-    war = _f(g.iloc[0]["war"]) if not g.empty else None
-    war_sd = _f(g.iloc[0]["war_sd"]) if not g.empty else None
-    if pctile is None and war is not None:
-        # fallback: WAR percentile within position group
-        wp = bq.query_df(f"""with x as (
-              select player_id, case when position='D' then 'D' else 'F' end pg, war
-              from `{p}.nhl_models.player_gar` where season_window='{season}'),
-            r as (select player_id, percent_rank() over (partition by pg order by war) wp from x)
-            select wp from r where player_id={pid} limit 1""")
-        pctile = _f(wp.iloc[0]["wp"]) if not wp.empty else None
-    return {"percentile": pctile, "war": war, "war_sd": war_sd, "pos_group": "skater"}
+    """Projected talent for the skater (drives the floor + the separate quality axis)."""
+    return _quality_from_projection(_skater_projection(p, season).get(int(pid)), "skater")
 
 
 def _goalie_profile(p: str, pid: int, season: str, position, shoots) -> dict:
-    """Goalies: quality from goalie_overall (percentile) + goalie_gar (WAR). No skater components."""
-    ov = bq.query_df(f"""select overall_percentile from `{p}.nhl_models.goalie_overall`
-        where goalie_id={pid} and season_window='{season}' limit 1""")
-    pctile = _f(ov.iloc[0]["overall_percentile"]) if not ov.empty else None
-    g = bq.query_df(f"""select war, war_sd from `{p}.nhl_models.goalie_gar`
-        where goalie_id={pid} and season_window='{season}' limit 1""")
-    war = _f(g.iloc[0]["war"]) if not g.empty else None
-    war_sd = _f(g.iloc[0]["war_sd"]) if not g.empty else None
-    if pctile is None and war is None:
-        raise ValueError(f"no {season} goalie profile for player {pid}")
+    """Goalies: projected goaltending talent (no skater components). Strength = the same projected
+    percentile that feeds the floor, so the need overlap and the floor use one consistent number."""
+    proj = _goalie_projection(p, season).get(int(pid))
+    if proj is None:
+        raise ValueError(f"no {season} goalie projection for player {pid}")
+    quality = _quality_from_projection(proj, "goalie")
     return {"is_goalie": True, "position": "G", "role": "G", "shoots": shoots,
-            "comp_pct": {"goaltending": pctile}, "mix": [], "primary": None, "style": {},
-            "quality": {"percentile": pctile, "war": war, "war_sd": war_sd, "pos_group": "goalie"}}
+            "comp_pct": {"goaltending": proj["pctile"]}, "mix": [], "primary": None, "style": {},
+            "quality": quality}
 
 
 # ------------------------------------------------------------------ team context
@@ -367,19 +499,20 @@ def _need_dimension(prof: dict, role_needs: dict, hand: dict, team_id: int, abbr
             share = h[prof["shoots"]] / (h["L"] + h["R"])
             need_score = max(0.0, min(1.0, need_score * (1.0 + (0.5 - share) * CFG["HAND_MOD"])))
 
-    # tangible note: the team's most acute need at the role + whether the player addresses it
-    top = max(breakdown, key=lambda b: b["team_need"]) if breakdown else None
+    # tangible note: anchor on the INTERSECTION — the component where his strength meets their need
+    # (max opportunity = need x strength), NOT the biggest need and biggest strength glued together.
+    role_word = ROLE_LABEL[prof["role"]]
+    comp_name = lambda b: b["label"].split("· ")[-1].lower()
     addressed = max(breakdown, key=lambda b: b["opportunity"]) if breakdown else None
-    if top and top["team_need"] >= 0.5:
-        if addressed and addressed["opportunity"] >= 0.4:
-            note = (f"{abbr} are thin at {ROLE_LABEL[prof['role']]} {top['label'].split('· ')[-1].lower()}; "
-                    f"he addresses it ({addressed['label'].split('· ')[-1].lower()}, "
-                    f"{round(addressed['player_strength']*100)}th pct).")
-        else:
-            note = (f"{abbr} are thin at {ROLE_LABEL[prof['role']]} {top['label'].split('· ')[-1].lower()}, "
-                    f"but his strengths lie elsewhere.")
+    top_need = max(breakdown, key=lambda b: b["team_need"]) if breakdown else None
+    if addressed and addressed["opportunity"] >= CFG["NEED_OVERLAP_MIN"]:
+        note = (f"{abbr} are thin at {role_word} {comp_name(addressed)} and he provides it "
+                f"({ordinal(round(addressed['player_strength'] * 100))} pct).")
+    elif top_need and top_need["team_need"] >= 0.5:
+        note = (f"{abbr}'s biggest {role_word} need is {comp_name(top_need)}, which isn't his "
+                f"strength — he doesn't directly address their hole.")
     else:
-        note = f"{abbr} have solid {ROLE_LABEL[prof['role']]} depth — not a roster hole to fill."
+        note = f"{abbr} have solid {role_word} depth — not a roster hole to fill."
     tone = "positive" if need_score >= 0.45 else "neutral"
     return {"key": "need", "label": "Need fit", "level": round(need_score, 3),
             "value": _word(need_score), "note": note, "tone": tone, "breakdown": breakdown}
@@ -439,17 +572,26 @@ def _line_dimension(line: dict | None) -> dict:
 
 
 def _quality_axis(prof: dict) -> dict:
-    """The SEPARATE quality axis (never folded into match). percentile drives the floor."""
+    """The SEPARATE quality axis (never folded into match). Reports the PROJECTED talent — recency-
+    weighted, regressed, aged — so a contract-year spike doesn't read as a clean elite; the projected
+    percentile drives the floor. When last season sits well above the projection, the band is already
+    widened (in the projection) and the note says so honestly."""
     q = prof["quality"]
-    pct, war, war_sd = q["percentile"], q["war"], q["war_sd"]
+    pct, war, war_sd, last = q["percentile"], q["war"], q["war_sd"], q.get("last_war")
     pos = "goalies" if prof["is_goalie"] else ("defensemen" if prof["role"] == "D" else "forwards")
     label = _quality_label(pct)
+    gap = config.PLAYER_FIT_PROJECTION["SPIKE_NOTE_GAP_WAR"]
     if pct is None:
-        note = "No value estimate this season."
+        note = "No multi-season value estimate (too little NHL history to project)."
     else:
         war_txt = (f"{war:+.1f} WAR" + (f" ± {war_sd:.1f}" if war_sd else "")) if war is not None else ""
-        note = f"{round(pct*100)}th-percentile value among {pos}{(' (' + war_txt + ')') if war_txt else ''}."
-    return {"percentile": pct, "war": war, "war_sd": war_sd, "label": label, "note": note}
+        note = f"Projects to {ordinal(round(pct * 100))}-percentile value among {pos}" \
+               f"{(' (' + war_txt + ')') if war_txt else ''}."
+        if last is not None and war is not None and last - war >= gap:
+            note += (f" Last season {last:+.1f} WAR — the projection regresses toward his "
+                     f"multi-season level and ages it forward.")
+    return {"percentile": pct, "war": war, "war_sd": war_sd, "last_war": last,
+            "label": label, "note": note}
 
 
 # ------------------------------------------------------------------ composition
@@ -487,8 +629,9 @@ def _verdict(name, abbr, grade, quality, dims, is_goalie) -> str:
     nd = by.get("need")
     if nd and nd["level"] < 0.35 and not (lead and lead["key"] == "need"):
         clause += f", though {abbr} aren't especially short where he helps"
-    return (f"{clause}. Fit grades {grade} — read the dimensions below, and weigh what the model "
-            f"can't see: injuries, departures, cap, and locker room.")
+    # Player-specific verdict only. The canonical fit-vs-quality explanation and the "can't see"
+    # caveat live ONCE, in the UI footnote — not repeated here.
+    return f"{clause}. Fit grades {grade}."
 
 
 # ------------------------------------------------------------------ main
