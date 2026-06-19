@@ -108,42 +108,36 @@ LINEFIT_GRADE_BANDS = [
 ]
 LINEFIT_ARTIFACT = "linefit_v1"
 
-# --- Team needs / trade fit (Phase 5.3) -------------------------------------
-# A team's need profile is measured against the average of the top-N teams by power rating.
-TEAM_NEEDS_TOP_N = 8
-
-# Multi-dimension Trade Fit (rebuild). Fit is NOT one number: a POSITIONAL gate (relevance —
-# guarantees a positionally-relevant player never scores 0) multiplies a weighted blend of four
-# separately-measured dimensions. NEED is one dimension, not the master axis; low need = "not a
-# statistical gap" (neutral, never negative/red). No redundancy penalty (a team strong at a
-# position can still validly add the player). See docs/methodology/trade-fit.md.
+# --- Player Fit (rebuilt: quality FLOORS fit, need is the core, by component-and-role) -----------
+# Fit measures how well a player's profile SERVES a team. Talent never CAPS it — an elite player
+# always floors at a decent fit, and a low-value specialist who lands on a real team need can still
+# score high. Composition (all terms in [0, 1]):
+#     match = weighted(need, style, line)
+#     floor = FLOOR_CAP * overall_quality_percentile            # talent floors, never caps
+#     fit   = floor + (1 - floor) * match                       # match drives the upside, uncapped
+# Quality is exposed as its OWN axis beside fit, never folded into match. Position is NOT a
+# dimension — it is the role axis of NEED: team_needs is role (C/W/D/G) x component, benchmarked
+# against the team's OWN current depth, not the league's top teams. See docs/methodology/player-fit.md.
 TRADE_FIT = {
-    # Score = (positional gate) * weighted_avg(quality, line, style)  +  asymmetric NEED bonus.
-    # NEED is NOT averaged into the base: it can only ADD (filling a hole is upside), never drag a
-    # score down. A great player is a great add regardless of need; a team already strong at the
-    # position is not penalised for having no gap. (Was a 4th averaged, floored term -> it pulled
-    # every low-need trade toward the floor, incorrectly demoting strong fits.)
-    "WEIGHTS": {"quality": 0.45, "line": 0.30, "style": 0.25},   # base dims (talent-dominant); sum 1.0
-    # the positional gate is bounded so a relevant NHL skater is never zeroed: gate in [FLOOR, 1].
-    "GATE_FLOOR": 0.55,
-    # NEED -> additive bonus in [0, NEED_BONUS_MAX]: bonus = MAX * max(0, 2*sigmoid(gap/SCALE) - 1),
-    # so a surplus/no gap adds 0 (neutral) and a big gap adds up to MAX. NEED_GAP_SCALE ~ league sd
-    # of component gaps. NEED_BONUS_MAX is sized to visibly lift a real-need fit (~a B->A- bump) yet
-    # never rescue a bad player (0.30 base + 0.12 = 0.42 is still C/D). NEED_FLOOR only floors the
-    # DISPLAYED need level for the breakdown bar; it no longer enters the score.
-    "NEED_GAP_SCALE": 12.0,
-    "NEED_FLOOR": 0.15,
-    "NEED_BONUS_MAX": 0.12,
-    # STYLE level = alignment of the player's generation profile (rush / cycle-forecheck / volume /
-    # pace percentiles, from the radar) with the team's identity fingerprint (same percentiles).
-    # LINE level maps the projected pairing/line xGF% across this band to [0,1].
-    "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,
-    # letter grade on the 0-1 overall score (first band whose floor is met wins). Tuned to the
-    # post-change distribution (validate_trade_fit: n=72, median ~0.62, a clear valley ~0.42-0.55
-    # where below-average-but-relevant players land, and a bad-player floor ~0.15-0.27). A = top
-    # fits, B = solid contributors, C = a decent fit limited by the player (e.g. an elite line/style
-    # fit dragged by below-average value), D/F = weak/bad. See docs/methodology/trade-fit.md.
-    "GRADE_BANDS": [("A", 0.70), ("B", 0.56), ("C", 0.42), ("D", 0.30), ("F", 0.0)],
+    "MATCH_WEIGHTS": {"need": 0.55, "style": 0.20, "line": 0.25},   # need is the core; sum 1.0
+    "FLOOR_CAP": 0.55,           # elite (quality pctile ~1.0) floors here; a depth player floors ~0
+    # need_score at a role: opp_c = team_need_c * player_strength_c (the team is weak there AND the
+    # player is strong there). Blend the single best opportunity (rewards a specialist who nails the
+    # team's biggest hole) with breadth across components (rewards an all-rounder addressing several).
+    "NEED_PRIMARY_W": 0.7,       # weight on max(opp_c); (1 - this) on mean(opp_c)
+    # handedness: a SMALL modifier inside need — bump when the team is short the player's shot at his
+    # role, trim when over-supplied. Bounded to +/- HAND_MOD/2 so it never dominates.
+    "HAND_MOD": 0.10,
+    # line complementarity (Phase 3): sum of the line model's PAIRWISE feature contributions (arch
+    # overlap, shot-loc variety, handedness, pace spread, tilt) — talent-INDEPENDENT — mapped through
+    # a sigmoid (0.5 = neutral). Scale ~ a typical pairwise contribution magnitude in xGF% space.
+    "LINE_COMP_SCALE": 0.03,
+    "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,   # kept for the line note's grade context
+    # letter grade off the COMPOSED fit (carding only). The API and UI ALWAYS render the
+    # decomposition + the separate quality axis — never a lone grade. Tuned to the floor+match
+    # distribution in validate_trade_fit (a star floors ~0.55 -> B even at a poor-fit team; a
+    # low-value player nobody needs lands D/F; a specialist on a real need reaches B+).
+    "GRADE_BANDS": [("A", 0.80), ("B", 0.68), ("C", 0.56), ("D", 0.44), ("F", 0.0)],
 }
 
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------

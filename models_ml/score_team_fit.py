@@ -1,28 +1,32 @@
 """
-Trade / free-agency fit scoring (Phase 5.3 rebuild, blueprint 6.4).
+Player Fit scoring (rebuilt from first principles).
 
-Fit is NOT one number. The old tool collapsed it to a single cosine of player-profile vs team-need
-(positive gaps only, cosine floored at 0), so a defenseman who addresses a defensive need at a
-defense-STRONG team scored ~0 — position was never a term and a surplus team's need vector was
-empty exactly where the player was strong. This rebuild measures fit on FIVE separate dimensions:
+Fit measures how well a player's profile SERVES a team. Talent never CAPS fit — it FLOORS it:
 
-  1. POSITIONAL FIT (the gate / relevance): does the player's position + handedness + role slot into
-     the team? Bounded in [GATE_FLOOR, 1] so a positionally-relevant skater can NEVER score 0.
-  2. NEED FIT: how big is the team's statistical gap in the player's areas (team_needs). LOW need =
-     "not a statistical gap" — neutral, floored, NEVER negative (a strong team can still add him).
-  3. STYLE FIT: does the player's generation style (rush / cycle-forecheck / volume / pace from the
-     radar) match the team's identity fingerprint (mart_team_identity)?
-  4. LINE FIT: would he improve the line/pair he'd slot into (reuse score_line against the team's
-     current top unit for his position)? A model estimate -> carries its interval.
-  5. PLAYER QUALITY: his actual level — WAR percentile within position + RAPM impact.
+    match = weighted(need, style, line)        # all in [0, 1]
+    floor = FLOOR_CAP * overall_quality_pctile # an elite player always floors at a decent fit;
+                                               # a depth player floors near zero
+    fit   = floor + (1 - floor) * match        # match drives the upside, UNCAPPED by talent
 
-overall = positional_gate * weighted_avg(need, style, line, quality); a letter grade off config
-bands. None of these floors at 0 inappropriately, there is no max(0,) clamp, and the headline is
-always decomposable into the five dimensions. The verdict is deterministic and explicitly notes the
-model can't see injury / cap / roster context. See docs/methodology/trade-fit.md.
+So a low-value specialist who lands on a real team need can score a high fit (match ~1 regardless of
+talent), and an elite player is never rated a poor fit anywhere (the floor holds). Quality is exposed
+as its OWN axis beside fit — never folded into match — so "elite player, mediocre fit here" and
+"depth player, ideal fit here" both read cleanly.
+
+The three MATCH dimensions:
+  1. NEED (the core; it ABSORBS POSITION): how well the player's component-level strengths land on
+     the team's component-level weaknesses, BY ROLE (C / W / D / G), benchmarked against the team's
+     OWN current depth (nhl_models.team_needs, team_needs_v2). Handedness is a small modifier here.
+  2. STYLE: the player's offence-generation orientation vs the team's identity (match, not magnitude).
+  3. LINE: complementarity with the unit he'd actually skate with (the line model's PAIRWISE
+     contributions — talent-independent), Phase 3.
+Goalies take a simplified path (need = team goaltending weakness, same floor; no skater style/line).
+
+The API returns the DECOMPOSITION (need w/ its component-by-role breakdown, style, line) plus quality
+as a separate axis — never a lone collapsed grade. See docs/methodology/player-fit.md.
 
     from models_ml.score_team_fit import score_team_fit
-    score_team_fit(player_id=8483457, team_id=54)   # Hutson -> VGK
+    score_team_fit(player_id=8478402, team_id=24)   # McDavid -> ANA
 """
 
 from __future__ import annotations
@@ -33,29 +37,23 @@ import math
 import numpy as np
 
 from models_ml import bq, config
+from models_ml.compute_team_needs import role_of, SKATER_COMPONENTS, COMPONENT_LABEL, ROLE_LABEL
 
 CFG = config.TRADE_FIT
 ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
-COMPONENTS = ["ev_offense", "ev_defense", "pp", "pk", "finishing"]
-COMPONENT_LABEL = {"ev_offense": "even-strength offense", "ev_defense": "even-strength defense",
-                   "pp": "the power play", "pk": "the penalty kill", "finishing": "finishing"}
-# style dimensions: (player radar spoke key, team-identity fingerprint percentile col, label).
-# These are MATCHED generation axes (how the player creates offense vs how the team creates it),
-# all comparable shares — deliberately NOT skating-burst-vs-team-pace, which are different axes.
-STYLE_DIMS = [
-    ("rush_offense", "rush_share_for_pctile", "rush offense"),
-    ("cycle_forecheck", "forecheck_cycle_for_pctile", "forecheck/cycle"),
-    ("shot_volume", "shot_volume_per60_pctile", "shot volume"),
-]
+
+# style dimensions reuse the radar spokes vs the team-identity fingerprint (matched generation axes).
+STYLE_PLAYER_KEYS = ("rush_offense", "cycle_forecheck")
 
 
+# ------------------------------------------------------------------ small helpers
 def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
-def _grade(score01: float) -> str:
+def _grade(fit01: float) -> str:
     for letter, floor in CFG["GRADE_BANDS"]:
-        if score01 >= floor:
+        if fit01 >= floor:
             return letter
     return "F"
 
@@ -74,110 +72,171 @@ def _word(level: float | None) -> str:
     return "Low"
 
 
+def _f(v):
+    try:
+        f = float(v)
+        return f if np.isfinite(f) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _quality_label(pct: float | None) -> str:
+    if pct is None:
+        return "unrated"
+    if pct >= 0.90:
+        return "elite"
+    if pct >= 0.75:
+        return "high-end"
+    if pct >= 0.55:
+        return "solid middle-six/top-four"
+    if pct >= 0.35:
+        return "depth"
+    return "below-replacement"
+
+
 def _latest_season(p: str) -> str:
     return bq.query_df(f"select max(season) as s from `{p}.nhl_models.team_needs`").iloc[0]["s"]
 
 
-# ---------------------------------------------------------------- player profile
+def _player_name(p: str, player_id: int) -> str | None:
+    df = bq.query_df(f"""select any_value(first_name||' '||last_name) nm
+        from `{p}.nhl_staging.stg_rosters` where player_id={int(player_id)}""")
+    return df.iloc[0]["nm"] if not df.empty else None
+
+
+def _abbrev_map(p: str, season: str) -> dict:
+    df = bq.query_df(f"""select team_id, any_value(team_abbrev) a
+        from `{p}.nhl_mart.mart_team_game_stats` where season='{season}' group by 1""")
+    return dict(zip(df["team_id"].astype(int), df["a"]))
+
+
+# ------------------------------------------------------------------ player profile
 def _player_profile(p: str, player_id: int, season: str) -> dict:
-    """Archetype mix + composite components + bio (position/handedness) + style spokes + quality."""
+    """Position/role, per-component within-role percentiles (skater strengths), overall quality
+    percentile (the floor + the separate quality axis), style spokes, and the archetype mix (display).
+    Goalies get a simplified profile (goalie overall percentile; no skater components/style)."""
     pid = int(player_id)
-    arch = bq.query_df(f"""select archetypes, primary_archetype
-        from `{p}.nhl_models.player_archetypes` where player_id={pid} and season='{season}'""")
-    comp = bq.query_df(f"""select {', '.join(COMPONENTS)}
-        from `{p}.nhl_models.player_composite` where player_id={pid} and season_window='{season}'""")
     bio = bq.query_df(f"""select position, shoots from `{p}.nhl_staging.stg_player_bio`
         where player_id={pid} limit 1""")
-    radar = bq.query_df(f"""select spokes from `{p}.nhl_models.player_radar`
-        where player_id={pid} and season='{season}' limit 1""")
-    # quality: WAR + WAR percentile within position group + RAPM impact
-    qual = bq.query_df(f"""
-        with g as (select player_id, position, war, war_sd, toi_5v5,
-                          case when position='D' then 'D' else 'F' end pg
-                   from `{p}.nhl_models.player_gar` where season_window='{season}'),
-             r as (select *, percent_rank() over (partition by pg order by war) war_pct from g)
-        select war, war_sd, war_pct, position from r where player_id={pid} limit 1""")
-    impact = bq.query_df(f"""select off_impact, def_impact from `{p}.nhl_models.player_impact`
-        where player_id={pid} and season_window='{season}' limit 1""")
+    position = bio.iloc[0]["position"] if not bio.empty and bio.iloc[0]["position"] else None
+    shoots = bio.iloc[0]["shoots"] if not bio.empty else None
 
-    if arch.empty and comp.empty and qual.empty:
-        raise ValueError(f"no {season} profile for player {pid}")
+    # composite carries position_code too — use it as a fallback so role is robust to missing bio.
+    # NOTE: `position` is a reserved word in DuckDB (the serving backend), so it is never used as an
+    # output alias here — only as an (accepted) column reference.
+    comp_pos = bq.query_df(f"""select any_value(position) as pos
+        from `{p}.nhl_models.player_composite` where player_id={pid} and season_window='{season}'""")
+    if (not position) and (not comp_pos.empty) and comp_pos.iloc[0]["pos"]:
+        position = comp_pos.iloc[0]["pos"]
+    role = role_of(position)
 
-    # archetype mix
-    p_arch = np.zeros(len(ARCH_LIST)); idx = {a: i for i, a in enumerate(ARCH_LIST)}
-    primary, primary_w, mix = None, 0.0, []
+    if role == "G":
+        return _goalie_profile(p, pid, season, position, shoots)
+
+    # per-component percentile WITHIN ROLE (the player's strength by component)
+    pct = bq.query_df(f"""
+        with base as (
+          select player_id,
+            case when position='C' then 'C' when position in ('L','R','LW','RW') then 'W'
+                 when position='D' then 'D' else position end as role,
+            ev_offense, ev_defense, pp, pk, finishing
+          from `{p}.nhl_models.player_composite` where season_window='{season}'),
+        r as (
+          select player_id, role,
+            percent_rank() over (partition by role order by ev_offense) as ev_offense,
+            percent_rank() over (partition by role order by ev_defense) as ev_defense,
+            percent_rank() over (partition by role order by pp) as pp,
+            percent_rank() over (partition by role order by pk) as pk,
+            percent_rank() over (partition by role order by finishing) as finishing
+          from base)
+        select {', '.join(SKATER_COMPONENTS)} from r where player_id={pid} limit 1""")
+    comp_pct = {c: (_f(pct.iloc[0][c]) if not pct.empty else None) for c in SKATER_COMPONENTS}
+
+    # overall quality percentile (within position group) -> floor + separate axis
+    qual = _skater_quality(p, pid, season)
+
+    # archetype mix (display only)
+    arch = bq.query_df(f"""select archetypes, primary_archetype
+        from `{p}.nhl_models.player_archetypes` where player_id={pid} and season='{season}'""")
+    mix, primary = [], None
     if not arch.empty and isinstance(arch.iloc[0]["archetypes"], str):
         for it in json.loads(arch.iloc[0]["archetypes"]):
             mix.append({"archetype": it["archetype"], "weight": round(float(it["weight"]), 3)})
-            if it["archetype"] in idx:
-                p_arch[idx[it["archetype"]]] = float(it["weight"])
         primary = arch.iloc[0]["primary_archetype"]
-        primary_w = next((m["weight"] for m in mix if m["archetype"] == primary), 0.0)
 
-    p_comp = {c: (float(comp.iloc[0][c]) if not comp.empty and comp.iloc[0][c] is not None else 0.0)
-              for c in COMPONENTS}
-
-    # position + handedness (bio falls back to gar position / archetype prefix)
-    position = (bio.iloc[0]["position"] if not bio.empty and bio.iloc[0]["position"]
-                else (qual.iloc[0]["position"] if not qual.empty else None))
-    pos_group = "D" if position == "D" else "F"
-    shoots = bio.iloc[0]["shoots"] if not bio.empty else None
-
-    # style spokes (rush / cycle-forecheck / volume percentiles) from the radar
+    # style spokes (rush / cycle-forecheck percentiles) from the radar
+    radar = bq.query_df(f"""select spokes from `{p}.nhl_models.player_radar`
+        where player_id={pid} and season='{season}' limit 1""")
     style = {}
     if not radar.empty and isinstance(radar.iloc[0]["spokes"], str):
         sp = {s["key"]: s.get("percentile") for s in json.loads(radar.iloc[0]["spokes"])}
-        style = {k: (float(sp[k]) if sp.get(k) is not None else None)
-                 for k in ("rush_offense", "cycle_forecheck", "shot_volume", "burst")}
+        style = {k: (_f(sp[k]) if sp.get(k) is not None else None) for k in STYLE_PLAYER_KEYS}
 
-    quality = {
-        "war": float(qual.iloc[0]["war"]) if not qual.empty else None,
-        "war_sd": float(qual.iloc[0]["war_sd"]) if not qual.empty and qual.iloc[0]["war_sd"] is not None else None,
-        "war_pct": float(qual.iloc[0]["war_pct"]) if not qual.empty and qual.iloc[0]["war_pct"] is not None else None,
-        "off_impact": float(impact.iloc[0]["off_impact"]) if not impact.empty else None,
-        "def_impact": float(impact.iloc[0]["def_impact"]) if not impact.empty else None,
-    }
-    return {"p_arch": p_arch, "p_comp": p_comp, "mix": mix, "primary": primary,
-            "primary_w": primary_w, "position": position, "pos_group": pos_group,
-            "shoots": shoots, "style": style, "quality": quality,
-            "top_comp": max(p_comp, key=p_comp.get)}
+    if comp_pct["ev_offense"] is None and qual["percentile"] is None:
+        raise ValueError(f"no {season} skater profile for player {pid}")
+
+    return {"is_goalie": False, "position": position, "role": role, "shoots": shoots,
+            "comp_pct": comp_pct, "quality": qual, "style": style, "mix": mix, "primary": primary}
 
 
-# ---------------------------------------------------------------- team context
-def _team_identity(p: str, season: str) -> dict:
-    """Per team: the fingerprint percentiles used for style fit (+ a top-trait label)."""
-    df = bq.query_df(f"""
-        select team_id, rush_share_for_pctile,
-               (forecheck_share_for_pctile + cycle_share_for_pctile)/2 as forecheck_cycle_for_pctile,
-               shot_volume_per60_pctile, pace_pctile, oz_time_pct_pctile, shot_quality_pctile
-        from `{p}.nhl_mart.mart_team_identity`
-        where season='{season}' and window_kind='season'""")
+def _skater_quality(p: str, pid: int, season: str) -> dict:
+    """Overall within-position-group percentile (player_overall) + WAR/sd (player_gar). The percentile
+    drives the floor AND is the separate quality axis; WAR is the human number."""
+    ov = bq.query_df(f"""select overall_percentile from `{p}.nhl_models.player_overall`
+        where player_id={pid} and season_window='{season}' limit 1""")
+    pctile = _f(ov.iloc[0]["overall_percentile"]) if not ov.empty else None
+    g = bq.query_df(f"""select war, war_sd from `{p}.nhl_models.player_gar`
+        where player_id={pid} and season_window='{season}' limit 1""")
+    war = _f(g.iloc[0]["war"]) if not g.empty else None
+    war_sd = _f(g.iloc[0]["war_sd"]) if not g.empty else None
+    if pctile is None and war is not None:
+        # fallback: WAR percentile within position group
+        wp = bq.query_df(f"""with x as (
+              select player_id, case when position='D' then 'D' else 'F' end pg, war
+              from `{p}.nhl_models.player_gar` where season_window='{season}'),
+            r as (select player_id, percent_rank() over (partition by pg order by war) wp from x)
+            select wp from r where player_id={pid} limit 1""")
+        pctile = _f(wp.iloc[0]["wp"]) if not wp.empty else None
+    return {"percentile": pctile, "war": war, "war_sd": war_sd, "pos_group": "skater"}
+
+
+def _goalie_profile(p: str, pid: int, season: str, position, shoots) -> dict:
+    """Goalies: quality from goalie_overall (percentile) + goalie_gar (WAR). No skater components."""
+    ov = bq.query_df(f"""select overall_percentile from `{p}.nhl_models.goalie_overall`
+        where goalie_id={pid} and season_window='{season}' limit 1""")
+    pctile = _f(ov.iloc[0]["overall_percentile"]) if not ov.empty else None
+    g = bq.query_df(f"""select war, war_sd from `{p}.nhl_models.goalie_gar`
+        where goalie_id={pid} and season_window='{season}' limit 1""")
+    war = _f(g.iloc[0]["war"]) if not g.empty else None
+    war_sd = _f(g.iloc[0]["war_sd"]) if not g.empty else None
+    if pctile is None and war is None:
+        raise ValueError(f"no {season} goalie profile for player {pid}")
+    return {"is_goalie": True, "position": "G", "role": "G", "shoots": shoots,
+            "comp_pct": {"goaltending": pctile}, "mix": [], "primary": None, "style": {},
+            "quality": {"percentile": pctile, "war": war, "war_sd": war_sd, "pos_group": "goalie"}}
+
+
+# ------------------------------------------------------------------ team context
+def _role_needs(p: str, team_id: int, season: str, role: str) -> dict:
+    """team_needs rows for this team at the player's role: {component: {need, label, strength}}."""
+    df = bq.query_df(f"""select component, label, need, team_strength, league_pctile
+        from `{p}.nhl_models.team_needs`
+        where team_id={int(team_id)} and season='{season}' and role='{role}'""")
     out = {}
     for r in df.itertuples():
-        out[int(r.team_id)] = {
-            "rush_share_for_pctile": _f(r.rush_share_for_pctile),
-            "forecheck_cycle_for_pctile": _f(r.forecheck_cycle_for_pctile),
-            "shot_volume_per60_pctile": _f(r.shot_volume_per60_pctile),
-            "pace_pctile": _f(r.pace_pctile), "oz_time_pct_pctile": _f(r.oz_time_pct_pctile),
-            "shot_quality_pctile": _f(r.shot_quality_pctile),
-        }
+        out[r.component] = {"need": _f(r.need) or 0.0, "label": r.label,
+                            "league_pctile": _f(r.league_pctile)}
     return out
 
 
 def _team_handedness(p: str, season: str) -> dict:
-    """Per team: TOI-weighted handedness share by position group (for the positional gate)."""
+    """Per (team, pos_group): TOI-weighted L/R 5v5 share — a small handedness modifier inside need."""
     from models_ml import duck
-
     if duck.serving_active():
-        # Read the precomputed table (the int_shift_segments scan ran nightly).
         df = bq.query_df(f"""select team_id, pos_group, l_toi, r_toi
             from `{p}.nhl_models.team_handedness` where season='{season}'""")
-        out: dict = {}
-        for r in df.itertuples():
-            out[(int(r.team_id), r.pos_group)] = {
-                "L": float(r.l_toi or 0.0), "R": float(r.r_toi or 0.0)}
-        return out
-
+        return {(int(r.team_id), r.pos_group): {"L": float(r.l_toi or 0.0), "R": float(r.r_toi or 0.0)}
+                for r in df.itertuples()}
     df = bq.query_df(f"""
         with toi as (
           select s.player_id, s.team_id,
@@ -197,7 +256,19 @@ def _team_handedness(p: str, season: str) -> dict:
     return out
 
 
-# team's current top unit (trio for F, pair for D) over its last 10 games, members + their war
+def _team_identity(p: str, season: str, team_id: int) -> dict:
+    df = bq.query_df(f"""
+        select rush_share_for_pctile,
+               (forecheck_share_for_pctile + cycle_share_for_pctile)/2 as forecheck_cycle_for_pctile
+        from `{p}.nhl_mart.mart_team_identity`
+        where season='{season}' and window_kind='season' and team_id={int(team_id)} limit 1""")
+    if df.empty:
+        return {}
+    return {"rush_share_for_pctile": _f(df.iloc[0]["rush_share_for_pctile"]),
+            "forecheck_cycle_for_pctile": _f(df.iloc[0]["forecheck_cycle_for_pctile"])}
+
+
+# team's current top unit (trio for F, pair for D) over its last 10 games, members
 _TOP_UNIT_SQL = """
 with g as (
   select game_id, game_date from `{p}.nhl_staging.stg_boxscores`
@@ -214,29 +285,30 @@ unit as (
   select segment_index, game_id, any_value(segment_duration) dur,
          array_agg(player_id order by player_id) members, count(*) n
   from seg5 where position_code in ({pos}) group by 1,2)
-select (select string_agg(cast(m as string),'-' order by m) from unnest(members) m) line_key,
-       any_value(members) members, sum(dur)/60.0 minutes
-from unit where n={n} group by line_key order by minutes desc limit 1
+select any_value(members) members, sum(dur)/60.0 minutes
+from unit where n={n}
+group by (select string_agg(cast(m as string),'-' order by m) from unnest(members) m)
+order by minutes desc limit 1
 """
 
 
-def _line_fit(p: str, player_id: int, team_id: int, season: str, pos_group: str,
-              player_war: float | None) -> dict | None:
-    """Swap the player into the team's current top unit for his position; project with score_line."""
+def _line_complement(p: str, player_id: int, team_id: int, season: str, role: str) -> dict | None:
+    """Swap the player into the team's current top unit for his role, project with the line model, and
+    measure COMPLEMENTARITY = the sum of the model's PAIRWISE feature contributions (arch overlap,
+    shot-loc variety, handedness, pace spread, tilt). Talent-independent (member-level contributions,
+    which carry individual quality, are excluded), so line measures fit, not the player's level."""
     from models_ml.score_line import score_line
     from models_ml import duck
-    line_type = "F3" if pos_group == "F" else "D2"
+    line_type = "F3" if role in ("C", "W") else "D2"
     if duck.serving_active():
-        # Read the precomputed top unit (the int_shift_segments scan ran nightly).
         df = bq.query_df(f"""select line_key from `{p}.nhl_models.team_current_lines`
-            where team_id={int(team_id)} and season='{season}'
-              and line_type='{line_type}' and rnk=1""")
+            where team_id={int(team_id)} and season='{season}' and line_type='{line_type}' and rnk=1""")
         if df.empty:
             return None
         members = [int(x) for x in str(df.iloc[0]["line_key"]).split("-")]
     else:
-        pos = "'C','L','R'" if pos_group == "F" else "'D'"
-        n = 3 if pos_group == "F" else 2
+        pos = "'C','L','R'" if line_type == "F3" else "'D'"
+        n = 3 if line_type == "F3" else 2
         df = bq.query_df(_TOP_UNIT_SQL.format(p=p, team=int(team_id), season=season, pos=pos, n=n))
         if df.empty:
             return None
@@ -254,92 +326,74 @@ def _line_fit(p: str, player_id: int, team_id: int, season: str, pos_group: str,
         cur = score_line(members, season, blend=False)
     except Exception:
         return None
-    return {"members": members, "drop": drop, "new_unit": new_unit,
+    pair_keys = ("pair_arch_cos", "pair_shotloc_dist", "hand_balance", "burst_spread", "oz_tilt_mean")
+    contribs = new.get("contribs", {}) or {}
+    complement = sum(float(v) for k, v in contribs.items() if k in pair_keys)
+    return {"members": members, "drop": drop,
             "proj_xgf": new["projected_xgf_pct"], "cur_xgf": cur["projected_xgf_pct"],
             "grade": new["grade"], "partner_names": [m["name"] for m in new["members"]],
+            "complement": complement,
             "interval_half": round((new["interval_high"] - new["interval_low"]) / 2, 4)}
 
 
-def _f(v):
-    try:
-        f = float(v)
-        return f if np.isfinite(f) else None
-    except (TypeError, ValueError):
-        return None
-
-
-# ---------------------------------------------------------------- dimensions
-def _need_dimension(needs, prof) -> dict:
-    """Need level = team's component gap weighted by where the PLAYER provides value, sigmoid-mapped.
-    Low (surplus) reads ~0.15 — 'not a statistical gap', never negative."""
-    comp_need = {r.key: float(r.gap) for r in needs[needs.need_type == "component"].itertuples()}
-    # the player's positive component profile = where he provides value
-    pv = {c: max(0.0, prof["p_comp"][c]) for c in COMPONENTS}
-    tot = sum(pv.values()) or 1.0
-    gap = sum(comp_need.get(c, 0.0) * pv[c] for c in COMPONENTS) / tot
-    level = max(CFG["NEED_FLOOR"], _sigmoid(gap / CFG["NEED_GAP_SCALE"]))
-    # tangible note anchored on the player's strongest component (where he provides value)
-    top_c = max(pv, key=pv.get)
-    if gap <= 0.5:
-        note = (f"{prof['_team_abbrev']} aren't statistically short at {COMPONENT_LABEL[top_c]} — "
-                f"not a gap, but a team can still add here.")
+# ------------------------------------------------------------------ dimensions
+def _need_dimension(prof: dict, role_needs: dict, hand: dict, team_id: int, abbr: str) -> dict:
+    """NEED (the core, absorbs position). opp_c = team_need_c * player_strength_c at the player's role;
+    need_score blends the single best opportunity (a specialist nailing the biggest hole) with breadth.
+    Handedness is a small modifier. Returns the dimension + a component-by-role BREAKDOWN."""
+    # components are data-driven from the team's role needs (so D excludes finishing automatically)
+    comps = ["goaltending"] if prof["is_goalie"] else [c for c in SKATER_COMPONENTS if c in role_needs]
+    breakdown, opps = [], []
+    for c in comps:
+        need_c = role_needs.get(c, {}).get("need", 0.0)
+        str_c = prof["comp_pct"].get(c)
+        str_c = 0.0 if str_c is None else float(str_c)
+        opp = need_c * str_c
+        opps.append(opp)
+        breakdown.append({"component": c, "label": COMPONENT_LABEL[c],
+                          "team_need": round(need_c, 3), "player_strength": round(str_c, 3),
+                          "opportunity": round(opp, 3)})
+    if opps:
+        w = CFG["NEED_PRIMARY_W"]
+        need_score = w * max(opps) + (1 - w) * (sum(opps) / len(opps))
     else:
-        note = (f"Addresses {prof['_team_abbrev']}'s {COMPONENT_LABEL[top_c]} gap "
-                f"(~{gap:+.0f} goals behind the top teams).")
-    return {"key": "need", "label": "Need fit", "level": round(level, 3),
-            "value": _word(level), "note": note, "tone": "neutral" if gap <= 0.5 else "positive",
-            # raw team gap in the player's area; drives the additive bonus in _combine. NEED only
-            # ADDS to the score (never subtracts) — see _need_bonus. (Ignored by the response model.)
-            "gap": round(gap, 3)}
+        need_score = 0.0
 
+    # small handedness modifier (skaters only): bump if the team is short the player's shot at his pos
+    if not prof["is_goalie"] and prof["shoots"] in ("L", "R"):
+        pg = "D" if prof["role"] == "D" else "F"
+        h = hand.get((int(team_id), pg))
+        if h and (h["L"] + h["R"]) > 0:
+            share = h[prof["shoots"]] / (h["L"] + h["R"])
+            need_score = max(0.0, min(1.0, need_score * (1.0 + (0.5 - share) * CFG["HAND_MOD"])))
 
-def _positional_dimension(p, prof, hand, team_id) -> dict:
-    """Gate in [FLOOR,1]: every NHL position is usable; modulate by handedness balance vs the team's
-    actual L/R distribution at the position. The note leads on that handedness context — specific to
-    THIS player + team — and never emits tautological filler ('a role every team ices'). When no
-    handedness signal is available it states the position plainly and stops."""
-    pg, shoots = prof["pos_group"], prof["shoots"]
-    base = 0.82  # any F or D is positionally usable by any team
-    pos_word = {"D": "defenseman", "F": "forward"}[pg]
-    hand_word = {"L": "left-shot ", "R": "right-shot "}.get(shoots or "", "")
-    abbr = prof["_team_abbrev"]
-    # Plain-fact fallback (no editorializing tail) — used when handedness can't be determined.
-    note = f"A {hand_word}{pos_word}.".replace("  ", " ")
-
-    h = hand.get((int(team_id), pg))
-    if h and shoots in ("L", "R") and (h["L"] + h["R"]) > 0:
-        share = h[shoots] / (h["L"] + h["R"])           # team's current share of the player's hand
-        # under-supplied handedness (low share) -> bump; over-supplied -> slight trim. ±0.12.
-        base += (0.5 - share) * 0.24
-        side = "left" if shoots == "L" else "right"
-        opp = "right" if shoots == "L" else "left"
-        if share <= 0.42:
-            note = f"A {hand_word}{pos_word} — {abbr} lean {opp}-shot at the position, so the handedness helps."
-        elif share >= 0.62:
-            note = f"A {hand_word}{pos_word}, where {abbr} already have {side}-shot depth."
+    # tangible note: the team's most acute need at the role + whether the player addresses it
+    top = max(breakdown, key=lambda b: b["team_need"]) if breakdown else None
+    addressed = max(breakdown, key=lambda b: b["opportunity"]) if breakdown else None
+    if top and top["team_need"] >= 0.5:
+        if addressed and addressed["opportunity"] >= 0.4:
+            note = (f"{abbr} are thin at {ROLE_LABEL[prof['role']]} {top['label'].split('· ')[-1].lower()}; "
+                    f"he addresses it ({addressed['label'].split('· ')[-1].lower()}, "
+                    f"{round(addressed['player_strength']*100)}th pct).")
         else:
-            note = f"A {hand_word}{pos_word}; {abbr} are balanced at the position."
-    level = max(CFG["GATE_FLOOR"], min(1.0, base))
-    return {"key": "positional", "label": "Positional fit", "level": round(level, 3),
-            "value": _word(level), "note": note, "tone": "positive"}
+            note = (f"{abbr} are thin at {ROLE_LABEL[prof['role']]} {top['label'].split('· ')[-1].lower()}, "
+                    f"but his strengths lie elsewhere.")
+    else:
+        note = f"{abbr} have solid {ROLE_LABEL[prof['role']]} depth — not a roster hole to fill."
+    tone = "positive" if need_score >= 0.45 else "neutral"
+    return {"key": "need", "label": "Need fit", "level": round(need_score, 3),
+            "value": _word(need_score), "note": note, "tone": tone, "breakdown": breakdown}
 
 
 def _orient(rush, cyc):
-    """Rush-vs-(forecheck/cycle) ORIENTATION as a within-entity ratio in [0,1] (1 = all rush). This
-    is comparable across a player (percentiles within position) and a team (within league) because
-    it's each entity's own balance, not an absolute level — sidestepping the player-vs-team scale
-    mismatch."""
     if rush is None or cyc is None or (rush + cyc) <= 0:
         return None
     return rush / (rush + cyc)
 
 
-def _style_dimension(prof, ident) -> dict:
-    """Style level = how well the player's OFFENSE-GENERATION orientation (rush vs forecheck/cycle)
-    matches the team's identity orientation. A transition/rush creator into a rush team fits; a rush
-    creator into a grind-it-out forecheck/cycle team is a partial mismatch. Balanced teams read
-    neutral (~0.5)."""
-    abbr = prof.get("_team_abbrev", "the team")
+def _style_dimension(prof: dict, ident: dict, abbr: str) -> dict:
+    """STYLE: the player's rush-vs-(forecheck/cycle) ORIENTATION (a within-entity ratio) vs the team's
+    identity orientation. A match, not a magnitude — does not scale with the player's value."""
     lean_p = _orient(prof["style"].get("rush_offense"), prof["style"].get("cycle_forecheck"))
     lean_t = _orient(ident.get("rush_share_for_pctile"), ident.get("forecheck_cycle_for_pctile")) if ident else None
     if lean_p is None or lean_t is None:
@@ -352,204 +406,162 @@ def _style_dimension(prof, ident) -> dict:
                 "forecheck-and-cycle" if lean <= 0.4 else "balanced")
     tw, pw = word(lean_t), word(lean_p)
     if level >= 0.72:
-        note = (f"Both the player and {abbr} play a balanced style — a comfortable stylistic fit."
-                if tw == pw == "balanced" else
-                f"Matches {abbr}'s {tw} identity (the player generates offense the same way).")
+        note = (f"Both play a balanced style — a comfortable stylistic fit." if tw == pw == "balanced"
+                else f"Matches {abbr}'s {tw} identity (he generates offense the same way).")
     elif level <= 0.45:
-        note = f"{abbr} are a {tw} team; the player leans more {pw} — a stylistic mismatch."
+        note = f"{abbr} are a {tw} team; he leans more {pw} — a stylistic mismatch."
     else:
-        note = f"{abbr} lean {tw}; the player is {pw} — a partial stylistic match."
+        note = f"{abbr} lean {tw}; he is {pw} — a partial stylistic match."
     tone = "positive" if level >= 0.6 else ("neutral" if level >= 0.45 else "warn")
     return {"key": "style", "label": "Style fit", "level": round(level, 3),
             "value": _word(level), "note": note, "tone": tone}
 
 
-def _line_dimension(line) -> dict:
+def _line_dimension(line: dict | None) -> dict:
+    """LINE: complementarity with the unit he'd skate with — the line model's PAIRWISE contribution
+    mapped through a sigmoid (0.5 = neutral). Talent-independent by construction (Phase 3)."""
     if not line:
         return {"key": "line", "label": "Line fit", "level": None, "value": "n/a",
                 "note": "No current top unit to slot into (insufficient recent 5v5 data).",
                 "tone": "neutral", "uncertain": True}
-    lo, hi = CFG["LINE_XGF_LO"], CFG["LINE_XGF_HI"]
-    level = max(0.0, min(1.0, (line["proj_xgf"] - lo) / (hi - lo)))
-    delta = line["proj_xgf"] - line["cur_xgf"]
+    level = _sigmoid(line["complement"] / CFG["LINE_COMP_SCALE"])
     partners = [n for n in line["partner_names"] if n]
     pwith = (" with " + " & ".join(partners[:2])) if partners else ""
-    note = (f"Projects a {line['grade']} pairing/line{pwith}: {line['proj_xgf']*100:.1f}% xGF "
-            f"({delta*100:+.1f} vs the current unit).")
+    if level >= 0.6:
+        note = f"Complements the unit{pwith} (varied roles/shot locations); projects a {line['grade']} line."
+    elif level <= 0.4:
+        note = f"Overlaps the unit{pwith} stylistically; projects a {line['grade']} line."
+    else:
+        note = f"A neutral stylistic fit on the unit{pwith}; projects a {line['grade']} line."
     return {"key": "line", "label": "Line fit", "level": round(level, 3),
-            "value": f"{line['grade']} · {line['proj_xgf']*100:.0f}%", "note": note,
-            "tone": "positive" if delta >= 0 else "neutral", "uncertain": True,
-            "sd": line.get("interval_half")}
+            "value": _word(level), "note": note, "tone": "positive" if level >= 0.5 else "neutral",
+            "uncertain": True, "sd": line.get("interval_half")}
 
 
-def _quality_dimension(prof) -> dict:
+def _quality_axis(prof: dict) -> dict:
+    """The SEPARATE quality axis (never folded into match). percentile drives the floor."""
     q = prof["quality"]
-    if q["war_pct"] is None:
-        return {"key": "quality", "label": "Player quality", "level": None, "value": "n/a",
-                "note": "No value estimate this season.", "tone": "neutral", "uncertain": True}
-    level = q["war_pct"]
-    pos_noun = "defensemen" if prof["pos_group"] == "D" else "forwards"
-    war_txt = f"{q['war']:+.1f} WAR" + (f" ± {q['war_sd']:.1f}" if q["war_sd"] else "")
-    note = f"{round(level*100)}th-percentile value among {pos_noun} ({war_txt})."
-    return {"key": "quality", "label": "Player quality", "level": round(level, 3),
-            "value": f"{round(level*100)}th", "note": note, "tone": "positive", "uncertain": True,
-            "sd": round((q["war_sd"] or 0) / 12.0, 3) if q["war_sd"] else None}
+    pct, war, war_sd = q["percentile"], q["war"], q["war_sd"]
+    pos = "goalies" if prof["is_goalie"] else ("defensemen" if prof["role"] == "D" else "forwards")
+    label = _quality_label(pct)
+    if pct is None:
+        note = "No value estimate this season."
+    else:
+        war_txt = (f"{war:+.1f} WAR" + (f" ± {war_sd:.1f}" if war_sd else "")) if war is not None else ""
+        note = f"{round(pct*100)}th-percentile value among {pos}{(' (' + war_txt + ')') if war_txt else ''}."
+    return {"percentile": pct, "war": war, "war_sd": war_sd, "label": label, "note": note}
 
 
-# ---------------------------------------------------------------- main
-def _abbrev_map(p: str, season: str) -> dict:
-    df = bq.query_df(f"""select team_id, any_value(team_abbrev) a
-        from `{p}.nhl_mart.mart_team_game_stats` where season='{season}' group by 1""")
-    return dict(zip(df["team_id"].astype(int), df["a"]))
-
-
-def _need_bonus(gap: float | None) -> float:
-    """Asymmetric additive NEED bonus in [0, NEED_BONUS_MAX].
-
-    0 for a surplus / no gap (need is neutral, never a penalty); rises monotonically with a real
-    team gap in the player's area, up to NEED_BONUS_MAX. Filling a hole is upside ON TOP of the
-    player-and-fit base — it can lift a grade but can never rescue a bad player.
-    """
-    g = gap or 0.0
-    return CFG["NEED_BONUS_MAX"] * max(0.0, 2.0 * _sigmoid(g / CFG["NEED_GAP_SCALE"]) - 1.0)
-
-
-def _combine(dims: list[dict]) -> tuple[float, str]:
-    """(positional gate) * weighted_avg(quality, line, style)  +  asymmetric NEED bonus.
-
-    The base is purely about the player and the fit (talent-dominant), gated so a positionally
-    relevant skater is never zeroed. NEED is added afterwards and can only HELP (see _need_bonus):
-    low need adds nothing, it does NOT drag the average down.
-    """
+# ------------------------------------------------------------------ composition
+def _match(dims: list[dict]) -> float:
+    """Weighted blend of the available match dimensions (need/style/line), renormalised over present."""
+    w = CFG["MATCH_WEIGHTS"]
     by = {d["key"]: d for d in dims}
-    gate = by["positional"]["level"] or CFG["GATE_FLOOR"]
-    w = CFG["WEIGHTS"]; num = den = 0.0
-    for k in ("quality", "line", "style"):
-        lvl = by[k]["level"]
-        if lvl is not None:
-            num += w[k] * lvl; den += w[k]
-    base = (num / den) if den > 0 else 0.5
-    gated_base = gate * base
-    bonus = _need_bonus(by["need"].get("gap"))
-    score = max(0.0, min(1.0, gated_base + bonus))
-    return round(score, 4), _grade(score)
+    num = den = 0.0
+    for k in ("need", "style", "line"):
+        d = by.get(k)
+        if d and d.get("level") is not None:
+            num += w[k] * d["level"]; den += w[k]
+    return (num / den) if den > 0 else 0.0
 
 
-def _verdict(name, team_abbrev, grade, dims) -> str:
-    """Deterministic verdict. The grade is driven by the base (quality/line/style); NEED is framed
-    as pure upside (mention only when it's a real gap, never as a deduction), and a low base is
-    attributed to its real cause — usually the player's value — not to a lack of need."""
+def _compose(quality_pct: float | None, match: float) -> tuple[float, str]:
+    """fit = floor + (1 - floor) * match, where floor = FLOOR_CAP * quality percentile."""
+    floor = CFG["FLOOR_CAP"] * (quality_pct if quality_pct is not None else 0.0)
+    fit = max(0.0, min(1.0, floor + (1.0 - floor) * match))
+    return round(fit, 4), _grade(fit)
+
+
+def _verdict(name, abbr, grade, quality, dims, is_goalie) -> str:
+    """Deterministic verdict: lead with the quality TIER (the floor), then the strongest match driver,
+    then the served need. Decomposition is the product; this just narrates it."""
     by = {d["key"]: d for d in dims}
-    base = sorted([by[k] for k in ("quality", "line", "style") if by.get(k) and by[k]["level"] is not None],
-                  key=lambda d: -(d["level"] or 0))
-    bits = []
-    # lead with the strongest base dimension when it's genuinely a strength
-    lead = base[0] if base else None
-    if lead and (lead["level"] or 0) >= 0.6:
-        bits.append({"style": "fits the team's style",
-                     "line": "would upgrade the line he slots into",
-                     "quality": "brings real top-end value"}[lead["key"]])
-    # name the legitimate drag (now quality, not need) when the player is below average
-    q = by.get("quality")
-    if q and q["level"] is not None and q["level"] < 0.4:
-        bits.append("though he's held back by his below-average value")
-    # NEED is upside only: mention a real hole as a positive; otherwise say nothing about need
-    nd = by["need"]
-    if (nd.get("gap") or 0.0) > 0.5:
-        bits.append("and he fills a clear hole at the position")
-    body = ", ".join(bits) if bits else "the dimensions are mixed"
-    return (f"{name} grades {grade} as a fit for {team_abbrev}: {body}. "
-            f"Weigh this against what the model can't see — injuries, departures, cap, and locker room.")
+    qtier = quality["label"]
+    match_dims = [by[k] for k in ("need", "style", "line") if by.get(k) and by[k].get("level") is not None]
+    lead = max(match_dims, key=lambda d: d["level"]) if match_dims else None
+    clause = f"{name} is {('an' if qtier and qtier[0] in 'aeiou' else 'a')} {qtier} player"
+    if lead and lead["level"] >= 0.6:
+        clause += " " + {"need": f"who fills a real {abbr} need",
+                         "style": f"whose style suits {abbr}",
+                         "line": "who complements the unit he'd join"}[lead["key"]]
+    nd = by.get("need")
+    if nd and nd["level"] < 0.35 and not (lead and lead["key"] == "need"):
+        clause += f", though {abbr} aren't especially short where he helps"
+    return (f"{clause}. Fit grades {grade} — read the dimensions below, and weigh what the model "
+            f"can't see: injuries, departures, cap, and locker room.")
 
 
+# ------------------------------------------------------------------ main
 def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> dict:
     p = bq.project(); season = season or _latest_season(p)
     tid = int(team_id)
-    needs = bq.query_df(f"""select need_type, key, label, team_value, reference_value, gap
-        from `{p}.nhl_models.team_needs` where team_id={tid} and season='{season}'""")
-    if needs.empty:
-        raise ValueError(f"no need profile for team {team_id} in {season}")
-    abbrev = _abbrev_map(p, season)
+    abbr_map = _abbrev_map(p, season)
+    abbr = abbr_map.get(tid, f"team {tid}")
     prof = _player_profile(p, player_id, season)
-    prof["_team_abbrev"] = abbrev.get(tid, f"team {tid}")
+    role_needs = _role_needs(p, tid, season, prof["role"])
+    if not role_needs:
+        raise ValueError(f"no need profile for team {team_id} at role {prof['role']} in {season}")
 
-    ident = _team_identity(p, season).get(tid, {})
-    hand = _team_handedness(p, season)
-    line = _line_fit(p, player_id, tid, season, prof["pos_group"], prof["quality"]["war"])
+    quality = _quality_axis(prof)
+    hand = _team_handedness(p, season) if not prof["is_goalie"] else {}
+    need = _need_dimension(prof, role_needs, hand, tid, abbr)
 
-    dims = [
-        _positional_dimension(p, prof, hand, tid),
-        _need_dimension(needs, prof),
-        _style_dimension(prof, ident),
-        _line_dimension(line),
-        _quality_dimension(prof),
-    ]
-    score, grade = _combine(dims)
+    if prof["is_goalie"]:
+        dims = [need]                                   # goalies: need only (no skater style/line)
+    else:
+        ident = _team_identity(p, season, tid)
+        line = _line_complement(p, player_id, tid, season, prof["role"])
+        dims = [need, _style_dimension(prof, ident, abbr), _line_dimension(line)]
+
+    match = _match(dims)
+    fit, grade = _compose(quality["percentile"], match)
     name = _player_name(p, player_id)
-    verdict = _verdict(name, prof["_team_abbrev"], grade, dims)
-
-    # legacy need profile for the UI context (top positive component/archetype gaps)
-    def top_needs(nt, n):
-        sub = needs[(needs.need_type == nt) & (needs.gap > 0)].sort_values("gap", ascending=False)
-        return [dict(key=r.key, label=r.label, gap=round(float(r.gap), 3),
-                     team_value=round(float(r.team_value), 3),
-                     reference_value=round(float(r.reference_value), 3)) for r in sub.head(n).itertuples()]
+    verdict = _verdict(name, abbr, grade, quality, dims, prof["is_goalie"])
 
     return {
         "player_id": int(player_id), "player_name": name, "team_id": tid, "season": season,
-        "overall_grade": grade, "overall_score": round(score * 100, 1),
-        "verdict_sentence": verdict, "dimensions": dims,
+        "role": prof["role"],
+        "overall_grade": grade, "overall_score": round(fit * 100, 1),
+        "verdict_sentence": verdict,
+        "quality": quality,                              # SEPARATE axis — never folded into match
+        "dimensions": dims,                              # need (w/ breakdown) + style + line
+        "need_breakdown": need["breakdown"],
         "player_archetypes": prof["mix"],
-        "need_profile": {"team_id": tid, "season": season,
-                         "archetype_needs": top_needs("archetype", 5),
-                         "component_needs": top_needs("component", 5)},
     }
 
 
-def _player_name(p: str, player_id: int) -> str | None:
-    df = bq.query_df(f"""select any_value(first_name||' '||last_name) nm
-        from `{p}.nhl_staging.stg_rosters` where player_id={int(player_id)}""")
-    return df.iloc[0]["nm"] if not df.empty else None
-
-
+# ------------------------------------------------------------------ best teams (lightweight)
 def best_team_fits(player_id: int, season: str | None = None, top_n: int = 3,
                    exclude_team_id: int | None = None) -> list[dict]:
-    """Teams a player fits best — a LIGHTWEIGHT estimate (positional gate * need/style/quality, no
-    per-team line fit) so all 32 teams rank cheaply. Same no-zero-floor discipline."""
+    """Teams a player fits best — a LIGHTWEIGHT estimate (need + style + floor, no per-team line) so
+    all 32 teams rank cheaply. Same floor/match composition; for a fixed player the ordering comes
+    from need + style (talent floors everywhere equally)."""
     p = bq.project(); season = season or _latest_season(p)
     prof = _player_profile(p, player_id, season)
-    abbrev = _abbrev_map(p, season)
-    ident_all = _team_identity(p, season)
-    hand = _team_handedness(p, season)
-    allneeds = bq.query_df(f"""select team_id, need_type, key, label, team_value, reference_value, gap
-        from `{p}.nhl_models.team_needs` where season='{season}'""")
-    if allneeds.empty:
+    abbr_map = _abbrev_map(p, season)
+    quality = _quality_axis(prof)
+    hand = _team_handedness(p, season) if not prof["is_goalie"] else {}
+
+    needs_all = bq.query_df(f"""select team_id, component, label, need
+        from `{p}.nhl_models.team_needs` where season='{season}' and role='{prof['role']}'""")
+    if needs_all.empty:
         return []
-    q = _quality_dimension(prof)
     out = []
-    for tid, g in allneeds.groupby("team_id"):
+    for tid, g in needs_all.groupby("team_id"):
         tid = int(tid)
         if exclude_team_id is not None and tid == int(exclude_team_id):
             continue
-        prof["_team_abbrev"] = abbrev.get(tid, f"team {tid}")
-        need = _need_dimension(g, prof)
-        style = _style_dimension(prof, ident_all.get(tid, {}))
-        pos = _positional_dimension(p, prof, hand, tid)
-        dims = [pos, need, style, {"key": "line", "label": "Line fit", "level": None},
-                {"key": "quality", "label": "Player quality", "level": q["level"]}]
-        score, grade = _combine(dims)
-        out.append({"team_id": tid, "fit_score": round(score * 100, 1), "grade": grade,
-                    "reason": need["note"] if need["level"] >= 0.5 else style["note"],
-                    "top_need_label": need_label(g), "top_need_gap": need_gap(g)})
+        abbr = abbr_map.get(tid, f"team {tid}")
+        role_needs = {r.component: {"need": _f(r.need) or 0.0, "label": r.label} for r in g.itertuples()}
+        need = _need_dimension(prof, role_needs, hand, tid, abbr)
+        dims = [need]
+        if not prof["is_goalie"]:
+            dims.append(_style_dimension(prof, _team_identity(p, season, tid), abbr))
+        fit, grade = _compose(quality["percentile"], _match(dims))
+        top = max(need["breakdown"], key=lambda b: b["team_need"]) if need["breakdown"] else None
+        out.append({"team_id": tid, "fit_score": round(fit * 100, 1), "grade": grade,
+                    "reason": need["note"],
+                    "top_need_label": top["label"] if top else None,
+                    "top_need_gap": round(top["team_need"], 3) if top else None})
     out.sort(key=lambda x: -x["fit_score"])
     return out[:top_n]
-
-
-def need_label(g):
-    sub = g[(g.need_type == "component") & (g.gap > 0)].sort_values("gap", ascending=False)
-    return sub.iloc[0]["label"] if not sub.empty else None
-
-
-def need_gap(g):
-    sub = g[(g.need_type == "component") & (g.gap > 0)].sort_values("gap", ascending=False)
-    return round(float(sub.iloc[0]["gap"]), 1) if not sub.empty else None

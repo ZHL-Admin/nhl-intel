@@ -1,15 +1,21 @@
 """
-Team need profiles for the trade/free-agency fit tool (Phase 5.3, blueprint 6.4).
+Team need profiles for the Player Fit tool — by ROLE x COMPONENT, vs the team's OWN current depth.
 
-A team's need = where it falls short of the league's best teams, on two axes:
-  (a) archetype gaps  — the team's TOI-weighted archetype mix vs the average mix of the top-8
-                        teams by power rating (which roles is it short on?);
-  (b) component gaps  — the team's summed composite by component (EV offense/defense, PP, PK,
-                        finishing) vs the top-8 average (which kind of value is it short on?).
+A team's need at a (role, component) is how WEAK its current depth is there relative to the league:
 
-Output: nhl_models.team_needs (long format), one row per (team, season, need_type, key):
-team_value, reference_value (top-8 avg), gap (reference - team; positive = a need). The trade-fit
-service (models_ml/score_team_fit.py) reads this to score how well a player fills the gaps.
+  team_strength[role][component] = sum over the team's current players at that role of their
+      composite component value (goals-scale; the sum captures BOTH quality and depth — a team with
+      several good centers sums high, a team with one good center and scrubs sums low).
+  league_pctile = percent_rank of that strength across the 32 teams at the same (role, component).
+  need          = 1 - league_pctile   (weak own depth -> high need), in [0, 1].
+
+Roles: C / W (L+R wings) / D for skaters; G for goalies (single component 'goaltending', from the
+composite goalie GSAx). This REPLACES the old top-8 archetype/component benchmark: need is now
+own-depth, role-aware, and it ABSORBS POSITION entirely — a center is measured against the team's
+center depth, a winger against its wing depth, so a player only scores need at his own role.
+
+Output nhl_models.team_needs (long): one row per (team_id, season, role, component) with
+team_strength, league_pctile, need, label, model_version. Consumed by models_ml.score_team_fit.
 
 Run:  python -m models_ml.compute_team_needs [--season 2025-26] [--dry-run]
 """
@@ -17,35 +23,118 @@ Run:  python -m models_ml.compute_team_needs [--season 2025-26] [--dry-run]
 from __future__ import annotations
 
 import argparse
-import json
 
-import numpy as np
 import pandas as pd
 
-from models_ml import bq, config
+from models_ml import bq
 
-ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
-COMPONENTS = ["ev_offense", "ev_defense", "pp", "pk", "finishing"]
+SKATER_COMPONENTS = ["ev_offense", "ev_defense", "pp", "pk", "finishing"]
 COMPONENT_LABEL = {
     "ev_offense": "Even-strength offense", "ev_defense": "Even-strength defense",
     "pp": "Power play", "pk": "Penalty kill", "finishing": "Finishing",
+    "goaltending": "Goaltending",
 }
+ROLE_LABEL = {"C": "center", "W": "wing", "D": "defense", "G": "goaltending"}
 
 
-def _arch_vector(arch_json) -> np.ndarray:
-    v = np.zeros(len(ARCH_LIST), dtype="float64")
-    if not isinstance(arch_json, str):
-        return v
-    idx = {a: i for i, a in enumerate(ARCH_LIST)}
-    for item in json.loads(arch_json):
-        i = idx.get(item.get("archetype"))
-        if i is not None:
-            v[i] = float(item.get("weight", 0.0))
-    return v
+def components_for_role(role: str) -> list[str]:
+    """Skater components scored at a role. Finishing is a forward skill — excluded for defensemen
+    (for D it's a tiny, shrunk shot sample whose percentile is noise)."""
+    if role == "D":
+        return [c for c in SKATER_COMPONENTS if c != "finishing"]
+    return list(SKATER_COMPONENTS)
+
+
+def role_of(position) -> str | None:
+    """Map a position code to a depth-chart role. Wings (L/R) collapse to W; centers and D stay
+    distinct (the center premium); goalies are G. Unknown/blank -> None (dropped, not guessed)."""
+    if not isinstance(position, str):
+        return None
+    p = position.strip().upper()
+    if p in ("C",):
+        return "C"
+    if p in ("L", "R", "LW", "RW"):
+        return "W"
+    if p in ("D",):
+        return "D"
+    if p in ("G",):
+        return "G"
+    return None
 
 
 def _latest_season(p: str) -> str:
     return bq.query_df(f"select max(season) as s from `{p}.nhl_models.team_ratings`").iloc[0]["s"]
+
+
+def pull_players(p: str, season: str) -> pd.DataFrame:
+    """Every player's composite components + position + current NHL team that season.
+
+    Current team uses the roster trick filtered to NHL game types ('01'/'02'/'03') so 2026 Olympic /
+    4-Nations games (national team_ids) never pick a player's 'current team'."""
+    df = bq.query_df(f"""
+        with comp as (
+            select player_id, position, toi_5v5, goalie_gsax, {', '.join(SKATER_COMPONENTS)}
+            from `{p}.nhl_models.player_composite` where season_window = '{season}'
+        ),
+        team as (
+            select player_id,
+                array_agg(team_id order by game_id desc limit 1)[offset(0)] as team_id
+            from `{p}.nhl_staging.stg_rosters`
+            where season = '{season}' and substr(cast(game_id as string), 5, 2) in ('01', '02', '03')
+            group by 1
+        )
+        select c.*, t.team_id from comp c join team t using (player_id)
+    """)
+    df = df[df["team_id"].notna()].copy()
+    df["team_id"] = df["team_id"].astype("int64")
+    for col in SKATER_COMPONENTS + ["goalie_gsax", "toi_5v5"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    df["role"] = df["position"].map(role_of)
+    return df[df["role"].notna()].copy()
+
+
+def compute(players: pd.DataFrame, season: str) -> pd.DataFrame:
+    """Per (team, role, component): summed depth strength -> league percentile -> need = 1 - pctile."""
+    rows = []
+    for (team_id, role), sub in players.groupby(["team_id", "role"]):
+        if role == "G":
+            rows.append((team_id, "G", "goaltending", float(sub["goalie_gsax"].sum())))
+        else:
+            # finishing is a forward skill — for defensemen it's a tiny, shot-volume-shrunk sample
+            # whose percentile is mostly noise, so it's excluded from D need (it otherwise spikes a
+            # lucky-goal depth D's need_score). C/W keep all five components.
+            for comp in components_for_role(role):
+                rows.append((team_id, role, comp, float(sub[comp].sum())))
+    df = pd.DataFrame(rows, columns=["team_id", "role", "component", "team_strength"])
+    # league percentile of depth strength within each (role, component); need = how weak that is
+    df["league_pctile"] = df.groupby(["role", "component"])["team_strength"].rank(pct=True)
+    df["need"] = (1.0 - df["league_pctile"]).clip(0.0, 1.0)
+    df["season"] = season
+    df["label"] = df.apply(lambda r: f"{ROLE_LABEL[r['role']]} · {COMPONENT_LABEL[r['component']]}", axis=1)
+    df["model_version"] = "team_needs_v2"
+    return df[["team_id", "season", "role", "component", "label",
+               "team_strength", "league_pctile", "need", "model_version"]]
+
+
+def _abbrev(p: str, season: str) -> dict:
+    df = bq.query_df(f"""select team_id, any_value(team_abbrev) a
+                         from `{p}.nhl_mart.mart_team_game_stats`
+                         where season = '{season}' group by 1""")
+    return dict(zip(df["team_id"], df["a"]))
+
+
+def report(out: pd.DataFrame, p: str, season: str) -> None:
+    abbrev = _abbrev(p, season)
+    print(f"\n=== Biggest role-and-component needs (sample teams), {season} ===")
+    for team_id in sorted(out["team_id"].unique())[:4]:
+        sub = out[out.team_id == team_id].sort_values("need", ascending=False).head(3)
+        needs = ", ".join(f"{r.label} (need {r.need:.2f})" for r in sub.itertuples())
+        print(f"  {abbrev.get(team_id, team_id)}: {needs}")
+    # the single weakest center-depth and goaltending teams (smell test)
+    for role, comp in (("C", "ev_offense"), ("G", "goaltending")):
+        s = out[(out.role == role) & (out.component == comp)].sort_values("need", ascending=False).head(3)
+        names = ", ".join(f"{abbrev.get(r.team_id, r.team_id)} ({r.need:.2f})" for r in s.itertuples())
+        print(f"  weakest {ROLE_LABEL[role]}/{COMPONENT_LABEL[comp]}: {names}")
 
 
 def main() -> None:
@@ -56,80 +145,9 @@ def main() -> None:
     p = bq.project()
     season = args.season or _latest_season(p)
 
-    # players: composite components + 5v5 TOI, archetype mix, and current NHL team that season
-    players = bq.query_df(f"""
-        with comp as (
-            select player_id, {', '.join(COMPONENTS)}, toi_5v5
-            from `{p}.nhl_models.player_composite` where season_window = '{season}'
-        ),
-        arch as (
-            select player_id, archetypes from `{p}.nhl_models.player_archetypes`
-            where season = '{season}'
-        ),
-        team as (
-            select player_id,
-                array_agg(team_id order by game_id desc limit 1)[offset(0)] as team_id
-            from `{p}.nhl_staging.stg_rosters`
-            where season = '{season}' and substr(cast(game_id as string), 5, 2) in ('01', '02', '03')
-            group by 1
-        )
-        select c.player_id, t.team_id, c.toi_5v5, {', '.join('c.' + x for x in COMPONENTS)},
-               a.archetypes
-        from comp c
-        join team t using (player_id)
-        left join arch a using (player_id)
-    """)
-    players = players[players["team_id"].notna()].copy()
-    for col in COMPONENTS + ["toi_5v5"]:
-        players[col] = pd.to_numeric(players[col], errors="coerce").fillna(0.0)
-    arch_mat = np.vstack([_arch_vector(a) for a in players["archetypes"].tolist()])
-
-    # team archetype mix (TOI-weighted, renormalized) + summed components
-    team_arch: dict[int, np.ndarray] = {}
-    team_comp: dict[int, np.ndarray] = {}
-    for team_id, idx in players.groupby("team_id").groups.items():
-        rows = players.loc[idx]
-        w = rows["toi_5v5"].to_numpy()
-        sub = arch_mat[[players.index.get_loc(i) for i in idx]]
-        mix = (sub * w[:, None]).sum(axis=0)
-        s = mix.sum()
-        team_arch[int(team_id)] = mix / s if s > 0 else mix
-        team_comp[int(team_id)] = rows[COMPONENTS].to_numpy().sum(axis=0)
-
-    # top-8 teams by current power rating
-    ratings = bq.query_df(f"""
-        select team_id, total_rating from (
-            select team_id, total_rating,
-                   row_number() over (partition by team_id order by game_date desc) rn
-            from `{p}.nhl_models.team_ratings` where season = '{season}'
-        ) where rn = 1 order by total_rating desc limit {config.TEAM_NEEDS_TOP_N}
-    """)
-    top8 = [int(t) for t in ratings["team_id"].tolist() if int(t) in team_arch]
-    ref_arch = np.mean([team_arch[t] for t in top8], axis=0)
-    ref_comp = np.mean([team_comp[t] for t in top8], axis=0)
-    print(f"Season {season}: top-{len(top8)} reference teams {top8}")
-
-    out_rows = []
-    for team_id in team_arch:
-        for i, a in enumerate(ARCH_LIST):
-            tv, rv = float(team_arch[team_id][i]), float(ref_arch[i])
-            out_rows.append(dict(team_id=team_id, season=season, need_type="archetype",
-                                 key=a, label=a, team_value=tv, reference_value=rv, gap=rv - tv))
-        for i, comp in enumerate(COMPONENTS):
-            tv, rv = float(team_comp[team_id][i]), float(ref_comp[i])
-            out_rows.append(dict(team_id=team_id, season=season, need_type="component",
-                                 key=comp, label=COMPONENT_LABEL[comp],
-                                 team_value=tv, reference_value=rv, gap=rv - tv))
-    out = pd.DataFrame(out_rows)
-    out["model_version"] = "team_needs_v1"
-
-    # report: a couple of teams' biggest needs
-    print("\n=== Sample team needs (largest gaps) ===")
-    abbrev = _abbrev(p, season)
-    for team_id in list(team_arch)[:3]:
-        sub = out[(out.team_id == team_id)].sort_values("gap", ascending=False).head(3)
-        needs = ", ".join(f"{r.label} ({r.gap:+.2f})" for r in sub.itertuples())
-        print(f"  {abbrev.get(team_id, team_id)}: {needs}")
+    players = pull_players(p, season)
+    out = compute(players, season)
+    report(out, p, season)
 
     if args.dry_run:
         print(f"\n[dry-run] {len(out)} rows not written")
@@ -137,14 +155,7 @@ def main() -> None:
     out["team_id"] = out["team_id"].astype("int64")
     bq.write_df(out, "team_needs", write_disposition="WRITE_TRUNCATE",
                 clustering_fields=["season", "team_id"])
-    print(f"\nWrote {len(out)} rows to nhl_models.team_needs.")
-
-
-def _abbrev(p: str, season: str) -> dict:
-    df = bq.query_df(f"""select team_id, any_value(team_abbrev) a
-                         from `{p}.nhl_mart.mart_team_game_stats`
-                         where season = '{season}' group by 1""")
-    return dict(zip(df["team_id"], df["a"]))
+    print(f"\nWrote {len(out)} rows to nhl_models.team_needs (team_needs_v2).")
 
 
 if __name__ == "__main__":
