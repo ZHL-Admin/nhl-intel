@@ -122,6 +122,49 @@ def _team_ledgers(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
     return ledgers
 
 
+# ------------------------------------------------------------------------------------- netting (P2)
+def _hw(lo, hi) -> float:
+    """Half-width of a [low, high] band (0 if either bound is missing)."""
+    if lo is None or hi is None:
+        return 0.0
+    return abs(float(hi) - float(lo)) / 2.0
+
+
+def _net(req: dict, assets: dict[str, dict]) -> dict[int, dict]:
+    """Per team, net incoming minus outgoing on TWO separate axes — talent (WAR) and surplus (dollars
+    and cap-share) — propagating each asset's uncertainty band by combining VARIANCES (incoming and
+    outgoing both add uncertainty), so a prospect/pick-heavy side shows a wide net band."""
+    acc = {int(t): {"war": 0.0, "war_var": 0.0, "sd": 0.0, "sd_var": 0.0, "sc": 0.0, "sc_var": 0.0}
+           for t in req["team_ids"]}
+    for m in req["movements"]:
+        a = assets[m["asset_id"]]
+        war = float(a.get("value_war") or 0.0)
+        sd = float(a.get("surplus_dollars") or 0.0)
+        sc = float(a.get("surplus_capshare") or 0.0)
+        war_v = _hw(a.get("value_war_low"), a.get("value_war_high")) ** 2
+        sd_v = _hw(a.get("surplus_low"), a.get("surplus_high")) ** 2
+        sc_v = _hw(a.get("surplus_capshare_low"), a.get("surplus_capshare_high")) ** 2
+        for tid, sign in ((int(m["to_team_id"]), +1.0), (int(m["from_team_id"]), -1.0)):
+            d = acc[tid]
+            d["war"] += sign * war; d["sd"] += sign * sd; d["sc"] += sign * sc
+            d["war_var"] += war_v; d["sd_var"] += sd_v; d["sc_var"] += sc_v
+    out = {}
+    for tid, d in acc.items():
+        war_hw, sd_hw, sc_hw = math.sqrt(d["war_var"]), math.sqrt(d["sd_var"]), math.sqrt(d["sc_var"])
+        out[tid] = {
+            "talent_delta_war": round(d["war"], 2),
+            "talent_delta_war_low": round(d["war"] - war_hw, 2),
+            "talent_delta_war_high": round(d["war"] + war_hw, 2),
+            "surplus_delta_dollars": round(d["sd"]),
+            "surplus_delta_dollars_low": round(d["sd"] - sd_hw),
+            "surplus_delta_dollars_high": round(d["sd"] + sd_hw),
+            "surplus_delta_capshare": round(d["sc"], 4),
+            "surplus_delta_capshare_low": round(d["sc"] - sc_hw, 4),
+            "surplus_delta_capshare_high": round(d["sc"] + sc_hw, 4),
+        }
+    return out
+
+
 # ------------------------------------------------------------------------------------- orchestration
 def evaluate(req: dict, season: Optional[str] = None) -> dict:
     """Evaluate a proposed trade -> the multi-team, multi-axis decomposition (see schemas)."""
@@ -132,14 +175,16 @@ def evaluate(req: dict, season: Optional[str] = None) -> dict:
 
     abbr = _abbrevs(req["team_ids"])
     ledgers = _team_ledgers(req, assets)
+    nets = _net(req, assets)
 
     teams = []
     for tid in req["team_ids"]:
         tid = int(tid)
         teams.append({
             "team_id": tid, "team_abbrev": abbr.get(tid),
+            **nets[tid],                              # talent + surplus deltas with bands (P2)
             "incoming": ledgers[tid]["incoming"], "outgoing": ledgers[tid]["outgoing"],
-            # axes filled by later phases (P2 netting, P3 retention, P4 cap, P5 fit, P6 verdict)
+            # remaining axes filled by later phases (P3 retention, P4 cap, P5 fit, P6 verdict)
             "cap": {"approximate": True, "caveat": CAP_CAVEAT},
         })
 
