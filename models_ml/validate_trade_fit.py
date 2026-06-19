@@ -179,11 +179,12 @@ def main() -> None:
         print(f"  FAIL (2): star spread only {star_max - star_min:.1f} pts — fit barely varies"); ok = False
     else:
         print(f"  OK (2): star fit varies {star_max - star_min:.1f} pts across teams")
-    # 3. star never a poor fit (worst >= B floor)
-    if star_min / 100.0 < B_FLOOR - 1e-9:
-        print(f"  FAIL (3): star worst fit {star_min:.1f} < B floor — the quality floor did not hold"); ok = False
+    # 3. star never a POOR fit: the quality floor keeps a star out of D/F (>= C) even at a bad-fit
+    #    team (under the conventional hard bands a poor-stylistic-match star reads C, not a forced B).
+    if star_min / 100.0 < C_FLOOR - 1e-9:
+        print(f"  FAIL (3): star worst fit {star_min:.1f} < C floor — the quality floor did not hold"); ok = False
     else:
-        print(f"  OK (3): star worst fit {star_min:.1f} >= B floor — floor holds")
+        print(f"  OK (3): star worst fit {star_min:.1f} >= C floor — floor keeps a star out of D/F")
     # 4. bad player's best fit is low (< C)
     if r_bad["overall_score"] / 100.0 >= C_FLOOR:
         print(f"  FAIL (4): bad player's best fit {r_bad['overall_score']:.1f} >= C — too high"); ok = False

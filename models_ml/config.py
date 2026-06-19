@@ -145,6 +145,9 @@ TRADE_FIT = {
     # team's biggest hole) with breadth across components (rewards an all-rounder addressing several).
     "NEED_PRIMARY_W": 0.7,       # weight on max(opp_c); (1 - this) on mean(opp_c)
     "NEED_OVERLAP_MIN": 0.40,    # min opportunity (need x strength) to say "he addresses it"
+    # per-role need tag thresholds (n = team need 0-1, s = his strength pctile 0-1):
+    "LOW_NEED": 0.30,            # n < this -> 'low_need'
+    "STRONG_NEED": 0.60,         # n >= this with s>=n -> 'fills'; with s<n -> 'gap'
     # handedness: a SMALL modifier inside need — bump when the team is short the player's shot at his
     # role, trim when over-supplied. Bounded to +/- HAND_MOD/2 so it never dominates.
     "HAND_MOD": 0.10,
@@ -153,11 +156,12 @@ TRADE_FIT = {
     # a sigmoid (0.5 = neutral). Scale ~ a typical pairwise contribution magnitude in xGF% space.
     "LINE_COMP_SCALE": 0.03,
     "LINE_XGF_LO": 0.44, "LINE_XGF_HI": 0.58,   # kept for the line note's grade context
-    # letter grade off the COMPOSED fit (carding only). The API and UI ALWAYS render the
-    # decomposition + the separate quality axis — never a lone grade. Conventional-feeling bands so
-    # the letter matches the /100 (≈85+ A, 70s B, 55+ C, ...): a star floors at ≥ B even at a poor-fit
-    # team; a low-value player nobody needs lands D/F; a specialist on a real need reaches A/B.
-    "GRADE_BANDS": [("A", 0.85), ("B", 0.70), ("C", 0.55), ("D", 0.40), ("F", 0.0)],
+    # letter grade off the COMPOSED fit (carding only) — conventional HARD bands so the letter
+    # always matches the /100: 90+ A, 80-89 B, 70-79 C, 60-69 D, <60 F. The API and UI ALWAYS render
+    # the decomposition + the separate quality axis — never a lone grade. (The quality FLOOR still
+    # guarantees a high-quality player a strong SCORE; the letter just follows the conventional scale,
+    # so a star at a poor-stylistic-match team can read C — honestly — rather than a forced B.)
+    "GRADE_BANDS": [("A", 0.90), ("B", 0.80), ("C", 0.70), ("D", 0.60), ("F", 0.0)],
 }
 
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------

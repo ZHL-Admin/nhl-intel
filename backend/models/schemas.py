@@ -1301,6 +1301,7 @@ class FitComponentNeed(BaseModel):
     team_need: float          # 0-1: how weak the team's current depth is at this role+component
     player_strength: float    # 0-1: the player's within-role percentile in this component
     opportunity: float        # team_need * player_strength
+    tag: str = "covered"      # fills | gap | covered | low_need (server-classified; FE renders)
 
 
 class FitDimension(BaseModel):
@@ -1346,7 +1347,8 @@ class TradeFitResult(BaseModel):
     verdict_sentence: str = ""
     quality: FitQualityAxis = Field(default_factory=FitQualityAxis)
     dimensions: List[FitDimension] = Field(default_factory=list)
-    need_breakdown: List[FitComponentNeed] = Field(default_factory=list)
+    need_breakdown: List[FitComponentNeed] = Field(default_factory=list)   # sorted by team need desc
+    need_summary: str = ""                                                 # one-line need takeaway
     player_archetypes: List["ArchetypeWeight"] = Field(default_factory=list)
 
 

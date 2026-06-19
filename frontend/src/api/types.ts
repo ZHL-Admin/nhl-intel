@@ -980,6 +980,7 @@ export interface FitComponentNeed {
   team_need: number          // 0-1: how weak the team's own depth is here, at the player's role
   player_strength: number    // 0-1: the player's within-role percentile in this component
   opportunity: number        // team_need * player_strength
+  tag: 'fills' | 'gap' | 'covered' | 'low_need'   // server-classified per role (FE renders)
 }
 /** One MATCH dimension of Player Fit (need / style / line). `level` 0-1 drives the bar; `tone`:
  * positive | neutral | warn; `uncertain`/`sd` flag model estimates; `breakdown` is set for NEED. */
@@ -1014,7 +1015,8 @@ export interface TradeFitResult {
   verdict_sentence: string
   quality: FitQualityAxis        // SEPARATE axis (never folded into match)
   dimensions: FitDimension[]     // need (w/ breakdown) + style + line
-  need_breakdown: FitComponentNeed[]
+  need_breakdown: FitComponentNeed[]   // sorted by team need desc, each tagged
+  need_summary: string                 // one-line need takeaway
   player_archetypes: ArchetypeWeightLite[]
 }
 export interface MatchupPreviewTeam {

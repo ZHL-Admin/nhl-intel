@@ -461,9 +461,11 @@ def _line_complement(p: str, player_id: int, team_id: int, season: str, role: st
     pair_keys = ("pair_arch_cos", "pair_shotloc_dist", "hand_balance", "burst_spread", "oz_tilt_mean")
     contribs = new.get("contribs", {}) or {}
     complement = sum(float(v) for k, v in contribs.items() if k in pair_keys)
+    # partners = the EXISTING linemates he'd play with (exclude the incoming player himself)
+    partner_names = [m["name"] for m in new["members"] if int(m["player_id"]) != int(player_id)]
     return {"members": members, "drop": drop,
             "proj_xgf": new["projected_xgf_pct"], "cur_xgf": cur["projected_xgf_pct"],
-            "grade": new["grade"], "partner_names": [m["name"] for m in new["members"]],
+            "grade": new["grade"], "partner_names": partner_names,
             "complement": complement,
             "interval_half": round((new["interval_high"] - new["interval_low"]) / 2, 4)}
 
@@ -475,6 +477,15 @@ def _need_dimension(prof: dict, role_needs: dict, hand: dict, team_id: int, abbr
     Handedness is a small modifier. Returns the dimension + a component-by-role BREAKDOWN."""
     # components are data-driven from the team's role needs (so D excludes finishing automatically)
     comps = ["goaltending"] if prof["is_goalie"] else [c for c in SKATER_COMPONENTS if c in role_needs]
+    low, strong = CFG["LOW_NEED"], CFG["STRONG_NEED"]
+
+    def _role_tag(n: float, s: float) -> str:
+        if n < low:
+            return "low_need"
+        if s >= n:
+            return "fills" if n >= strong else "covered"
+        return "gap" if n >= strong else "covered"
+
     breakdown, opps = [], []
     for c in comps:
         need_c = role_needs.get(c, {}).get("need", 0.0)
@@ -484,7 +495,8 @@ def _need_dimension(prof: dict, role_needs: dict, hand: dict, team_id: int, abbr
         opps.append(opp)
         breakdown.append({"component": c, "label": COMPONENT_LABEL[c],
                           "team_need": round(need_c, 3), "player_strength": round(str_c, 3),
-                          "opportunity": round(opp, 3)})
+                          "opportunity": round(opp, 3), "tag": _role_tag(need_c, str_c)})
+    breakdown.sort(key=lambda b: b["team_need"], reverse=True)   # FE renders sorted by need desc
     if opps:
         w = CFG["NEED_PRIMARY_W"]
         need_score = w * max(opps) + (1 - w) * (sum(opps) / len(opps))
@@ -514,8 +526,24 @@ def _need_dimension(prof: dict, role_needs: dict, hand: dict, team_id: int, abbr
     else:
         note = f"{abbr} have solid {role_word} depth — not a roster hole to fill."
     tone = "positive" if need_score >= 0.45 else "neutral"
+
+    # takeaway: name the biggest filled need and the biggest remaining gap (FE renders, doesn't author)
+    fills = [b for b in breakdown if b["tag"] == "fills"]
+    gaps = [b for b in breakdown if b["tag"] == "gap"]
+    top_fill = max(fills, key=lambda b: b["team_need"]) if fills else None
+    top_gap = max(gaps, key=lambda b: b["team_need"]) if gaps else None
+    if top_fill and top_gap:
+        need_summary = f"Fills {abbr}'s {top_fill['label'].lower()} need; still a gap at {top_gap['label'].lower()}."
+    elif top_fill:
+        need_summary = f"Fills {abbr}'s {top_fill['label'].lower()} need at {role_word}."
+    elif top_gap:
+        need_summary = f"Doesn't fill a top {role_word} need — biggest gap at {top_gap['label'].lower()}."
+    else:
+        need_summary = f"{abbr} have no acute {role_word} needs he addresses."
+
     return {"key": "need", "label": "Need fit", "level": round(need_score, 3),
-            "value": _word(need_score), "note": note, "tone": tone, "breakdown": breakdown}
+            "value": _word(need_score), "note": note, "tone": tone,
+            "breakdown": breakdown, "need_summary": need_summary}
 
 
 def _orient(rush, cyc):
@@ -538,34 +566,45 @@ def _style_dimension(prof: dict, ident: dict, abbr: str) -> dict:
         return ("rush/transition" if lean >= 0.6 else
                 "forecheck-and-cycle" if lean <= 0.4 else "balanced")
     tw, pw = word(lean_t), word(lean_p)
-    if level >= 0.72:
+    # the driver MUST agree with the level word (consistency checker): Strong/Excellent (>=0.62) = a
+    # match, Moderate (0.46-0.62) = partial, Slight/Low (<0.46) = mismatch — same cuts as _word().
+    if level >= 0.62:
         note = (f"Both play a balanced style — a comfortable stylistic fit." if tw == pw == "balanced"
                 else f"Matches {abbr}'s {tw} identity (he generates offense the same way).")
-    elif level <= 0.45:
-        note = f"{abbr} are a {tw} team; he leans more {pw} — a stylistic mismatch."
-    else:
+    elif level >= 0.46:
         note = f"{abbr} lean {tw}; he is {pw} — a partial stylistic match."
-    tone = "positive" if level >= 0.6 else ("neutral" if level >= 0.45 else "warn")
+    else:
+        note = f"{abbr} are a {tw} team; he leans more {pw} — a stylistic mismatch."
+    tone = "positive" if level >= 0.62 else ("neutral" if level >= 0.46 else "warn")
     return {"key": "style", "label": "Style fit", "level": round(level, 3),
             "value": _word(level), "note": note, "tone": tone}
 
 
+def _grade_article(grade: str | None) -> str:
+    """'an' before a vowel-sound grade (A, F), else 'a' — so we never render 'a A line'."""
+    return "an" if grade and grade[0] in "AEFHILMNORSX" else "a"
+
+
 def _line_dimension(line: dict | None) -> dict:
-    """LINE: complementarity with the unit he'd skate with — the line model's PAIRWISE contribution
-    mapped through a sigmoid (0.5 = neutral). Talent-independent by construction (Phase 3)."""
+    """LINE: the projected unit he'd skate on. The BAR scales with the projected line quality (xGF%
+    mapped through the line grade band) so it tracks the stated grade; the NOTE explains WHY via the
+    talent-independent complementarity signal (does he complement or overlap his linemates)."""
     if not line:
         return {"key": "line", "label": "Line fit", "level": None, "value": "n/a",
                 "note": "No current top unit to slot into (insufficient recent 5v5 data).",
                 "tone": "neutral", "uncertain": True}
-    level = _sigmoid(line["complement"] / CFG["LINE_COMP_SCALE"])
+    lo, hi = CFG["LINE_XGF_LO"], CFG["LINE_XGF_HI"]
+    level = max(0.0, min(1.0, (line["proj_xgf"] - lo) / (hi - lo)))   # bar tracks the projected grade
+    comp = _sigmoid(line["complement"] / CFG["LINE_COMP_SCALE"])      # complementarity = the WHY
     partners = [n for n in line["partner_names"] if n]
     pwith = (" with " + " & ".join(partners[:2])) if partners else ""
-    if level >= 0.6:
-        note = f"Complements the unit{pwith} (varied roles/shot locations); projects a {line['grade']} line."
-    elif level <= 0.4:
-        note = f"Overlaps the unit{pwith} stylistically; projects a {line['grade']} line."
+    art = _grade_article(line["grade"])
+    if comp >= 0.6:
+        note = f"Complements the unit{pwith} (varied roles/shot locations); projects {art} {line['grade']} line."
+    elif comp <= 0.4:
+        note = f"Overlaps the unit{pwith} stylistically; projects {art} {line['grade']} line."
     else:
-        note = f"A neutral stylistic fit on the unit{pwith}; projects a {line['grade']} line."
+        note = f"A neutral stylistic fit on the unit{pwith}; projects {art} {line['grade']} line."
     return {"key": "line", "label": "Line fit", "level": round(level, 3),
             "value": _word(level), "note": note, "tone": "positive" if level >= 0.5 else "neutral",
             "uncertain": True, "sd": line.get("interval_half")}
@@ -668,7 +707,8 @@ def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> d
         "verdict_sentence": verdict,
         "quality": quality,                              # SEPARATE axis — never folded into match
         "dimensions": dims,                              # need (w/ breakdown) + style + line
-        "need_breakdown": need["breakdown"],
+        "need_breakdown": need["breakdown"],             # sorted by team need desc, each tagged
+        "need_summary": need["need_summary"],            # one-line takeaway (FE renders, doesn't author)
         "player_archetypes": prof["mix"],
     }
 

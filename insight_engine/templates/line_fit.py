@@ -53,7 +53,8 @@ def _base(col: str) -> str:
 
 def grade_sentence(grade: str, xgf_pct: float, line_type: str) -> str:
     unit = "forward trio" if line_type == "F3" else "defense pair"
-    return f"Projected as a {grade}-grade {unit} at {xgf_pct * 100:.0f}% expected-goals share."
+    art = "an" if grade and grade[0] in "AEFHILMNORSX" else "a"   # never "a A-grade"
+    return f"Projected as {art} {grade}-grade {unit} at {xgf_pct * 100:.0f}% expected-goals share."
 
 
 def reasons_and_risk(contribs: dict[str, float], *, max_reasons: int = 3,
