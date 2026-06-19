@@ -251,33 +251,45 @@
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
-/* two axes: FIT (grade + score, tinted by grade) and QUALITY (separate) — never one masks the other */
-.tf-axes {
-  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);
-  padding: var(--space-5) var(--space-5) var(--space-3);
+/* archetype chip on the facts line (reuses the .tf-prow__arch chip element) */
+.tf-hero__facts { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.tf-hero__arch { margin-left: var(--space-1); }
+
+/* ONE HERO ANSWER: a single grade card + the verdict at lead size + a subordinate quality chip */
+.tf-answer {
+  display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap;
+  padding: var(--space-5);
 }
-.tf-axis {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-4); border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border-subtle); background: var(--color-bg-surface);
+.tf-answer__grade {
+  display: flex; flex-direction: column; align-items: center; flex-shrink: 0; min-width: 116px;
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tf-grade) 10%, var(--color-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--tf-grade) 30%, var(--color-border-subtle));
 }
-.tf-axis--fit { background: color-mix(in srgb, var(--tf-grade) 8%, var(--color-bg-surface)); }
-.tf-axis--fit .tf-axis__letter {
-  font-size: 3rem; font-weight: 800; line-height: 0.9; color: var(--tf-grade);
-  flex-shrink: 0; min-width: 60px; text-align: center;
+.tf-answer__letter { font-size: 3.2rem; font-weight: 800; line-height: 0.85; color: var(--tf-grade); }
+.tf-answer__score { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700; color: var(--tf-grade); margin-top: 4px; }
+.tf-answer__label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center; }
+.tf-answer__read { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: var(--space-3); }
+.tf-answer__verdict { margin: 0; font-size: var(--text-lg); color: var(--color-text-primary); line-height: 1.5; }
+/* quality = an INPUT chip, in info-blue (never the grade's green) so it doesn't read as a rival answer */
+.tf-qchip {
+  display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; align-self: flex-start;
+  padding: 4px 10px; border-radius: var(--radius-full);
+  background: color-mix(in srgb, #2563eb 10%, var(--color-bg-surface));
+  border: 1px solid color-mix(in srgb, #2563eb 28%, var(--color-border-subtle));
+  font-size: var(--text-xs);
 }
-.tf-axis__qval { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 800; line-height: 0.9; flex-shrink: 0; min-width: 60px; text-align: center; }
-.tf-axis__meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.tf-axis__name { font-weight: 700; color: var(--color-text-primary); font-size: var(--text-sm); }
-.tf-axis__tag {
-  display: inline-block; margin-left: 6px; padding: 0 6px;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--color-text-secondary); background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-full); vertical-align: middle;
+.tf-qchip__k { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #2563eb; }
+.tf-qchip__v { color: var(--color-text-primary); font-weight: 600; }
+.tf-qchip__floor { color: var(--color-text-muted); }
+.tf-qchip__info { display: inline-flex; color: #2563eb; cursor: help; }
+
+/* section titles sit ON THE BACKGROUND (de-carded) */
+.tf-sec {
+  margin: 0; padding: var(--space-4) var(--space-5) var(--space-2);
+  font-size: var(--text-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
 }
-.tf-axis__sub { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
-.tf-headline__verdict { margin: 0; padding: 0 var(--space-5) var(--space-4); font-size: var(--text-base); color: var(--color-text-secondary); line-height: 1.55; }
-@media (max-width: 640px) { .tf-axes { grid-template-columns: 1fr; } }
 
 /* dimension breakdown — compact rows: small label + slim level bar + a muted level caption */
 .tf-dims { display: flex; flex-direction: column; padding: var(--space-3) var(--space-5); gap: var(--space-1); }
@@ -293,6 +305,14 @@
   border: 1px solid var(--color-border-subtle); border-radius: var(--radius-full);
   vertical-align: middle;
 }
+/* weight chip (need 55 / style 20 / line 25) or a "floor" tag for quality (a multiplier, not a term) */
+.tf-dim__weight {
+  display: inline-block; margin-left: 6px; padding: 0 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--color-text-muted); background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-full); vertical-align: middle;
+}
+.tf-dim__weight--floor { text-transform: uppercase; letter-spacing: 0.05em; color: #2563eb; border-color: color-mix(in srgb, #2563eb 30%, var(--color-border-subtle)); }
 /* the per-dimension level word: a small, muted caption — not a competing "sub-grade" */
 .tf-dim__val { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; }
 .tf-dim__bar { position: relative; height: 6px; border-radius: var(--radius-full); background: var(--color-bg-elevated); }
@@ -300,22 +320,38 @@
 .tf-dim__band { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); opacity: 0.4; border-radius: 2px; }
 .tf-dim__note { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.45; }
 
-/* NEED component-by-role breakdown: per component, team-need bar beside his-strength bar */
-.tf-needbd { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; padding: var(--space-2) var(--space-3); background: var(--color-bg-elevated); border-radius: var(--radius-md); }
-.tf-needbd__legend { display: flex; gap: var(--space-3); font-size: 10px; color: var(--color-text-muted); }
-.tf-needbd__legend span { display: inline-flex; align-items: center; gap: 4px; }
-.tf-needbd__dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
-.tf-needbd__dot--need { background: #d97706; }
-.tf-needbd__dot--str { background: #2563eb; }
-.tf-needbd__row { display: grid; grid-template-columns: 138px 1fr; align-items: center; gap: var(--space-2); }
-/* show the FULL component label (e.g. "Even-strength offense" vs "...defense" must be distinct) — wrap
-   rather than truncate to an ambiguous "Even-stren…" */
-.tf-needbd__label { font-size: var(--text-xs); color: var(--color-text-secondary); line-height: 1.2; overflow-wrap: break-word; }
-.tf-needbd__bars { display: flex; flex-direction: column; gap: 2px; }
-.tf-needbd__bar { position: relative; height: 5px; border-radius: var(--radius-full); background: var(--color-bg-surface); }
-.tf-needbd__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
-.tf-needbd__fill--need { background: #d97706; }
-.tf-needbd__fill--str { background: #2563eb; }
+/* "Where he fits the roster" — de-carded (on background): need vs strength per role, sorted by need,
+   each tagged fills/gap/covered/low-need, with a takeaway line. */
+.tf-need { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-5) var(--space-2); }
+.tf-need__legend { display: flex; gap: var(--space-3); font-size: 10px; color: var(--color-text-muted); }
+.tf-need__legend span { display: inline-flex; align-items: center; gap: 4px; }
+.tf-need__dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.tf-need__dot--need { background: #d97706; }
+.tf-need__dot--str { background: #2563eb; }
+.tf-need__row { display: grid; grid-template-columns: 150px 1fr 64px; align-items: center; gap: var(--space-3); }
+.tf-need__label { font-size: var(--text-xs); color: var(--color-text-secondary); line-height: 1.2; overflow-wrap: break-word; }
+.tf-need__bars { display: flex; flex-direction: column; gap: 3px; }
+.tf-need__bar { position: relative; height: 6px; border-radius: var(--radius-full); background: var(--color-bg-elevated); }
+.tf-need__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
+.tf-need__fill--need { background: #d97706; }
+.tf-need__fill--str { background: #2563eb; }
+.tf-need__tag {
+  justify-self: end; padding: 1px 8px; border-radius: var(--radius-full);
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.tf-need__tag--pos { color: #16a34a; background: color-mix(in srgb, #16a34a 12%, transparent); }
+.tf-need__tag--warn { color: #d97706; background: color-mix(in srgb, #d97706 12%, transparent); }
+.tf-need__tag--neutral { color: var(--color-text-secondary); background: var(--color-bg-elevated); }
+.tf-need__tag--muted { color: var(--color-text-muted); background: var(--color-bg-elevated); }
+.tf-need__takeaway { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.5; }
+
+/* condensed caveat: one muted line above a top border */
+.tf-caveat {
+  margin: var(--space-2) var(--space-5) 0; padding: var(--space-3) 0 var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
+}
 
 .tf-hero__banner {
   position: relative;

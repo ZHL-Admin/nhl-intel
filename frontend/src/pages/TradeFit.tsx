@@ -9,14 +9,25 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Check, Info, ArrowRight, RotateCcw, Share2, Zap, Sparkles, Search, X } from 'lucide-react'
-import { PageLayout, PageHeader, SkeletonLoader } from '../components/common'
+import { PageLayout, PageHeader, SkeletonLoader, Tooltip } from '../components/common'
 import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
 import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
 import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, FitComponentNeed, PlayerPreview, ArchetypeRankRow } from '../api/types'
 import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
-import { ordinal } from '../utils/format'
+import { ordinal, fmtWar } from '../utils/format'
 import './TradeFit.css'
+
+// match-dimension weights, mirroring config.MATCH_WEIGHTS (need .55 / style .20 / line .25); quality
+// is NOT a weighted term — it's the floor, shown with a "floor" tag rather than a weight chip.
+const DIM_WEIGHT: Record<string, number> = { need: 55, style: 20, line: 25 }
+// the single canonical fit-vs-quality explanation (lives in the quality chip's tooltip, not the footer)
+const FIT_VS_QUALITY =
+  'Fit and quality are two different things. Quality is how good the player is — it sets a FLOOR ' +
+  'under fit (a strong player keeps a respectable fit even at a stylistic mismatch) but never a ' +
+  'ceiling. Fit is the match: how his strengths land on this team’s thin spots (by role), whether ' +
+  'his style suits their system, and how he complements the unit he’d join. A low-value player who ' +
+  'lands on a real need can still fit well.'
 
 interface TeamOpt { team_id: number; abbrev: string; name: string }
 
@@ -358,36 +369,43 @@ export default function TradeFit() {
   )
 }
 
-/** The NEED component-by-role breakdown: per component, the team's weakness (need) beside the
- * player's strength there. Where the two bars BOTH run long is where he fills a real hole. */
-function NeedBreakdown({ rows }: { rows: FitComponentNeed[] }) {
+/** "Where he fits the roster": team-need vs his-strength per role (already sorted by need desc),
+ * with a fills/gap/covered/low-need tag per row and a one-line takeaway. De-carded (on background). */
+const TAG_LABEL: Record<FitComponentNeed['tag'], string> =
+  { fills: 'fills', gap: 'gap', covered: 'covered', low_need: 'low need' }
+const TAG_TONE: Record<FitComponentNeed['tag'], string> =
+  { fills: 'pos', gap: 'warn', covered: 'neutral', low_need: 'muted' }
+
+function NeedSection({ rows, summary }: { rows: FitComponentNeed[]; summary: string }) {
   return (
-    <div className="tf-needbd">
-      <div className="tf-needbd__legend">
-        <span><i className="tf-needbd__dot tf-needbd__dot--need" /> team need</span>
-        <span><i className="tf-needbd__dot tf-needbd__dot--str" /> his strength</span>
+    <div className="tf-need">
+      <div className="tf-need__legend">
+        <span><i className="tf-need__dot tf-need__dot--need" /> team need</span>
+        <span><i className="tf-need__dot tf-need__dot--str" /> his strength</span>
       </div>
       {rows.map((r) => (
-        <div key={r.component} className="tf-needbd__row">
-          <span className="tf-needbd__label">{r.label.split('· ').pop()}</span>
-          <span className="tf-needbd__bars">
-            <span className="tf-needbd__bar" title={`Team need ${Math.round(r.team_need * 100)}`}>
-              <span className="tf-needbd__fill tf-needbd__fill--need" style={{ width: `${r.team_need * 100}%` }} />
+        <div key={r.component} className="tf-need__row">
+          <span className="tf-need__label">{r.label}</span>
+          <span className="tf-need__bars">
+            <span className="tf-need__bar" title={`Team need ${Math.round(r.team_need * 100)}`}>
+              <span className="tf-need__fill tf-need__fill--need" style={{ width: `${r.team_need * 100}%` }} />
             </span>
-            <span className="tf-needbd__bar" title={`His strength ${Math.round(r.player_strength * 100)} (within role)`}>
-              <span className="tf-needbd__fill tf-needbd__fill--str" style={{ width: `${r.player_strength * 100}%` }} />
+            <span className="tf-need__bar" title={`His strength ${Math.round(r.player_strength * 100)} (within role)`}>
+              <span className="tf-need__fill tf-need__fill--str" style={{ width: `${r.player_strength * 100}%` }} />
             </span>
           </span>
+          <span className={`tf-need__tag tf-need__tag--${TAG_TONE[r.tag]}`}>{TAG_LABEL[r.tag]}</span>
         </div>
       ))}
+      {summary && <p className="tf-need__takeaway">{summary}</p>}
     </div>
   )
 }
 
-/** One match-dimension row: label | bar (level) over a tangible note | right value. Every dimension
- * (need / style / line) is coloured by LEVEL — a weak one reads as the soft spot, a strong one green.
- * The NEED row expands into its component-by-role breakdown. */
-function DimensionRow({ d }: { d: FitDimension }) {
+/** One decomposition row: label (+ weight or a 'floor' tag) | level word | bar | driver note. Coloured
+ * by LEVEL (green strong / slate moderate / amber soft spot — never red). Estimates (Line, Quality)
+ * carry the EST tag + a translucent ±SE band. The NEED breakdown lives in its own section, not here. */
+function DimensionRow({ d, weight, gateTag }: { d: FitDimension; weight?: number; gateTag?: string }) {
   const color = levelColor(d.level)
   const pct = d.level == null ? 0 : Math.max(0, Math.min(1, d.level)) * 100
   const band = d.uncertain && d.sd ? Math.min(20, d.sd * 100) : 0
@@ -396,11 +414,11 @@ function DimensionRow({ d }: { d: FitDimension }) {
       <div className="tf-dim__head">
         <span className="tf-dim__label">
           {d.label}
+          {weight != null && <span className="tf-dim__weight" title="weight in the fit blend">{weight}%</span>}
+          {gateTag && <span className="tf-dim__weight tf-dim__weight--floor"
+            title="Quality isn't averaged in — it sets a floor under fit">{gateTag}</span>}
           {d.uncertain && (
-            <span className="tf-dim__est"
-              title="Projected with a confidence band — read this as a tier, not a precise number">
-              est.
-            </span>
+            <span className="tf-dim__est" title="Model estimate — read this as a tier, not a precise number">est.</span>
           )}
         </span>
         <span className="tf-dim__val" style={{ color }}>{d.value}</span>
@@ -412,7 +430,6 @@ function DimensionRow({ d }: { d: FitDimension }) {
         {d.level != null && <span className="tf-dim__fill" style={{ width: `${pct}%`, background: color }} />}
       </div>
       <p className="tf-dim__note">{d.note}</p>
-      {d.key === 'need' && d.breakdown && d.breakdown.length > 0 && <NeedBreakdown rows={d.breakdown} />}
     </div>
   )
 }
@@ -442,6 +459,15 @@ function Hero({ result, player, team }: {
     preview?.age ? `Age ${preview.age}` : null,
     player?.team_abbrev ? getTeamName(player.team_abbrev) : null,
   ].filter(Boolean) as string[]
+  const primaryArch = player?.archetype ?? result.player_archetypes?.[0]?.archetype ?? null
+
+  // Quality is the FLOOR, not a co-equal hero: a chip on the verdict line + one decomposition row.
+  const q = result.quality
+  const qualityRow: FitDimension = {
+    key: 'quality', label: 'Quality', level: q.percentile ?? null,
+    value: q.label || '—', note: q.note, tone: 'positive', uncertain: true,
+    sd: q.war_sd != null ? Math.min(0.18, q.war_sd / 15) : null,
+  }
 
   return (
     <div className="tf-hero" style={{ ['--tf-grade' as string]: color } as React.CSSProperties}>
@@ -460,50 +486,56 @@ function Hero({ result, player, team }: {
         </Link>
       </div>
 
-      {/* tangible player facts (what the API gives us; no cap/contract) */}
-      {factParts.length > 0 && (
-        <div className="tf-hero__facts">{factParts.join(' · ')}</div>
+      {/* tangible player facts + archetype chip (what the API gives us; no cap/contract) */}
+      {(factParts.length > 0 || primaryArch) && (
+        <div className="tf-hero__facts">
+          <span>{factParts.join(' · ')}</span>
+          {primaryArch && <span className="tf-prow__arch tf-hero__arch">{primaryArch}</span>}
+        </div>
       )}
 
-      {/* TWO AXES side by side: FIT (how well he serves the team) and QUALITY (how good he is).
-          They are deliberately separate — talent floors fit, it never caps it. */}
-      <div className="tf-axes">
-        <div className="tf-axis tf-axis--fit">
-          <span className="tf-axis__letter">{result.overall_grade}</span>
-          <span className="tf-axis__meta">
-            <span className="tf-axis__name">Fit with {team?.name ?? 'the team'}</span>
-            <span className="tf-axis__sub">{result.overall_score.toFixed(0)} / 100 · how well he serves their needs</span>
-          </span>
+      {/* ONE HERO ANSWER: the grade card + the verdict at lead size + quality as a subordinate chip */}
+      <div className="tf-answer">
+        <div className="tf-answer__grade">
+          <span className="tf-answer__letter">{result.overall_grade}</span>
+          <span className="tf-answer__score">{result.overall_score.toFixed(0)} / 100</span>
+          <span className="tf-answer__label">Fit with {team?.name ?? 'the team'}</span>
         </div>
-        <div className="tf-axis tf-axis--quality">
-          <span className="tf-axis__qval" style={{ color: levelColor(result.quality.percentile) }}>
-            {result.quality.percentile != null ? ordinal(result.quality.percentile * 100) : '—'}
-          </span>
-          <span className="tf-axis__meta">
-            <span className="tf-axis__name">Player quality<span className="tf-axis__tag">{result.quality.label}</span></span>
-            <span className="tf-axis__sub">{result.quality.note}</span>
+        <div className="tf-answer__read">
+          <p className="tf-answer__verdict">{result.verdict_sentence}</p>
+          <span className="tf-qchip">
+            <span className="tf-qchip__k">Quality</span>
+            <span className="tf-qchip__v">
+              {q.percentile != null ? ordinal(q.percentile * 100) : '—'} · {q.label}
+              {q.war != null && <> · {fmtWar(q.war)}{q.war_sd ? ` ± ${q.war_sd.toFixed(1)}` : ''} WAR</>}
+            </span>
+            <span className="tf-qchip__floor">high floor on fit</span>
+            <Tooltip content={FIT_VS_QUALITY}>
+              <span className="tf-qchip__info" tabIndex={0} aria-label="How fit and quality differ"><Info size={13} /></span>
+            </Tooltip>
           </span>
         </div>
       </div>
 
-      <p className="tf-headline__verdict">{result.verdict_sentence}</p>
-
-      {/* DECOMPOSITION: the match dimensions (need w/ breakdown, style, line). The grade NEVER
-          appears without these — fit is the decomposition, not a lone letter. */}
+      {/* WHY IT GRADES — one decomposition of all the dimensions (quality as a floor row, not a hero) */}
+      <h3 className="tf-sec">Why it grades {result.overall_grade}</h3>
       <div className="tf-dims">
-        {result.dimensions.map((d) => <DimensionRow key={d.key} d={d} />)}
+        {result.dimensions.map((d) => <DimensionRow key={d.key} d={d} weight={DIM_WEIGHT[d.key]} />)}
+        <DimensionRow d={qualityRow} gateTag="floor" />
       </div>
 
-      <div className="tf-hero__limit">
-        <Info size={14} />
-        <span>
-          Fit and quality are separate. Quality is how good the player is; it sets a floor on fit (an
-          elite player is never a bad fit) but never a ceiling. Fit is the match — need (his strengths
-          vs the team’s thin spots, by role), style, and line complementarity — and a low-value player
-          who lands on a real need can still fit well. The model can’t see injuries, departures, cap,
-          or locker room — weigh those yourself.
-        </span>
-      </div>
+      {/* WHERE HE FITS THE ROSTER — the need decomposition, sorted by need, tagged, with a takeaway */}
+      {result.need_breakdown && result.need_breakdown.length > 0 && (
+        <>
+          <h3 className="tf-sec">Where he fits the roster</h3>
+          <NeedSection rows={result.need_breakdown} summary={result.need_summary} />
+        </>
+      )}
+
+      <p className="tf-caveat">
+        Fit and quality are separate, and the model can’t see injuries, departures, cap, or locker
+        room — weigh those yourself.
+      </p>
     </div>
   )
 }
