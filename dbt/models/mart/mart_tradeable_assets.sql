@@ -27,7 +27,9 @@ players as (
         v.player_id,
         coalesce(n.name, cast(v.player_id as string))        as label,
         c.contract_team                                      as org_team,
-        v.pos_group || ' · ' || cast(v.age as string) || 'y' as pos_or_slot,
+        -- actual listed position (e.g. "C/LW", "RD") not just the F/D group, for exploration
+        replace(coalesce(c.contract_pos, v.pos_group), ', ', '/') || ' · '
+          || cast(v.age as string) || 'y'                   as pos_or_slot,
         -- talent axis (value + band, WAR and dollars)
         v.value_war, v.value_war_low, v.value_war_high,
         v.value_dollars, v.value_dollars_low, v.value_dollars_high,
