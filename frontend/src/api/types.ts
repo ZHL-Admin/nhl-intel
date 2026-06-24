@@ -578,6 +578,12 @@ export interface GoalieSeason {
   saves: number
   goals_against: number
   save_pct: number | null
+  wins?: number | null
+  losses?: number | null
+  otl?: number | null
+  shutouts?: number | null
+  gaa?: number | null
+  toi_seconds?: number | null
   xga: number
   gsax: number
   our_hd_gsax: number | null
@@ -1483,4 +1489,62 @@ export interface TradeEvaluateResponse {
   summary: TradeSummaryLine[]
   caveats: string[]
   dollar_basis?: string | null
+}
+
+// --- Offseason roster forecast (Phase 6 tool) ---
+export interface RosterForecastRow {
+  team_id: number
+  team_abbrev?: string | null
+  transition: string
+  base_rating: number
+  projected_rating: number
+  delta: number
+  band_low: number          // band is on projected_rating
+  band_high: number
+  band_goals: number        // half-width (goals/game)
+  net_delta_war: number
+  chemistry_adj?: number | null
+  base_rank?: number | null
+  projected_rank?: number | null
+  projected_rank_delta?: number | null
+  n_moves: number
+  negligible: boolean
+}
+
+export interface RosterMove {
+  player_id?: number | null
+  name?: string | null
+  position?: string | null
+  pos_group?: string | null
+  is_goalie: boolean
+  move_type: string         // arrival | departure | returning
+  base_war: number
+  projected_war: number
+  war_sd: number            // band on the projected value
+  no_track_record: boolean
+  base_slot?: string | null
+  updated_slot?: string | null
+  delta_contribution: number
+}
+
+export interface OffseasonLineupSlot {
+  slot: string
+  player_id?: number | null
+  name?: string | null
+  position?: string | null
+  projected_war: number
+  war_sd: number
+  no_track_record: boolean
+  replacement: boolean
+}
+
+export interface OffseasonTeamDetail {
+  forecast: RosterForecastRow
+  base_components: Record<string, number | null>
+  moves: RosterMove[]
+  projected_lineup: OffseasonLineupSlot[]
+  style_note?: string | null
+  verdict: string
+  reasons: string[]
+  limitations: string
 }

@@ -2,11 +2,17 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users, ArrowLeftRight, Scale, FileText } from 'lucide-react'
+import { Users, ArrowLeftRight, Scale, FileText, CalendarClock } from 'lucide-react'
 import { PageLayout, PageHeader } from '../components/common'
 import './Tools.css'
 
 const TOOLS = [
+  {
+    to: '/tools/offseason',
+    icon: CalendarClock,
+    title: 'Offseason Forecast',
+    blurb: 'Project how good a team will be next season from the moves it has made — a decomposed ledger and a projected lineup, with honest uncertainty.',
+  },
   {
     to: '/tools/lineup-lab',
     icon: Users,
