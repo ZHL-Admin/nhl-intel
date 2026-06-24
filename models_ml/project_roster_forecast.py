@@ -557,19 +557,22 @@ def main() -> None:
     # published roster). Otherwise next-season rosters are not published yet, so the meaningful
     # transition is the most recent COMPLETED one (prior -> latest), both sides from the robust
     # game-derived roster so the diff is real moves, not a dressed-vs-published artifact.
-    if not args.backtest and _season_year(live) > _season_year(latest):
-        # Real upcoming offseason: base = latest season's END roster, updated = the live published
-        # (opening) roster — already an offseason boundary comparison.
-        base_season, updated_season = latest, live
-        base_mem = robust_roster_membership(bq, base_season, floor, "end")
-        upd_mem = updated_roster_membership(bq)
-    else:
-        # Completed offseason: prior-season END vs next-season OPENING night, so only between-season
-        # moves count (mid-season trades are ignored — the player was on the club at each boundary).
-        updated_season = "2025-26" if args.backtest else latest
-        base_season = prior_season(updated_season)
+    if args.backtest:
+        # Calibration on a COMPLETED offseason: 2024-25 season-END -> 2025-26 OPENING night.
+        base_season, updated_season = "2024-25", "2025-26"
         base_mem = robust_roster_membership(bq, base_season, floor, "end")
         upd_mem = robust_roster_membership(bq, updated_season, floor, "open")
+    else:
+        # Forward-looking: the UPCOMING offseason. BASE = latest completed season-END roster; UPDATED
+        # = the NEXT season's opening roster from the live published feed. Until NHL publishes
+        # next-season rosters (pre-July free agency) the live feed still shows the latest completed
+        # season, so there are no moves yet: UPDATED == BASE and every team correctly reads "no moves
+        # logged yet". The tool fills in automatically as signings/trades land and NHL publishes them.
+        base_season = latest                 # latest completed season (e.g. 2025-26)
+        updated_season = next_season(base_season)   # the upcoming season (e.g. 2026-27)
+        base_mem = robust_roster_membership(bq, base_season, floor, "end")
+        upd_mem = (updated_roster_membership(bq)
+                   if _season_year(live) >= _season_year(updated_season) else base_mem)
     trans = f"{base_season}->{updated_season}"
     print(f"project_roster_forecast {run_id}: transition {trans} (model_version={CFG['MODEL_VERSION']})")
 
@@ -686,9 +689,17 @@ def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, aging, ages,
         # full-roster symmetric difference (a season's call-ups are not offseason moves).
         f = forecast_team(base_players, upd_players, rc["rating"], rc,
                           xgf_share_delta=None)  # chemistry filled next (needs the built lineups)
-        chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
-        f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta)
-        f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
+        # The line-fit / style overlays are only meaningful when the roster actually changed. Skip
+        # them for a no-move team (e.g. the whole league before next-season rosters are published),
+        # which keeps that run fast and avoids pointless score_line/score_team_fit round-trips.
+        has_moves = any(m["move_type"] in ("arrival", "departure") for m in f["ledger"])
+        if has_moves:
+            chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
+            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta)
+            f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
+        else:
+            chem_delta = None
+            f["style_note"] = ""
         f.update({"team_id": tid, "transition": trans, "model_version": CFG["MODEL_VERSION"],
                   "scored_at": scored_at, "xgf_share_delta": None if chem_delta is None else round(chem_delta, 4)})
         for mr in f.pop("ledger"):

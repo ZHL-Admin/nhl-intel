@@ -17,50 +17,59 @@ offseason has no games, so a purely game-derived roster cannot reflect signings 
 repo already ingests a LIVE roster feed (built earlier — see SESSION-STATE.md "LIVE ROSTER
 MEMBERSHIP" and scripts/ROSTER_FINDINGS.md), which is the current-membership source we use.
 
-### BASE roster — prior season-end membership (game-derived, accurate for a completed season)
-Source: `nhl_staging.stg_rosters` (one row per game per player, from `raw_play_by_play.rosterSpots`).
-For a *completed* season the last game a player dressed defines his season-end team, so:
+### Robust roster at a season BOUNDARY (offseason-only by construction)
+This is an OFFSEASON tool, so it compares the prior season's END roster to the next season's
+OPENING-night roster — only between-season moves count, never mid-season trades.
+`robust_roster_membership(season, boundary)`:
 
 ```
-season-end team for season S =
-  argmax_by(game_id) over stg_rosters
-  where season = S
-    and substr(cast(game_id as string), 5, 2) in ('01','02','03')   -- exclude intl pollution
-  partition by player_id  ->  take the row with the latest game_id  ->  team_id
+a player is on the roster of his {boundary} team that season
+  boundary='end'  -> team in his LATEST game of the season   (season-end roster, the BASE)
+  boundary='open' -> team in his EARLIEST game of the season  (opening-night roster, the UPDATED)
+  IF he played >= MIN_GAMES_ROSTER (10) games that season  (filters cup-of-coffee call-ups)
+over stg_rosters, season = S, substr(game_id,5,2) in ('01','02','03')   -- exclude intl games
 ```
 
-Join keys: `player_id` (int64), `team_id` (int64), `season` (STRING "YYYY-YY"). The `01/02/03`
-filter is mandatory (the international-team pollution that bit Phase 5).
+A mid-season trade therefore does NOT show up as a move: a player traded at the deadline was on his
+old club at that season's END and on his new club at the next season's OPENING, so he is "returning"
+for the club he actually changed teams *within* the season (e.g. Berggren, traded DET→STL at the
+2025-26 deadline, returns for DET — he opened 2025-26 there). Only a true between-season signing,
+trade, or departure changes a player's boundary team.
 
-### UPDATED roster — current membership (live feed; reflects offseason moves)
-Source of truth: `nhl_staging.int_player_current_team` (`player_id` → `current_team_id`,
-`is_live_roster`, `team_source`), which resolves **live roster first, latest game as fallback** so
-nobody is dropped (UFAs / between-contract players keep their last-game team). It is fed by
-`stg_roster_current` (newest-ingestion snapshot per player) over `nhl_raw.raw_rosters`, ingested by
-`ingestion.nhl_api.get_roster()` → `max(/roster-season/{TEAM})` → `/v1/roster/{TEAM}/{season8}`
-(the planned `/current` endpoint is a 307 redirect; deviation documented in ROSTER_FINDINGS.md).
+Why neither naive source works (measured on Detroit, 2025-26): the NHL's official 21-man published
+roster (`stg_roster_current`) is too NARROW — it drops regulars later sent to the AHL (Sandin-Pellikka
+70 GP, Söderblom 41 GP). The raw game-derived "anyone who dressed" list is too BROAD — it adds 1-2
+game call-ups (Cossa 1 GP, Postava 2 GP). A games floor on the game-derived list, with team assigned
+at the season boundary (end vs opening, above), is the honest middle ground. The one remaining blind
+spot is a player injured almost an entire season; `MIN_GAMES_ROSTER` is the single tunable, and an
+official full-season roster source (per-season `/roster/{TEAM}/{season8}`) is the documented future
+upgrade to cover it.
 
-Live payload shape (verified against real output, TOR, this session — `{forwards, defensemen,
-goalies, team_abbrev, season8}`; each player object carries `id`, `firstName.default`,
-`lastName.default`, `positionCode`, `sweaterNumber`, `shootsCatches`, `headshot`, height/weight,
-birth fields). The join key into the value tables is the NHL `id` (= `player_id`).
+### Forward-looking transition (the UPCOMING offseason)
+The live view always targets the upcoming offseason: BASE = latest completed season's END roster,
+UPDATED = the NEXT season's OPENING roster from the live published feed. Today that is
+`2025-26 -> 2026-27`. Until NHL publishes next-season rosters (pre-July, before free agency) the live
+feed still shows the latest completed season, so UPDATED == BASE and every team correctly reads "no
+moves logged yet" — the board shows current projected standings and each team's ledger fills in
+automatically as signings/trades land and NHL publishes them. (No-move teams skip the line-fit/style
+overlays, so that whole-league empty state is cheap to compute.)
 
-Join keys: `player_id` (int64) → `current_team_id` (int64). Abbrev↔id via `stg_games` (staging).
+The `--backtest` path is the only one that targets a COMPLETED offseason — `2024-25 END -> 2025-26
+OPENING` — purely to measure calibration against what actually happened.
+
+Value/rating/aging inputs are keyed to the BASE season. Join key: `player_id` (int64) → `team_id`
+(int64); abbrev↔id via `stg_games` (staging).
 
 ### Membership ≠ performance (carried into every forecast number)
-The live roster fixes the team LABEL only. A just-arrived player has ZERO games with his new club,
-so all his value inputs (GAR/RAPM/archetype/aging) come from his OLD team's usage. The forecast
-projects his prior value forward; it does not invent new-team production. This is stated in the
-verdict's limitations footer.
+Affiliation is the team LABEL only. A just-arrived player has ZERO games with his new club, so all
+his value inputs (GAR/RAPM/archetype/aging) come from his OLD team's usage. The forecast projects his
+prior value forward; it does not invent new-team production. Stated in the verdict's limitations footer.
 
-### Transition definition
-A "transition" is `prior_completed_season -> next_season`, e.g. `2024-25 -> 2025-26`. BASE =
-end-of-`2024-25` `team_ratings` + `2024-25` season-end roster; UPDATED = current
-`int_player_current_team` membership (which, in deep offseason, resolves to the latest published
-roster — see ROSTER_FINDINGS.md). Backtest uses `2024-25 -> 2025-26` with the ACTUAL 2025-26
-rosters as UPDATED.
-
-Smoke: `scripts/smoke_roster_source.py` (exercises the UPDATED live source; BASE is a BigQuery read).
+### Move classification is ROSTER-based, not lineup-based
+`move_type` keys on whether the player is on the base/updated ROSTER, not whether he holds a top-N
+LINEUP slot — so a holdover merely promoted or demoted in the lineup reads as `returning`, and only a
+genuine join/leave reads as `arrival`/`departure`. (The per-player `delta_contribution` stays
+lineup-based and still partitions the net rating delta.)
 
 ---
 
