@@ -320,6 +320,26 @@ def latest_completed_season(bq) -> str:
     return str(df["s"].iloc[0])
 
 
+def _is_offseason(bq, min_gap_days: int):
+    """Are we between seasons? True iff the most recent NHL game is a PLAYOFF game (type 03) AND it
+    was at least `min_gap_days` ago — i.e. the Stanley Cup Final is over. This is robust where a
+    days-only test is not: an in-season break (4 Nations, All-Star) ends on a REGULAR-season game
+    (type 02), and a between-playoff-round gap is shorter than `min_gap_days`. Once the next season's
+    games begin (preseason 01 / regular 02), the most recent game is no longer a playoff game, so it
+    flips to False. Returns (is_offseason, days_since_last_game)."""
+    df = bq.query_df(f"""
+        SELECT game_date, SUBSTR(CAST(game_id AS STRING), 5, 2) AS gtype
+        FROM {bq.staging('stg_rosters')}
+        WHERE game_date IS NOT NULL AND {GAME_TYPE_FILTER}
+        ORDER BY game_id DESC LIMIT 1
+    """)
+    if df.empty or df["game_date"].iloc[0] is None:
+        return False, None
+    import pandas as pd
+    gap = (datetime.now(timezone.utc).date() - pd.Timestamp(df["game_date"].iloc[0]).date()).days
+    return (str(df["gtype"].iloc[0]) == "03" and gap >= min_gap_days), gap
+
+
 def next_season(season: str) -> str:
     start = int(season[:4]) + 1
     return f"{start}-{str(start + 1)[2:]}"
@@ -592,6 +612,18 @@ def main() -> None:
 
     run_id = _run_id()
     floor = CFG["MIN_GAMES_ROSTER"]
+
+    # Offseason-only guard for the live write: the upcoming-season forecast only makes sense between
+    # seasons, so a daily DAG run is a no-op once the next season's first game is played (the most
+    # recent NHL game becomes recent again). --sample/--dry-run/--backtest are exempt (testing).
+    writes_live = args.full or not (args.dry_run or args.sample or args.backtest)
+    if writes_live:
+        is_off, gap = _is_offseason(bq, CFG["OFFSEASON_MIN_GAP_DAYS"])
+        if not is_off:
+            print(f"Not in the offseason (last NHL game {gap}d ago, not a finished playoff run); the "
+                  f"upcoming-season forecast runs only between seasons. Skipping.")
+            return
+
     latest = latest_completed_season(bq)        # latest season with team_ratings + complete games
 
     # Transition selection (auto-advancing): if the live roster is a season AHEAD of the latest

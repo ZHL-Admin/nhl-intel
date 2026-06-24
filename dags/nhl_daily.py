@@ -591,12 +591,13 @@ with DAG(
         env=_dbt_env,
     )
 
-    # Offseason roster forecast (weekly; offseason-relevant + cheap). Reads team_ratings + the value
-    # tables + line/fit services; trains nothing. Runs after all its model deps so it reads fresh
-    # ratings/GAR/aging/line-fit/needs.
+    # Offseason roster forecast: runs DAILY so it tracks signings/trades as they land (the live roster
+    # is refreshed daily by roster_refresh). The job self-guards to the offseason — it is a no-op once
+    # the next season's first game is played — so a daily run is cheap in-season and current all summer.
+    # Reads team_ratings + the value tables + line/fit services; trains nothing.
     roster_forecast = BashOperator(
         task_id="roster_forecast",
-        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.project_roster_forecast --full"),
+        bash_command="cd /opt/airflow && python -m models_ml.project_roster_forecast --full",
         env=_dbt_env,
     )
 
@@ -634,6 +635,16 @@ with DAG(
     compute_overall = BashOperator(
         task_id="compute_overall",
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_overall"),
+        env=_dbt_env,
+    )
+
+    # Player Verdict (Workstream B): Gemini narrates the deterministic two-horizon payload, the
+    # consistency checker verifies every cited number, and passing reads land in player_verdict.
+    # The written paragraph regenerates WEEKLY scoped to players who played in the last 7 days
+    # (identity inputs come from the slow-clock 3yr tables this reads). Use --full on a refit.
+    generate_verdicts = BashOperator(
+        task_id="generate_verdicts",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.generate_verdicts --weekly"),
         env=_dbt_env,
     )
 
@@ -769,6 +780,9 @@ with DAG(
     # Goalie GAR off the marts; per-player Overall needs both value lenses for skaters and goalies.
     run_dbt_marts >> compute_goalie_gar >> generate_report
     [compute_gar, compute_composite, compute_goalie_gar, compute_goalie_radar] >> compute_overall >> generate_report
+    # Player Verdict: needs the overall block, the current radar, and consistency (identity inputs
+    # come from the 3yr impact/archetype tables those depend on). Weekly, scoped to active players.
+    [compute_overall, compute_player_radar, compute_consistency] >> generate_verdicts >> generate_report
 
     # Trade tool (weekly): match contracts off fresh rosters -> rebuild the contract mart -> value
     # it against gar/composite/aging; ingest futures -> value them; then the unified asset mart

@@ -476,6 +476,14 @@ ROSTER_FORECAST = {
     # the AHL) and the raw game-derived list is too broad (1-2 game call-ups), so we floor by games.
     "MIN_GAMES_ROSTER": 10,
 
+    # The live (--full) forecast runs DAILY but only during the offseason (the upcoming-season forecast
+    # is meaningless once that season starts). Offseason = the most recent NHL game is a finished
+    # PLAYOFF run: a playoff (type 03) game at least this many days ago. 8 days clears any
+    # between-playoff-round gap but triggers right after the Cup Final; an in-season break ends on a
+    # regular-season game so it never qualifies. The forecast thus runs all summer and stops at the
+    # next season's first game.
+    "OFFSEASON_MIN_GAP_DAYS": 8,
+
     # GOALS_PER_WIN restated for a self-contained block; asserted == GAR_CONFIG at import so a
     # WAR delta converts to goals on the SAME scale the team rating uses (principle 2: fail loud).
     "GOALS_PER_WIN": 6.0,
@@ -734,5 +742,7 @@ VERDICT = {
     # Consistency checker tolerance: a cited number must match the payload value within this
     # absolute tolerance (after both are normalised to the same unit, e.g. 0-100 percentiles).
     "CHECK_TOL": 1.0,
-    "MAX_REGEN_ATTEMPTS": 2,   # regenerate once if the consistency check fails, then drop
+    "MAX_REGEN_ATTEMPTS": 4,   # regenerate on a failed check up to this many times, then drop
+    "BACKFILL_CONCURRENCY": 8,  # default parallel workers for --full (Gemini calls are I/O-bound)
+    "PERSIST_BATCH": 40,        # checkpoint: flush completed verdicts every N (crash-safe, resumable)
 }
