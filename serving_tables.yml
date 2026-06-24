@@ -95,6 +95,9 @@ tables:
   - {name: streak_cards,       dataset: models, kind: source, cap: full, indexes: [team_id, season]}
   - {name: team_needs,         dataset: models, kind: source, cap: full, indexes: [team_id, season]}
   - {name: archetype_gallery,  dataset: models, kind: source, cap: full, indexes: [pos_group]}
+  # Offseason roster forecast (Phase 6 tool): league board + per-team move ledger.
+  - {name: roster_forecast,    dataset: models, kind: source, cap: full, indexes: [team_id, transition]}
+  - {name: roster_moves,       dataset: models, kind: source, cap: full, indexes: [team_id, transition]}
   - {name: player_style_map,   dataset: models, kind: source, cap: full, indexes: [player_id, pos_group]}
   - {name: player_contract_value, dataset: models, kind: source, cap: full, indexes: [player_id]}
   - {name: futures_value,      dataset: models, kind: source, cap: full, indexes: [asset_kind, player_id]}

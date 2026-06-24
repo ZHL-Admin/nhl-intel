@@ -137,7 +137,7 @@ as a prior, not a guarantee.
 
 **Measured calibration (`make roster-forecast-validate`, 2024-25 -> 2025-26, 31 teams):**
 
-- Spearman rank-delta correlation: **0.59**
+- Spearman rank-delta correlation: **0.60**
 - Mean absolute rank-delta error: **6.7 positions**
 
 Read honestly: the offseason moves explain a MODERATE share of next-season rank movement — they get

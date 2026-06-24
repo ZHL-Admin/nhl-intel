@@ -10,7 +10,7 @@ from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
     TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile,
     TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam, StreakCard,
-    TeamLines, StandingsRow, TeamInsight,
+    TeamLines, StandingsRow, TeamInsight, OffseasonTeamDetail,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -667,6 +667,20 @@ async def get_team_roster(
         defensemen=defensemen,
         goalies=goalies
     )
+
+
+@router.get("/{team_id}/offseason", response_model=OffseasonTeamDetail)
+@cache(ttl=3600)
+async def get_team_offseason(team_id: int, season: Optional[str] = Query(None)) -> OffseasonTeamDetail:
+    """One team's offseason roster-forecast decomposition: the move ledger, before/after rating
+    components, the projected lineup with per-player value + band, the style-fit note, and the
+    deterministic verdict + reasons + limitations (Phase 6 tool). Reads nhl_models.roster_*."""
+    from services import offseason as off_svc
+    try:
+        payload = await run_in_threadpool(off_svc.offseason_team, team_id, season)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return OffseasonTeamDetail(**payload)
 
 
 @router.get("/{team_id}/vs/{opponent_id}", response_model=TeamVsOpponent)

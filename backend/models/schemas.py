@@ -981,6 +981,13 @@ class GoalieSeason(BaseModel):
     saves: int
     goals_against: int
     save_pct: Optional[float] = None
+    # Traditional record/rate line (decision goalie for W/L/OTL/SO; GAA = GA per 60 in net)
+    wins: Optional[int] = None
+    losses: Optional[int] = None
+    otl: Optional[int] = None
+    shutouts: Optional[int] = None
+    gaa: Optional[float] = None
+    toi_seconds: Optional[int] = None
     xga: float
     gsax: float = Field(description="Goals saved above expected (xGA - GA)")
     our_hd_gsax: Optional[float] = Field(None, description="High-danger GSAx (ours)")
@@ -1438,6 +1445,67 @@ class BestTeamFit(BaseModel):
     reason: Optional[str] = None
     top_need_label: Optional[str] = None
     top_need_gap: Optional[float] = None
+
+
+class RosterForecastRow(BaseModel):
+    """One team's offseason forecast (league board row). Every projected number carries its band."""
+    team_id: int
+    team_abbrev: Optional[str] = None
+    transition: str
+    base_rating: float
+    projected_rating: float
+    delta: float
+    band_low: float            # band is on projected_rating
+    band_high: float
+    band_goals: float          # half-width (goals/game)
+    net_delta_war: float
+    chemistry_adj: Optional[float] = None
+    base_rank: Optional[int] = None
+    projected_rank: Optional[int] = None
+    projected_rank_delta: Optional[int] = None
+    n_moves: int
+    negligible: bool
+
+
+class RosterMove(BaseModel):
+    """One row of the move ledger. delta_contribution partitions the team's net projected-WAR delta."""
+    player_id: Optional[int] = None
+    name: Optional[str] = None
+    position: Optional[str] = None
+    pos_group: Optional[str] = None
+    is_goalie: bool = False
+    move_type: str             # arrival | departure | returning | replacement_fill
+    base_war: float            # last-season realized value
+    projected_war: float       # next-season projected value
+    war_sd: float              # band on the projected value (goalie ~3x skater)
+    no_track_record: bool = False
+    base_slot: Optional[str] = None
+    updated_slot: Optional[str] = None
+    delta_contribution: float
+
+
+class OffseasonLineupSlot(BaseModel):
+    """A projected-lineup slot: the player, his projected value, and its band (never a bare number)."""
+    slot: str
+    player_id: Optional[int] = None
+    name: Optional[str] = None
+    position: Optional[str] = None
+    projected_war: float
+    war_sd: float
+    no_track_record: bool = False
+    replacement: bool = False
+
+
+class OffseasonTeamDetail(BaseModel):
+    """Full decomposition for one team: forecast + components, move ledger, projected lineup, verdict."""
+    forecast: RosterForecastRow
+    base_components: dict                      # play_5v5 / finishing / goaltending / special_teams
+    moves: List[RosterMove] = Field(default_factory=list)
+    projected_lineup: List[OffseasonLineupSlot] = Field(default_factory=list)
+    style_note: Optional[str] = None
+    verdict: str
+    reasons: List[str] = Field(default_factory=list)
+    limitations: str
 
 
 class MatchupPreviewTeam(BaseModel):

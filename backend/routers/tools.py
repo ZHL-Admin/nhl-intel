@@ -10,6 +10,7 @@ from models.schemas import (
     TradeFitRequest, TradeFitResult, BestTeamFit,
     TradeEvaluateRequest, TradeEvaluateResponse,
     ContractGradeRequest, ContractGrade,
+    RosterForecastRow,
 )
 from services import tools as tool_svc
 from services import trade_engine
@@ -102,6 +103,17 @@ async def get_best_team_fits(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return [BestTeamFit(**t) for t in payload]
+
+
+# Single-segment literal path; registered here so it can never be shadowed by a future /{id} route.
+@router.get("/offseason", response_model=List[RosterForecastRow])
+@cache(ttl=3600)
+async def get_offseason_board(season: Optional[str] = Query(None)) -> List[RosterForecastRow]:
+    """Offseason roster-forecast league board: every team's projected next-season rating, delta,
+    rank, and band from the moves it made (Phase 6 tool). Reads nhl_models.roster_forecast."""
+    from services import offseason as off_svc
+    payload = await run_in_threadpool(off_svc.offseason_board, season)
+    return [RosterForecastRow(**r) for r in payload]
 
 
 def _player_name(player_id: int):
