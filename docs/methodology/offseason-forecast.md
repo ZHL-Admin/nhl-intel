@@ -132,7 +132,17 @@ his new club.
 
 Project the 2024-25 final rosters forward to 2025-26 (`--backtest`: base = 2024-25 end-of-season
 `team_ratings`; updated = actual 2025-26 rosters), then compare each team's projected 2025-26 rank
-delta to its actual 2025-26 power-rating rank delta. Report Spearman rank correlation and mean
-absolute rank error here as the tool's calibration; the verdict language inherits that honesty (a
-prior, not a guarantee). To be filled from the real run output.
+delta to its actual 2025-26 power-rating rank delta. The verdict language inherits this calibration
+as a prior, not a guarantee.
+
+**Measured calibration (`make roster-forecast-validate`, 2024-25 -> 2025-26, 31 teams):**
+
+- Spearman rank-delta correlation: **0.59**
+- Mean absolute rank-delta error: **6.7 positions**
+
+Read honestly: the offseason moves explain a MODERATE share of next-season rank movement — they get
+the direction right more often than not — but roughly half the variance is the cap/injury/coaching/
+camp/prospect reality the model cannot see (which is exactly why the band is wide and the verdict
+foregrounds it). It is a directional prior, not a precise rank prediction. (One team is dropped from
+the 32 when a franchise id is not present in both seasons' `team_ratings`, e.g. a relocation.)
 

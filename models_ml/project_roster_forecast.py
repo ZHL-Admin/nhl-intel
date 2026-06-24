@@ -234,11 +234,16 @@ def project_rating(base_rating: float, net_delta_war: float, chemistry_adj: floa
 
 
 def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerProj],
-                  base_rating: float, base_components: dict, n_moves: int,
-                  xgf_share_delta: float | None, cfg: dict = CFG) -> dict:
+                  base_rating: float, base_components: dict, n_moves: int | None = None,
+                  xgf_share_delta: float | None = None, cfg: dict = CFG) -> dict:
     """Assemble one team's forecast from its two projected rosters. Pure: callers supply already
-    projected PlayerProj lists (base_war + projected_war filled), the base rating + components, the
-    move count, and the line-fit xGF share delta. Returns the roster_forecast row payload + ledger.
+    projected PlayerProj lists (base_war + projected_war filled), the base rating + components, and
+    the line-fit xGF share delta. Returns the roster_forecast row payload + ledger.
+
+    n_moves (turnover) is LINEUP-RELEVANT: it is derived from the ledger (arrivals + departures among
+    the projected lineups), NOT the symmetric difference of full-season rosters — a season's worth of
+    call-ups and injury fills are not offseason moves and must not inflate the band. A caller-supplied
+    n_moves is ignored in favor of the ledger count (kept in the signature for back-compat).
     """
     fwd_b = [p for p in base_players if p.pos_group == "F"]
     def_b = [p for p in base_players if p.pos_group == "D"]
@@ -253,6 +258,7 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg)
 
     net_delta, ledger = reconcile_ledger(base_lineup, upd_lineup, cfg)
+    n_moves = sum(1 for m in ledger if m["move_type"] in ("arrival", "departure"))
     chem = chemistry_adjustment(xgf_share_delta, cfg)
     band_g = forecast_band(upd_lineup, n_moves, cfg)
     proj = project_rating(base_rating, net_delta, chem, cfg)
@@ -402,11 +408,11 @@ def load_ages(bq, season: str) -> dict:
     """player_id -> age at the season start (season start year minus birth year)."""
     start = int(season[:4])
     sql = f"""
-    SELECT player_id, EXTRACT(YEAR FROM CAST(birth_date AS DATE)) AS by
+    SELECT player_id, EXTRACT(YEAR FROM CAST(birth_date AS DATE)) AS birth_year
     FROM {bq.staging('stg_player_bio')} WHERE birth_date IS NOT NULL
     """
-    return {int(x.player_id): start - int(x.by) for _, x in bq.query_df(sql).iterrows()
-            if x.by is not None}
+    return {int(x.player_id): start - int(x.birth_year) for _, x in bq.query_df(sql).iterrows()
+            if x.birth_year is not None}
 
 
 def base_roster_membership(bq, season: str) -> dict:
@@ -604,14 +610,13 @@ def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means, aging
                                           archetypes, project_value=True)
         upd_players = _projected_players(tid, upd_mem, gar_rows, goalie_rows, means, aging, ages,
                                          archetypes, project_value=True)
-        base_ids = {p.player_id for p in base_players if p.player_id}
-        upd_ids = {p.player_id for p in upd_players if p.player_id}
-        n_moves = len(base_ids ^ upd_ids)
         rc = ratings[tid]
-        f = forecast_team(base_players, upd_players, rc["rating"], rc, n_moves,
+        # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
+        # full-roster symmetric difference (a season's call-ups are not offseason moves).
+        f = forecast_team(base_players, upd_players, rc["rating"], rc,
                           xgf_share_delta=None)  # chemistry filled next (needs the built lineups)
         chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
-        f = forecast_team(base_players, upd_players, rc["rating"], rc, n_moves, xgf_share_delta=chem_delta)
+        f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta)
         f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
         f.update({"team_id": tid, "transition": trans, "model_version": CFG["MODEL_VERSION"],
                   "scored_at": scored_at, "xgf_share_delta": None if chem_delta is None else round(chem_delta, 4)})
