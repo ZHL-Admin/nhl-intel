@@ -437,13 +437,20 @@ def base_roster_membership(bq, season: str) -> dict:
 
 
 def updated_roster_membership(bq) -> dict:
-    """Current membership from the live-first resolution + names/positions from the live snapshot."""
+    """Current membership from the LIVE roster ONLY (stg_roster_current).
+
+    We deliberately do NOT use int_player_current_team here: its latest-game FALLBACK (is_live_roster
+    = False) keeps anyone whose last NHL game is in the value window on his old team — retired,
+    deceased, sent to the minors/Europe — which would show up as a phantom offseason ARRIVAL on a
+    club he is no longer on (e.g. a player who last dressed two seasons ago). The live roster is the
+    set of players a club has ACTUALLY rostered, which is exactly the "updated roster" the forecast
+    diffs against the prior season-end roster. A real trade/signing is on the new club's live roster;
+    a departure is on the prior season-end roster but not the live one — both still resolve correctly.
+    """
     sql = f"""
-    SELECT r.player_id, r.current_team_id AS team_id,
-           COALESCE(c.position_code, '') AS position_code,
-           COALESCE(c.full_name, '') AS name
-    FROM {bq.staging('int_player_current_team')} r
-    LEFT JOIN {bq.staging('stg_roster_current')} c ON c.player_id = r.player_id
+    SELECT player_id, team_id, COALESCE(position_code, '') AS position_code,
+           COALESCE(full_name, '') AS name
+    FROM {bq.staging('stg_roster_current')} WHERE team_id IS NOT NULL
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
