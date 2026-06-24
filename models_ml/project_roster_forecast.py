@@ -501,6 +501,49 @@ def updated_roster_membership(bq) -> dict:
     return out
 
 
+def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
+    """The CURRENT offseason roster: each player's team is his LIVE published-roster team if he is on
+    one, else his `base_season` END team (a fallback so AHL/unsigned holdovers do not falsely depart).
+
+    The live feed reflects offseason signings/trades as they happen even while it is still LABELLED the
+    prior season (NHL rolls the season label later), so we read team membership from it directly rather
+    than gating on its label. Universe = live-roster players UNION the base-season robust roster, which
+    excludes stale fallback-only players (retired/in-Europe) that would otherwise be phantom arrivals.
+    A player only counts as MOVED when he is actively on a different club's live roster.
+    """
+    sql = f"""
+    WITH base AS (
+        SELECT player_id, e.team_id AS team_id, e.position_code AS position_code,
+               e.first_name || ' ' || e.last_name AS name FROM (
+            SELECT player_id, COUNT(*) AS gp,
+                   ARRAY_AGG(STRUCT(team_id, position_code, first_name, last_name)
+                             ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS e
+            FROM {bq.staging('stg_rosters')}
+            WHERE season = '{base_season}' AND {GAME_TYPE_FILTER}
+            GROUP BY player_id
+        ) WHERE gp >= {int(min_games)}
+    ),
+    live AS (
+        SELECT player_id, team_id, COALESCE(position_code, '') AS position_code,
+               COALESCE(full_name, '') AS name
+        FROM {bq.staging('stg_roster_current')} WHERE team_id IS NOT NULL
+    )
+    SELECT player_id,
+           COALESCE(l.team_id, b.team_id) AS team_id,
+           COALESCE(NULLIF(l.position_code, ''), b.position_code) AS position_code,
+           COALESCE(NULLIF(l.name, ''), b.name) AS name
+    FROM live l FULL OUTER JOIN base b USING (player_id)
+    """
+    out: dict = {}
+    for _, x in bq.query_df(sql).iterrows():
+        if x.team_id is None:
+            continue
+        out.setdefault(int(x.team_id), []).append({"player_id": int(x.player_id),
+                                                    "position": str(x.position_code) or "F",
+                                                    "name": x["name"] or None})
+    return out
+
+
 def _pos_group(position: str) -> str:
     if position == "G":
         return "G"
@@ -550,7 +593,6 @@ def main() -> None:
     run_id = _run_id()
     floor = CFG["MIN_GAMES_ROSTER"]
     latest = latest_completed_season(bq)        # latest season with team_ratings + complete games
-    live = live_roster_season(bq)               # the season the live published roster represents
 
     # Transition selection (auto-advancing): if the live roster is a season AHEAD of the latest
     # completed games, that is the real upcoming offseason (base = latest completed, updated = live
@@ -564,15 +606,14 @@ def main() -> None:
         upd_mem = robust_roster_membership(bq, updated_season, floor, "open")
     else:
         # Forward-looking: the UPCOMING offseason. BASE = latest completed season-END roster; UPDATED
-        # = the NEXT season's opening roster from the live published feed. Until NHL publishes
-        # next-season rosters (pre-July free agency) the live feed still shows the latest completed
-        # season, so there are no moves yet: UPDATED == BASE and every team correctly reads "no moves
-        # logged yet". The tool fills in automatically as signings/trades land and NHL publishes them.
+        # = the CURRENT roster from the live published feed, which reflects offseason signings/trades
+        # as they happen (even while still labelled the prior season). A player only moves when he is
+        # actively on a different club's live roster; AHL/unsigned holdovers keep their base team. The
+        # ledger fills in as moves land — and is empty (all teams negligible) only if none have yet.
         base_season = latest                 # latest completed season (e.g. 2025-26)
         updated_season = next_season(base_season)   # the upcoming season (e.g. 2026-27)
         base_mem = robust_roster_membership(bq, base_season, floor, "end")
-        upd_mem = (updated_roster_membership(bq)
-                   if _season_year(live) >= _season_year(updated_season) else base_mem)
+        upd_mem = offseason_updated_membership(bq, base_season, floor)
     trans = f"{base_season}->{updated_season}"
     print(f"project_roster_forecast {run_id}: transition {trans} (model_version={CFG['MODEL_VERSION']})")
 
