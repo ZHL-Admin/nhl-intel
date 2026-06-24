@@ -82,6 +82,47 @@ sources:
           season) soft archetype memberships from per-position Gaussian mixtures. Names are
           hand-assigned (config.ARCHETYPE_NAMES) from the labeling report.
 
+      - name: roster_forecast
+        description: >
+          Offseason roster forecast (models_ml/project_roster_forecast.py): one row per
+          (team_id, transition) projecting next-season team rating from the moves made, with an
+          honest band (band_low/band_high), projected league rank, the net lineup-WAR delta, a
+          chemistry adjustment, and the four base rating components. READS team_ratings + value
+          tables; trains nothing.
+        columns:
+          - name: team_id
+            description: NHL team id
+            tests: [not_null]
+          - name: transition
+            description: prior_completed_season->next_season, e.g. 2024-25->2025-26
+            tests: [not_null]
+          - name: projected_rating
+            description: Projected next-season rating (goals/game, same scale as team_ratings)
+          - name: band_low
+            description: Low end of the honest band (goals/game)
+          - name: band_high
+            description: High end of the honest band (goals/game)
+          - name: projected_rank
+            description: Projected league rank (1 = best by projected_rating)
+
+      - name: roster_moves
+        description: >
+          Long move ledger behind each roster_forecast (one row per team_id, transition, player_id):
+          move_type (arrival/departure/returning), base_war, projected_war (aged + reliability-shrunk),
+          war_sd band, no_track_record flag, and the lineup slot it fills/vacates. The per-player
+          delta_contribution partitions the team's net lineup-WAR delta (the consistency discipline).
+        columns:
+          - name: team_id
+            description: NHL team id
+            tests: [not_null]
+          - name: transition
+            description: prior_completed_season->next_season
+            tests: [not_null]
+          - name: move_type
+            description: arrival | departure | returning | replacement_fill
+          - name: delta_contribution
+            description: This row's signed contribution to the team's net projected-WAR delta
+
       - name: player_contract_value
         description: >
           Contract surplus (Trade tool P4; models_ml/compute_contract_value.py): one row per matched

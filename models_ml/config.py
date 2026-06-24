@@ -451,6 +451,84 @@ assert GOALIE_GAR_CONFIG["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
     "Goalie and skater GOALS_PER_WIN must match for cross-position WAR to be comparable.")
 
 
+# =====================================================================================
+# Offseason roster forecast (models_ml/project_roster_forecast.py). Projects how good a team
+# will be NEXT season from the moves it made this offseason, with an honest band, a decomposed
+# move ledger, a projected lineup with line-fit grades, and a style-fit read. READS team_ratings,
+# player_gar, goalie_gar, aging_curves, player_archetypes, team identity/needs and the
+# score_line / score_team_fit services; it trains NOTHING. Every constant is named so the
+# methodology doc (docs/methodology/offseason-forecast.md) can cite it verbatim.
+# =====================================================================================
+ROSTER_FORECAST = {
+    "MODEL_VERSION": "roster_forecast_v1",
+    "RANDOM_SEED": 7,                 # deterministic tie-breaks only; the job does no sampling
+
+    # The dressed lineup a team ices. The talent total is summed over FILLED slots, never "all
+    # arrivals minus all departures" — a team plays a fixed lineup. 12 F + 6 D + 1 starter.
+    "N_FWD": 12,
+    "N_DEF": 6,
+    "N_GOALIE": 1,
+    "GAMES_PER_SEASON": 82,           # season WAR (wins) -> per-game goals scaling
+
+    # GOALS_PER_WIN restated for a self-contained block; asserted == GAR_CONFIG at import so a
+    # WAR delta converts to goals on the SAME scale the team rating uses (principle 2: fail loud).
+    "GOALS_PER_WIN": 6.0,
+
+    # Replacement-level fill for an unfilled lineup slot, or a vacated slot with no arrival. WAR is
+    # value ABOVE replacement, so a replacement player is 0.0 WAR BY DEFINITION — but the slot still
+    # EXISTS and is filled (a departure is never a free hole and never a dropped slot). Named so a
+    # test can assert a vacated slot resolves to this baseline, not the departed player's value.
+    "REPLACEMENT_WAR": 0.0,
+
+    # Aging as a VALUE multiplier (approximation, documented loudly): aging_curves is in points/82
+    # (production-shaped). We scale a player's WAR by the curve's age-t -> age-(t+1) LEVEL ratio.
+    # Clamp so a sparse or extreme curve segment can't blow up or zero out a real player's value.
+    "AGE_MULT_FLOOR": 0.80,
+    "AGE_MULT_CEIL": 1.08,
+    "AGE_CURVE_FALLBACK": {"F": "All Forwards", "D": "All Defensemen"},  # mirrors CONTRACT_VALUE
+
+    # Regress toward the repeatable lens (do NOT forecast off luck). Shrink weights ARE the measured
+    # reliabilities in GAR_STABILITY_YOY (referenced, never re-derived): each player_gar component
+    # is shrunk toward its position mean by its r. Finishing luck is isolated as (goals - ixg) and
+    # shrunk hardest. Goalie value is ALREADY reliability-shrunk inside goalie_gar (RELIABILITY_K),
+    # so we carry its point + band straight through; its band is ~3x a skater's by design (the
+    # measured goalie-rate reliability is ~0.19, which is exactly why the band stays wide).
+    "SHRINK_R": {
+        "ev_offense": GAR_STABILITY_YOY["production_r"],  # 0.66 actual-goal production
+        "pp":         GAR_STABILITY_YOY["production_r"],  # 0.66
+        "ev_defense": GAR_STABILITY_YOY["rapm_r"],        # 0.38 RAPM-based
+        "pk":         GAR_STABILITY_YOY["rapm_r"],        # 0.38
+        "finishing":  GAR_STABILITY_YOY["finishing_r"],   # 0.35 (goals - ixg) residual
+    },
+    "SHRINK_PASSTHROUGH": ["penalty", "faceoff"],   # tiny, stable terms passed through unshrunk
+
+    # Chemistry overlay: the line-fit delta (projected top units vs base top units, via score_line
+    # xGF%) nudges the rating, BOUNDED so a noisy chemistry read can't dominate the talent signal.
+    "CHEMISTRY_ADJ_CAP": 0.06,        # goals/game, +/- cap on the chemistry term
+    "CHEMISTRY_XGF_TO_GOALS": 0.30,   # maps a top-unit xGF% share delta to a goals/game nudge
+
+    # Honest band (all in goals/game). Base value uncertainty propagates the per-slot war_sd in
+    # quadrature; then we ADD band for the share of projected value from no-track-record players,
+    # from goalies (value ~3x less reliable), and from roster turnover. A floor blocks false
+    # precision in a quiet offseason.
+    "BAND_FLOOR": 0.05,
+    "BAND_NO_TRACK_W": 0.40,          # x (no-track-record value share)  -> extra band
+    "BAND_GOALIE_W": 0.25,            # x (goalie value share)           -> extra band
+    "BAND_TURNOVER_W": 0.015,         # x (arrivals + departures count)  -> extra band
+    "NO_TRACK_RECORD_WAR_SD": 1.2,    # deliberately wide band on a replacement-level no-track player
+
+    # Deep-offseason / negligible-moves guard: when the updated lineup ~ the base lineup (next
+    # season's roster not yet published, or a genuinely quiet offseason) the verdict says so
+    # explicitly instead of rendering a confident near-zero forecast (no-zeroed-empty-states).
+    "NEGLIGIBLE_NET_WAR": 0.5,        # |net lineup WAR delta| at/below this AND ...
+    "NEGLIGIBLE_MOVES": 2,            # ... arrivals+departures at/below this -> "no material moves"
+}
+
+assert ROSTER_FORECAST["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
+    "ROSTER_FORECAST GOALS_PER_WIN must match GAR_CONFIG so a projected WAR delta and the team "
+    "rating share one goals scale.")
+
+
 # ── Deployment efficiency (Divergence Board rework) ──────────────────────────────────────────
 # The board compares a player's ACTUAL situational usage against the usage his situation-
 # appropriate VALUE justifies. Divergence = actual_usage_pctile − justified_usage_pctile
