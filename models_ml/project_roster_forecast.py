@@ -140,13 +140,15 @@ class LineupForecast:
 
 
 def reconcile_ledger(base_lineup: list[PlayerProj], updated_lineup: list[PlayerProj],
+                     base_roster_ids: set, updated_roster_ids: set,
                      cfg: dict = CFG) -> tuple[float, list[dict]]:
     """The slot-level delta and a per-player ledger that PARTITIONS it (the consistency discipline).
 
-    base lineup value uses base_war (this season — what base_rating already reflects); updated lineup
-    value uses projected_war (next season). Each player's delta_contribution =
-      (projected_war if he holds an updated slot else 0) - (base_war if he held a base slot else 0).
-    Their sum equals net_delta exactly (replacement slots carry REPLACEMENT_WAR on both sides).
+    delta_contribution is LINEUP-based: (projected_war in the updated lineup) - (projected_war in the
+    base lineup); summed it equals net_delta exactly. But move_type is ROSTER-based — whether the
+    player is on the base/updated ROSTER, not whether he holds a top-N lineup slot. So a holdover who
+    is merely promoted/demoted in the lineup reads as "returning" (he did not join or leave the team),
+    and only a genuine roster change reads as "arrival"/"departure".
     """
     base_real = {p.player_id: p for p in base_lineup if p.player_id is not None}
     upd_real = {p.player_id: p for p in updated_lineup if p.player_id is not None}
@@ -164,9 +166,9 @@ def reconcile_ledger(base_lineup: list[PlayerProj], updated_lineup: list[PlayerP
         src = upd_real.get(pid) or base_real[pid]
         base_proj = base_real[pid].projected_war if in_base else 0.0   # his base-lineup slot value
         upd_proj = upd_real[pid].projected_war if in_upd else 0.0      # his updated-lineup slot value
-        if in_base and in_upd:
+        if pid in base_roster_ids and pid in updated_roster_ids:
             move_type = "returning"
-        elif in_upd:
+        elif pid in updated_roster_ids:
             move_type = "arrival"
         else:
             move_type = "departure"
@@ -260,7 +262,10 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     base_lineup, _ = _full_lineup(fwd_b, def_b, g_b, "projected_war", cfg)
     upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg)
 
-    net_delta, ledger = reconcile_ledger(base_lineup, upd_lineup, cfg)
+    # Roster membership sets classify a move as a real join/leave (vs a lineup promotion/demotion).
+    base_roster_ids = {p.player_id for p in base_players if p.player_id is not None}
+    updated_roster_ids = {p.player_id for p in updated_players if p.player_id is not None}
+    net_delta, ledger = reconcile_ledger(base_lineup, upd_lineup, base_roster_ids, updated_roster_ids, cfg)
     n_moves = sum(1 for m in ledger if m["move_type"] in ("arrival", "departure"))
     chem = chemistry_adjustment(xgf_share_delta, cfg)
     band_g = forecast_band(upd_lineup, n_moves, cfg)
@@ -418,21 +423,51 @@ def load_player_names(bq) -> dict:
     return {int(x.player_id): x["name"] for _, x in bq.query_df(sql).iterrows() if x["name"]}
 
 
-def base_roster_membership(bq, season: str) -> dict:
-    """Prior season-end membership: latest game that season per player -> (team_id, position)."""
+def _season_year(season: str) -> int:
+    return int(season[:4])
+
+
+def prior_season(season: str) -> str:
+    """'2025-26' -> '2024-25'."""
+    y = _season_year(season) - 1
+    return f"{y}-{str(y + 1)[2:]}"
+
+
+def live_roster_season(bq) -> str:
+    """The season the live published roster (stg_roster_current) currently represents."""
+    df = bq.query_df(f"SELECT max(season) AS s FROM {bq.staging('stg_roster_current')}")
+    return str(df["s"].iloc[0])
+
+
+def robust_roster_membership(bq, season: str, min_games: int) -> dict:
+    """A team's robust end-of-season roster for `season`.
+
+    A player is a member of his LATEST-game team that season (so an in-season trade lands him on his
+    final club) IF he played at least `min_games` games (so 1-2 game call-ups are filtered out). This
+    is the honest middle ground: the official 21-man snapshot drops regulars later sent to the AHL,
+    and the raw game-derived list adds cup-of-coffee call-ups. Returns team_id -> [{player_id,
+    position, name}]. Note: a player injured almost the whole season is the one remaining blind spot.
+    """
     sql = f"""
-    WITH r AS (
-        SELECT player_id, team_id, position_code,
-               ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_id DESC) AS rn
+    WITH g AS (
+        SELECT player_id, COUNT(*) AS gp,
+               ARRAY_AGG(STRUCT(team_id, position_code, first_name, last_name)
+                         ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS latest
         FROM {bq.staging('stg_rosters')}
         WHERE season = '{season}' AND {GAME_TYPE_FILTER}
+        GROUP BY player_id
     )
-    SELECT player_id, team_id, position_code FROM r WHERE rn = 1
+    SELECT player_id, latest.team_id AS team_id, latest.position_code AS position_code,
+           latest.first_name || ' ' || latest.last_name AS name
+    FROM g WHERE gp >= {int(min_games)}
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
+        if x.team_id is None:
+            continue
         out.setdefault(int(x.team_id), []).append({"player_id": int(x.player_id),
-                                                    "position": str(x.position_code)})
+                                                    "position": str(x.position_code),
+                                                    "name": x["name"]})
     return out
 
 
@@ -508,13 +543,32 @@ def main() -> None:
     from models_ml import bq
 
     run_id = _run_id()
-    base_season = "2024-25" if args.backtest else latest_completed_season(bq)
-    trans = f"{base_season}->{next_season(base_season)}"
+    floor = CFG["MIN_GAMES_ROSTER"]
+    latest = latest_completed_season(bq)        # latest season with team_ratings + complete games
+    live = live_roster_season(bq)               # the season the live published roster represents
+
+    # Transition selection (auto-advancing): if the live roster is a season AHEAD of the latest
+    # completed games, that is the real upcoming offseason (base = latest completed, updated = live
+    # published roster). Otherwise next-season rosters are not published yet, so the meaningful
+    # transition is the most recent COMPLETED one (prior -> latest), both sides from the robust
+    # game-derived roster so the diff is real moves, not a dressed-vs-published artifact.
+    if not args.backtest and _season_year(live) > _season_year(latest):
+        base_season, updated_season = latest, live
+        base_mem = robust_roster_membership(bq, base_season, floor)
+        upd_mem = updated_roster_membership(bq)
+    else:
+        updated_season = "2025-26" if args.backtest else latest
+        base_season = prior_season(updated_season)
+        base_mem = robust_roster_membership(bq, base_season, floor)
+        upd_mem = robust_roster_membership(bq, updated_season, floor)
+    trans = f"{base_season}->{updated_season}"
     print(f"project_roster_forecast {run_id}: transition {trans} (model_version={CFG['MODEL_VERSION']})")
 
     if args.dry_run:
         _print_byte_estimate(bq, base_season)
 
+    # Value/aging/ratings are keyed to the BASE season — the realized rating the projection starts
+    # from, and the value each player carries into the next season.
     window = value_season_window(bq, base_season)
     ratings = load_team_ratings(bq, base_season)
     gar_rows = load_skater_gar(bq, window)
@@ -522,9 +576,6 @@ def main() -> None:
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
     ages = load_ages(bq, base_season)
-    base_mem = base_roster_membership(bq, base_season)
-    # Backtest UPDATED = actual next-season game-derived rosters; live UPDATED = current membership.
-    upd_mem = base_roster_membership(bq, next_season(base_season)) if args.backtest else updated_roster_membership(bq)
 
     forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
                                     aging, ages, archetypes, trans, run_id, sample=args.sample)

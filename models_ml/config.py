@@ -470,6 +470,12 @@ ROSTER_FORECAST = {
     "N_GOALIE": 1,
     "GAMES_PER_SEASON": 82,           # season WAR (wins) -> per-game goals scaling
 
+    # Robust end-of-season roster: a player is a roster member of his LATEST-game team that season
+    # (handles in-season trades) if he played at least this many games (filters cup-of-coffee
+    # call-ups). The official 21-man published snapshot is too narrow (drops regulars later sent to
+    # the AHL) and the raw game-derived list is too broad (1-2 game call-ups), so we floor by games.
+    "MIN_GAMES_ROSTER": 10,
+
     # GOALS_PER_WIN restated for a self-contained block; asserted == GAR_CONFIG at import so a
     # WAR delta converts to goals on the SAME scale the team rating uses (principle 2: fail loud).
     "GOALS_PER_WIN": 6.0,
@@ -697,4 +703,36 @@ FUTURES = {
     "ELC_COST": 900_000,
     "PICKS_PER_ROUND": 32,        # representative overall = (round-1)*32 + 16; band spans the round
     "MODEL_VERSION": "futures_value_v1",
+}
+
+# --- Player Verdict (composed scouting read; Gemini narrates a deterministic two-horizon payload) ---
+VERDICT = {
+    "MODEL_VERSION": "verdict_v1",
+    "LLM_MODEL": "gemini-2.5-flash-lite",   # stable; the -exp alias was retired. Bump to gemini-2.5-flash on a paid key.
+    "IDENTITY_WINDOW": "2023-24_2025-26",   # the stored 3-year window the identity block reads
+    # Identity confidence from career games played (shrinkage: short sample -> hedged language).
+    "CONF_HIGH_GAMES": 250,
+    "CONF_MED_GAMES": 100,
+    # Durable-trait selection is a BAND, not a hard top-N: take the player's top impact dim as the
+    # anchor and keep every dim within DURABLE_BAND points of it (and not below DURABLE_FLOOR), so a
+    # value spread across several mid-high traits is described as a spread, not collapsed to one spike
+    # (and a characterizing trait is not dropped by a one-point percentile edge). EV impact (off/def)
+    # gets a small ordering bonus over special teams so the lead trait characterizes, not just ranks.
+    "DURABLE_BAND": 15,        # points below the anchor still counted as durable
+    "DURABLE_FLOOR": 60,       # never call a sub-median dim a durable strength
+    "DURABLE_EV_BONUS": 3,     # ordering nudge for EV (off/def) impact over special teams on near-ties
+    "DURABLE_MAX": 4,          # at most this many durable traits (there are only four impact dims)
+    # Horizon divergence: flag (neutrally) when current production outruns 3yr play-driving impact by
+    # at least this many percentile points (or vice versa). Never written as the model being "wrong".
+    "HORIZON_GAP_PTS": 20,
+    "TOP_TRAITS_N": 3,
+    "WATCH_OUTS_N": 2,
+    # Hard cap on the long read; a verdict exceeding this is regenerated, then dropped.
+    "MAX_SENTENCES": 4,
+    # Agreement between the two value lenses (production vs play-driving), in percentile points.
+    "AGREE_GAP_PTS": 15,
+    # Consistency checker tolerance: a cited number must match the payload value within this
+    # absolute tolerance (after both are normalised to the same unit, e.g. 0-100 percentiles).
+    "CHECK_TOL": 1.0,
+    "MAX_REGEN_ATTEMPTS": 2,   # regenerate once if the consistency check fails, then drop
 }

@@ -45,8 +45,9 @@ def main() -> None:
     archetypes = J.load_archetypes(bq, base_season)
     aging = J.load_aging(bq)
     ages = J.load_ages(bq, base_season)
-    base_mem = J.base_roster_membership(bq, base_season)
-    upd_mem = J.base_roster_membership(bq, next_s)          # ACTUAL 2025-26 rosters
+    floor = J.CFG["MIN_GAMES_ROSTER"]
+    base_mem = J.robust_roster_membership(bq, base_season, floor)
+    upd_mem = J.robust_roster_membership(bq, next_s, floor)   # robust 2025-26 roster
     trans = f"{base_season}->{next_s}"
     forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
                               aging, ages, archetypes, trans, "backtest")
