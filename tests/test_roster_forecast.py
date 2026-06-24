@@ -75,13 +75,13 @@ def test_departed_slot_filled_at_replacement_not_dropped():
 # ---------------------------------------------------------------- no-track-record: wide band, no point estimate
 def test_no_track_record_gets_replacement_and_wide_band():
     p = make_player_proj(555, "Rookie", "C", gar_rows={}, goalie_rows={},
-                         means={"F": {}, "D": {}}, aging={}, ages={}, archetypes={}, project_value=True)
+                         aging={}, ages={}, archetypes={}, project_value=True)
     assert p.no_track_record is True
     assert p.projected_war == CFG["REPLACEMENT_WAR"]              # replacement level, never fabricated
     assert p.war_sd == CFG["NO_TRACK_RECORD_WAR_SD"] >= 1.0       # deliberately wide band
     # a roster leaning on no-track value must carry a wider forecast band than a known roster
     known = _full_roster()
-    rookie_heavy = [make_player_proj(600 + i, f"R{i}", "C", {}, {}, {"F": {}, "D": {}}, {}, {}, {}, True)
+    rookie_heavy = [make_player_proj(600 + i, f"R{i}", "C", {}, {}, {}, {}, {}, True)
                     for i in range(CFG["N_FWD"])] + known[CFG["N_FWD"]:]
     assert forecast_band(rookie_heavy, n_moves=12) > forecast_band(known, n_moves=12)
 
@@ -99,14 +99,17 @@ def test_goalie_band_wider_than_skater_band():
 
 # ---------------------------------------------------------------- regression toward the stable lens
 def test_finishing_residual_is_shrunk_hardest():
-    # two identical skaters except one's production is all finishing luck (goals >> ixg)
-    means = {"sust": 1.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0}
+    # two skaters with equal ev_offense, but one's production is all finishing luck (goals >> ixg)
     lucky = {"ev_offense": 4.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
              "faceoff": 0.0, "goals": 4.0, "ixg": 1.0}     # 3.0 of finishing luck
     skilled = {"ev_offense": 4.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
-               "faceoff": 0.0, "goals": 1.0, "ixg": 4.0}   # negative finishing luck, sustainable
-    # the lucky finisher is shrunk further below the skilled one than their raw equality implies
-    assert shrink_skater_gar(lucky, means) < shrink_skater_gar(skilled, means)
+               "faceoff": 0.0, "goals": 1.0, "ixg": 4.0}   # sustainable, negative finishing luck
+    # the lucky finisher projects below the skilled one despite identical raw ev_offense
+    assert shrink_skater_gar(lucky) < shrink_skater_gar(skilled)
+    # and a depth player at ~replacement is NOT inflated above replacement by the shrink
+    scrub = {"ev_offense": 0.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
+             "faceoff": 0.0, "goals": 0.0, "ixg": 0.0}
+    assert abs(shrink_skater_gar(scrub)) < 1e-9
 
 
 def test_finishing_isolation_split():

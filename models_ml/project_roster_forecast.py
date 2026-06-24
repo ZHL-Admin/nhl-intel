@@ -62,21 +62,24 @@ def isolate_finishing(ev_offense: float, goals: float, ixg: float) -> tuple[floa
     return float(ev_offense) - fin, fin
 
 
-def shrink_skater_gar(row: dict, means: dict, cfg: dict = CFG) -> float:
+def shrink_skater_gar(row: dict, cfg: dict = CFG) -> float:
     """Regress a skater's GAR (goals) toward the repeatable lens — do NOT forecast off luck.
 
-    Each component is shrunk toward its position mean by its MEASURED reliability
-    (config.GAR_STABILITY_YOY, surfaced via cfg['SHRINK_R']); the finishing residual is shrunk
-    hardest toward 0; the tiny penalty/faceoff terms pass through. Returns shrunk GAR in goals.
+    Each component is value ABOVE REPLACEMENT, so we keep the REPEATABLE FRACTION of it: the
+    projected component = its MEASURED reliability (config.GAR_STABILITY_YOY, via cfg['SHRINK_R'])
+    times the observed value, i.e. regressed toward replacement (0). The finishing residual
+    (goals - ixg; its mean is ~0) is shrunk hardest; the tiny penalty/faceoff terms pass through.
+    This leans on the repeatable parts without INFLATING depth players toward a positive pool mean.
+    Returns shrunk GAR in goals.
     """
     r = cfg["SHRINK_R"]
     sust, fin = isolate_finishing(row["ev_offense"], row["goals"], row["ixg"])
     shrunk = (
-        means["sust"] + r["ev_offense"] * (sust - means["sust"])      # sustainable production
-        + r["finishing"] * fin                                        # finishing residual -> toward 0
-        + means["pp"] + r["pp"] * (row["pp"] - means["pp"])           # power play
-        + means["ev_defense"] + r["ev_defense"] * (row["ev_defense"] - means["ev_defense"])
-        + means["pk"] + r["pk"] * (row["pk"] - means["pk"])
+        r["ev_offense"] * sust       # sustainable production, repeatable fraction
+        + r["finishing"] * fin       # finishing residual, shrunk hardest (toward its ~0 mean)
+        + r["pp"] * row["pp"]
+        + r["ev_defense"] * row["ev_defense"]
+        + r["pk"] * row["pk"]
     )
     shrunk += sum(float(row.get(k, 0.0)) for k in cfg["SHRINK_PASSTHROUGH"])
     return shrunk
@@ -98,9 +101,9 @@ def age_multiplier(curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
     return float(min(cfg["AGE_MULT_CEIL"], max(cfg["AGE_MULT_FLOOR"], a1 / a0)))
 
 
-def project_skater(row: dict, means: dict, curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
+def project_skater(row: dict, curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
     """Skater projected WAR = (shrunk GAR / goals-per-win) * aging multiplier."""
-    return (shrink_skater_gar(row, means, cfg) / cfg["GOALS_PER_WIN"]) * age_multiplier(curve_by_age, age_t, cfg)
+    return (shrink_skater_gar(row, cfg) / cfg["GOALS_PER_WIN"]) * age_multiplier(curve_by_age, age_t, cfg)
 
 
 def build_lineup(players: list[PlayerProj], n_slots: int, value_attr: str,
@@ -348,35 +351,22 @@ def load_team_ratings(bq, season: str) -> dict:
     return out
 
 
-def load_skater_gar(bq, window: str) -> tuple[dict, dict]:
-    """player_id -> gar row (for the given season_window), plus per-pos-group component means used by
-    the reliability shrink (computed over non-replacement skaters only)."""
+def load_skater_gar(bq, window: str) -> dict:
+    """player_id -> gar row for the given season_window (the reliability shrink regresses each
+    above-replacement component toward 0, so no position means are needed)."""
     sql = f"""
     SELECT player_id, position, gar, war, gar_sd, war_sd, ev_offense, pp, ev_defense, pk,
            penalty, faceoff, goals, ixg, is_replacement
     FROM {bq.models('player_gar')} WHERE season_window = '{window}'
     """
-    df = bq.query_df(sql)
     rows = {}
-    for _, x in df.iterrows():
+    for _, x in bq.query_df(sql).iterrows():
         d = {k: (float(x[k]) if x[k] is not None else 0.0) for k in
              ("gar", "war", "gar_sd", "war_sd", "ev_offense", "pp", "ev_defense", "pk",
               "penalty", "faceoff", "goals", "ixg")}
         d["position"] = str(x.position)
-        d["is_replacement"] = bool(x.is_replacement)
         rows[int(x.player_id)] = d
-    means = {}
-    for pg, poss in (("F", {"C", "L", "R"}), ("D", {"D"})):
-        pool = [d for d in rows.values() if d["position"] in poss and not d["is_replacement"]]
-        if not pool:
-            means[pg] = {"sust": 0.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0}
-            continue
-        susts = [isolate_finishing(d["ev_offense"], d["goals"], d["ixg"])[0] for d in pool]
-        means[pg] = {"sust": sum(susts) / len(pool),
-                     "pp": sum(d["pp"] for d in pool) / len(pool),
-                     "ev_defense": sum(d["ev_defense"] for d in pool) / len(pool),
-                     "pk": sum(d["pk"] for d in pool) / len(pool)}
-    return rows, means
+    return rows
 
 
 def load_goalie_gar(bq, window: str) -> dict:
@@ -415,6 +405,19 @@ def load_ages(bq, season: str) -> dict:
             if x.birth_year is not None}
 
 
+def load_player_names(bq) -> dict:
+    """player_id -> 'First Last' from the latest game a player dressed (covers base-roster departures
+    and updated players resolved via the game fallback, who carry no live-snapshot name)."""
+    sql = f"""
+    SELECT player_id, name FROM (
+        SELECT player_id, first_name || ' ' || last_name AS name,
+               ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_id DESC) AS rn
+        FROM {bq.staging('stg_rosters')} WHERE {GAME_TYPE_FILTER}
+    ) WHERE rn = 1
+    """
+    return {int(x.player_id): x["name"] for _, x in bq.query_df(sql).iterrows() if x["name"]}
+
+
 def base_roster_membership(bq, season: str) -> dict:
     """Prior season-end membership: latest game that season per player -> (team_id, position)."""
     sql = f"""
@@ -444,9 +447,10 @@ def updated_roster_membership(bq) -> dict:
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
+        # NB: x["name"] is the COLUMN; x.name would be the Series index label (a classic trap).
         out.setdefault(int(x.team_id), []).append({"player_id": int(x.player_id),
                                                     "position": str(x.position_code) or "F",
-                                                    "name": x.name or None})
+                                                    "name": x["name"] or None})
     return out
 
 
@@ -456,7 +460,7 @@ def _pos_group(position: str) -> str:
     return "D" if position == "D" else "F"
 
 
-def make_player_proj(pid, name, position, gar_rows, goalie_rows, means, aging, ages,
+def make_player_proj(pid, name, position, gar_rows, goalie_rows, aging, ages,
                      archetypes, project_value: bool, cfg=CFG) -> PlayerProj:
     """Build a PlayerProj. project_value=False -> base_war only (this-season realized); True -> also
     fill projected_war (skater = shrunk+aged; goalie = carried through). A player with no GAR row is
@@ -479,7 +483,7 @@ def make_player_proj(pid, name, position, gar_rows, goalie_rows, means, aging, a
     if project_value:
         arch = (archetypes.get(pid) or {}).get("archetype") or cfg["AGE_CURVE_FALLBACK"][pg]
         curve = aging.get(arch) or aging.get(cfg["AGE_CURVE_FALLBACK"][pg]) or {}
-        proj = project_skater(row, means[pg], curve, ages.get(pid), cfg)
+        proj = project_skater(row, curve, ages.get(pid), cfg)
     return PlayerProj(pid, name, position, pg, False, base_war, proj, row["war_sd"], False)
 
 
@@ -506,7 +510,7 @@ def main() -> None:
 
     window = value_season_window(bq, base_season)
     ratings = load_team_ratings(bq, base_season)
-    gar_rows, means = load_skater_gar(bq, window)
+    gar_rows = load_skater_gar(bq, window)
     goalie_rows = load_goalie_gar(bq, window)
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
@@ -515,7 +519,7 @@ def main() -> None:
     # Backtest UPDATED = actual next-season game-derived rosters; live UPDATED = current membership.
     upd_mem = base_roster_membership(bq, next_season(base_season)) if args.backtest else updated_roster_membership(bq)
 
-    forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means,
+    forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
                                     aging, ages, archetypes, trans, run_id, sample=args.sample)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
@@ -528,12 +532,11 @@ def main() -> None:
     _write_tables(bq, forecasts, move_rows)
 
 
-def _projected_players(team_id, mem, gar_rows, goalie_rows, means, aging, ages, archetypes,
-                       project_value):
+def _projected_players(team_id, mem, gar_rows, goalie_rows, aging, ages, archetypes, project_value):
     out = []
     for m in mem.get(team_id, []):
         out.append(make_player_proj(m["player_id"], m.get("name"), m["position"], gar_rows,
-                                    goalie_rows, means, aging, ages, archetypes, project_value))
+                                    goalie_rows, aging, ages, archetypes, project_value))
     return out
 
 
@@ -594,9 +597,10 @@ def _style_note(bq, team_id, upd_lineup, season):
     return ""
 
 
-def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means, aging, ages, archetypes,
+def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, aging, ages, archetypes,
              trans, run_id, sample=None):
     scored_at = datetime.now(timezone.utc).isoformat()
+    names = load_player_names(bq)
     team_ids = sorted(set(base_mem) | set(upd_mem))
     if sample:
         abbr_to_id = _abbrev_to_team_id(bq)
@@ -606,9 +610,9 @@ def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means, aging
     for tid in team_ids:
         if tid not in ratings:
             continue
-        base_players = _projected_players(tid, base_mem, gar_rows, goalie_rows, means, aging, ages,
+        base_players = _projected_players(tid, base_mem, gar_rows, goalie_rows, aging, ages,
                                           archetypes, project_value=True)
-        upd_players = _projected_players(tid, upd_mem, gar_rows, goalie_rows, means, aging, ages,
+        upd_players = _projected_players(tid, upd_mem, gar_rows, goalie_rows, aging, ages,
                                          archetypes, project_value=True)
         rc = ratings[tid]
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
@@ -621,6 +625,8 @@ def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means, aging
         f.update({"team_id": tid, "transition": trans, "model_version": CFG["MODEL_VERSION"],
                   "scored_at": scored_at, "xgf_share_delta": None if chem_delta is None else round(chem_delta, 4)})
         for mr in f.pop("ledger"):
+            if not mr.get("name") and mr.get("player_id"):
+                mr["name"] = names.get(mr["player_id"])
             mr.update({"team_id": tid, "transition": trans, "model_version": CFG["MODEL_VERSION"],
                        "scored_at": scored_at})
             move_rows.append(mr)

@@ -40,7 +40,7 @@ def main() -> None:
     # Projected: run the same pipeline the job runs under --backtest (updated = actual next rosters).
     window = J.value_season_window(bq, base_season)
     ratings = J.load_team_ratings(bq, base_season)
-    gar_rows, means = J.load_skater_gar(bq, window)
+    gar_rows = J.load_skater_gar(bq, window)
     goalie_rows = J.load_goalie_gar(bq, window)
     archetypes = J.load_archetypes(bq, base_season)
     aging = J.load_aging(bq)
@@ -48,7 +48,7 @@ def main() -> None:
     base_mem = J.base_roster_membership(bq, base_season)
     upd_mem = J.base_roster_membership(bq, next_s)          # ACTUAL 2025-26 rosters
     trans = f"{base_season}->{next_s}"
-    forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, means,
+    forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
                               aging, ages, archetypes, trans, "backtest")
     J._rank_and_finalize(forecasts)
 
