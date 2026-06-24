@@ -79,7 +79,8 @@
 .plineup__grid--fwd { grid-template-columns: repeat(4, 1fr); }
 .plineup__grid--def { grid-template-columns: repeat(3, 1fr); }
 .plineup__grid--goalie { grid-template-columns: repeat(2, 1fr); max-width: 560px; }
-.lcard { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: var(--space-3); }
+/* inset panel (the section is the card; these are sub-units, not nested cards) */
+.lcard { background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); padding: var(--space-3); }
 .lcard__head { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
 .lslot { padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
 .lslot:last-child { border-bottom: none; }
@@ -116,7 +117,7 @@
 .oltable__pill--rebuild { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
 
 /* --- quiet state --- */
-.qstate { display: flex; gap: var(--space-4); align-items: flex-start; background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); padding: var(--space-5); }
+.qstate { display: flex; gap: var(--space-4); align-items: flex-start; background: var(--color-bg-elevated); border-radius: var(--radius-md); padding: var(--space-4); }
 .qstate__icon { color: var(--color-text-muted); flex-shrink: 0; }
 .qstate__head { font-size: var(--text-base); font-weight: 600; margin: 0 0 var(--space-1); color: var(--color-text-primary); }
 .qstate__text { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0; line-height: 1.5; max-width: 60ch; }

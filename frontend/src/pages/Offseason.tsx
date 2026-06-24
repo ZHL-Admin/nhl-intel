@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Pencil, Info } from 'lucide-react'
-import { PageLayout, Tabs, Select, SkeletonLoader } from '../components/common'
+import { Info } from 'lucide-react'
+import { PageLayout, PageHeader, Tabs, Select, SkeletonLoader } from '../components/common'
 import { getOffseasonBoard, getTeamOffseason } from '../api/offseason'
 import { RosterForecastRow, OffseasonTeamDetail } from '../api/types'
 import {
@@ -144,17 +144,19 @@ export default function Offseason() {
   return (
     <PageLayout>
       <div className="off">
-        <div className="off__head">
-          <div>
-            <h1 className="off__title mono">Offseason Forecast</h1>
-            <p className="off__desc">
-              How good each team projects next season from the moves it has made — value over last
-              season's roster, with the model's honest uncertainty shown throughout.
-            </p>
+        <PageHeader
+          title="Offseason Forecast"
+          subtitle="How good each team projects next season from the moves it has made — value over last season's roster, with honest uncertainty shown throughout."
+        >
+          <div className="off__toolbar">
+            <Tabs value={view} onChange={setView}
+              options={[{ value: 'team', label: 'Team' }, { value: 'league', label: 'League' }]} />
+            {view === 'team' && selected && (
+              <Select ariaLabel="Choose team" value={String(selected.team_id)} options={teamOptions}
+                onChange={(v) => selectTeam(Number(v), true)} />
+            )}
           </div>
-          <Tabs value={view} onChange={setView}
-            options={[{ value: 'team', label: 'Team' }, { value: 'league', label: 'League' }]} />
-        </div>
+        </PageHeader>
 
         {boardErr && <p className="off-msg">The offseason forecast is unavailable right now.</p>}
         {!board && !boardErr && <SkeletonLoader height={360} />}
@@ -163,21 +165,15 @@ export default function Offseason() {
           <>
             <header className="fid">
               <span className="fid__wash" aria-hidden />
-              <div className="fid__row">
+              <div className="fid__identity">
                 <img className="fid__logo" src={getTeamLogoUrl(selected.team_abbrev ?? '')} alt="" aria-hidden />
-                <span className="fid__name">{getTeamName(selected.team_abbrev ?? '')}</span>
-                <span className="fid__pick">
-                  <Select ariaLabel="Choose team" value={String(selected.team_id)} options={teamOptions}
-                    onChange={(v) => selectTeam(Number(v), true)} />
-                </span>
-                <button className="fid__edit" onClick={() => { /* TODO: wire to move-entry flow when it exists */ }}>
-                  <Pencil size={14} /> Edit moves
-                </button>
+                <div className="fid__idtext">
+                  <span className="fid__name">{getTeamName(selected.team_abbrev ?? '')}</span>
+                  <p className="fid__context">
+                    Projected for {nextSeasonOf(selected.transition)} · {selected.n_moves} move{selected.n_moves === 1 ? '' : 's'} logged · updated today
+                  </p>
+                </div>
               </div>
-              <p className="fid__context">
-                Projected for {nextSeasonOf(selected.transition)} · {selected.n_moves} move{selected.n_moves === 1 ? '' : 's'} logged · updated today
-              </p>
-              <div className="fid__divider" />
               <ForecastHeroStats f={selected} />
             </header>
 

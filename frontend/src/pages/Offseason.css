@@ -4,21 +4,23 @@
   padding: var(--space-10) var(--space-8) var(--space-20);
 }
 
-/* page head */
-.off__head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--space-6); margin-bottom: var(--space-8); }
-.off__title { font-size: var(--text-2xl); font-weight: 600; margin: 0; color: var(--color-text-primary); }
-.off__desc { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-2) 0 0; max-width: 52ch; line-height: 1.5; }
+/* page header controls (inside the shared PageHeader card) */
+.off__toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 
-/* 4.0 identity header */
+/* 4.0 identity header — team identity on the left, the four hero stats on the right */
 .fid {
   position: relative;
   overflow: hidden;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-8);
+  align-items: center;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
   padding: var(--space-6) var(--space-8);
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-6);
 }
 .fid__wash {
   position: absolute;
@@ -27,20 +29,26 @@
   pointer-events: none;
 }
 .fid > *:not(.fid__wash) { position: relative; z-index: 1; }
-.fid__row { display: flex; align-items: center; gap: var(--space-4); }
-.fid__logo { width: 46px; height: 46px; object-fit: contain; }
-.fid__name { font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); }
-.fid__pick { margin-left: var(--space-1); }
-.fid__edit { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-text-secondary); background: none; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); cursor: pointer; }
-.fid__edit:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
-.fid__context { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-3) 0 0; }
-.fid__divider { border-top: 1px solid var(--color-border-subtle); margin-top: var(--space-6); padding-top: var(--space-6); }
+.fid__identity { display: flex; align-items: center; gap: var(--space-4); padding-right: var(--space-8); border-right: 1px solid var(--color-border-subtle); }
+.fid__logo { width: 56px; height: 56px; object-fit: contain; flex-shrink: 0; }
+.fid__idtext { display: flex; flex-direction: column; gap: var(--space-1); }
+.fid__name { font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); line-height: 1.15; }
+.fid__context { font-size: var(--text-xs); color: var(--color-text-secondary); margin: 0; }
 
 /* team grid */
 .off-grid { display: grid; grid-template-columns: 268px 1fr; gap: var(--space-10); align-items: start; }
 .off-grid__rail { position: sticky; top: 72px; align-self: start; }
 .off-grid__detail { min-width: 0; }
-.off-detail { display: flex; flex-direction: column; gap: var(--space-16); }
+.off-detail { display: flex; flex-direction: column; gap: var(--space-6); }
+
+/* each numbered section is its own card */
+.sec {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-6);
+}
 
 /* 4.2 verdict */
 .verdict__lead { font-size: var(--text-xl); font-weight: 500; line-height: 1.45; margin: 0; max-width: 62ch; color: var(--color-text-primary); }
@@ -64,6 +72,8 @@
 /* responsive */
 @media (max-width: 960px) {
   .off { padding: var(--space-8) var(--space-5) var(--space-16); }
+  .fid { grid-template-columns: 1fr; gap: var(--space-5); }
+  .fid__identity { border-right: none; border-bottom: 1px solid var(--color-border-subtle); padding-right: 0; padding-bottom: var(--space-4); }
   .off-grid { grid-template-columns: 1fr; gap: var(--space-8); }
   .off-grid__rail { position: static; order: 2; }
   .off-grid__rail .lrail__card { max-height: none; overflow-y: visible; }
@@ -71,5 +81,5 @@
   .off-detail { gap: var(--space-10); }
 }
 @media (max-width: 640px) {
-  .off__head { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+  .off__toolbar { flex-direction: column; align-items: stretch; }
 }

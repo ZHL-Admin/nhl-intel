@@ -2,7 +2,7 @@
   position: relative;
   display: block;
   width: 100%;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-base);
   border-radius: 999px;
   overflow: visible;
 }
