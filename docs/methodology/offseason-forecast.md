@@ -46,13 +46,18 @@ official full-season roster source (per-season `/roster/{TEAM}/{season8}`) is th
 upgrade to cover it.
 
 ### Forward-looking transition (the UPCOMING offseason)
-The live view always targets the upcoming offseason: BASE = latest completed season's END roster,
-UPDATED = the NEXT season's OPENING roster from the live published feed. Today that is
-`2025-26 -> 2026-27`. Until NHL publishes next-season rosters (pre-July, before free agency) the live
-feed still shows the latest completed season, so UPDATED == BASE and every team correctly reads "no
-moves logged yet" — the board shows current projected standings and each team's ledger fills in
-automatically as signings/trades land and NHL publishes them. (No-move teams skip the line-fit/style
-overlays, so that whole-league empty state is cheap to compute.)
+The live view always targets the upcoming offseason: BASE = latest completed season's END roster
+(robust, game-derived), UPDATED = the CURRENT roster from the live published feed
+(`offseason_updated_membership`). Today that is `2025-26 -> 2026-27`.
+
+The live feed is refreshed daily and reflects offseason signings and trades AS THEY HAPPEN, even
+while it is still labelled the prior season (NHL rolls the season label later) — so we read team
+membership from it directly rather than gating on its label. Each player's UPDATED team is his live
+team if he is on a published roster, else his base-season END team (a fallback so AHL/unsigned
+holdovers do not falsely depart); the universe is (live ∪ base), which excludes stale fallback-only
+players. A player only counts as moved when actively on a different club's live roster. The ledger
+therefore grows through the summer as moves land; before the first move a team reads "no moves logged
+yet", and no-move teams skip the line-fit/style overlays so they are cheap to compute.
 
 The `--backtest` path is the only one that targets a COMPLETED offseason — `2024-25 END -> 2025-26
 OPENING` — purely to measure calibration against what actually happened.
