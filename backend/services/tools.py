@@ -51,7 +51,12 @@ def search_players(q: str, limit: int = 20, season: Optional[str] = None) -> lis
         } for r in rows]
 
     rosters = bq_service.get_full_table_id("stg_rosters")
+    roster_current = bq_service.get_full_table_id("stg_roster_current")
+    cur_team = bq_service.get_full_table_id("int_player_current_team")
     arch = bq_service.get_models_table_id("player_archetypes")
+    # Membership comes from the live-roster-first resolution (int_player_current_team): a
+    # traded player shows his NEW team before he dresses. Identity (name/pos/headshot) prefers
+    # the live roster too, falling back to the latest game for anyone not on a live roster.
     sql = f"""
     WITH latest AS (
         SELECT player_id,
@@ -60,14 +65,26 @@ def search_players(q: str, limit: int = 20, season: Optional[str] = None) -> lis
         FROM {rosters}
         WHERE season = @season AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
         GROUP BY player_id
-    )
-    SELECT l.player_id, l.r.first_name AS first_name, l.r.last_name AS last_name,
-           l.r.team_id AS team_id, l.r.position_code AS position,
-           l.r.headshot_url AS headshot_url, a.primary_archetype AS archetype
+    ),
+    live AS (
+        SELECT player_id, team_id, first_name, last_name, position_code, headshot_url
+        FROM {roster_current}
+    ),
+    res AS (SELECT player_id, current_team_id FROM {cur_team})
+    SELECT l.player_id,
+           COALESCE(live.first_name, l.r.first_name) AS first_name,
+           COALESCE(live.last_name, l.r.last_name) AS last_name,
+           COALESCE(res.current_team_id, l.r.team_id) AS team_id,
+           COALESCE(live.position_code, l.r.position_code) AS position,
+           COALESCE(live.headshot_url, l.r.headshot_url) AS headshot_url,
+           a.primary_archetype AS archetype
     FROM latest l
+    LEFT JOIN live ON live.player_id = l.player_id
+    LEFT JOIN res ON res.player_id = l.player_id
     LEFT JOIN {arch} a ON a.player_id = l.player_id AND a.season = @season
-    WHERE LOWER(l.r.first_name || ' ' || l.r.last_name) LIKE LOWER(@like)
-    ORDER BY l.r.last_name, l.r.first_name
+    WHERE LOWER(COALESCE(live.first_name, l.r.first_name) || ' ' ||
+                COALESCE(live.last_name, l.r.last_name)) LIKE LOWER(@like)
+    ORDER BY COALESCE(live.last_name, l.r.last_name), COALESCE(live.first_name, l.r.first_name)
     LIMIT {int(limit)}
     """
     rows = bq_service.query(sql, params=[

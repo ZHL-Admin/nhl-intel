@@ -27,9 +27,11 @@ players as (
         v.player_id,
         coalesce(n.name, cast(v.player_id as string))        as label,
         c.contract_team                                      as org_team,
-        -- actual listed position (e.g. "C/LW", "RD") not just the F/D group, for exploration
+        -- actual listed position (e.g. "C/LW", "RD") not just the F/D group, for exploration; a
+        -- pending RFA (expired deal, team still holds his rights) is tagged so the picker shows it
         replace(coalesce(c.contract_pos, v.pos_group), ', ', '/') || ' · '
-          || cast(v.age as string) || 'y'                   as pos_or_slot,
+          || cast(v.age as string) || 'y'
+          || case when c.contract_status = 'rfa_projected' then ' · RFA' else '' end as pos_or_slot,
         -- talent axis (value + band, WAR and dollars)
         v.value_war, v.value_war_low, v.value_war_high,
         v.value_dollars, v.value_dollars_low, v.value_dollars_high,
@@ -39,10 +41,25 @@ players as (
         v.total_discounted_surplus                           as surplus_dollars,
         v.surplus_low, v.surplus_high,
         v.total_discounted_surplus_share                     as surplus_capshare,
+        -- TERM-NORMALIZED per-year rate = mean of each year's surplus as a share of THAT year's cap.
+        -- The board SORT KEY: ranks value density, not term length (cumulative surplus_capshare above
+        -- is kept as the displayed magnitude). Computed from the per-year schedule, not re-modelled.
+        (select avg(cast(json_value(e, '$.surplus_share') as float64))
+           from unnest(json_extract_array(v.cap_share_schedule)) as e) as surplus_capshare_per_year,
         v.surplus_share_low                                  as surplus_capshare_low,
         v.surplus_share_high                                 as surplus_capshare_high,
+        v.cap_growth_surplus,                                -- how much of the surplus is cap growth
         v.confidence,
-        cast(null as string)                                 as note
+        case when c.contract_status = 'rfa_projected'
+             then 'Pending RFA — ' || coalesce(c.contract_team, 'his team')
+                  || ' holds his rights; cost is the projected next deal ($'
+                  || cast(cast(round(c.cap_hit / 1e6, 1) as numeric) as string) || 'M x '
+                  || cast(c.term_years as string) || 'y), QO $'
+                  || cast(cast(round(c.qo / 1e6, 2) as numeric) as string) || 'M'
+             else cast(null as string) end                   as note,
+        -- 'signed' | 'rfa_projected' — lets the surplus/contract leaderboards drop projected RFA deals
+        -- (a projected next deal is not a signed contract) while the asset layer still carries them
+        c.contract_status
     from {{ source('nhl_models', 'player_contract_value') }} v
     left join {{ ref('mart_player_contracts') }} c
         on v.player_id = c.player_id and v.as_of_date = c.as_of_date
@@ -61,9 +78,12 @@ prospects as (
         f.value_dollars_high as surplus_high,
         -- futures carry ~no cap cost, so their cap-share surplus is a NOMINAL value/cap (2025-26 cap)
         f.surplus_dollars    / 95500000.0 as surplus_capshare,
+        cast(null as float64)              as surplus_capshare_per_year,
         f.value_dollars_low  / 95500000.0 as surplus_capshare_low,
         f.value_dollars_high / 95500000.0 as surplus_capshare_high,
-        f.confidence, f.ownership_note as note
+        cast(null as int64) as cap_growth_surplus,
+        f.confidence, f.ownership_note as note,
+        cast(null as string) as contract_status
     from {{ source('nhl_models', 'futures_value') }} f
     where f.asset_kind = 'prospect'
       -- dedup: drop prospects already represented as a rostered player (contract value wins)
@@ -81,9 +101,12 @@ picks as (
         f.value_dollars_low  as surplus_low,
         f.value_dollars_high as surplus_high,
         f.surplus_dollars    / 95500000.0 as surplus_capshare,
+        cast(null as float64)              as surplus_capshare_per_year,
         f.value_dollars_low  / 95500000.0 as surplus_capshare_low,
         f.value_dollars_high / 95500000.0 as surplus_capshare_high,
-        f.confidence, f.ownership_note as note
+        cast(null as int64) as cap_growth_surplus,
+        f.confidence, f.ownership_note as note,
+        cast(null as string) as contract_status
     from {{ source('nhl_models', 'futures_value') }} f
     where f.asset_kind = 'pick'
 )

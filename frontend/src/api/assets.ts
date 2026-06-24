@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { TradeableAsset, PlayerContract, TradeEvaluateRequest, TradeEvaluateResponse } from './types'
+import { TradeableAsset, PlayerContract, TradeEvaluateRequest, TradeEvaluateResponse, ContractGrade } from './types'
 
 /**
  * Trade tool access layer (P7). Searches the unified tradeable-asset layer (players, prospects,
@@ -21,6 +21,14 @@ export async function searchAssets(
 /** A player's parsed contract and present-valued surplus (with a confidence band). */
 export async function getPlayerContract(playerId: number): Promise<PlayerContract> {
   const r = await apiClient.get<PlayerContract>(`/players/${playerId}/contract`)
+  return r.data
+}
+
+/** Grade an actual or hypothetical contract (player + cap hit + term) as A–F good/fair/bad. */
+export async function gradeContract(
+  player_id: number, cap_hit: number, term_years: number, season?: string,
+): Promise<ContractGrade> {
+  const r = await apiClient.post<ContractGrade>('/tools/contract-grade', { player_id, cap_hit, term_years, season })
   return r.data
 }
 

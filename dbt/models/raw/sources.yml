@@ -125,6 +125,20 @@ sources:
           - name: confidence
             description: high (direct name match / override) or medium (surname-tier)
 
+      - name: rfa_player_map
+        description: >
+          Pending-RFA -> canonical player_id resolution (scripts/match_rfas.py). The RFA feed has
+          no team, so this is a TEAM-LESS match (unique name / name+pos / name+age). One row per
+          matched (player_name_src, season, as_of_date). Minor-league RFAs with no NHL game are
+          absent (correctly, like prospects).
+        columns:
+          - name: player_name_src
+            description: Source RFA name ("Last, First"), the join key back to raw_contracts_rfa
+          - name: player_id
+            description: Canonical NHL player id used across the marts
+          - name: confidence
+            description: high (unique name / name+pos / override) or medium (surname-tier)
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw
@@ -319,6 +333,27 @@ sources:
           - name: season
             description: Season STRING the snapshot belongs to (e.g. "2025-26")
 
+      - name: raw_contracts_rfa
+        description: >
+          Pending-RFA snapshot (scripts/load_rfas.py). A SEPARATE feed from raw_contracts with a
+          DIFFERENT schema: an RFA's deal has expired, so there are no signed terms — instead the
+          source carries the PROJECTED next deal (proj_cap / proj_term), the qualifying offer (qo),
+          and last-season stats (gp, toi, points). NO team column (derived downstream from the
+          player's latest NHL game). Source-faithful strings; parsed in stg_contracts_rfa.
+        columns:
+          - name: player_name_src
+            description: RFA name as scraped ("Last, First")
+          - name: proj_cap
+            description: Projected next-contract AAV as a dollar string ("$3,082,778")
+          - name: proj_term
+            description: Projected next-contract term ("2 yrs")
+          - name: qo
+            description: Qualifying-offer amount as a dollar string (the floor to retain rights)
+          - name: as_of_date
+            description: Snapshot date (DATE)
+          - name: season
+            description: Season STRING the snapshot belongs to (e.g. "2025-26")
+
       - name: raw_prospects
         description: >
           Org prospect lists (Trade tool P5; scripts/ingest_futures.py -> /v1/prospects/{TEAM}).
@@ -371,3 +406,28 @@ sources:
           - name: frame_count
             description: Number of frames in the sprite
           - name: ingestion_date
+
+      - name: raw_rosters
+        description: >
+          LIVE team rosters (membership feed; scripts/refresh_rosters.py ->
+          api-web /v1/roster/{TEAM}/{season8}, resolved as max(/roster-season)). One row per
+          (team_abbrev, ingestion_date). The forwards/defensemen/goalies arrays are serialized
+          JSON strings (locale name objects drift per player), parsed by stg_roster_current.
+          This fixes a player's CURRENT TEAM LABEL before he dresses for a game; it does NOT
+          update performance (a just-traded player keeps old-team value until he plays). Daily
+          appends stack snapshots; stg_roster_current keeps the newest ingestion per player.
+        columns:
+          - name: team_abbrev
+            description: Team abbreviation this roster belongs to (implied by the per-team endpoint)
+          - name: season8
+            description: Resolved 8-digit season the roster is for (e.g. 20252026)
+          - name: season
+            description: Human season string "YYYY-YY" of the resolved roster (loader-added)
+          - name: forwards
+            description: Serialized JSON array of forward player objects (id, name, positionCode, ...)
+          - name: defensemen
+            description: Serialized JSON array of defenseman player objects
+          - name: goalies
+            description: Serialized JSON array of goalie player objects
+          - name: ingestion_date
+            description: Date the roster snapshot was ingested (newest wins in stg_roster_current)

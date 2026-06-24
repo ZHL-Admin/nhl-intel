@@ -1,0 +1,14 @@
+.form-strip { display: inline-flex; align-items: center; gap: var(--space-3); }
+.form-strip__pips { display: inline-flex; gap: 3px; }
+.form-strip__pip { display: inline-block; border-radius: 2px; opacity: 0.85; }
+.form-strip--md .form-strip__pip { width: 12px; height: 12px; }
+.form-strip--sm .form-strip__pip { width: 9px; height: 9px; }
+.form-strip__pip--w { background: var(--color-success); }
+.form-strip__pip--l { background: var(--color-danger); }
+.form-strip__pip--otl { background: var(--color-warning); }
+.form-strip__record {
+  font-family: var(--font-mono); color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.form-strip--md .form-strip__record { font-size: var(--text-sm); }
+.form-strip--sm .form-strip__record { font-size: var(--text-xs); }

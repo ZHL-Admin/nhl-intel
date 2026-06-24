@@ -489,6 +489,27 @@ models:
         description: Snapshot date
         tests: [not_null]
 
+  - name: stg_roster_current
+    description: >
+      Live team-roster membership (NOT game-derived): one row per player on a team's current
+      roster, newest ingestion snapshot per player. Source nhl_raw.raw_rosters. Fixes the team
+      LABEL before a player dresses; performance is unaffected until he plays.
+    columns:
+      - name: player_id
+        description: Canonical NHL player id
+        tests:
+          - not_null
+          - unique
+      - name: team_id
+        description: Current team id (resolved from team_abbrev via mart_team_game_stats)
+      - name: team_abbrev
+        description: Current team abbreviation (from the per-team roster endpoint)
+      - name: pos_group
+        description: Position group F/D/G (which roster array the player came from)
+        tests:
+          - accepted_values:
+              values: ['F', 'D', 'G']
+
   - name: stg_draft_picks
     description: >
       Future draft picks as tradeable assets (Trade tool P5), one row per (owner_team, draft_year,

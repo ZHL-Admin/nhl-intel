@@ -187,7 +187,12 @@ export interface TeamDetail {
   hdca_per60_rank: number
   gf_per_gp_rank: number
   ga_per_gp_rank: number
+  xga_per60_rank?: number | null
   zone_entry_proxy_success_rate_rank: number | null
+  // Standings context (Overview header)
+  division?: string | null
+  conference?: string | null
+  division_rank?: number | null
   // Zone time percentages
   oz_pct?: number | null
   nz_pct?: number | null
@@ -197,6 +202,81 @@ export interface TeamDetail {
   oz_faceoff_win_pct?: number | null
   nz_faceoff_win_pct?: number | null
   dz_faceoff_win_pct?: number | null
+}
+
+/** One team's current standings line (latest stg_standings). League-wide; sliced by division. */
+export interface StandingsRow {
+  team_id?: number | null
+  team_abbrev: string
+  team_name?: string | null
+  division?: string | null
+  conference?: string | null
+  division_rank?: number | null
+  conference_rank?: number | null
+  wildcard_rank?: number | null
+  games_played: number
+  wins: number
+  losses: number
+  otl: number
+  points: number
+}
+
+/** One generated Overview quick-insight card (engine copy; key = category for cold-strip dedup). */
+export interface TeamInsight {
+  key: string
+  tone: 'positive' | 'neutral' | 'caution'
+  icon: string
+  title: string
+  body: string
+}
+
+// --- Playoff bracket predictor ---
+export interface PlayoffTeamRef {
+  team_id?: number | null
+  abbrev: string
+}
+export interface PlayoffSeries {
+  round: number
+  round_label: string
+  conference?: string | null
+  high: PlayoffTeamRef
+  low: PlayoffTeamRef
+  high_rating: number
+  low_rating: number
+  high_seed_winprob: number
+  high_seed_winprob_lo: number
+  high_seed_winprob_hi: number
+  favorite: string
+  favorite_winprob: number
+  winner: string
+  coin_flip: boolean
+  style_modifier: number
+  recent_form_modifier: number
+  style_reasons: string[]
+}
+export interface PlayoffOdds {
+  team_id?: number | null
+  abbrev: string
+  reach_round2: number
+  reach_conf_final: number
+  reach_final: number
+  win_cup: number
+}
+export interface PlayoffPairwise {
+  a: string
+  b: string
+  a_winprob: number
+  higher_seed: string
+}
+export interface PlayoffBracket {
+  season: string
+  as_of_date: string
+  league_avg_goals: number
+  rounds: PlayoffSeries[][]
+  champion: PlayoffTeamRef
+  champion_winprob: number
+  odds: PlayoffOdds[]
+  pairwise: PlayoffPairwise[]
 }
 
 export interface TeamTrendPoint {
@@ -289,6 +369,14 @@ export interface PlayerDetail {
   composite_components?: CompositeComponent[]
   archetypes?: ArchetypeWeight[]
   primary_archetype?: string | null
+  // within-position display ranks for the six snapshot rate stats (1 = best); rank_pool = pool size
+  rank_pool?: number | null
+  toi_rank?: number | null
+  points_per60_rank?: number | null
+  goals_per60_rank?: number | null
+  assists_per60_rank?: number | null
+  cf_pct_rank?: number | null
+  hdcf_per60_rank?: number | null
   value?: PlayerValue | null
 }
 
@@ -302,6 +390,25 @@ export interface OverallComponent {
   key: string
   label: string
   percentile?: number | null
+}
+/** A position-scoped total-value (WAR) window around a player, for the player-page header module. */
+export interface ValueNeighbor {
+  rank: number
+  player_id: number
+  player_name?: string | null
+  team_abbrev?: string | null
+  war: number
+  is_current: boolean
+}
+export interface ValueNeighborhood {
+  player_id: number
+  season: string
+  scope: string            // forwards | defensemen | goalies
+  scope_label: string      // e.g. "Among defensemen, by total value"
+  unit: string             // "WAR"
+  rank: number
+  n: number
+  neighbors: ValueNeighbor[]
 }
 /** Per-player Overall — a within-position percentile SUMMARY (card-only, never a sort key).
  * Always rendered WITH its `components` (the percentiles it averaged). */
@@ -1079,6 +1186,7 @@ export interface PlayerRadar {
   offensive_label?: string | null
   defensive_label?: string | null
   descriptor?: string | null
+  identity_line?: string | null
   baseline?: string | null
 }
 export interface GoalieRadar {
@@ -1169,6 +1277,7 @@ export interface PlayerContract {
   expiry_year?: number | null
   is_ufa?: boolean | null
   contract_type?: string | null
+  contract_status?: string | null   // 'signed' | 'rfa_projected' (projected next deal, NOT signed)
   // talent axis (value + band, both currencies)
   war_now?: number | null
   value_war?: number | null
@@ -1197,9 +1306,70 @@ export interface PlayerContract {
 export interface CapShareYear {
   season: string
   cap: number
-  actual_share: number
-  expected_share: number
+  actual_share: number        // cap hit as a share of that year's cap
+  expected_share: number      // fair value as a share of that year's cap
   surplus_share: number
+  // per-year detail (transparency layer; optional — older stored schedules predate them)
+  age?: number | null
+  projected_war?: number | null
+  fair_value_dollars?: number | null
+  cap_hit_dollars?: number | null
+  surplus_dollars?: number | null
+  cumulative_surplus_dollars?: number | null
+}
+
+export interface WarWindow {
+  season_window: string
+  war: number
+  games: number
+}
+
+export interface ComparableContract {
+  player_id: number
+  name: string
+  aav: number
+  term: number
+  grade?: string | null
+  caliber?: number | null
+}
+
+export interface ContractGrade {
+  player_id: number
+  cap_hit: number
+  term_years: number
+  season: string
+  position?: string | null
+  war_now: number             // effective WAR the projection runs on (value basis)
+  // value derivation
+  blended_war?: number | null
+  shrink_factor?: number | null
+  caliber_pct?: number | null
+  value_basis?: string | null   // 'intrinsic' | 'caliber-floor'
+  war_windows?: WarWindow[]
+  // fair AAV, two framings
+  fair_aav: number              // point-in-time (now); kept for compat
+  fair_aav_now?: number | null
+  fair_aav_breakeven?: number | null
+  // value (PV) + band
+  value_dollars: number
+  value_dollars_low?: number | null
+  value_dollars_high?: number | null
+  war_sd?: number | null
+  cost_dollars: number
+  // surplus + cap-growth split
+  total_discounted_surplus: number
+  surplus_low: number
+  surplus_high: number
+  cap_growth_surplus?: number   // portion of surplus from a flat $ cap hit shrinking vs a rising cap
+  player_value_surplus?: number | null
+  total_discounted_surplus_capshare: number
+  cap_share_schedule: CapShareYear[]
+  comparables?: ComparableContract[]
+  confidence: string
+  grounded: boolean
+  grade: string
+  verdict: string
+  tone: 'positive' | 'neutral' | 'caution'
 }
 
 export interface TradeableAsset {
@@ -1224,7 +1394,10 @@ export interface TradeableAsset {
   surplus_dollars?: number | null
   surplus_low?: number | null
   surplus_high?: number | null
-  surplus_capshare?: number | null
+  surplus_capshare?: number | null            // cumulative discounted surplus as a share of cap (magnitude)
+  surplus_capshare_per_year?: number | null   // mean annual surplus share — the board sort key (density)
+  cap_growth_surplus?: number | null  // portion of surplus from a flat cap hit vs a rising cap
+  grade?: string | null               // A–F letter (display only)
   confidence?: string | null
   note?: string | null
 }

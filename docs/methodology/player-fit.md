@@ -52,10 +52,27 @@ The talent that floors fit is a forward **projection**, derived the way the trad
 3. **Age it forward** one season on the player's archetype aging curve (`aging_curves`; flat for
    goalies). A young breakout ages **up** (tempered little); an older spike ages **down** (more).
 
-The projected WAR is percentiled within position to give the floor input and the displayed percentile;
 `last_war` is carried for the honest spike note. Validated (`make trade-fit-validate`): older spikes
 regress more than young (mean proj/last ≈ 0.71 vs 0.80, 2025-26). Constants in
 `config.PLAYER_FIT_PROJECTION`.
+
+**The floor lens is the blended Overall standing, not production WAR alone (`_blend_quality`).**
+Production (GAR) bakes in shooting luck *by design*, so a finishing-driven one-season spike can floor
+a career-ordinary player as "elite" (the documented Raddysh case: 23 goals from a career 6-goal
+scorer projected to 95th-percentile WAR among D). The isolated play-driving (RAPM) lens is not fooled
+by finishing. So the floor input is the **blended Overall percentile** the system already trusts
+(`config.OVERALL_WEIGHTS` = 0.55 production / 0.45 play-driving, read straight off
+`nhl_models.player_overall.overall_percentile`), recency- and games-weighted across the recent seasons
+and regressed toward the league-average 0.5 by sample. This is a *more stable* predictor than the
+isolated rate alone (production YoY r ≈ 0.66 vs RAPM rate r ≈ 0.38, see [value-gar.md](value-gar.md)),
+while the play-driving term defuses exactly the unrepeatable finishing residual (r ≈ 0.35) that opens
+a luck spike. The production-WAR projection is still computed — it drives the displayed WAR number and
+the trajectory series — but it no longer sets the floor. The quality note shows the split honestly
+("Nth-percentile all-around value: Xth in production (+W WAR), Yth in isolated play-driving"), which
+is exactly where a luck spike is visible. Worked: Raddysh floors at **73rd ("solid top-four")** —
+83rd production / 65th play-driving — instead of 95th "elite", while genuine two-lens elites are
+untouched (Quinn Hughes 99th/98th → 93rd; McDavid 100th/99th → 94th). Goalies have no play-driving
+axis, so they keep the goalie-GAR projection percentile (already reliability-shrunk).
 
 A letter grade is derived from the composed fit (`GRADE_BANDS`) for carding only — the API and UI
 **always** render the full decomposition plus the quality axis, never a lone grade.
@@ -140,3 +157,81 @@ The fit term also feeds the trade engine's fit overlay (`backend/services/trade_
 `_fit`), which is re-validated by `make trade-engine-validate` after any change here.
 
 All constants live in `config.TRADE_FIT`.
+
+## The verdict — deterministic, context-aware clause assembly
+
+The one-line verdict is **not** a fixed template with blind slots. It is assembled from conditional
+clauses whose presence, order, and wording are all chosen by computed signals, so it reads as
+context-aware while every claim still references a number that agrees with the rest of the page (the
+consistency rule). It is built by pure functions in `insight_engine/templates/team_fit.py` — no LLM,
+no frontend computation — so the claims are guaranteed against the numbers and the string is
+deterministic. `score_team_fit.py` computes the signals and calls them; the **same** trajectory
+descriptor and the **same** projected WAR/percentile drive both the verdict and the quality-card
+sentence, so the two can never disagree.
+
+### A) Trajectory classifier (`classify_trajectory`)
+
+A deterministic classifier over the player's per-season WAR series (reusing the projection's
+`player_gar` history — a slightly deeper, floor-neutral pull: the extra season carries recency
+weight 0, so `proj_war` and the floor are unchanged). From the series it derives the slope, the
+prior-seasons slope, the trailing run of consecutive drops/rises, the track-record depth at the
+projected tier, and the band width relative to value, then buckets:
+
+| bucket | phrase | when |
+|---|---|---|
+| `established_stable` | a flat **"is a {tier}"** *(only here, and only with a deep record)* | flat slope, deep track record |
+| `career_year` | "projects as a {tier}, coming off a career year" | newest season spikes well above the established level; projection regresses down |
+| `down_year` | "is a proven {tier} coming off a down year the model regresses back up" | newest drops below a **stable** proven plateau; projection regresses up |
+| `declining` | "has slipped {N} straight seasons; … trends down toward {lower tier}" | a **sustained** slide (prior seasons were declining too) |
+| `ascending` | "is trending up; … and still climbing" | a sustained rise; projection ≥ the prior level |
+| `volatile` | "swings year to year … on a wide band" | a wide band / high season-to-season CV with no clean trend |
+
+Two rules make it honest: the tier word maps to the **projection**, never to last season; and
+`declining`/`volatile` **must** carry the trend/band caveat, so a high projection never sits silently
+beside a downward trajectory. `down_year` and `declining` arise from the *same* "last < baseline"
+condition but are separated by whether the prior seasons were a stable plateau (a cliff → down year)
+or already sliding (sustained → declining), and they render different phrases.
+
+### B) The verdict clauses (`build_verdict`)
+
+Five clause types, selected by signal, ordered strongest-first, ending on the binding constraint:
+
+1. **identity** (always) — `{player} {trajectory phrase} who {signature strength}`. The signature is
+   his top role/skill by within-role percentile (reused from the profile), with a graceful degrade to
+   a plain "depth {pos}" when nothing clears the bar (no invented strength). A flat **"is a {tier}"**
+   is used **only** for `established_stable` with track-record depth ≥ `TRAJ.MIN_DEPTH_FOR_IS`;
+   everything else hedges with "projects/profiles as".
+2. **fit driver** (always) — from the need decomposition: a role he *fills* ("That's {team}'s thinnest
+   spot at {component} …, so he fills a real need") or, when nothing is tagged `fills`, the low-need
+   form ("But {team} are already deep …, so he doesn't fill a real need").
+3. **cap** (conditional) — the largest **material** weighted shortfall among the match dimensions
+   (`weight × (1 − level)`), plus an "unproven one-year projection" cap for a career-year/volatile
+   bucket. It appears only if it exceeds `MATERIAL_CAP` and names a **different** factor than the fit
+   driver already covered (need is never restated). Phrased by grade — "the only thing keeping it from
+   higher" near the top, "pulls it further down" lower. With nothing material, a top grade gets a
+   confidence closer ("Nothing meaningful argues against the fit."), otherwise the clause is dropped.
+4. **floor note** (conditional) — "His quality keeps a floor under the grade." appears only when
+   `grade_score − match_score ≥ FLOOR_LIFT_MIN` (quality is doing the lifting).
+5. **grade** (always, closing) — "Fit grades {grade}."
+
+The quality-card sentence (`quality_note`) is built from the **same** tier descriptor + the same
+WAR/percentile, plus a trajectory tail, so the card and the verdict always agree.
+
+### Worked reads (2025-26, live)
+
+- *Raddysh → DET, B:* "Darren Raddysh is an elite #1 defenseman who drives play at both ends. That's
+  DET's thinnest spot at even-strength offense on the blue line, so he fills a real need. A partial
+  style mismatch is the only thing keeping it from higher. Fit grades B." (card: "Projects as an elite
+  #1 defenseman — 95th-percentile value among defensemen (+1.1 WAR ± 0.9).")
+- *Raddysh → EDM, C:* same identity, but the low-need form, a style cap that "pulls it further down,"
+  and the floor note appear — the fit-driver and cap factors never overlap.
+- *McDavid → MTL, A:* "Connor McDavid profiles as an elite first-line forward who drives play at both
+  ends. That's MTL's thinnest spot at even-strength offense up front, so he fills a real need. Nothing
+  meaningful argues against the fit. Fit grades A." (the hedged "profiles as" — his projection tier is
+  not a deep flat record — proves the unhedged-"is" gate.)
+
+All thresholds and labels live in `config.TRADE_FIT` (`TRAJ`, `TIER_LABELS`, `SIGNATURE_*`,
+`MATERIAL_CAP`, `FLOOR_LIFT_MIN`, …). The clause functions are unit-tested hermetically (no BigQuery)
+in `tests/test_trade_fit_verdict.py`, covering the classifier buckets, the unhedged-"is" gate, the
+fit-driver flip, the cap omission/no-restatement, the floor-note gate, verdict↔card coherence, and
+determinism.

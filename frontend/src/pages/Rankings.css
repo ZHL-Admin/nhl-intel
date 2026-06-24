@@ -12,16 +12,11 @@
 .rankings__tip { border-bottom: 1px dotted var(--color-text-muted); cursor: help; }
 
 /* ---- consolidated top card: mode · count · caption · how-it-works · Colors ---- */
+/* now lives inside the PageHeader card — a layout container, not its own card */
 .rankings__toolbar {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  margin: var(--space-4) 0 var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
 }
 .rankings__bar {
   display: flex;

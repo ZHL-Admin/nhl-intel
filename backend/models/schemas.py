@@ -228,7 +228,13 @@ class TeamDetail(BaseModel):
     hdca_per60_rank: int
     gf_per_gp_rank: int
     ga_per_gp_rank: int
+    xga_per60_rank: Optional[int] = None
     zone_entry_proxy_success_rate_rank: Optional[int] = None
+
+    # Standings context (Overview header): division/conference + rank in division (stg_standings)
+    division: Optional[str] = None
+    conference: Optional[str] = None
+    division_rank: Optional[int] = None
 
     # Zone time percentages
     oz_pct: Optional[float] = Field(None, description="Offensive zone percentage")
@@ -240,6 +246,41 @@ class TeamDetail(BaseModel):
     oz_faceoff_win_pct: Optional[float] = Field(None, description="Offensive zone faceoff win %")
     nz_faceoff_win_pct: Optional[float] = Field(None, description="Neutral zone faceoff win %")
     dz_faceoff_win_pct: Optional[float] = Field(None, description="Defensive zone faceoff win %")
+
+
+class StandingsRow(BaseModel):
+    """One team's current standings line (latest stg_standings date).
+
+    League-wide payload reused by the Team Overview header (StandingsLadder, sliced to the
+    team's division) and reusable on the Teams index / standings page. team_id is mapped from
+    the abbrev via the mart so the frontend can link rows; it may be None if unmapped.
+    """
+    team_id: Optional[int] = None
+    team_abbrev: str
+    team_name: Optional[str] = None
+    division: Optional[str] = None
+    conference: Optional[str] = None
+    division_rank: Optional[int] = None
+    conference_rank: Optional[int] = None
+    wildcard_rank: Optional[int] = None
+    games_played: int
+    wins: int
+    losses: int
+    otl: int
+    points: int
+
+
+class TeamInsight(BaseModel):
+    """One generated Overview "quick insight" card (insight_engine/templates/team_overview).
+
+    Copy is produced by the engine, never authored in the frontend. `key` is a category so the
+    frontend can dedupe a card against the Streak Doctor cold strip (e.g. not goaltending twice).
+    """
+    key: str
+    tone: str = Field(description="'positive' | 'neutral' | 'caution' — drives the icon tint")
+    icon: str = Field(description="Lucide icon name resolved on the frontend")
+    title: str
+    body: str
 
 
 class TeamTrendPoint(BaseModel):
@@ -528,6 +569,16 @@ class PlayerDetail(BaseModel):
     composite_components: List[CompositeComponent] = []
     archetypes: List[ArchetypeWeight] = []
     primary_archetype: Optional[str] = None
+    # Within-position display RANKS for the six snapshot rate stats (1 = best among qualified peers
+    # at this position). DISPLAY-ONLY ranks over the same values already returned above; no metric
+    # formula is changed. `rank_pool` is the size of the qualified position pool.
+    rank_pool: Optional[int] = None
+    toi_rank: Optional[int] = None
+    points_per60_rank: Optional[int] = None
+    goals_per60_rank: Optional[int] = None
+    assists_per60_rank: Optional[int] = None
+    cf_pct_rank: Optional[int] = None
+    hdcf_per60_rank: Optional[int] = None
     # Value (GAR/WAR) block — the goals-reality companion to RAPM impact (Phase 6 GAR).
     value: Optional["PlayerValue"] = None
 
@@ -583,6 +634,33 @@ class ValueRankingRow(BaseModel):
     gar_sd: Optional[float] = None
     war_sd: Optional[float] = None       # goalies render a VISIBLY wider band (principle 6)
     components: List[CompositeComponent] = []
+
+
+class ValueNeighbor(BaseModel):
+    """One row of the player-page total-value neighborhood (a position-scoped slice around a player).
+
+    `war` is the same total-value point estimate the Players index shows; `rank` is the player's
+    global position in the position-scoped pool ordered exactly like the Players index default."""
+    rank: int
+    player_id: int
+    player_name: Optional[str] = None
+    team_abbrev: Optional[str] = None
+    war: float
+    is_current: bool = False
+
+
+class ValueNeighborhood(BaseModel):
+    """A window of ~7 players centered on one player, ranked by TOTAL VALUE (WAR), scoped to his
+    position (forwards / defensemen / goalies). Reuses the Players index ordering and value so the
+    header module never disagrees with the Players page."""
+    player_id: int
+    season: str
+    scope: str                  # forwards | defensemen | goalies
+    scope_label: str            # e.g. "Among defensemen, by total value"
+    unit: str = "WAR"
+    rank: int                   # the player's global rank in the position pool
+    n: int                      # pool size
+    neighbors: List[ValueNeighbor] = []
 
 
 class OverallComponent(BaseModel):
@@ -1414,6 +1492,7 @@ class PlayerRadar(BaseModel):
     offensive_label: Optional[str] = None
     defensive_label: Optional[str] = None
     descriptor: Optional[str] = None
+    identity_line: Optional[str] = None   # data-grounded scouting sentence from the spokes
     baseline: Optional[str] = None
 
 
@@ -1529,12 +1608,20 @@ class GoaliePreview(BaseModel):
 # --- Trade tool: contracts, surplus, and the unified tradeable-asset layer --------------------
 class CapShareYear(BaseModel):
     """One season of a contract's cap-share schedule (Trade tool cap pass). actual_share declines
-    over the term as the cap rises against a flat cap hit; surplus_share = expected - actual."""
+    over the term as the cap rises against a flat cap hit; surplus_share = expected - actual.
+    The per-year detail fields are Optional (older stored schedules predate them)."""
     season: str
     cap: int
-    actual_share: float
-    expected_share: float
+    actual_share: float                          # cap hit as a share of that year's cap
+    expected_share: float                        # fair value as a share of that year's cap
     surplus_share: float
+    # per-year detail for the transparency layer (nominal $ that season)
+    age: Optional[int] = None
+    projected_war: Optional[float] = None
+    fair_value_dollars: Optional[int] = None
+    cap_hit_dollars: Optional[int] = None
+    surplus_dollars: Optional[int] = None
+    cumulative_surplus_dollars: Optional[int] = None
 
 
 class PlayerContract(BaseModel):
@@ -1550,6 +1637,7 @@ class PlayerContract(BaseModel):
     expiry_year: Optional[int] = None
     is_ufa: Optional[bool] = None
     contract_type: Optional[str] = None
+    contract_status: Optional[str] = None     # 'signed' | 'rfa_projected' (a projected next deal, NOT signed)
     # --- two axes (from player_contract_value); absent if the player has no value row ---
     # TALENT axis: projected on-ice value over the control window (WAR + dollars, discounted, banded)
     war_now: Optional[float] = None
@@ -1577,6 +1665,74 @@ class PlayerContract(BaseModel):
     match_method: Optional[str] = None        # how the contract resolved to this player_id (auditable)
 
 
+class ContractGradeRequest(BaseModel):
+    """Grade an actual or hypothetical deal for a player (Contract Grader)."""
+    player_id: int
+    cap_hit: int = Field(description="Annual cap hit (AAV) in dollars")
+    term_years: int = Field(ge=1, le=8, description="Contract length in years")
+    season: Optional[str] = None
+
+
+class WarWindow(BaseModel):
+    """One component season of the blended-WAR projection base (value-derivation panel)."""
+    season_window: str
+    war: float
+    games: int
+
+
+class ComparableContract(BaseModel):
+    """A real signed deal near this player by caliber + position (what the market pays for this type)."""
+    player_id: int
+    name: str
+    aav: int
+    term: int
+    grade: Optional[str] = None
+    caliber: Optional[float] = None             # 0–1 role+production blend (for the derivation panel)
+
+
+class ContractGrade(BaseModel):
+    """Graded value/cost/surplus for a proposed contract, with a letter grade + verdict and band,
+    plus the full transparency layer (derivation, per-year detail, comparables)."""
+    player_id: int
+    cap_hit: int
+    term_years: int
+    season: str
+    position: Optional[str] = None
+    war_now: float = Field(description="effective WAR the projection runs on (value basis)")
+    # --- value derivation ---
+    blended_war: Optional[float] = Field(default=None, description="recency/games-weighted multi-season WAR")
+    shrink_factor: Optional[float] = Field(default=None, description="games/(games+k) applied to the blend")
+    caliber_pct: Optional[float] = Field(default=None, description="0–1 role+production percentile blend")
+    value_basis: Optional[str] = Field(default=None, description="intrinsic | caliber-floor (which won)")
+    war_windows: List[WarWindow] = Field(default_factory=list)
+    # --- fair AAV, two distinct framings ---
+    fair_aav: int = Field(description="point-in-time fair AAV (now); kept for compatibility")
+    fair_aav_now: Optional[int] = Field(default=None, description="point-in-time fair AAV (year-0 expected value)")
+    fair_aav_breakeven: Optional[int] = Field(default=None, description="flat AAV over the term that zeros PV surplus")
+    # --- value (PV) + band ---
+    value_dollars: int = Field(description="PV of projected on-ice value over the term")
+    value_dollars_low: Optional[int] = None
+    value_dollars_high: Optional[int] = None
+    war_sd: Optional[float] = Field(default=None, description="WAR std driving the ± band")
+    cost_dollars: int = Field(description="PV of the cap hit over the term")
+    # --- surplus + cap-growth split ---
+    total_discounted_surplus: int = Field(description="value − cost, present-valued")
+    surplus_low: int
+    surplus_high: int
+    cap_growth_surplus: int = Field(
+        default=0, description="portion of the surplus from a flat $ cap hit shrinking vs a rising cap")
+    player_value_surplus: Optional[int] = Field(
+        default=None, description="surplus attributable to player value (total − cap-growth)")
+    total_discounted_surplus_capshare: float
+    cap_share_schedule: List[CapShareYear] = Field(default_factory=list)
+    comparables: List[ComparableContract] = Field(default_factory=list)
+    confidence: str
+    grounded: bool
+    grade: str = Field(description="A–F")
+    verdict: str
+    tone: str = Field(description="positive | neutral | caution")
+
+
 class TradeableAsset(BaseModel):
     """One row of the unified asset layer (Trade tool P7): a player, prospect, or pick with a
     common interface — value with a band, cost, surplus, confidence — in one WAR + dollar currency."""
@@ -1601,6 +1757,10 @@ class TradeableAsset(BaseModel):
     surplus_dollars: Optional[int] = None
     surplus_low: Optional[int] = None
     surplus_high: Optional[int] = None
+    surplus_capshare: Optional[float] = None    # CUMULATIVE discounted surplus as a share of cap (magnitude)
+    surplus_capshare_per_year: Optional[float] = None  # mean annual surplus share — the BOARD SORT KEY (density)
+    cap_growth_surplus: Optional[int] = None    # portion of surplus from a flat cap hit vs a rising cap
+    grade: Optional[str] = None                 # A–F letter (from surplus-to-cost ratio bands; display only)
     confidence: Optional[str] = None
     note: Optional[str] = None                  # e.g. own-picks ownership caveat
 
@@ -1711,3 +1871,67 @@ class TradeEvaluateResponse(BaseModel):
     caveats: List[str] = Field(default_factory=list)
     # Reference-cap basis for EVERY dollar figure in this response (projected-cap PV, not today's $).
     dollar_basis: Optional[str] = None
+
+
+# ============================================================================
+# Playoff bracket predictor (leakage-free: end-of-regular-season inputs only)
+# ============================================================================
+
+class PlayoffTeamRef(BaseModel):
+    """Minimal team reference for a bracket node."""
+    team_id: Optional[int] = None
+    abbrev: str
+
+
+class PlayoffSeries(BaseModel):
+    """One predicted best-of-7 series in the bracket tree."""
+    round: int = Field(description="1=First Round … 4=Stanley Cup Final")
+    round_label: str
+    conference: Optional[str] = Field(None, description="None for the Final (cross-conference)")
+    high: PlayoffTeamRef = Field(description="Higher seed (home ice)")
+    low: PlayoffTeamRef
+    high_rating: float
+    low_rating: float
+    high_seed_winprob: float = Field(description="P(higher seed wins the series), 0-1")
+    high_seed_winprob_lo: float = Field(description="90% band low (propagated from rating SE)")
+    high_seed_winprob_hi: float = Field(description="90% band high (propagated from rating SE)")
+    favorite: str = Field(description="Predicted favorite abbrev")
+    favorite_winprob: float = Field(description="The favorite's series win prob (>= 0.5)")
+    winner: str = Field(description="Predicted winner abbrev (advances in the tree)")
+    coin_flip: bool = Field(default=False, description="Within the tie window; winner is the higher seed (home-ice tiebreak)")
+    style_modifier: float = Field(description="Net goals/game style nudge applied to the higher seed")
+    recent_form_modifier: float = Field(description="Net goals/game recent-form (trajectory) nudge to the higher seed")
+    style_reasons: List[str] = Field(default_factory=list)
+
+
+class PlayoffOdds(BaseModel):
+    """One team's Monte-Carlo probability of reaching each round."""
+    team_id: Optional[int] = None
+    abbrev: str
+    reach_round2: float
+    reach_conf_final: float
+    reach_final: float
+    win_cup: float
+
+
+class PlayoffPairwise(BaseModel):
+    """Model series win probability for any pairing of the 16 bracket teams (home ice to the higher
+    seed). Lets the frontend score user-built ("build your own path") brackets, including upsets."""
+    a: str
+    b: str
+    a_winprob: float = Field(description="P(team a wins a best-of-7 vs team b)")
+    higher_seed: str = Field(description="The higher-seeded team (home ice); wins near-tie tiebreaks")
+
+
+class PlayoffBracket(BaseModel):
+    """Full bracket prediction: deterministic favorite tree + Monte-Carlo championship odds."""
+    season: str
+    as_of_date: str = Field(description="Last regular-season game date (the leakage cutoff)")
+    league_avg_goals: float
+    rounds: List[List[PlayoffSeries]] = Field(description="Predicted tree, one list per round")
+    champion: PlayoffTeamRef
+    champion_winprob: float = Field(description="Cup odds for the predicted champion")
+    odds: List[PlayoffOdds] = Field(description="All bracket teams, sorted by cup odds desc")
+    pairwise: List[PlayoffPairwise] = Field(
+        default_factory=list,
+        description="Every pairing's series win prob, for scoring user-built paths")

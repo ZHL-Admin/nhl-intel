@@ -21,6 +21,7 @@ from models.schemas import (
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
     PlayerContract, CapShareYear,
+    ValueNeighbor, ValueNeighborhood,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -481,6 +482,70 @@ async def get_player_radar(
     return PlayerRadar(**payload)
 
 
+def _value_neighbors_sync(player_id: int, season: Optional[str], half: int = 3) -> Optional[ValueNeighborhood]:
+    """Position-scoped total-value (WAR) window around a player. Reuses the EXACT ordering and value
+    the Players index uses (rankings._skater_value_rows / _goalie_value_rows, sort='confidence'), so
+    the player-page header module can never disagree with the Players page."""
+    from routers.rankings import _skater_value_rows, _goalie_value_rows
+    gar = bq_service.get_models_table_id('player_gar')
+    gg = bq_service.get_models_table_id('goalie_gar')
+    if not season:
+        season = bq_service.query(
+            f"SELECT MAX(season_window) AS s FROM {gar} WHERE season_window LIKE '____-__'")[0]['s']
+
+    # Which position pool does this player belong to? (forwards / defensemen / goalies)
+    posrow = bq_service.query(
+        f"SELECT position FROM {gar} WHERE player_id = {int(player_id)} AND season_window = '{season}'")
+    if posrow:
+        group = 'D' if (posrow[0].get('position') == 'D') else 'F'
+        rows = _skater_value_rows(group, season, 1000, 'confidence')
+        scope = 'defensemen' if group == 'D' else 'forwards'
+    else:
+        grow = bq_service.query(
+            f"SELECT 1 FROM {gg} WHERE goalie_id = {int(player_id)} AND season_window = '{season}'")
+        if not grow:
+            return None    # not in any qualifying value pool this season -> header omits the module
+        rows = _goalie_value_rows(season, 1000, 'confidence')
+        scope = 'goalies'
+
+    idx = next((i for i, r in enumerate(rows) if r.player_id == player_id), None)
+    if idx is None:
+        return None
+
+    # ~7 rows centered on the player; shift the window inward at the ends so it stays full
+    n = len(rows)
+    lo, hi = idx - half, idx + half
+    if lo < 0:
+        hi -= lo; lo = 0
+    if hi > n - 1:
+        lo -= (hi - (n - 1)); hi = n - 1
+    lo = max(0, lo)
+    neighbors = [
+        ValueNeighbor(rank=i + 1, player_id=rows[i].player_id, player_name=rows[i].player_name,
+                      team_abbrev=rows[i].team_abbrev, war=rows[i].war, is_current=(i == idx))
+        for i in range(lo, hi + 1)
+    ]
+    return ValueNeighborhood(
+        player_id=player_id, season=season, scope=scope,
+        scope_label=f"Among {scope}, by total value", unit="WAR",
+        rank=idx + 1, n=n, neighbors=neighbors)
+
+
+@router.get("/{player_id}/value-neighbors", response_model=ValueNeighborhood)
+@cache(ttl=1800)
+async def get_player_value_neighbors(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest single season)"),
+) -> ValueNeighborhood:
+    """A position-scoped slice of the total-value (WAR) leaderboard centered on this player (~3 above,
+    ~3 below), for the player-page header ranking module. Same lens, ordering, and value as the
+    Players index default sort. 404 if the player isn't in a qualifying value pool this season."""
+    payload = await run_in_threadpool(_value_neighbors_sync, player_id, season)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Player not in a qualifying value pool")
+    return payload
+
+
 @router.get("/{player_id}/trajectory", response_model=PlayerTrajectory)
 @cache(ttl=1800)
 async def get_player_trajectory(player_id: int) -> PlayerTrajectory:
@@ -606,7 +671,7 @@ async def get_player_reconciliation(
 async def get_overall_leaders(
     position: str = Query("ALL", description="ALL | F | D"),
     season: Optional[str] = Query(None, description="Season (default: latest)"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=1000),
 ) -> List[ArchetypeRankRow]:
     """The highest-value skaters overall, by composite total (Phase 4.2)."""
     arch = bq_service.get_models_table_id('player_archetypes')
@@ -656,6 +721,55 @@ async def get_overall_leaders(
             components=_components_from_row(r), archetype_weight=weight,
             primary_archetype=primary))
     return out
+
+
+def _rate_stat_ranks(player_id: int, season: str) -> dict:
+    """Within-position DISPLAY ranks for the six snapshot rate stats (1 = best). Ranks the SAME
+    per-game-averaged expressions get_player_detail returns, partitioned by F/D, over players with
+    >= 10 GP, so the rank agrees with the value shown. Display-only; changes no metric formula."""
+    mart = bq_service.get_full_table_id('mart_player_game_stats')
+    try:
+        rows = bq_service.query(f"""
+            WITH per_player AS (
+                SELECT player_id,
+                       CASE WHEN ANY_VALUE(position_code) = 'D' THEN 'D' ELSE 'F' END AS pos_group,
+                       COUNT(DISTINCT game_id) AS gp,
+                       AVG(toi_5v5) AS toi,
+                       AVG(primary_points_per60) AS p60,
+                       AVG(SAFE_DIVIDE(individual_goals, toi_5v5) * 60.0) AS g60,
+                       AVG(SAFE_DIVIDE(first_assists, toi_5v5) * 60.0) AS a60,
+                       AVG(on_ice_xgf_pct) AS cf,
+                       AVG(ixg_per60) AS hdcf
+                FROM {mart}
+                WHERE season = '{season}'
+                  AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+                  AND position_code IN ('C', 'L', 'R', 'D')
+                GROUP BY player_id
+            ),
+            qual AS (SELECT * FROM per_player WHERE gp >= 10),
+            ranked AS (
+                SELECT player_id,
+                       COUNT(*) OVER (PARTITION BY pos_group) AS n,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY toi DESC) AS toi_rank,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY p60 DESC) AS points_per60_rank,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY g60 DESC) AS goals_per60_rank,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY a60 DESC) AS assists_per60_rank,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY cf DESC) AS cf_pct_rank,
+                       RANK() OVER (PARTITION BY pos_group ORDER BY hdcf DESC) AS hdcf_per60_rank
+                FROM qual
+            )
+            SELECT * FROM ranked WHERE player_id = {int(player_id)}
+        """)
+        if not rows:
+            return {}
+        r = rows[0]
+        keys = ['toi_rank', 'points_per60_rank', 'goals_per60_rank', 'assists_per60_rank',
+                'cf_pct_rank', 'hdcf_per60_rank']
+        out = {k: (int(r[k]) if r.get(k) is not None else None) for k in keys}
+        out['rank_pool'] = int(r['n']) if r.get('n') is not None else None
+        return out
+    except Exception:
+        return {}   # ranks are a display nicety; never fail the detail load over them
 
 
 @router.get("/{player_id}", response_model=PlayerDetail)
@@ -713,6 +827,21 @@ async def get_player_detail(
         raise HTTPException(status_code=404, detail="Player not found")
 
     row = results[0]
+
+    # Current team LABEL comes from dim_current_roster, whose team_id is the LIVE-first resolved
+    # current team (built from int_player_current_team in precompute). dim is a serving table, so
+    # this works under DuckDB. An offseason trade shows the NEW club here even though the stats
+    # above are still his old-team games (membership != performance — value/archetype lag until he
+    # plays for the new team). Falls back to the latest-game team_id when the player isn't in the
+    # current-roster dim (retired / not on a current roster).
+    try:
+        cur = bq_service.query(
+            f"SELECT team_id FROM {bq_service.get_models_table_id('dim_current_roster')} "
+            f"WHERE player_id = {player_id} LIMIT 1")
+        if cur and cur[0].get('team_id') is not None:
+            row['team_id'] = cur[0]['team_id']
+    except Exception:
+        pass  # current-roster dim unavailable: fall back to the latest-game team_id
 
     # Get team abbrev
     team_sql = f"""
@@ -791,6 +920,7 @@ async def get_player_detail(
         archetypes=archetypes,
         primary_archetype=primary_archetype,
         value=_value_block(row['player_id'], season),
+        **_rate_stat_ranks(row['player_id'], season),
     )
 
 
@@ -1259,7 +1389,8 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
     value = bq_service.get_models_table_id("player_contract_value")
     rows = bq_service.query(f"""
         SELECT c.player_id, c.as_of_date, c.season, c.contract_team, c.cap_hit, c.aav,
-               c.remaining_years, c.expiry_year, c.is_ufa, c.contract_type, c.match_method,
+               c.remaining_years, c.expiry_year, c.is_ufa, c.contract_type, c.contract_status,
+               c.match_method,
                v.war_now, v.value_war, v.value_war_low, v.value_war_high,
                v.value_dollars, v.value_dollars_low, v.value_dollars_high,
                v.expected_value_now AS expected_aav_now, v.cost_dollars, v.surplus_current,
@@ -1282,7 +1413,8 @@ def _player_contract_sync(player_id: int) -> PlayerContract:
         player_id=int(r["player_id"]), as_of_date=r.get("as_of_date"), season=r.get("season"),
         contract_team=r.get("contract_team"), cap_hit=r.get("cap_hit"), aav=r.get("aav"),
         remaining_years=r.get("remaining_years"), expiry_year=r.get("expiry_year"),
-        is_ufa=r.get("is_ufa"), contract_type=r.get("contract_type"), match_method=r.get("match_method"),
+        is_ufa=r.get("is_ufa"), contract_type=r.get("contract_type"),
+        contract_status=r.get("contract_status"), match_method=r.get("match_method"),
         war_now=r.get("war_now"), value_war=r.get("value_war"),
         value_war_low=r.get("value_war_low"), value_war_high=r.get("value_war_high"),
         value_dollars=r.get("value_dollars"), value_dollars_low=r.get("value_dollars_low"),

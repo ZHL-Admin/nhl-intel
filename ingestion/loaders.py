@@ -105,6 +105,11 @@ def load_json_to_bigquery(
             "linescore", "shotsByPeriod", "gameVideo", "gameReports",
         ],
         "raw_partner_odds": ["games", "bettingPartner"],
+        # Live rosters: the player objects carry localized name objects whose locale
+        # keys vary per player (firstName has cs/de/.. for some, only default for most),
+        # so serialize the three position arrays and parse them in stg_roster_current
+        # (resilient to that drift). team_abbrev + season8 stay as scalar columns.
+        "raw_rosters": ["forwards", "defensemen", "goalies"],
         # Standings rows carry nested {default, fr} localized name objects.
         "raw_standings": ["teamName", "teamAbbrev", "placeName", "teamCommonName"],
         # ppt-replay: goal metadata object + the (large) per-frame sprite array.

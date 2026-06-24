@@ -1,0 +1,119 @@
+/* StandingsLadder — compact ranked division rows (shared). */
+.standings-ladder {
+  background: var(--color-bg-surface);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  box-shadow: var(--shadow-sm);
+  border-left: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  min-width: 240px;
+}
+.standings-ladder--md {
+  min-width: 320px;
+  padding: var(--space-3) var(--space-5);
+}
+.standings-ladder--md .standings-ladder__row {
+  padding: var(--space-1) var(--space-2);
+}
+
+.standings-ladder__head {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-2) var(--space-3);
+}
+
+.standings-ladder__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.standings-ladder__item {
+  border-radius: var(--radius-md);
+}
+
+/* Playoff cut: a straight dashed divider under the last team that makes it. Drawn as a
+   pseudo-element (not a border-bottom) so the rounded item radius doesn't curve its ends. */
+.standings-ladder__item.is-cut {
+  position: relative;
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.standings-ladder__item.is-cut::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top: 1px dashed var(--color-border-strong);
+}
+
+.standings-ladder__row {
+  display: grid;
+  grid-template-columns: 20px 20px 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-md);
+  transition: background-color 120ms ease;
+}
+a.standings-ladder__row:hover {
+  background: var(--color-bg-elevated);
+}
+
+.standings-ladder__item.is-current > .standings-ladder__row {
+  background: color-mix(in srgb, var(--color-team-primary, var(--color-accent)) 12%, var(--color-bg-surface));
+}
+
+.standings-ladder__rank {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+.standings-ladder__logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.standings-ladder__abbrev {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.standings-ladder__item.is-current .standings-ladder__abbrev {
+  font-weight: 700;
+}
+.standings-ladder__pts {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.standings-ladder__gp {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  min-width: 40px;
+  text-align: right;
+}
+
+.standings-ladder__context {
+  margin: var(--space-3) var(--space-2) 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+/* sm: tighter rows for dense placements (Teams index). */
+.standings-ladder--sm .standings-ladder__row {
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-2);
+}
+.standings-ladder--sm .standings-ladder__logo {
+  width: 16px;
+  height: 16px;
+}

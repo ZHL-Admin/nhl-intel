@@ -10,7 +10,7 @@ from models.schemas import (
     TeamDetail, TeamTrends, TeamTrendPoint, TeamRoster, RosterPlayer,
     TeamVsOpponent, PlayerZoneDeployment, TeamSituational, EdgeTeamProfile,
     TeamIdentity, TeamIdentityWindow, IdentityMetric, StyleMap, StyleMapTeam, StreakCard,
-    TeamLines,
+    TeamLines, StandingsRow, TeamInsight,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -152,6 +152,68 @@ def _season_str_to_id(season: Optional[str]) -> Optional[int]:
         return None
 
 
+@router.get("/standings", response_model=List[StandingsRow])
+@cache(ttl=600)
+async def get_standings(
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> List[StandingsRow]:
+    """Current league standings (latest stg_standings row per team), all 32 teams.
+
+    Reused by the Team Overview header (sliced to the team's division for the StandingsLadder) and
+    by the Teams index. team_id is mapped from the abbrev via the mart so rows can link. Returns an
+    empty list if standings are unavailable rather than erroring the page.
+    """
+    mart = bq_service.get_full_table_id('mart_team_game_stats')
+    std = bq_service.get_full_table_id('stg_standings')
+    if not season:
+        srows = bq_service.query(f"SELECT MAX(season) AS s FROM {mart}")
+        season = srows[0]['s'] if srows and srows[0].get('s') else None
+
+    try:
+        rows = bq_service.query(f"""
+            WITH abbr AS (
+                SELECT team_abbrev, ANY_VALUE(team_id) AS team_id
+                FROM {mart} WHERE season = '{season}' GROUP BY team_abbrev
+            ),
+            latest AS (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY team_abbrev ORDER BY standings_date DESC
+                ) AS rn
+                FROM {std}
+            )
+            SELECT
+                a.team_id, s.team_abbrev, s.team_name,
+                s.division_name, s.conference_name,
+                s.division_rank, s.conference_rank, s.wildcard_rank,
+                s.games_played, s.wins, s.losses, s.ot_losses, s.points
+            FROM latest s
+            LEFT JOIN abbr a USING (team_abbrev)
+            WHERE s.rn = 1
+            ORDER BY s.conference_name, s.division_name, s.division_rank
+        """)
+    except Exception:
+        return []
+
+    return [
+        StandingsRow(
+            team_id=r.get('team_id'),
+            team_abbrev=r['team_abbrev'],
+            team_name=r.get('team_name'),
+            division=r.get('division_name'),
+            conference=r.get('conference_name'),
+            division_rank=r.get('division_rank'),
+            conference_rank=r.get('conference_rank'),
+            wildcard_rank=r.get('wildcard_rank'),
+            games_played=r.get('games_played') or 0,
+            wins=r.get('wins') or 0,
+            losses=r.get('losses') or 0,
+            otl=r.get('ot_losses') or 0,
+            points=r.get('points') or 0,
+        )
+        for r in rows
+    ]
+
+
 @router.get("/{team_id}", response_model=TeamDetail)
 @cache(ttl=600)
 async def get_team_detail(
@@ -209,6 +271,7 @@ async def get_team_detail(
             RANK() OVER (ORDER BY SAFE_DIVIDE(xgf_per60, xgf_per60 + xga_per60) DESC) as xgf_pct_rank,
             RANK() OVER (ORDER BY hdcf_per60 DESC) as hdcf_per60_rank,
             RANK() OVER (ORDER BY hdca_per60 ASC) as hdca_per60_rank,
+            RANK() OVER (ORDER BY xga_per60 ASC) as xga_per60_rank,
             RANK() OVER (ORDER BY total_goals_for / NULLIF(games_played, 0) DESC) as gf_per_gp_rank,
             RANK() OVER (ORDER BY total_goals_against / NULLIF(games_played, 0) ASC) as ga_per_gp_rank,
             RANK() OVER (ORDER BY zone_entry_proxy_success_rate DESC NULLS LAST) as zone_entry_proxy_success_rate_rank
@@ -271,16 +334,42 @@ async def get_team_detail(
         if dz_total > 0:
             dz_faceoff_win_pct = dz_won / dz_total
 
+    # Standings context for the Overview header (division / conference / rank in division), and the
+    # real W-L-OTL record + points (the goals-only proxy below has otl=0 and counts 2*wins only).
+    division = conference = None
+    division_rank = None
+    wins = row['wins']; losses = row['losses']; otl = row['otl']; points = row['points']
+    try:
+        std = bq_service.query(f"""
+            SELECT division_name, conference_name, division_rank, wins, losses, ot_losses, points
+            FROM {bq_service.get_full_table_id('stg_standings')}
+            WHERE team_abbrev = '{row['team_abbrev']}'
+            ORDER BY standings_date DESC LIMIT 1
+        """)
+        if std:
+            s = std[0]
+            division = s.get('division_name')
+            conference = s.get('conference_name')
+            division_rank = s.get('division_rank')
+            if s.get('points') is not None:    # prefer real standings record over the goals proxy
+                wins, losses, otl, points = s['wins'], s['losses'], s['ot_losses'], s['points']
+    except Exception:
+        pass  # standings unavailable -> header degrades to no division context, keeps the proxy record
+
     return TeamDetail(
         team_id=row['team_id'],
         team_name=row['team_abbrev'],  # TODO: Get full team name
         team_abbrev=row['team_abbrev'],
+        division=division,
+        conference=conference,
+        division_rank=division_rank,
+        xga_per60_rank=row.get('xga_per60_rank'),
         season=season,
         games_played=row['games_played'],
-        wins=row['wins'],
-        losses=row['losses'],
-        otl=row['otl'],
-        points=row['points'],
+        wins=wins,
+        losses=losses,
+        otl=otl,
+        points=points,
         cf_pct=row['cf_pct'],
         hdcf_per60=row['hdcf_per60'],
         hdca_per60=row['hdca_per60'],
@@ -304,6 +393,48 @@ async def get_team_detail(
         nz_faceoff_win_pct=nz_faceoff_win_pct,
         dz_faceoff_win_pct=dz_faceoff_win_pct
     )
+
+
+@router.get("/{team_id}/insights", response_model=List[TeamInsight])
+@cache(ttl=600)
+async def get_team_insights(
+    team_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> List[TeamInsight]:
+    """Generated Overview "quick insights" for a team (Layer 1).
+
+    Reuses the /teams/{id} aggregation for the team's season values + league ranks, then runs the
+    deterministic insight_engine team_overview template. Copy lives in the engine, never the
+    frontend. Returns candidates most-salient first; the frontend dedupes against the cold strip
+    and renders the top three.
+    """
+    # Deferred import: repo root is on sys.path by request time (added by services at startup),
+    # matching how routers/players.py imports the insight engine.
+    from insight_engine.templates import team_overview
+
+    td = await get_team_detail(team_id, season)
+    gp = max(1, td.games_played)
+    xgf_share = (
+        td.xgf_per60 / (td.xgf_per60 + td.xga_per60)
+        if (td.xgf_per60 + td.xga_per60) else None
+    )
+    team = {
+        "team_abbrev": td.team_abbrev,
+        "gf_per_gp": td.total_goals_for / gp,
+        "ga_per_gp": td.total_goals_against / gp,
+        "cf_pct": td.cf_pct,
+        "xgf_share": xgf_share,
+        "hdcf_per60": td.hdcf_per60,
+        "hdca_per60": td.hdca_per60,
+        "gf_per_gp_rank": td.gf_per_gp_rank,
+        "ga_per_gp_rank": td.ga_per_gp_rank,
+        "cf_pct_rank": td.cf_pct_rank,
+        "xgf_pct_rank": td.xgf_pct_rank,
+        "hdcf_per60_rank": td.hdcf_per60_rank,
+        "hdca_per60_rank": td.hdca_per60_rank,
+        "xga_per60_rank": td.xga_per60_rank,
+    }
+    return [TeamInsight(**c) for c in team_overview.insights(team)]
 
 
 @router.get("/{team_id}/edge", response_model=EdgeTeamProfile)
@@ -438,12 +569,20 @@ async def get_team_roster(
     zone = bq_service.get_full_table_id('mart_player_zone_deployment')
     toi_t = bq_service.get_models_table_id('player_situation_toi')
     dim = bq_service.get_models_table_id('dim_current_roster')
+    # Membership = dim_current_roster, whose team_id is the LIVE-first resolved current team
+    # (built from int_player_current_team in precompute), so an offseason trade-IN shows up before
+    # the player dresses. dim is a serving table (works under DuckDB); identity + archetype +
+    # headshot come from it. games_played + the per-60 stat CTEs stay keyed to games FOR THIS TEAM,
+    # so a just-traded player appears with 0 games and null rates until he plays (membership != perf).
     sql = f"""
     WITH roster AS (
-        SELECT player_id,
-               ANY_VALUE(CONCAT(first_name, ' ', last_name)) AS player_name,
-               ANY_VALUE(position_code) AS position,
-               COUNT(DISTINCT game_id) AS games_played
+        SELECT player_id, full_name AS player_name, position_code AS position,
+               primary_archetype AS archetype, headshot_url
+        FROM {dim}
+        WHERE team_id = {team_id}
+    ),
+    played AS (  -- games this player logged FOR THIS TEAM this season (0 for a fresh trade-in)
+        SELECT player_id, COUNT(DISTINCT game_id) AS games_played
         FROM {rosters}
         WHERE team_id = {team_id} AND season = '{season}'
             AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01', '02', '03')
@@ -468,10 +607,9 @@ async def get_team_roster(
     ozs AS (
         SELECT player_id, AVG(ozs_pct) AS ozs_pct
         FROM {zone} WHERE team_id = {team_id} AND season = '{season}' GROUP BY player_id
-    ),
-    arch AS (SELECT player_id, primary_archetype, headshot_url FROM {dim})
+    )
     SELECT
-        r.player_id, r.player_name, r.position, r.games_played,
+        r.player_id, r.player_name, r.position, COALESCE(played.games_played, 0) AS games_played,
         SAFE_DIVIDE(t.total_min, t.toi_games) AS toi_per_gp,
         SAFE_DIVIDE((prod.g + prod.a) * 60.0, t.total_min) AS points_per60,
         SAFE_DIVIDE(prod.g * 60.0, t.total_min) AS goals_per60,
@@ -479,14 +617,14 @@ async def get_team_roster(
         onice.on_ice_xgf_pct AS on_ice_xgf_pct,
         ozs.ozs_pct AS ozs_pct,
         prod.hot_cold AS hot_cold,
-        arch.primary_archetype AS archetype,
-        arch.headshot_url AS headshot_url
+        r.archetype AS archetype,
+        r.headshot_url AS headshot_url
     FROM roster r
+    LEFT JOIN played USING (player_id)
     LEFT JOIN toi t USING (player_id)
     LEFT JOIN prod USING (player_id)
     LEFT JOIN onice USING (player_id)
     LEFT JOIN ozs USING (player_id)
-    LEFT JOIN arch USING (player_id)
     ORDER BY r.position, points_per60 DESC NULLS LAST
     """
 

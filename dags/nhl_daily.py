@@ -405,6 +405,16 @@ with DAG(
             "--profiles-dir /opt/airflow/dbt --log-path /tmp/dbt_logs "
             "--target-path /tmp/dbt_target")
 
+    # LIVE roster membership feed (daily; cheap — 32 small api-web calls). Lands raw_rosters BEFORE
+    # the dbt staging pass so stg_roster_current / int_player_current_team build off the fresh
+    # snapshot, and an offseason trade shows the new team before the player dresses. Membership only
+    # — performance (value/archetype) lags until he plays for the new club.
+    roster_refresh = BashOperator(
+        task_id="roster_refresh",
+        bash_command="cd /opt/airflow && python -m scripts.refresh_rosters",
+        env=_dbt_env,
+    )
+
     # The in-house xG model (nhl_models.shot_xg) is scored BETWEEN staging/sequence and the
     # shot-attempt intermediates + marts that join it. So dbt runs in two passes around it.
     run_dbt_pre_xg = BashOperator(
@@ -708,6 +718,10 @@ with DAG(
         >> generate_report
         >> publish_report
     )
+    # Live roster snapshot lands after raw ingestion and gates the dbt staging pass, so
+    # stg_roster_current / int_player_current_team build off the fresh raw_rosters.
+    ingest_task >> roster_refresh >> run_dbt_pre_xg
+
     # deserved standings + streak cards branch off ratings; style map off the marts; the
     # report waits on them all
     compute_ratings >> simulate_deserved >> generate_report

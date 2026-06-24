@@ -6,13 +6,17 @@ interface StatCardProps {
   label: string
   value: string | number
   rank?: number
+  /** Pre-formatted rank line (e.g. "4th of 248") for within-position ranks; takes precedence over
+   *  `rank` and skips the NHL-wide wording/tiering. Pair with `rankTier` for color. */
+  rankText?: string
+  rankTier?: 'top' | 'mid' | 'bottom'
   tooltip?: string
   sparklineData?: number[]
   trendDelta?: number
   trendLabel?: string
 }
 
-function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, trendLabel }: StatCardProps) {
+function StatCard({ label, value, rank, rankText, rankTier, tooltip, sparklineData, trendDelta, trendLabel }: StatCardProps) {
   const getRankTier = (rank: number): string => {
     if (rank <= 10) return 'top'
     if (rank >= 23) return 'bottom'
@@ -85,7 +89,11 @@ function StatCard({ label, value, rank, tooltip, sparklineData, trendDelta, tren
         )}
       </div>
       <div className="stat-card__value mono">{value}</div>
-      {rank !== undefined && (
+      {rankText !== undefined ? (
+        <div className={`stat-card__rank stat-card__rank--${rankTier ?? 'mid'}`}>
+          {rankText}
+        </div>
+      ) : rank !== undefined && (
         <div className={`stat-card__rank stat-card__rank--${getRankTier(rank)}`}>
           {getRankText(rank)}
         </div>

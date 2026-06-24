@@ -47,30 +47,53 @@ def _latest_season(p: str) -> str:
 
 # --------------------------------------------------------------------------- #
 def build_dim_current_roster(p: str) -> pd.DataFrame:
+    # The search picker's current-season player->team map. Membership is resolved LIVE-first
+    # (int_player_current_team: live roster, else latest game), so an offseason trade shows the
+    # NEW team before the player dresses. Identity (name/pos/headshot) prefers the live roster too.
+    # Universe = current-season game players UNION anyone on a live roster, so a just-added player
+    # is searchable. team_id is the resolved current team; performance is unaffected (membership
+    # != performance — value/archetype lag until he plays for the new club).
     season = _latest_season(p)
     sql = f"""
-    WITH latest AS (
-        SELECT player_id,
-               ARRAY_AGG(STRUCT(team_id, headshot_url, first_name, last_name, position_code)
-                         ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS r
-        FROM `{p}.nhl_staging.stg_rosters`
-        WHERE season = '{season}' AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01','02','03')
-        GROUP BY player_id
+    WITH latest AS (  -- current-season game-derived identity + team (historical path)
+        SELECT player_id, team_id, headshot_url, first_name, last_name, position_code
+        FROM (
+            SELECT player_id, team_id, headshot_url, first_name, last_name, position_code,
+                   ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_id DESC) AS rn
+            FROM `{p}.nhl_staging.stg_rosters`
+            WHERE season = '{season}' AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('01','02','03')
+        ) WHERE rn = 1
+    ),
+    live AS (  -- live-roster identity (preferred for trade-ins)
+        SELECT player_id, first_name, last_name, full_name, position_code, headshot_url
+        FROM `{p}.nhl_staging.stg_roster_current`
+    ),
+    res AS (SELECT player_id, current_team_id FROM `{p}.nhl_staging.int_player_current_team`),
+    universe AS (
+        SELECT player_id FROM latest
+        UNION DISTINCT
+        SELECT player_id FROM live
     ),
     tm AS (SELECT team_id, ANY_VALUE(team_abbrev) abbrev
            FROM `{p}.nhl_mart.mart_team_game_stats` WHERE season = '{season}' GROUP BY team_id)
-    SELECT l.player_id,
+    SELECT u.player_id,
            '{season}' AS season,
-           l.r.first_name AS first_name, l.r.last_name AS last_name,
-           l.r.first_name || ' ' || l.r.last_name AS full_name,
-           LOWER(l.r.first_name || ' ' || l.r.last_name) AS name_lower,
-           l.r.team_id AS team_id, tm.abbrev AS team_abbrev,
-           l.r.position_code AS position_code, l.r.headshot_url AS headshot_url,
+           COALESCE(live.first_name, latest.first_name) AS first_name,
+           COALESCE(live.last_name, latest.last_name) AS last_name,
+           COALESCE(live.full_name, latest.first_name || ' ' || latest.last_name) AS full_name,
+           LOWER(COALESCE(live.full_name, latest.first_name || ' ' || latest.last_name)) AS name_lower,
+           COALESCE(res.current_team_id, latest.team_id) AS team_id,
+           tm.abbrev AS team_abbrev,
+           COALESCE(live.position_code, latest.position_code) AS position_code,
+           COALESCE(live.headshot_url, latest.headshot_url) AS headshot_url,
            a.primary_archetype AS primary_archetype
-    FROM latest l
-    LEFT JOIN tm ON l.r.team_id = tm.team_id
+    FROM universe u
+    LEFT JOIN live ON live.player_id = u.player_id
+    LEFT JOIN latest ON latest.player_id = u.player_id
+    LEFT JOIN res ON res.player_id = u.player_id
+    LEFT JOIN tm ON COALESCE(res.current_team_id, latest.team_id) = tm.team_id
     LEFT JOIN `{p}.nhl_models.player_archetypes` a
-      ON a.player_id = l.player_id AND a.season = '{season}'
+      ON a.player_id = u.player_id AND a.season = '{season}'
     """
     return bq.query_df(sql)
 

@@ -1,5 +1,6 @@
 .identity-header {
   position: relative;
+  display: flex;
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-6) var(--space-8);

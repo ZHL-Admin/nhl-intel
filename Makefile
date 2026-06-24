@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
+.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -50,6 +50,12 @@ test:
 SEASON ?= 2025-26
 edge-refresh:
 	python -m scripts.refresh_edge --season $(SEASON)
+
+# Refresh LIVE team rosters (membership feed) into nhl_raw.raw_rosters for all 32 teams.
+# Fixes a player's current TEAM LABEL before he dresses (offseason trades); resumable per day.
+# Run nightly via the DAG; SEASON only selects which season's team list to iterate.
+roster-refresh:
+	python -m scripts.refresh_rosters --season $(SEASON)
 
 # Fit isolated-impact RAPM (Phase 4.1): 3-season window + recent single seasons, with
 # bootstrap SDs, into nhl_models.player_impact. Long-running (~1-2h with bootstrap).

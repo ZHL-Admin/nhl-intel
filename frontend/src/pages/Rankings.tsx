@@ -217,9 +217,8 @@ export default function Rankings() {
         <PageHeader
           title="Rankings"
           subtitle="Team strength by net goals per game, with the luck stripped out."
-        />
-
-        <div className="rankings__toolbar">
+        >
+          <div className="rankings__toolbar">
           <div className="rankings__bar">
             <Tabs
               options={[
@@ -254,7 +253,8 @@ export default function Rankings() {
           </div>
 
           {tab === 'power' && showColors && <PowerLegend />}
-        </div>
+          </div>
+        </PageHeader>
 
         {error && <p className="rankings__msg">{error}</p>}
         {loading && !error && <SkeletonLoader />}

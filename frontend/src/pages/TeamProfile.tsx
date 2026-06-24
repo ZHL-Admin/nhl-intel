@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, ComponentStackBar, PlayerAvatar } from '../components/common'
-import type { StackSegment } from '../components/common'
+import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, PlayerAvatar, StreakDoctorCard, StandingsLadder, InsightCard } from '../components/common'
+import type { StandingsLadderTeam } from '../components/common'
+import { Flame, Shield, Gauge, Crosshair, Zap, ShieldCheck, Sparkles, Hand, Lightbulb } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Tabs from '../components/common/Tabs'
 import { ChartPanel } from '../components/common'
 import TeamIdentityTab from '../components/teams/TeamIdentityTab'
@@ -9,12 +11,55 @@ import TeamFormTab from '../components/teams/TeamFormTab'
 import TeamRadar from '../components/teams/TeamRadar'
 import LineBoard from '../components/teams/LineBoard'
 import { LineSwapWidget } from '../components/common'
-import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak } from '../api/teams'
+import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak, getStandings, getTeamInsights } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
 import { getTeamGames } from '../api/games'
-import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, StreakCard, PowerRatingRow } from '../api/types'
+import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, StreakCard, PowerRatingRow, StandingsRow, TeamInsight } from '../api/types'
 import { RATINGS_COMPONENTS } from '../config/metrics'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, formatTOI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
+import { ordinal } from '../utils/format'
+import { TEAM_SNAPSHOT_GROUPS, snapshotStatView } from '../config/metrics'
+
+/** Top three per division clinch; 4th and below chase the conference wild cards. */
+const PLAYOFF_CUT = 3
+
+/** Division StandingsLadder view-model from league standings + the current team (header). Returns
+ * null when the division slice isn't available, so the header omits the ladder rather than faking it. */
+function divisionLadder(standings: StandingsRow[], t: TeamDetail): {
+  division: string; teams: StandingsLadderTeam[]; contextLine?: string
+} | null {
+  if (!t.division) return null
+  const peers = standings.filter((s) => s.division === t.division && s.division_rank != null)
+  if (peers.length < 2) return null
+  const teams: StandingsLadderTeam[] = peers.map((s) => ({
+    teamId: s.team_id,
+    abbrev: s.team_abbrev,
+    logoUrl: getTeamLogoUrl(s.team_abbrev),
+    rank: s.division_rank as number,
+    points: s.points,
+    gamesPlayed: s.games_played,
+    isCurrent: s.team_abbrev === t.team_abbrev,
+  }))
+  const sorted = [...peers].sort((a, b) => (a.division_rank as number) - (b.division_rank as number))
+  const me = sorted.find((s) => s.team_abbrev === t.team_abbrev)
+  let contextLine: string | undefined
+  if (me?.division_rank != null) {
+    const rank = me.division_rank
+    const pts = (n: number) => `${n} point${n === 1 ? '' : 's'}`
+    if (rank <= PLAYOFF_CUT) {
+      const firstOut = sorted.find((s) => s.division_rank === PLAYOFF_CUT + 1)
+      const margin = firstOut ? me.points - firstOut.points : null
+      contextLine = `${ordinal(rank)} in ${t.division}` +
+        (margin != null && margin > 0 ? `, ${pts(margin)} up on the top three` : ', holding a top-three spot')
+    } else {
+      const cutTeam = sorted.find((s) => s.division_rank === PLAYOFF_CUT)
+      const back = cutTeam ? cutTeam.points - me.points : null
+      contextLine = `${ordinal(rank)} in ${t.division}` +
+        (back != null && back > 0 ? `, ${pts(back)} back of the top three` : '')
+    }
+  }
+  return { division: t.division, teams, contextLine }
+}
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts'
 import './TeamProfile.css'
 
@@ -30,6 +75,11 @@ function TeamProfile() {
   const [upcomingGame, setUpcomingGame] = useState<Game | null>(null)
   const [recentGames, setRecentGames] = useState<Game[]>([])
   const [streakCard, setStreakCard] = useState<StreakCard | null>(null)
+  // Power rating fetched ONCE here so the lead verdict and the Power Rating card show one net-goals/gm number.
+  const [power, setPower] = useState<{ row: PowerRatingRow; rank: number; n: number } | null>(null)
+  // League standings (sliced to the division for the header StandingsLadder) + generated quick insights.
+  const [standings, setStandings] = useState<StandingsRow[]>([])
+  const [insights, setInsights] = useState<TeamInsight[]>([])
 
   const [loading, setLoading] = useState(true)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -134,6 +184,42 @@ function TeamProfile() {
     getTeamStreak(parseInt(teamId), 10)
       .then((c) => active && setStreakCard(c))
       .catch(() => { /* no card (e.g. <10 games) — banner just hides */ })
+    return () => { active = false }
+  }, [teamId])
+
+  // Power rating + league rank (shared by the lead verdict and the Power Rating card).
+  useEffect(() => {
+    if (!teamId) return
+    let active = true
+    setPower(null)
+    getPowerRankings()
+      .then((rows) => {
+        if (!active) return
+        const idx = rows.findIndex((r) => r.team_id === parseInt(teamId))
+        if (idx >= 0) setPower({ row: rows[idx], rank: idx + 1, n: rows.length })
+      })
+      .catch(() => { /* no rating -> verdict + card degrade gracefully */ })
+    return () => { active = false }
+  }, [teamId])
+
+  // League standings (header StandingsLadder) — degrade to no ladder if unavailable.
+  useEffect(() => {
+    let active = true
+    setStandings([])
+    getStandings()
+      .then((rows) => active && setStandings(rows))
+      .catch(() => { /* no standings -> header omits the ladder */ })
+    return () => { active = false }
+  }, [teamId])
+
+  // Generated quick insights (engine copy) — omitted gracefully if unavailable.
+  useEffect(() => {
+    if (!teamId) return
+    let active = true
+    setInsights([])
+    getTeamInsights(parseInt(teamId))
+      .then((rows) => active && setInsights(rows))
+      .catch(() => { /* no insights -> Quick insights section hides */ })
     return () => { active = false }
   }, [teamId])
 
@@ -248,37 +334,52 @@ function TeamProfile() {
 
   const teamColor = getTeamColor(teamDetail.team_abbrev)
   const teamFullName = getTeamName(teamDetail.team_abbrev)
+  const ladder = divisionLadder(standings, teamDetail)
+  const netRating = power?.row.total_rating ?? null
 
   return (
     <PageLayout>
       <div className="team-profile">
-        {/* Identity Header */}
-        <IdentityHeader
-          backLink={{ label: '← Back to Teams', to: '/teams' }}
-          leftContent={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-              <img
-                src={getTeamLogoUrl(teamDetail.team_abbrev)}
-                alt={teamFullName}
-                style={{ width: '64px', height: '64px', objectFit: 'contain' }}
-              />
-              <div>
-                <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, margin: 0, color: 'var(--color-text-primary)' }}>
-                  {teamFullName}
-                </h1>
-                <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
-                    {teamDetail.wins}-{teamDetail.losses}-{teamDetail.otl}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
-                    {teamDetail.points} PTS
-                  </span>
+        {/* Identity Header (compact, packed) */}
+        {/* Header + standings as two side-by-side cards (per comp), not nested. */}
+        <div className="team-hd-row">
+          <IdentityHeader
+            leftContent={
+              <div className="team-hd">
+                <img src={getTeamLogoUrl(teamDetail.team_abbrev)} alt={teamFullName} className="team-hd__logo" />
+                <div className="team-hd__id">
+                  <h1 className="team-hd__name">{teamFullName}</h1>
+                  <div className="team-hd__context">
+                    {[teamDetail.division, teamDetail.conference,
+                      teamDetail.division_rank != null ? `${ordinal(teamDetail.division_rank)} in division` : null]
+                      .filter(Boolean).join(' · ')}
+                  </div>
+                  <hr className="team-hd__divider" />
+                  <div className="team-hd__hero">
+                    <span className="team-hd__record mono">{teamDetail.wins}-{teamDetail.losses}-{teamDetail.otl}</span>
+                    <span className="team-hd__pts">{teamDetail.points} PTS</span>
+                    {power && (
+                      <span className={`team-hd__power team-hd__power--r${power.rank <= 5 ? '1' : power.rank <= 11 ? '2' : power.rank <= 21 ? '3' : '4'}`}>
+                        Power Ranking: #{power.rank} of {power.n}
+                      </span>
+                    )}
+                  </div>
+                  <p className="team-hd__verdict">{teamVerdict(teamDetail, streakCard, netRating)}</p>
                 </div>
               </div>
-            </div>
-          }
-          teamColors={{ home: teamColor }}
-        />
+            }
+            teamColors={{ home: teamColor }}
+          />
+          {ladder && (
+            <StandingsLadder
+              division={ladder.division}
+              teams={ladder.teams}
+              playoffCutAfterRank={PLAYOFF_CUT}
+              showHeader={false}
+              size="md"
+            />
+          )}
+        </div>
 
         {/* Upcoming Game Strip (conditional) */}
         {upcomingGame && (
@@ -309,10 +410,10 @@ function TeamProfile() {
             <div className="team-profile__upcoming-game-arrow">→</div>
           </div>
         )}
-
-        {/* Tab Navigation */}
-        <div style={{ padding: 'var(--space-6) 0', borderBottom: '1px solid var(--color-border)' }}>
-          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 var(--space-6)' }}>
+        
+        {/* Tabs + tab content together in one card */}
+        <div className="team-tabs-card">
+          <div className="team-tabs-card__nav">
             <Tabs
               options={[
                 { value: 'overview', label: 'Overview' },
@@ -326,80 +427,61 @@ function TeamProfile() {
               onChange={handleTabChange}
             />
           </div>
-        </div>
 
-        {/* Tab Content */}
-        {currentTab === 'overview' && (
-          <OverviewTab teamDetail={teamDetail} teamColor={teamColor} streakCard={streakCard} />
-        )}
+          {/* Tab Content */}
+          {currentTab === 'overview' && teamId && (
+            <OverviewTab teamDetail={teamDetail} teamColor={teamColor} streakCard={streakCard}
+              power={power} insights={insights} teamId={parseInt(teamId)} />
+          )}
 
-        {/* Power-rating component breakdown — the full four-part split lives here (Phase 3.1) */}
-        {currentTab === 'overview' && teamId && (
-          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
-            <TeamPowerCard teamId={parseInt(teamId)} />
-          </div>
-        )}
+          {currentTab === 'identity' && teamId && (
+            <TeamIdentityTab teamId={parseInt(teamId)} teamDetail={teamDetail} teamColor={teamColor} />
+          )}
 
-        {/* Notable run -> a single compact insight line (the full Streak Doctor lives on
-            Performance / Trends, not here). */}
-        {currentTab === 'overview' && streakCard?.is_notable && (
-          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 var(--space-6, 24px) var(--space-4, 16px)' }}>
-            <Link to={`/teams/${teamId}?tab=performance`} className="team-profile__streak-line">
-              <Badge variant={streakCard.run_word === 'surge' ? 'hot' : streakCard.run_word === 'slump' ? 'cold' : 'small-sample'}
-                label={streakCard.run_word ? streakCard.run_word.toUpperCase() : 'FORM'} />
-              <span>{streakCard.verdict}</span>
-              <span className="team-profile__streak-line-cta">See Performance / Trends →</span>
-            </Link>
-          </div>
-        )}
+          {/* Performance / Trends — form verdict (Streak Doctor, its own Last 5/10/20 toggle) then
+              the season-long rolling trend charts + last-10 results. */}
+          {currentTab === 'performance' && teamId && (
+            <>
+              <TeamFormTab teamId={parseInt(teamId)} />
+              <PerformanceTrendsTab
+                teamTrends={teamTrends}
+                trendsError={trendsError}
+                handleRetryTrends={handleRetryTrends}
+                teamColor={teamColor}
+                recentGames={recentGames}
+                teamId={parseInt(teamId)}
+                navigate={navigate}
+              />
+            </>
+          )}
 
-        {currentTab === 'identity' && teamId && (
-          <TeamIdentityTab teamId={parseInt(teamId)} teamDetail={teamDetail} teamColor={teamColor} />
-        )}
+          {currentTab === 'lines' && teamId && (
+            <div className="team-profile__content">
+              <div className="team-profile__section">
+                <h2 className="team-profile__section-title">Lines</h2>
+                <LineBoard teamId={parseInt(teamId)} />
+              </div>
+              <div className="team-profile__section">
+                <h2 className="team-profile__section-title">Experiment with a swap</h2>
+                <p className="team-profile__section-sub">Swap any player into a current line to see the projected grade and xGF% change.</p>
+                <LineSwapWidget teamId={parseInt(teamId)} />
+              </div>
+            </div>
+          )}
 
-        {/* Performance / Trends — form verdict (Streak Doctor, its own Last 5/10/20 toggle) then
-            the season-long rolling trend charts + last-10 results. */}
-        {currentTab === 'performance' && teamId && (
-          <>
-            <TeamFormTab teamId={parseInt(teamId)} />
-            <PerformanceTrendsTab
-              teamTrends={teamTrends}
-              trendsError={trendsError}
-              handleRetryTrends={handleRetryTrends}
-              teamColor={teamColor}
-              recentGames={recentGames}
-              teamId={parseInt(teamId)}
+          {currentTab === 'roster' && (
+            <RosterTab
+              teamRoster={teamRoster}
+              teamAbbrev={teamDetail?.team_abbrev}
+              rosterError={rosterError}
+              handleRetryRoster={handleRetryRoster}
+              sortConfig={sortConfig}
+              handleSort={handleSort}
+              sortPlayers={sortPlayers}
               navigate={navigate}
             />
-          </>
-        )}
-
-        {currentTab === 'lines' && teamId && (
-          <div className="team-profile__content">
-            <div className="team-profile__section">
-              <h2 className="team-profile__section-title">Lines</h2>
-              <LineBoard teamId={parseInt(teamId)} />
-            </div>
-            <div className="team-profile__section">
-              <h2 className="team-profile__section-title">Experiment with a swap</h2>
-              <p className="team-profile__section-sub">Swap any player into a current line to see the projected grade and xGF% change.</p>
-              <LineSwapWidget teamId={parseInt(teamId)} />
-            </div>
-          </div>
-        )}
-
-        {currentTab === 'roster' && (
-          <RosterTab
-            teamRoster={teamRoster}
-            teamAbbrev={teamDetail?.team_abbrev}
-            rosterError={rosterError}
-            handleRetryRoster={handleRetryRoster}
-            sortConfig={sortConfig}
-            handleSort={handleSort}
-            sortPlayers={sortPlayers}
-            navigate={navigate}
-          />
-        )}
+          )}
+        </div>
       </div>
     </PageLayout>
   )
@@ -410,123 +492,181 @@ function TeamProfile() {
  * labels lives HERE (off the Rankings list, which shows a single magnitude bar). Reuses the
  * existing /rankings/power endpoint and finds this team's row — no new backend surface.
  */
-function TeamPowerCard({ teamId }: { teamId: number }) {
-  const [rows, setRows] = useState<PowerRatingRow[] | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    getPowerRankings()
-      .then((d) => { if (active) setRows(d) })
-      .catch(() => { if (active) setFailed(true) })
-    return () => { active = false }
-  }, [teamId])
-
-  if (failed || !rows) return null
-  const idx = rows.findIndex((r) => r.team_id === teamId)
-  if (idx === -1) return null // e.g. a national team with no NHL rating
-  const r = rows[idx]
-
-  const segments: StackSegment[] = RATINGS_COMPONENTS.map((c) => ({
-    key: c.key, label: c.label, value: r[c.contrib] as number, color: c.color,
-  }))
-  let pos = 0, neg = 0
-  for (const c of RATINGS_COMPONENTS) { const v = r[c.contrib] as number; if (v >= 0) pos += v; else neg += v }
-  const m = Math.max(0.2, pos, Math.abs(neg), Math.abs(r.total_rating) + (r.rating_se ?? 0))
-  const fmt = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
-
+/** Power Rating card (right rail): number + ±SE + the four-component ComponentStackBar. Takes the
+ * lifted power row so it shows the SAME net-goals/game number the lead verdict references. */
+/** One contribution as a diverging row: label · mini bar from league average · signed value.
+ * Color encodes SIGN only (valence): right/green above average, left/red below — never the
+ * component category. The baseline is league average (zero), consistent with the rest of the site. */
+function ContribRow({ label, value, max }: { label: string; value: number; max: number }) {
+  const frac = Math.min(1, Math.abs(value) / max) * 50 // % of the half-track from centre
+  const pos = value >= 0
+  const color = pos ? 'var(--color-success)' : 'var(--color-danger)'
   return (
-    <div className="team-profile__section">
-      <h2 className="team-profile__section-title">Power Rating</h2>
-      <div style={{
-        border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)',
-        background: 'var(--color-bg-surface)', boxShadow: 'var(--shadow-sm)',
-        padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 'var(--text-2xl)', color: 'var(--color-text-primary)' }}>{fmt(r.total_rating)}</span>
-            <span style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>net goals / game</span>
-            {r.rating_se != null && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>± {r.rating_se.toFixed(2)}</span>}
-          </div>
-          <Link to="/rankings" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-            #{idx + 1} of {rows.length} · full rankings →
-          </Link>
-        </div>
+    <div className="tov-contrib">
+      <span className="tov-contrib__label">{label}</span>
+      <span className="tov-contrib__bar">
+        <span className="tov-contrib__zero" />
+        <span
+          className="tov-contrib__fill"
+          style={pos
+            ? { left: '50%', width: `${frac}%`, background: color }
+            : { left: `${50 - frac}%`, width: `${frac}%`, background: color }}
+        />
+      </span>
+      <span className="tov-contrib__val mono" style={{ color }}>{(pos ? '+' : '') + value.toFixed(2)}</span>
+    </div>
+  )
+}
 
-        <ComponentStackBar segments={segments} total={r.total_rating} domain={[-m, m]} se={r.rating_se} height={26} />
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2) var(--space-4)' }}>
-          {RATINGS_COMPONENTS.map((c) => (
-            <span key={c.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: c.color, display: 'inline-block' }} />
-              {c.label}
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>{fmt(r[c.contrib] as number)}</span>
-            </span>
-          ))}
-        </div>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
-          Net goals per game versus a league-average opponent, split into the four sources that produce it.
-          Bar centred at league average; the tick is the total, the line its uncertainty.
-        </p>
+function PowerRatingCard({ power }: { power: { row: PowerRatingRow; rank: number; n: number } | null }) {
+  if (!power) return null
+  const { row: r, rank, n } = power
+  const contribs = RATINGS_COMPONENTS.map((c) => ({ label: c.label, value: r[c.contrib] as number }))
+  const max = Math.max(0.2, ...contribs.map((c) => Math.abs(c.value)), Math.abs(r.total_rating) + (r.rating_se ?? 0))
+  const fmt = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
+  return (
+    <div className="tov-card">
+      <div className="tov-card__title">Power rating</div>
+      <div className="tov-power__top">
+        <span className="tov-power__num">{fmt(r.total_rating)}</span>
+        <span className="tov-power__unit">net goals / game</span>
+        {r.rating_se != null && <span className="tov-power__se">± {r.rating_se.toFixed(2)}</span>}
+        <span className="tov-power__rank mono">#{rank} of {n}</span>
       </div>
+      <div className="tov-power__rows">
+        {contribs.map((c) => <ContribRow key={c.label} label={c.label} value={c.value} max={max} />)}
+      </div>
+      <Link to="/rankings" className="tov-card__link">Full rankings →</Link>
     </div>
   )
 }
 
 // Overview Tab Component
-/** Deterministic Overview verdict (Layer 1) from real rank fields + any notable run. Template-only
- * (no generated prose); the Phase 6 insight engine will replace this. */
-function teamVerdict(t: TeamDetail, streak: StreakCard | null): string {
+/** Deterministic Overview verdict (Layer 1). Net goals/game is sourced from the Power Rating total
+ * (the same number the Power Rating card shows) so the page never states two different figures. */
+function teamVerdict(t: TeamDetail, streak: StreakCard | null, netRating: number | null): string {
   const tier = (r?: number | null) => r == null ? 'a middling' : r <= 8 ? 'an elite' : r <= 16 ? 'a strong' : r <= 24 ? 'a middling' : 'a bottom-tier'
-  const gd = (t.total_goals_for - t.total_goals_against) / Math.max(1, t.games_played)
   const gen = t.hdcf_per60_rank, supp = t.hdca_per60_rank
   let danger: string
   if (gen != null && supp != null && gen <= 12 && supp <= 12) danger = 'win the high-danger battle at both ends'
   else if (gen != null && gen <= 12) danger = 'create high-danger chances well but give up too many'
   else if (supp != null && supp <= 12) danger = 'lean on suppressing danger more than creating it'
-  else danger = 'are middling in the high-danger battle'
-  const result = gd >= 0.4 ? 'and outscore opponents comfortably' : gd >= 0 ? 'and roughly break even on goals'
-    : gd >= -0.4 ? 'and are narrowly outscored' : 'and get outscored'
-  let s = `${t.team_abbrev} are ${tier(t.cf_pct_rank)} possession team that ${danger}, ${result} (${gd >= 0 ? '+' : ''}${gd.toFixed(2)}/gm).`
+  else danger = 'are weak in the high-danger battle'
+  let tail = '.'
+  if (netRating != null) {
+    const result = netRating >= 0.4 ? 'and outscore opponents comfortably' : netRating >= 0 ? 'and roughly break even on goals'
+      : netRating >= -0.4 ? 'and are narrowly outscored' : 'and get outscored'
+    tail = `, ${result} (${netRating >= 0 ? '+' : ''}${netRating.toFixed(2)} net goals/gm).`
+  }
+  let s = `${t.team_abbrev} is ${tier(t.cf_pct_rank)} possession team that ${danger}${tail}`
   if (streak?.is_notable && streak.run_word) s += ` Recent form: a ${streak.run_word}.`
   return s
 }
 
-function OverviewTab({ teamDetail, teamColor, streakCard }: {
+/** Strongest / weakest dimension read for the radar card, from the same rank fields the radar plots. */
+function radarRead(t: TeamDetail): string | null {
+  const dims = ([
+    { label: 'possession', rank: t.cf_pct_rank },
+    { label: 'chance quality', rank: t.xgf_pct_rank },
+    { label: 'danger generation', rank: t.hdcf_per60_rank },
+    { label: 'danger suppression', rank: t.hdca_per60_rank },
+    { label: 'zone control', rank: t.zone_entry_proxy_success_rate_rank },
+  ].filter((d) => d.rank != null) as { label: string; rank: number }[])
+  if (dims.length < 2) return null
+  const best = dims.reduce((b, d) => (d.rank < b.rank ? d : b), dims[0])
+  const worst = dims.reduce((b, d) => (d.rank > b.rank ? d : b), dims[0])
+  return `Strongest: ${best.label} (${ordinal(best.rank)}) · Weakest: ${worst.label} (${ordinal(worst.rank)})`
+}
+
+/** Lucide icon for an insight's engine-provided icon name (falls back to a generic bulb). */
+const INSIGHT_ICONS: Record<string, LucideIcon> = {
+  flame: Flame, shield: Shield, gauge: Gauge, crosshair: Crosshair, zap: Zap,
+  'shield-check': ShieldCheck, sparkles: Sparkles, hand: Hand,
+}
+
+/** Streak component key (cold-strip driver) -> insight category, so Quick insights don't restate it. */
+const STREAK_TO_INSIGHT: Record<string, string> = {
+  goaltending: 'goaltending', shooting_luck: 'finishing', special_teams: 'special_teams', play_change: 'possession',
+}
+
+/** The cold strip's dominant driver key (largest-magnitude component aligned with the run direction). */
+function streakDriverKey(card: StreakCard): string | null {
+  const sign = Math.sign(card.total_deviation) || 1
+  const aligned = card.components.filter((c) => Math.sign(c.value) === sign)
+  const pool = aligned.length ? aligned : card.components
+  if (!pool.length) return null
+  return pool.reduce((b, c) => (Math.abs(c.value) > Math.abs(b.value) ? c : b), pool[0]).key
+}
+
+function OverviewTab({ teamDetail, teamColor, streakCard, power, insights, teamId }: {
   teamDetail: TeamDetail; teamColor: string; streakCard: StreakCard | null
+  power: { row: PowerRatingRow; rank: number; n: number } | null
+  insights: TeamInsight[]; teamId: number
 }) {
-  const xgfShare = teamDetail.xgf_per60 + teamDetail.xga_per60 > 0
-    ? teamDetail.xgf_per60 / (teamDetail.xgf_per60 + teamDetail.xga_per60) : null
+  const read = radarRead(teamDetail)
+  const showColdStrip = !!streakCard?.is_notable
+
+  // Quick insights: drop the engine card that restates the cold strip's driver, then take three.
+  const driver = showColdStrip ? streakDriverKey(streakCard!) : null
+  const excludeKey = driver ? STREAK_TO_INSIGHT[driver] : null
+  const quickInsights = insights.filter((i) => i.key !== excludeKey).slice(0, 3)
+
   return (
-    <div className="team-profile__content">
-      <p className="team-profile__verdict">{teamVerdict(teamDetail, streakCard)}</p>
-
-      <div className="team-profile__section">
-        <h2 className="team-profile__section-title">Performance Profile</h2>
-        <p className="team-profile__section-sub">Percentile rank across six dimensions vs the league — the dashed polygon is the league median.</p>
-        <ChartPanel title="How this team is built">
-          <TeamRadar teamDetail={teamDetail} color={teamColor} />
-        </ChartPanel>
-      </div>
-
-      <div className="team-profile__section">
-        <h2 className="team-profile__section-title">Season Snapshot</h2>
-        <div className="team-profile__stat-grid">
-          <StatCard label="CF%" value={(teamDetail.cf_pct * 100).toFixed(1) + '%'} rank={teamDetail.cf_pct_rank} tooltip="Corsi For % — share of unblocked + blocked shot attempts at 5v5." />
-          <StatCard label="xGF%" value={xgfShare != null ? (xgfShare * 100).toFixed(1) + '%' : '—'} rank={teamDetail.xgf_pct_rank} tooltip="Expected-goals share at 5v5." />
-          <StatCard label="HDCF/60" value={teamDetail.hdcf_per60.toFixed(1)} rank={teamDetail.hdcf_per60_rank} tooltip="High-danger chances FOR per 60 minutes." />
-          <StatCard label="HDCA/60" value={teamDetail.hdca_per60.toFixed(1)} rank={teamDetail.hdca_per60_rank} tooltip="High-danger chances AGAINST per 60 (lower is better)." />
-          <StatCard label="GF/GP" value={(teamDetail.total_goals_for / teamDetail.games_played).toFixed(2)} rank={teamDetail.gf_per_gp_rank} />
-          <StatCard label="GA/GP" value={(teamDetail.total_goals_against / teamDetail.games_played).toFixed(2)} rank={teamDetail.ga_per_gp_rank} />
-          {teamDetail.zone_entry_proxy_success_rate != null && (
-            <StatCard label="Zone Entry % (proxy)" value={`${(teamDetail.zone_entry_proxy_success_rate * 100).toFixed(1)}%`} rank={teamDetail.zone_entry_proxy_success_rate_rank || undefined} tooltip="Derived proxy: inferred from consecutive event zone codes, not measured entries." />
+    <div className="team-profile__content tov">
+      {/* EVIDENCE ZONE — two columns; tops aligned, bottoms even (the identity verdict now
+          lives in the page header, just under the record line). */}
+      <div className="tov-evidence">
+        <div className="tov-col">
+          <div className="tov-col__head">
+            <h2 className="team-profile__section-title">Season snapshot</h2>
+            <p className="tov-col__sub">Team performance at a glance</p>
+          </div>
+          {showColdStrip && (
+            <StreakDoctorCard card={streakCard!} variant="strip" href={`/teams/${teamId}?tab=performance`} />
           )}
-          {teamDetail.faceoff_win_pct != null && (
-            <StatCard label="Faceoff Win %" value={`${(teamDetail.faceoff_win_pct * 100).toFixed(1)}%`} tooltip="Share of faceoffs won (all situations)." />
-          )}
+          <div className="tov-col__container">
+          {TEAM_SNAPSHOT_GROUPS.map((group) => (
+            <div className="tov-snap-group" key={group.id}>
+              <div className="tov-snap-group__label">{group.label}</div>
+              <div className="tov-snap-row">
+                {group.stats.map((stat) => {
+                  const v = snapshotStatView(teamDetail, stat)
+                  return <StatCard key={stat.key} label={stat.label} value={v.value} rank={v.rank} tooltip={v.tooltip} />
+                })}
+              </div>
+            </div>
+          ))}
+          </div>
+        </div>
+
+        <div className="tov-rail">
+          <h2 className="team-profile__section-title">Rating &amp; profile</h2>
+          <PowerRatingCard power={power} />
+          <div className="tov-card tov-radar">
+            <div className="tov-card__title">How they're built</div>
+            <TeamRadar teamDetail={teamDetail} color={teamColor} height={300} />
+            {read && <p className="tov-radar__read">{read}</p>}
+          </div>
         </div>
       </div>
+
+      {/* QUICK INSIGHTS — generated cards, deduped against the cold strip */}
+      {quickInsights.length > 0 && (
+        <div className="tov-insights">
+          <h2 className="team-profile__section-title">Quick insights</h2>
+          <div className="tov-insights__grid">
+            {quickInsights.map((ins) => (
+              <InsightCard
+                key={ins.key}
+                tone={ins.tone}
+                icon={INSIGHT_ICONS[ins.icon] ?? Lightbulb}
+                title={ins.title}
+                body={ins.body}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

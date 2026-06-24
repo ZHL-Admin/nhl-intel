@@ -41,6 +41,7 @@ import pandas as pd
 from models_ml import bq, config
 from models_ml.compute_team_needs import role_of, SKATER_COMPONENTS, COMPONENT_LABEL, ROLE_LABEL
 from models_ml.textfmt import ordinal
+from insight_engine.templates import team_fit as verdict_tmpl
 
 CFG = config.TRADE_FIT
 ARCH_LIST = sorted(set(config.ARCHETYPE_NAMES_V2.values()))
@@ -179,15 +180,57 @@ def _project_war(g: pd.DataFrame, rw: dict, cfg: dict, ratio: float) -> dict:
     sd = max(cfg["BAND_SD_FLOOR"], base_sd)
     if last_war - proj >= cfg["SPIKE_NOTE_GAP_WAR"]:      # widen the band on a one-off spike
         sd += cfg["SPIKE_BAND_INFLATE"] * (last_war - proj)
-    return {"proj_war": proj, "last_war": last_war, "proj_war_sd": sd}
+    # per-season WAR series (newest -> oldest) + the recency/games-weighted multi-season baseline,
+    # for the trajectory classifier. These are ADDED outputs — they do not affect proj_war/the floor.
+    order = g["season_window"].map(rw).fillna(-1.0)
+    g_ser = g.assign(_o=order).sort_values("_o", ascending=False)
+    series = [float(x) for x in g_ser["war"].to_numpy(dtype="float64")]
+    return {"proj_war": proj, "last_war": last_war, "proj_war_sd": sd,
+            "series": series, "baseline": weighted}
+
+
+def _blend_quality(g: pd.DataFrame, rw: dict, ov_by: dict, pid: int, cfg: dict) -> dict | None:
+    """The fit-quality FLOOR lens: the blended Overall standing (production + isolated play-driving),
+    NOT production WAR alone. Production (GAR) bakes in shooting luck by design, so a finishing-driven
+    one-season spike can floor a career-ordinary player as 'elite'; the play-driving (RAPM) lens does
+    not, so the blend the system already trusts (config.OVERALL_WEIGHTS, here read straight off
+    nhl_models.player_overall.overall_percentile) is the right floor input. Recency- and games-weighted
+    across the recent seasons, then regressed toward the league-average 0.5 by sample so a small-sample
+    season can't dominate. Returns the projected blended percentile + the two component lenses (for an
+    honest note). See docs/methodology/player-fit.md."""
+    w, gms, ovr, prod, pdr = [], [], [], [], []
+    for r in g.itertuples():
+        rec = ov_by.get((int(pid), r.season_window))
+        if rec is None or rec[0] is None:
+            continue
+        w.append(rw.get(r.season_window, 0.0))
+        gms.append(max(0.0, float(r.games)) if pd.notna(r.games) else 0.0)
+        ovr.append(rec[0]); prod.append(rec[1]); pdr.append(rec[2])
+    if not ovr:
+        return None
+    w = np.array(w); gms = np.array(gms)
+    gw = w * gms
+    use = gw if gw.sum() > 0 else w
+    den = use.sum()
+    if den <= 0:
+        return None
+    blend = float(np.dot(np.nan_to_num(ovr), use) / den)
+    n_eff = float(np.dot(w, gms))
+    rel = n_eff / (n_eff + cfg["REGRESS_GAMES_K"]) if (n_eff + cfg["REGRESS_GAMES_K"]) > 0 else 0.0
+    q = 0.5 + rel * (blend - 0.5)                          # regress toward league average by sample
+    pp = float(np.dot(np.nan_to_num(prod), use) / den) if any(x is not None for x in prod) else None
+    dp = float(np.dot(np.nan_to_num(pdr), use) / den) if any(x is not None for x in pdr) else None
+    return {"q_pctile": q, "prod_pctile": pp, "pd_pctile": dp}
 
 
 @functools.lru_cache(maxsize=4)
 def _skater_projection(p: str, season: str) -> dict:
     """Projected WAR + within-position percentile for every skater (the fit quality FLOOR input)."""
     cfg = config.PLAYER_FIT_PROJECTION
-    seasons = _recent_seasons(season)
-    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons)}
+    # pull a slightly deeper history for the trajectory series; the projection weights only the
+    # newest len(RECENCY_WEIGHTS) seasons (the rest map to weight 0), so proj_war is unchanged.
+    seasons = _recent_seasons(season, cfg.get("HISTORY_SEASONS", len(cfg["RECENCY_WEIGHTS"])))
+    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons) if i < len(cfg["RECENCY_WEIGHTS"])}
     qs = ", ".join(f"'{s}'" for s in seasons)
     gar = bq.query_df(f"""select player_id, season_window, position, war, war_sd, games
         from `{p}.nhl_models.player_gar`
@@ -196,6 +239,13 @@ def _skater_projection(p: str, season: str) -> dict:
         return {}
     for c in ("war", "war_sd", "games"):
         gar[c] = pd.to_numeric(gar[c], errors="coerce")
+    # the FLOOR lens: blended Overall (production + play-driving) percentile per season, per player.
+    ov = bq.query_df(f"""select player_id, season_window, overall_percentile,
+        production_percentile, play_driving_percentile
+        from `{p}.nhl_models.player_overall` where season_window in ({qs})""")
+    ov_by = {(int(r.player_id), r.season_window):
+             (_f(r.overall_percentile), _f(r.production_percentile), _f(r.play_driving_percentile))
+             for r in ov.itertuples()}
     bio = bq.query_df(f"select player_id, birth_date from `{p}.nhl_staging.stg_player_bio`")
     bio_age = {int(r.player_id): _age_at(r.birth_date, season) for r in bio.itertuples()}
     arch = bq.query_df(f"""select player_id, primary_archetype from `{p}.nhl_models.player_archetypes`
@@ -214,22 +264,38 @@ def _skater_projection(p: str, season: str) -> dict:
         proj = _project_war(g.set_index("season_window", drop=False), rw, cfg, ratio)
         if not proj:
             continue
-        rows.append({"player_id": pid, "pg": pg, "age": age, **proj})
+        entry = {"player_id": pid, "pg": pg, "age": age, "aging_ratio": ratio, **proj}
+        blend = _blend_quality(g, rw, ov_by, pid, cfg)
+        if blend:
+            entry.update(blend)
+        rows.append(entry)
     df = pd.DataFrame(rows)
     if df.empty:
         return {}
     df["pctile"] = df.groupby("pg")["proj_war"].rank(pct=True)
+    # the floor uses the blended Overall lens; fall back to the production-WAR percentile only when a
+    # player has no player_overall row (so the floor never silently breaks).
+    if "q_pctile" not in df:
+        df["q_pctile"] = np.nan
+    df["q_pctile"] = df["q_pctile"].fillna(df["pctile"])
+    for c in ("prod_pctile", "pd_pctile"):
+        if c not in df:
+            df[c] = np.nan
     return {int(r.player_id): {"proj_war": float(r.proj_war), "proj_war_sd": float(r.proj_war_sd),
                                "last_war": float(r.last_war), "pctile": float(r.pctile),
-                               "pos_group": r.pg, "age": int(r.age)} for r in df.itertuples()}
+                               "q_pctile": float(r.q_pctile),
+                               "prod_pctile": _f(r.prod_pctile), "pd_pctile": _f(r.pd_pctile),
+                               "pos_group": r.pg, "age": int(r.age),
+                               "aging_ratio": float(r.aging_ratio), "series": list(r.series)}
+            for r in df.itertuples()}
 
 
 @functools.lru_cache(maxsize=4)
 def _goalie_projection(p: str, season: str) -> dict:
     """Projected WAR + within-goalie percentile for every goalie (no aging — goalie curves are flat)."""
     cfg = config.PLAYER_FIT_PROJECTION
-    seasons = _recent_seasons(season)
-    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons)}
+    seasons = _recent_seasons(season, cfg.get("HISTORY_SEASONS", len(cfg["RECENCY_WEIGHTS"])))
+    rw = {s: cfg["RECENCY_WEIGHTS"][i] for i, s in enumerate(seasons) if i < len(cfg["RECENCY_WEIGHTS"])}
     qs = ", ".join(f"'{s}'" for s in seasons)
     gar = bq.query_df(f"""select goalie_id as player_id, season_window, war, war_sd,
         games_played as games from `{p}.nhl_models.goalie_gar` where season_window in ({qs})""")
@@ -249,7 +315,8 @@ def _goalie_projection(p: str, season: str) -> dict:
     df["pctile"] = df["proj_war"].rank(pct=True)
     return {int(r.player_id): {"proj_war": float(r.proj_war), "proj_war_sd": float(r.proj_war_sd),
                                "last_war": float(r.last_war), "pctile": float(r.pctile),
-                               "pos_group": "goalie", "age": None} for r in df.itertuples()}
+                               "pos_group": "goalie", "age": None, "aging_ratio": 1.0,
+                               "series": list(r.series)} for r in df.itertuples()}
 
 
 # ------------------------------------------------------------------ player profile
@@ -322,13 +389,21 @@ def _player_profile(p: str, player_id: int, season: str) -> dict:
 
 
 def _quality_from_projection(proj: dict | None, pos_group: str) -> dict:
-    """Quality = the PROJECTED talent (the floor input + the separate quality axis). projected WAR,
-    its within-position percentile, the band, and last season's WAR (for the honest spike note)."""
+    """Quality = the PROJECTED talent (the floor input + the separate quality axis). The headline
+    `percentile` is the blended Overall lens (production + isolated play-driving) — NOT production WAR
+    alone — so a finishing-luck spike can't floor a player as 'elite' (see _blend_quality). The
+    production WAR projection is kept for display + the trajectory series; the two component lenses
+    (prod_pctile / pd_pctile) drive the honest note."""
     if proj is None:
         return {"percentile": None, "war": None, "war_sd": None, "last_war": None,
-                "pos_group": pos_group}
-    return {"percentile": proj["pctile"], "war": proj["proj_war"], "war_sd": proj["proj_war_sd"],
-            "last_war": proj["last_war"], "pos_group": pos_group}
+                "pos_group": pos_group, "series": [], "age": None, "aging_ratio": 1.0,
+                "prod_pctile": None, "pd_pctile": None}
+    return {"percentile": proj.get("q_pctile", proj["pctile"]),   # blended floor lens (skaters); GAR for goalies
+            "war": proj["proj_war"], "war_sd": proj["proj_war_sd"],
+            "last_war": proj["last_war"], "pos_group": pos_group,
+            "series": proj.get("series", []), "age": proj.get("age"),
+            "aging_ratio": proj.get("aging_ratio", 1.0),
+            "prod_pctile": proj.get("prod_pctile"), "pd_pctile": proj.get("pd_pctile")}
 
 
 def _skater_quality(p: str, pid: int, season: str) -> dict:
@@ -653,24 +728,19 @@ def _compose(quality_pct: float | None, match: float) -> tuple[float, str]:
     return round(fit, 4), _grade(fit)
 
 
-def _verdict(name, abbr, grade, quality, dims, is_goalie) -> str:
-    """Deterministic verdict: lead with the quality TIER (the floor), then the strongest match driver,
-    then the served need. Decomposition is the product; this just narrates it."""
-    by = {d["key"]: d for d in dims}
-    qtier = quality["label"]
-    match_dims = [by[k] for k in ("need", "style", "line") if by.get(k) and by[k].get("level") is not None]
-    lead = max(match_dims, key=lambda d: d["level"]) if match_dims else None
-    clause = f"{name} is {('an' if qtier and qtier[0] in 'aeiou' else 'a')} {qtier} player"
-    if lead and lead["level"] >= 0.6:
-        clause += " " + {"need": f"who fills a real {abbr} need",
-                         "style": f"whose style suits {abbr}",
-                         "line": "who complements the unit he'd join"}[lead["key"]]
-    nd = by.get("need")
-    if nd and nd["level"] < 0.35 and not (lead and lead["key"] == "need"):
-        clause += f", though {abbr} aren't especially short where he helps"
-    # Player-specific verdict only. The canonical fit-vs-quality explanation and the "can't see"
-    # caveat live ONCE, in the UI footnote — not repeated here.
-    return f"{clause}. Fit grades {grade}."
+def _pos_group(prof: dict) -> str:
+    return "goalie" if prof["is_goalie"] else ("D" if prof["role"] == "D" else "F")
+
+
+def _trajectory(prof: dict, quality: dict) -> dict:
+    """Classify the player's per-season WAR trajectory (the projection carries the series + age +
+    aging direction). Pure call into the verdict template; drives BOTH the verdict identity clause
+    and the quality-card descriptor so the two never disagree (consistency rule)."""
+    q = prof["quality"]                      # the raw projection dict (carries series/age/aging_ratio)
+    return verdict_tmpl.classify_trajectory(
+        series=q.get("series", []), proj_war=quality["war"], last_war=quality.get("last_war"),
+        proj_sd=quality.get("war_sd"), age=q.get("age"), aging_ratio=q.get("aging_ratio", 1.0),
+        cfg=CFG)
 
 
 # ------------------------------------------------------------------ main
@@ -698,7 +768,22 @@ def score_team_fit(player_id: int, team_id: int, season: str | None = None) -> d
     match = _match(dims)
     fit, grade = _compose(quality["percentile"], match)
     name = _player_name(p, player_id)
-    verdict = _verdict(name, abbr, grade, quality, dims, prof["is_goalie"])
+
+    # ---- context-aware verdict (deterministic clause assembly) ----
+    # The trajectory + tier descriptor are computed ONCE and feed both the verdict and the quality
+    # card, so the two surfaces can never disagree on the player's trajectory word or his numbers.
+    traj = _trajectory(prof, quality)
+    tier = verdict_tmpl.tier_phrase(quality["percentile"], _pos_group(prof), CFG)
+    signature, _sig_comp = verdict_tmpl.signature_phrase(
+        prof["comp_pct"], prof["role"], prof["is_goalie"], CFG)
+    pos_label = "goalies" if prof["is_goalie"] else ("defensemen" if prof["role"] == "D" else "forwards")
+    quality["note"] = verdict_tmpl.quality_note(
+        quality=quality, pos_label=pos_label, tier=tier, traj=traj, cfg=CFG,
+        prod_pctile=prof["quality"].get("prod_pctile"), pd_pctile=prof["quality"].get("pd_pctile"))
+    verdict = verdict_tmpl.build_verdict(
+        name=name, abbr=abbr, grade=grade, fit=fit, match=match, dims=dims,
+        need_breakdown=need["breakdown"], traj=traj, tier=tier, signature=signature,
+        role=prof["role"], is_goalie=prof["is_goalie"], cfg=CFG)
 
     return {
         "player_id": int(player_id), "player_name": name, "team_id": tid, "season": season,

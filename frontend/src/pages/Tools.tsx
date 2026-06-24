@@ -2,7 +2,7 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users, ArrowLeftRight, Scale } from 'lucide-react'
+import { Users, ArrowLeftRight, Scale, FileText } from 'lucide-react'
 import { PageLayout, PageHeader } from '../components/common'
 import './Tools.css'
 
@@ -24,6 +24,12 @@ const TOOLS = [
     icon: Scale,
     title: 'Trade Builder',
     blurb: 'Build a real multi-team trade with salary retention and read each side as a decomposition — talent, cost-efficiency, and fit — with a soft cap check.',
+  },
+  {
+    to: '/tools/contract-grader',
+    icon: FileText,
+    title: 'Contract Grader',
+    blurb: 'Grade any deal — actual, hypothetical, or newly signed — against a player’s projected production, and see the league’s best-value and most-overpaid contracts.',
   },
 ]
 

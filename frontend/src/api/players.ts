@@ -141,6 +141,15 @@ export async function getPlayerPreview(playerId: number | string, season?: strin
   return r.data
 }
 
+/** Position-scoped total-value (WAR) slice centered on this player, for the player-page header
+ * ranking module. Same lens/ordering/value as the Players index default sort. 404 if unqualified. */
+export async function getPlayerValueNeighbors(
+  playerId: number | string, season?: string,
+): Promise<import('./types').ValueNeighborhood> {
+  const r = await apiClient.get(`/players/${playerId}/value-neighbors`, { params: season ? { season } : undefined })
+  return r.data
+}
+
 /** Deployment-efficiency board (actual vs justified usage) for a situation lens. */
 export async function getDeploymentBoard(situation: string, limit = 15): Promise<import('./types').DeploymentBoard> {
   const r = await apiClient.get('/players/deployment-board', { params: { situation, limit } })

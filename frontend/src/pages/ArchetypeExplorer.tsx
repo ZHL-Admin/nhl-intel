@@ -159,16 +159,16 @@ export default function ArchetypeExplorer() {
       <div className="arch">
         <PageHeader
           title="Archetypes"
-          subtitle="Player types are discovered by clustering, not designed. Browse the gallery of real types — each one's characteristic radar shape, what it always shows, and who exemplifies it."
-        />
-
-        {!selected && (
-          <div className="arch__toolbar">
-            <Tabs
-              options={[{ value: 'F', label: 'Forwards' }, { value: 'D', label: 'Defense' }]}
-              value={pos} onChange={(v) => setParam('pos', v)} />
-          </div>
-        )}
+          subtitle="Archeypes are discovered by clustering. Browse the gallery to see each one's characteristic radar shape, what it always shows, and who exemplifies it."
+        >
+          {!selected && (
+            <div className="arch__toolbar">
+              <Tabs
+                options={[{ value: 'F', label: 'Forwards' }, { value: 'D', label: 'Defense' }]}
+                value={pos} onChange={(v) => setParam('pos', v)} />
+            </div>
+          )}
+        </PageHeader>
 
         {error && <p className="arch__msg">{error}</p>}
         {!cards && !error && <SkeletonLoader />}

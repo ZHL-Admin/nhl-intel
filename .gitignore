@@ -70,3 +70,7 @@ scripts/ppt_cache/
 
 # DuckDB serving layer: rebuildable read-only snapshot of BigQuery (make export-serving)
 data/serving/
+
+# Local server logs + agent scratch output (not source)
+*.log
+frontend/.dx/

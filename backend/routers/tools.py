@@ -9,6 +9,7 @@ from models.schemas import (
     LineFitRequest, LineFitProjection, LineSuggestionsResponse,
     TradeFitRequest, TradeFitResult, BestTeamFit,
     TradeEvaluateRequest, TradeEvaluateResponse,
+    ContractGradeRequest, ContractGrade,
 )
 from services import tools as tool_svc
 from services import trade_engine
@@ -30,6 +31,20 @@ async def post_trade_evaluate(req: TradeEvaluateRequest) -> TradeEvaluateRespons
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return TradeEvaluateResponse(**payload)
+
+
+@router.post("/contract-grade", response_model=ContractGrade)
+@cache(ttl=3600)
+async def post_contract_grade(req: ContractGradeRequest) -> ContractGrade:
+    """Grade an actual or hypothetical contract (player + cap hit + term) as A–F good/fair/bad,
+    reusing the surplus model: projected production aged + market-priced vs the proposed cap hit."""
+    from services import contract_grade
+    try:
+        payload = await run_in_threadpool(
+            contract_grade.grade_contract, req.player_id, float(req.cap_hit), req.term_years, req.season)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ContractGrade(**payload)
 
 
 @router.post("/line-fit", response_model=LineFitProjection)

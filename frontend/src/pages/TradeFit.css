@@ -270,7 +270,7 @@
 .tf-answer__score { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700; color: var(--tf-grade); margin-top: 4px; }
 .tf-answer__label { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center; }
 .tf-answer__read { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: var(--space-3); }
-.tf-answer__verdict { margin: 0; font-size: var(--text-lg); color: var(--color-text-primary); line-height: 1.5; }
+.tf-answer__verdict { margin: 0; font-size: var(--text-md); color: var(--color-text-primary); line-height: 1.25; }
 /* quality = an INPUT chip, in info-blue (never the grade's green) so it doesn't read as a rival answer */
 .tf-qchip {
   display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; align-self: flex-start;
@@ -334,7 +334,7 @@
 .tf-need__bar { position: relative; height: 6px; border-radius: var(--radius-full); background: var(--color-bg-elevated); }
 .tf-need__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
 .tf-need__fill--need { background: #d97706; }
-.tf-need__fill--str { background: #2563eb; }
+.tf-need__fill--str { background: var(--color-data-neutral); }
 .tf-need__tag {
   justify-self: end; padding: 1px 8px; border-radius: var(--radius-full);
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
@@ -409,7 +409,7 @@
 .tf-needs { display: flex; flex-direction: column; gap: var(--space-3); }
 .tf-need {
   display: grid;
-  grid-template-columns: minmax(0, .75fr) minmax(36px, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: var(--space-3);
 }

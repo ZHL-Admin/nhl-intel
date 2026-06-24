@@ -1,6 +1,28 @@
 version: 2
 
 models:
+  - name: int_player_current_team
+    description: >
+      Current-team resolution consulted by the player-side lookups. Live roster
+      (stg_roster_current) is the source of truth for current affiliation; the game-derived
+      latest-NHL-game team (01/02/03 filter) is the fallback so nobody is dropped. One row per
+      player. Resolves the team LABEL only — performance models are untouched.
+    columns:
+      - name: player_id
+        description: Canonical NHL player id
+        tests:
+          - not_null
+          - unique
+      - name: current_team_id
+        description: Resolved current team id (live roster preferred, else latest-game team)
+      - name: is_live_roster
+        description: True when the team came from the live roster; false when from latest game
+      - name: team_source
+        description: Which path resolved the team
+        tests:
+          - accepted_values:
+              values: ['live_roster', 'latest_game']
+
   - name: int_shot_attempts_all
     description: >
       Shot attempts across all strength states (5v5, special teams, other) with

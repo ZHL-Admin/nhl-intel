@@ -14,7 +14,7 @@
  */
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
 import DeploymentBoard, { DEPLOYMENT_SITUATIONS } from '../components/players/DeploymentBoard'
 import {
@@ -23,7 +23,7 @@ import {
 import type { StackSegment } from '../components/common'
 import { getOverallLeaders } from '../api/players'
 import { getValueRankings, type ValueSort } from '../api/rankings'
-import { ArchetypeRankRow, ValueRankingRow } from '../api/types'
+import { ArchetypeRankRow, ValueRankingRow, PlayerSearchResult } from '../api/types'
 import { COMPOSITE_COMPONENTS, VALUE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import './Players.css'
 
@@ -32,6 +32,11 @@ type RankBy = 'war' | 'rapm' | 'gar'
 type Palette = { key: string; label: string; color: string }[]
 // seasons with value + composite data (newest first)
 const SEASONS = ['2025-26', '2024-25', '2023-24', '2022-23', '2021-22']
+const PAGE_SIZE = 50          // ranked rows per page
+const FETCH_ALL = 1000        // one call pulls the whole qualifying pool (≤ ~750); we paginate client-side
+
+/** The position-filter scope a searched player belongs to (goalie / defense / forward). */
+const scopeOf = (pos?: string | null): Show => (pos === 'G' ? 'G' : pos === 'D' ? 'D' : 'F')
 
 // Rows + divergence board reuse the shared headshot component (one implementation site-wide).
 const Avatar = PlayerAvatar
@@ -89,11 +94,16 @@ function MagnitudeBar({ row, max }: { row: Row; max: number }) {
 /* ============================================================================
    Leaderboard
    ============================================================================ */
-function Leaderboard({ show, rankBy, season, sort, setSort }: {
+function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHandled, focusedId, onClearFocus }: {
   show: Show; rankBy: RankBy; season: string; sort: ValueSort; setSort: (s: ValueSort) => void
+  jumpTarget: PlayerSearchResult | null; onJumpHandled: () => void
+  focusedId: number | null; onClearFocus: () => void
 }) {
+  const navigate = useNavigate()
   const [rows, setRows] = useState<Row[] | null>(null)
+  const [rowsKey, setRowsKey] = useState<string | null>(null)  // the context the loaded rows belong to
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<number | null>(null)   // one open at a time
   const toggle = (id: number) => setExpandedId((cur) => (cur === id ? null : id))
 
@@ -112,31 +122,55 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
     : effRankBy === 'rapm' ? COMPOSITE_COMPONENTS : VALUE_COMPONENTS
   // the confidence/point order applies to the value lenses (GAR/WAR), not the RAPM composite lens
   const sortable = effRankBy !== 'rapm'
+  // identifies which (scope, lens, season, sort) the currently loaded rows came from — used to make
+  // the search-jump wait for the right list before locating a player.
+  const fetchKey = `${show}|${effRankBy}|${season}|${sort}`
 
   useEffect(() => {
     let active = true
-    setRows(null); setError(null); setExpandedId(null)
+    setRows(null); setError(null); setExpandedId(null); setPage(0)
     let req: Promise<Row[]>
     if (mixed) {
-      req = getValueRankings('all', 'ALL', season, 60, sort).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
+      req = getValueRankings('all', 'ALL', season, FETCH_ALL, sort).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
     } else if (show === 'G') {
       const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('goalies', 'ALL', season, 60, sort).then((rs) =>
+      req = getValueRankings('goalies', 'ALL', season, FETCH_ALL, sort).then((rs) =>
         rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
     } else if (effRankBy === 'rapm') {
-      req = getOverallLeaders(show, season, 60).then((rs: ArchetypeRankRow[]) => rs.map((r) => ({
+      req = getOverallLeaders(show, season, FETCH_ALL).then((rs: ArchetypeRankRow[]) => rs.map((r) => ({
         id: r.player_id, name: r.player_name, team: r.team_abbrev, position: r.position,
         entityKind: 'skater' as const, value: r.composite_total, unit: 'value',
         band: r.composite_total_sd ?? null, components: r.components, war: null,
       })))
     } else {
       const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('skaters', show, season, 60, sort).then((rs) =>
+      req = getValueRankings('skaters', show, season, FETCH_ALL, sort).then((rs) =>
         rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
     }
-    req.then((d) => active && setRows(d)).catch(() => active && setError('Could not load rankings.'))
+    req.then((d) => { if (active) { setRows(d); setRowsKey(fetchKey) } })
+      .catch(() => active && setError('Could not load rankings.'))
     return () => { active = false }
-  }, [show, effRankBy, season, mixed, sort])
+  }, [show, effRankBy, season, mixed, sort, fetchKey])
+
+  // SEARCH: once the rows for the right context have loaded, find the searched player. If they're
+  // here, expand them (the focus filter below shows them as the only row); if they're in no ranked
+  // list here (unqualified, or absent from the RAPM-composite pool), fall back to their full profile.
+  useEffect(() => {
+    if (!jumpTarget || !rows || rowsKey !== fetchKey) return
+    if (rows.some((r) => r.id === jumpTarget.player_id)) {
+      setExpandedId(jumpTarget.player_id)
+    } else {
+      navigate(`/players/${jumpTarget.player_id}`)
+      onClearFocus()
+    }
+    onJumpHandled()
+  }, [jumpTarget, rows, rowsKey, fetchKey, navigate, onJumpHandled, onClearFocus])
+
+  // FOCUS: a search result is shown as the only row. Keep the focused player expanded whenever they
+  // (re)appear in the loaded list (e.g. after a season change), so the result stays open on its own.
+  useEffect(() => {
+    if (focusedId != null && rows?.some((r) => r.id === focusedId)) setExpandedId(focusedId)
+  }, [focusedId, rows])
 
   // shared scales: a symmetric component-bar domain (filtered) and a max for the magnitude bar (mixed)
   const { domain, maxMag } = useMemo(() => {
@@ -164,6 +198,18 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
         ? 'Play-Driving — RAPM-based value above replacement (“what tends to repeat”). The bar breaks value into components.'
         : `${effRankBy === 'gar' ? 'Production — GAR, goals above replacement (“what happened”)' : 'Total value — WAR, on the shared win scale'}. The bar breaks value into components.`) + confNote
 
+  const nPages = rows ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1
+  const safePage = Math.min(page, nPages - 1)
+  const pageStart = safePage * PAGE_SIZE
+  const pageRows = rows ? rows.slice(pageStart, pageStart + PAGE_SIZE) : []
+
+  // A search result is shown on its own: when the focused player is present in the loaded list,
+  // render only their row (keeping their true global rank) and hide the caption + pager.
+  const focusedIdx = focusedId != null && rows ? rows.findIndex((r) => r.id === focusedId) : -1
+  const isFocused = focusedIdx >= 0
+  const displayRows = isFocused ? [rows![focusedIdx]] : pageRows
+  const rankBase = isFocused ? focusedIdx : pageStart
+
   return (
     <section className="players__board">
       {error && <p className="players__msg">{error}</p>}
@@ -172,7 +218,17 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
 
       {rows && rows.length > 0 && (
         <>
-          <div className="players__caption-row">
+          {isFocused && (
+            <div className="players__focusbar">
+              <span className="players__focusbar-lbl">
+                Search result — showing <strong>{displayRows[0].name ?? displayRows[0].id}</strong> only
+              </span>
+              <button className="players__focusbar-clear" onClick={onClearFocus}>
+                <X size={14} aria-hidden="true" /> Show all players
+              </button>
+            </div>
+          )}
+          {!isFocused && <div className="players__caption-row">
             <p className="players__caption">{caption}</p>
             {sortable && (
               <span className="players__order">
@@ -188,16 +244,18 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
             )}
             {!mixed && <ColorsLegend palette={palette} />}
             <span className="players__count">{rows.length}</span>
-          </div>
+          </div>}
 
           <div className="players__rows">
-            {rows.map((r, i) => {
+            {displayRows.map((r, i) => {
+              const rank = rankBase + i   // global rank across all pages (0-based)
               const open = expandedId === r.id
               return (
                 <Fragment key={r.id}>
-                  <button className={`prow${i === 0 ? ' prow--lead' : ''}${open ? ' prow--active' : ''}`}
+                  <button id={`prow-${r.id}`}
+                    className={`prow${rank === 0 ? ' prow--lead' : ''}${open ? ' prow--active' : ''}`}
                     onClick={() => toggle(r.id)} aria-expanded={open}>
-                    <span className="prow__rank">{i + 1}</span>
+                    <span className="prow__rank">{rank + 1}</span>
                     <Avatar id={r.id} team={r.team} name={r.name} size={36} />
                     <span className="prow__id">
                       <span className="prow__name">{r.name ?? r.id}</span>
@@ -229,9 +287,53 @@ function Leaderboard({ show, rankBy, season, sort, setSort }: {
               )
             })}
           </div>
+
+          {!isFocused && nPages > 1 && (
+            <Pagination page={safePage} nPages={nPages} pageStart={pageStart}
+              shown={pageRows.length} total={rows.length}
+              onPage={(p) => { setPage(p); setExpandedId(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+          )}
         </>
       )}
     </section>
+  )
+}
+
+/* ============================================================================
+   Pagination — Prev / windowed page numbers / Next, with a "showing X–Y of N" readout.
+   ============================================================================ */
+function pageWindow(page: number, nPages: number): (number | '…')[] {
+  const out: (number | '…')[] = []
+  const add = (p: number) => out.push(p)
+  const lo = Math.max(1, page - 1), hi = Math.min(nPages - 2, page + 1)
+  add(0)
+  if (lo > 1) out.push('…')
+  for (let p = lo; p <= hi; p++) add(p)
+  if (hi < nPages - 2) out.push('…')
+  if (nPages > 1) add(nPages - 1)
+  return out
+}
+
+function Pagination({ page, nPages, pageStart, shown, total, onPage }: {
+  page: number; nPages: number; pageStart: number; shown: number; total: number; onPage: (p: number) => void
+}) {
+  return (
+    <nav className="players__pager" aria-label="Player pages">
+      <span className="players__pager-info">{pageStart + 1}–{pageStart + shown} of {total}</span>
+      <span className="players__pager-ctrls">
+        <button className="players__pager-btn" disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Previous page">
+          <ChevronLeft size={15} />
+        </button>
+        {pageWindow(page, nPages).map((p, i) =>
+          p === '…'
+            ? <span key={`gap-${i}`} className="players__pager-gap">…</span>
+            : <button key={p} className={`players__pager-num${p === page ? ' players__pager-num--active' : ''}`}
+                onClick={() => onPage(p)} aria-current={p === page ? 'page' : undefined}>{p + 1}</button>)}
+        <button className="players__pager-btn" disabled={page >= nPages - 1} onClick={() => onPage(page + 1)} aria-label="Next page">
+          <ChevronRight size={15} />
+        </button>
+      </span>
+    </nav>
   )
 }
 
@@ -263,7 +365,6 @@ function ColorsLegend({ palette }: { palette: Palette }) {
    Page
    ============================================================================ */
 export default function Players() {
-  const navigate = useNavigate()
   const [view, setView] = useState<'leaderboard' | 'divergence'>('leaderboard')
   const [show, setShow] = useState<Show>('all')
   const [rankBy, setRankBy] = useState<RankBy>('war')
@@ -271,6 +372,8 @@ export default function Players() {
   const [sort, setSort] = useState<ValueSort>('confidence')   // confidence-adjusted order by default
   const [situation, setSituation] = useState('all')           // Usage & Value tab's situation filter
   const [methodOpen, setMethodOpen] = useState(false)
+  const [jumpTarget, setJumpTarget] = useState<PlayerSearchResult | null>(null)  // search -> locate in list
+  const [focusedId, setFocusedId] = useState<number | null>(null)  // search -> show only that player
 
   // Show and Rank-by are interdependent (only WAR is cross-position-comparable; RAPM is skater-only;
   // GAR isn't comparable across positions). Rather than disable buttons, keep every button clickable
@@ -288,16 +391,30 @@ export default function Players() {
     else if (v === 'gar' && show === 'all') setShow('F')
   }
 
+  // Search a player -> show that player as the only result. Auto-adjust the filters so they're in the
+  // loaded list: jump to the leaderboard, the season the search ran against (current), and a Show scope
+  // that contains them (keep 'all' or their current scope; otherwise switch to their position group).
+  // The Leaderboard locates them once its list loads (falling back to the full profile only if they're
+  // in no ranked list here) and renders just their row until "Show all players" clears the focus.
+  const handleSearchSelect = (p: PlayerSearchResult) => {
+    setView('leaderboard')
+    if (season !== SEASONS[0]) setSeason(SEASONS[0])   // search is current-season roster
+    const grp = scopeOf(p.position)
+    if (show !== 'all' && show !== grp) changeShow(grp)
+    setJumpTarget(p)
+    setFocusedId(p.player_id)
+  }
+  const clearFocus = () => { setFocusedId(null); setJumpTarget(null) }
+
   return (
     <PageLayout>
       <div className="players">
         <PageHeader
           title="Players"
           subtitle="League-wide value, ranked. Filter, switch the lens, or search anyone."
-        />
-
-        {/* consolidated control card (matches the Rankings page) */}
-        <div className="players__toolbar">
+        >
+          {/* page controls live inside the header card */}
+          <div className="players__toolbar">
           {/* mode + search */}
           <div className="players__mode">
             <Tabs
@@ -309,7 +426,7 @@ export default function Players() {
               onChange={(v) => setView(v as 'leaderboard' | 'divergence')}
             />
             <div className="players__search">
-              <PlayerPicker placeholder="Find any player…" onSelect={(p) => navigate(`/players/${p.player_id}`)} />
+              <PlayerPicker placeholder="Find any player…" onSelect={handleSearchSelect} />
             </div>
           </div>
 
@@ -375,10 +492,13 @@ export default function Players() {
               </span>
             </div>
           )}
-        </div>
+          </div>
+        </PageHeader>
 
         {view === 'leaderboard'
-          ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort} />
+          ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort}
+              jumpTarget={jumpTarget} onJumpHandled={() => setJumpTarget(null)}
+              focusedId={focusedId} onClearFocus={clearFocus} />
           : <DeploymentBoard situation={situation} />}
       </div>
     </PageLayout>

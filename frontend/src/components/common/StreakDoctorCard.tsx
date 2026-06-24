@@ -5,10 +5,20 @@
  * (reuses ComponentStackBar), a sustainability gauge, and an expandable numbers table.
  */
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Snowflake, Flame, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import ComponentStackBar, { StackSegment } from './ComponentStackBar'
 import { StreakCard } from '../../api/types'
 import './StreakDoctorCard.css'
+
+export type StreakDoctorVariant = 'full' | 'strip'
+
+interface StreakDoctorCardProps {
+  card: StreakCard
+  variant?: StreakDoctorVariant   // default 'full' (existing behavior unchanged)
+  href?: string                   // strip-only: trailing "see trends ->" link
+  className?: string
+}
 
 const COLORS: Record<string, string> = {
   shooting_luck: '#f59e0b',
@@ -24,7 +34,39 @@ function sustainabilityTone(s: number): string {
   return 'streak-gauge--bad'
 }
 
-export default function StreakDoctorCard({ card }: { card: StreakCard }) {
+/** The dominant driver: the largest-magnitude component aligned with the run's direction. */
+function dominantDriver(card: StreakCard) {
+  const sign = Math.sign(card.total_deviation) || 1
+  const aligned = card.components.filter((c) => Math.sign(c.value) === sign)
+  const pool = aligned.length ? aligned : card.components
+  return pool.length ? pool.reduce((b, c) => (Math.abs(c.value) > Math.abs(b.value) ? c : b), pool[0]) : null
+}
+
+/** Condensed one-line strip for the Overview hero: cold/hot tag + the SAME verdict + driver figure. */
+function StreakStrip({ card, href, className }: { card: StreakCard; href?: string; className?: string }) {
+  const cold = card.total_deviation < 0
+  const driver = dominantDriver(card)
+  const unit = driver?.key === 'goaltending' ? 'GSAx' : 'goals'   // matches the full card's depth-3 driver row
+  return (
+    <div className={`streak-strip streak-strip--${cold ? 'cold' : 'hot'}${className ? ' ' + className : ''}`}>
+      <span className="streak-strip__tag">
+        {cold ? <Snowflake size={15} /> : <Flame size={15} />}{cold ? 'Cold streak.' : 'Hot streak.'}
+      </span>
+      <span className="streak-strip__verdict">{card.verdict}</span>
+      {driver && (
+        <span className="streak-strip__driver">{driver.label} {driver.value >= 0 ? '+' : ''}{driver.value.toFixed(1)} {unit}</span>
+      )}
+      {href && <Link to={href} className="streak-strip__link">see trends <ArrowRight size={13} /></Link>}
+    </div>
+  )
+}
+
+export default function StreakDoctorCard({ card, variant = 'full', href, className }: StreakDoctorCardProps) {
+  if (variant === 'strip') return <StreakStrip card={card} href={href} className={className} />
+  return <StreakDoctorFull card={card} />
+}
+
+function StreakDoctorFull({ card }: { card: StreakCard }) {
   const [open, setOpen] = useState(false)
   const segments: StackSegment[] = card.components.map((c) => ({
     key: c.key, label: c.label, value: c.value, color: COLORS[c.key] ?? '#888',

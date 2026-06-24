@@ -190,7 +190,7 @@ async def get_value_rankings(
     position: str = Query("ALL", description="ALL | F | D (skaters scope only)"),
     season: Optional[str] = Query(None, description="Season (default: latest single season)"),
     sort: str = Query("confidence", description="confidence (default) | point"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=1000),
 ) -> List[ValueRankingRow]:
     """Value leaderboard — goals/wins above replacement.
 
@@ -239,14 +239,30 @@ def merge_value_rows(
 
 
 # --- Trade tool: two-axis boards — efficiency (surplus) and talent (value) (Trade tool P4/P7) ---
-def _assets_board(order_col: str, direction: str, asset_type: Optional[str], limit: int) -> List[TradeableAsset]:
+def _assets_board(order_col: str, direction: str, asset_type: Optional[str], limit: int,
+                  exclude_rfa: bool = False, min_abs_surplus: float = 0.0) -> List[TradeableAsset]:
     assets = bq_service.get_full_table_id("mart_tradeable_assets")
     where = f"WHERE {order_col} IS NOT NULL"
     if asset_type in ("player", "prospect", "pick"):
         where += f" AND asset_type = '{asset_type}'"
+    if exclude_rfa:
+        # a projected RFA deal is not a signed contract — keep it out of contract leaderboards
+        where += " AND COALESCE(contract_status, '') != 'rfa_projected'"
+    if min_abs_surplus > 0:
+        # qualifying floor: a board slot needs a minimum ABSOLUTE PV surplus, so trivial short/cheap
+        # deals don't occupy a top-10 row (they're still graded + shown on player pages, just not ranked)
+        where += f" AND ABS(surplus_dollars) >= {int(min_abs_surplus)}"
     rows = bq_service.query(
         f"SELECT * FROM {assets} {where} ORDER BY {order_col} {direction} LIMIT {int(limit)}")
-    return [TradeableAsset(**{k: r.get(k) for k in TradeableAsset.model_fields}) for r in rows]
+    from services.contract_grade import grade_from_surplus
+    out = []
+    for r in rows:
+        a = TradeableAsset(**{k: r.get(k) for k in TradeableAsset.model_fields})
+        # letter grade for display only — from the surplus-to-cost RATIO bands (NOT the sort key)
+        if a.surplus_dollars is not None and a.cost_dollars:
+            a.grade = grade_from_surplus(a.surplus_dollars, a.cost_dollars)["grade"]
+        out.append(a)
+    return out
 
 
 @router.get("/surplus", response_model=List[TradeableAsset])
@@ -255,9 +271,16 @@ async def get_surplus_rankings(
     order: str = Query("surplus", description="surplus (best value first) | overpaid (worst first)"),
     limit: int = Query(25, ge=1, le=100),
 ) -> List[TradeableAsset]:
-    """Players ranked by the EFFICIENCY axis — present-valued surplus (best value, or most overpaid)."""
+    """Players ranked by MAGNITUDE — cumulative present-value surplus in dollars: best value (most
+    positive total surplus) or most overpaid (most negative). Magnitude ranks (total asset value the
+    deal returns over its term); the per-year cap-share rate is returned alongside as a density read so
+    a short dense ELC still reads as dense even when a longer deal out-totals it. The letter grade comes
+    from the surplus-to-cost ratio bands. A minimum absolute PV surplus floor keeps trivial deals off."""
+    from models_ml import config as mlcfg
     direction = "ASC" if order == "overpaid" else "DESC"
-    return await run_in_threadpool(_assets_board, "surplus_dollars", direction, "player", limit)
+    return await run_in_threadpool(
+        _assets_board, "surplus_dollars", direction, "player", limit, True,
+        mlcfg.LEADERBOARD_MIN_SURPLUS)
 
 
 @router.get("/talent", response_model=List[TradeableAsset])

@@ -334,10 +334,28 @@ export default function LineupLab() {
     <PageLayout>
       <div className="lab">
         <PageHeader
-          back={{ to: '/tools', label: 'All Tools' }}
           title="Lineup Lab"
           subtitle="Build a line and project its 5v5 results from each member’s measured profile — no two players need to have ever shared the ice."
-        />
+        >
+          {!showResult && !loading && (
+            <div className="lab__build-bar">
+              <Tabs
+                options={[
+                  { value: 'F3', label: 'Forward trio' },
+                  { value: 'D2', label: 'Defense pair' },
+                  { value: 'UNIT5', label: 'Full unit' },
+                ]}
+                value={lineType}
+                onChange={changeType}
+              />
+              {slots.some((s) => s.player) && (
+                <button className="lab__clear" onClick={clearAll}>
+                  <RotateCcw size={13} /> Clear
+                </button>
+              )}
+            </div>
+          )}
+        </PageHeader>
 
         {showResult ? (
           /* ---- the champion: projection result ---- */
@@ -359,25 +377,7 @@ export default function LineupLab() {
           <div className="lab__result"><SkeletonLoader /></div>
         ) : (
           /* ---- the builder ---- */
-          <>
-            <div className="lab__build-bar">
-              <Tabs
-                options={[
-                  { value: 'F3', label: 'Forward trio' },
-                  { value: 'D2', label: 'Defense pair' },
-                  { value: 'UNIT5', label: 'Full unit' },
-                ]}
-                value={lineType}
-                onChange={changeType}
-              />
-              {slots.some((s) => s.player) && (
-                <button className="lab__clear" onClick={clearAll}>
-                  <RotateCcw size={13} /> Clear
-                </button>
-              )}
-            </div>
-
-            <div className="lab__grid">
+          <div className="lab__grid">
               {/* ---- build surface ---- */}
               <section className="lab__build">
                 <div className="lab-rink">
@@ -407,7 +407,6 @@ export default function LineupLab() {
               {/* ---- explorer ---- */}
               <PlayerExplorer onPick={placeAuto} takenIds={takenIds} dragged={dragged} sticky />
             </div>
-          </>
         )}
       </div>
     </PageLayout>

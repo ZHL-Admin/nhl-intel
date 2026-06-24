@@ -14,7 +14,7 @@ import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
 import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
 import { TradeFitResult, PlayerSearchResult, BestTeamFit, FitDimension, FitComponentNeed, PlayerPreview, ArchetypeRankRow } from '../api/types'
-import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl } from '../utils/teams'
+import { getTeamName, getTeamLogoUrl, getPlayerHeadshotUrl, getTeamColor } from '../utils/teams'
 import { ordinal, fmtWar } from '../utils/format'
 import './TradeFit.css'
 
@@ -261,9 +261,8 @@ export default function TradeFit() {
     <PageLayout>
       <div className="tf">
         <PageHeader
-          back={{ to: '/tools', label: 'Tools' }}
           title="Player Fit"
-          subtitle="How well does a player address a team’s biggest gaps versus the league’s top teams?"
+          subtitle="How well does a player fit into a specific team?"
         />
 
         {showResult ? (
@@ -376,11 +375,11 @@ const TAG_LABEL: Record<FitComponentNeed['tag'], string> =
 const TAG_TONE: Record<FitComponentNeed['tag'], string> =
   { fills: 'pos', gap: 'warn', covered: 'neutral', low_need: 'muted' }
 
-function NeedSection({ rows, summary }: { rows: FitComponentNeed[]; summary: string }) {
+function NeedSection({ rows, summary, teamColor }: { rows: FitComponentNeed[]; summary: string; teamColor?: string }) {
   return (
     <div className="tf-need">
       <div className="tf-need__legend">
-        <span><i className="tf-need__dot tf-need__dot--need" /> team need</span>
+        <span><i className="tf-need__dot tf-need__dot--need" style={{ backgroundColor: teamColor }} /> team need</span>
         <span><i className="tf-need__dot tf-need__dot--str" /> his strength</span>
       </div>
       {rows.map((r) => (
@@ -388,7 +387,7 @@ function NeedSection({ rows, summary }: { rows: FitComponentNeed[]; summary: str
           <span className="tf-need__label">{r.label}</span>
           <span className="tf-need__bars">
             <span className="tf-need__bar" title={`Team need ${Math.round(r.team_need * 100)}`}>
-              <span className="tf-need__fill tf-need__fill--need" style={{ width: `${r.team_need * 100}%` }} />
+              <span className="tf-need__fill tf-need__fill--need" style={{ width: `${r.team_need * 100}%`, backgroundColor: teamColor }} />
             </span>
             <span className="tf-need__bar" title={`His strength ${Math.round(r.player_strength * 100)} (within role)`}>
               <span className="tf-need__fill tf-need__fill--str" style={{ width: `${r.player_strength * 100}%` }} />
@@ -441,6 +440,7 @@ function Hero({ result, player, team }: {
 }) {
   const color = gradeColor(result.overall_grade)
   const name = result.player_name ?? player?.name ?? 'This player'
+  const teamColor = team ? getTeamColor(team.abbrev) : undefined;
   const faceSrc = player?.headshot_url
     || (player?.team_abbrev ? getPlayerHeadshotUrl(player.player_id, player.team_abbrev) : '')
 
@@ -528,7 +528,11 @@ function Hero({ result, player, team }: {
       {result.need_breakdown && result.need_breakdown.length > 0 && (
         <>
           <h3 className="tf-sec">Where he fits the roster</h3>
-          <NeedSection rows={result.need_breakdown} summary={result.need_summary} />
+          <NeedSection 
+            rows={result.need_breakdown} 
+            summary={result.need_summary} 
+            teamColor={teamColor} 
+          />
         </>
       )}
 
@@ -573,7 +577,7 @@ function BestTeamFits({ playerId, excludeTeamId, teams, onPick }: {
       <div className="tf-best__head">
         <span className="tf-best__icon"><Sparkles size={16} /></span>
         <div>
-          <h3 className="tf-best__title">His strongest fits</h3>
+          <h3 className="tf-best__title">Strong fits</h3>
           <p className="tf-best__sub">
             Ranked by overall fit grade. Talent is the same everywhere, so the differences come from
             each team’s need and style. Click a team to re-score the fit there.

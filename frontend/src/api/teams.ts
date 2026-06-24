@@ -2,7 +2,7 @@
  * Team API endpoints.
  */
 import { apiClient } from './client'
-import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational, TeamIdentity, StyleMap, StreakCard } from './types'
+import { TeamDetail, TeamTrends, TeamRoster, TeamVsOpponent, PlayerZoneDeployment, TeamSituational, TeamIdentity, StyleMap, StreakCard, StandingsRow, TeamInsight } from './types'
 
 /**
  * Fetch detailed information for a specific team.
@@ -99,6 +99,22 @@ export async function getStyleMap(season?: string): Promise<StyleMap> {
 export async function getTeamStreak(teamId: number, window = 10, season?: string): Promise<StreakCard> {
   const response = await apiClient.get<StreakCard>(`/teams/${teamId}/streak`, {
     params: { window, ...(season ? { season } : {}) },
+  })
+  return response.data
+}
+
+/** Current league standings (latest row per team). Sliced to a division for the StandingsLadder. */
+export async function getStandings(season?: string): Promise<StandingsRow[]> {
+  const response = await apiClient.get<StandingsRow[]>('/teams/standings', {
+    params: season ? { season } : undefined,
+  })
+  return response.data
+}
+
+/** Generated Overview quick-insight cards for a team (engine copy). Most-salient first. */
+export async function getTeamInsights(teamId: number, season?: string): Promise<TeamInsight[]> {
+  const response = await apiClient.get<TeamInsight[]>(`/teams/${teamId}/insights`, {
+    params: season ? { season } : undefined,
   })
   return response.data
 }

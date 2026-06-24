@@ -125,6 +125,11 @@ PLAYER_FIT_PROJECTION = {
     "SPIKE_NOTE_GAP_WAR": 0.6,            # show "projects to X, last season Y" when last-proj >= this
     "SPIKE_BAND_INFLATE": 0.5,            # widen the band by this * (last - proj) on a spike
     "AGE_DEFAULT": 27,                    # league-ish age when bio is missing
+    # The projection numerics use the newest len(RECENCY_WEIGHTS)=3 seasons; the trajectory
+    # classifier reads a slightly deeper SERIES. We pull this many seasons of history — the extra
+    # (4th) season carries recency weight 0, so it is in the series for slope/"slipped N seasons"
+    # detection but DOES NOT change proj_war / the quality floor (floor-neutral by construction).
+    "HISTORY_SEASONS": 4,
 }
 
 # --- Player Fit (rebuilt: quality FLOORS fit, need is the core, by component-and-role) -----------
@@ -162,6 +167,62 @@ TRADE_FIT = {
     # guarantees a high-quality player a strong SCORE; the letter just follows the conventional scale,
     # so a star at a poor-stylistic-match team can read C — honestly — rather than a forced B.)
     "GRADE_BANDS": [("A", 0.90), ("B", 0.80), ("C", 0.70), ("D", 0.60), ("F", 0.0)],
+
+    # ---- verdict clause-assembly (insight_engine/templates/team_fit.py) ----------------------
+    # The verdict is assembled from conditional clauses chosen by computed signals (no flat template,
+    # no LLM). Every threshold/label here is tunable; the template carries no magic numbers. See the
+    # "verdict" section of docs/methodology/player-fit.md.
+    #
+    # TRAJECTORY classifier — buckets a player's per-season WAR series into a context word. The tier
+    # word ALWAYS maps to the PROJECTION (not last season); declining/volatile carry a trend caveat
+    # so a high projection never sits silently beside a downward trend.
+    "TRAJ": {
+        "CAREER_YEAR_GAP_WAR": 1.5,   # last season - established (prior) level >= this -> career_year
+        "DOWN_YEAR_GAP_WAR": 1.2,     # established level - last season >= this -> a down-year dip
+        "MIN_TRACK_DEPTH": 2,         # # prior seasons at/near the proven tier to call a dip a down_year
+        "MIN_DEPTH_FOR_IS": 3,        # # seasons at/near the projected tier to allow an unhedged "is"
+        "TIER_BAND_WAR": 1.0,         # |season WAR - reference| <= this counts as "at that tier"
+        "SLOPE_DECLINE": 0.30,        # overall WAR slope <= -this (per season) is a real decline
+        "SLOPE_DECLINE_PRIOR": 0.30,  # prior-seasons slope <= -this -> a SUSTAINED slide (vs a cliff)
+        "SLOPE_FLAT": 0.50,           # prior slope >= -this -> prior was stable (a cliff, not a slide)
+        "SLOPE_ASCEND": 0.30,         # overall slope >= this (per season) is a real climb
+        "DECLINE_MIN_SEASONS": 2,     # consecutive season-over-season drops to call it declining
+        "ASCEND_MIN_SEASONS": 2,      # consecutive rises to call it ascending
+        "VOLATILE_CV": 0.90,          # proj band / |proj WAR| >= this -> volatile
+        "VOLATILE_SERIES_CV": 0.60,   # season-to-season WAR CV >= this -> volatile
+        "CV_EPS": 0.5,                # stabiliser in the CV denominators (WAR near 0)
+    },
+    # TIER labels by position group — the adjective mirrors _quality_label's cuts (elite 0.90 /
+    # high-end 0.75 / solid 0.55 / depth 0.35 / below) so the verdict noun agrees with the quality
+    # chip on the same page. Ordered high -> low; "lower tier" (declining) = the next entry down.
+    "TIER_LABELS": {
+        "D": [(0.90, "elite #1 defenseman"), (0.75, "high-end top-four defenseman"),
+              (0.55, "solid top-four defenseman"), (0.35, "depth defenseman"),
+              (0.0, "below-replacement defenseman")],
+        "F": [(0.90, "elite first-line forward"), (0.75, "high-end top-six forward"),
+              (0.55, "middle-six forward"), (0.35, "depth forward"),
+              (0.0, "below-replacement forward")],
+        "G": [(0.90, "elite starter"), (0.75, "high-end starter"), (0.55, "solid starter"),
+              (0.35, "backup-caliber goaltender"), (0.0, "depth goaltender")],
+    },
+    # SIGNATURE strength — the top role/skill the identity clause names. Reuses the per-component
+    # within-role percentiles already on the profile; degrades to None (no skill tail) below the bar.
+    "SIGNATURE_MIN_PCT": 0.65,        # a component must clear this percentile to be a "signature"
+    "SIGNATURE_TWO_WAY_PCT": 0.70,    # ev_offense AND ev_defense both >= this -> "drives play at both ends"
+    "SIGNATURE_PHRASES": {
+        "ev_offense": "drives even-strength offense",
+        "ev_defense": "defends at even strength",
+        "pp": "produces on the power play",
+        "pk": "kills penalties",
+        "finishing": "finishes around the net",
+        "goaltending": "is a difference-maker in net",
+        "two_way": "drives play at both ends",
+    },
+    # CAP / FLOOR clause gates.
+    "MATERIAL_CAP": 0.06,             # a dimension's weighted shortfall must exceed this to be named
+    "FLOOR_LIFT_MIN": 0.12,           # fit - match >= this -> quality is doing the lifting (floor note)
+    "PROJ_CAP_MAG": 0.08,             # the "unproven one-year projection" cap magnitude (career/volatile)
+    "TOP_GRADES": ("A", "B"),         # grades that get "the only thing keeping it from higher" / a closer
 }
 
 # --- Matchup preview pregame WP (Phase 5.3) ---------------------------------
@@ -457,6 +518,17 @@ CAP_UPPER_LIMIT_BY_SEASON = {
 # it is deliberately adjustable. Documented in docs/methodology/contract-surplus.md.
 CAP_GROWTH_BEYOND_KNOWN = 0.05
 
+# Surplus leaderboards (best-value / most-overpaid) rank on CAP-SHARE RATE (per-year surplus as a
+# share of the cap — era-neutral, bounded, the unit the market curve is built in), NOT on PV dollars
+# (buries cheap elite deals under long veteran deals) and NOT on surplus-to-cost ratio (a sub-$1M cap
+# hit blows the ratio up and turns the board into an ELC leaderboard). To take a board slot a contract
+# must also clear a minimum ABSOLUTE PV surplus so trivial short/cheap deals don't occupy a top-10 row;
+# below-floor contracts are still graded and shown on player pages, they just don't rank. $4M sits just
+# above the non-ELC |PV surplus| median (~$3.1M), dropping the trivial bottom-half while every genuine
+# board bargain (top-10 are $20M+) clears it ~5x; currently non-binding for the top-10 (the rate sort
+# alone is clean) — a documented safeguard, not a tuned cutoff. A judgment lever; revisit per season.
+LEADERBOARD_MIN_SURPLUS = 4_000_000
+
 # ---------------------------------------------------------------------------------------------
 # Trade tool — contract surplus (models_ml/compute_contract_value.py -> nhl_models.player_contract_value)
 # Surplus = market value of a player's PROJECTED on-ice production minus their cap COST, measured in
@@ -481,11 +553,17 @@ CONTRACT_VALUE = {
     # This replaced isotonic regression, whose terminal block FLATTENED the sparse top well below the
     # AAVs elite production actually commands, making max-deal stars read as huge false negatives.
     "MARKET_MIN_N": 60,          # min sample to fit a position group; below it, pool all skaters
-    # The curve targets the upper-mid conditional quantile of AAV (not the mean): contracts price
-    # peak/reputation that single-season WAR understates, and the high-WAR cohort is diluted by ELC /
-    # bridge deals, so the mean reads stars as overpaid. 0.65 lands the sample stars at modest surplus
-    # while keeping the mid/low range sane (a 2-WAR forward ~ $9M).
-    "MARKET_QUANTILE": 0.65,
+    # TWO-ANCHOR PIVOT (replaces the intercept-only MARKET_QUANTILE shift). The curve is pinned through
+    # two empirical points on the NON-ELC (free-market) sample: a LOW anchor = the median going rate at
+    # the median WAR (so the median market deal's production is worth ~what it's paid -> grades C/fair),
+    # and a HIGH anchor = observed elite pay in a high-WAR band (so stars stay priced right and the
+    # elite guard passes). Two anchors give the slope a degree of freedom the single quantile lacked:
+    # the curve ROTATES to lower the middle while holding the top, which a uniform shift cannot do. Each
+    # anchor is the median of a WAR-percentile BAND (not a single quantile point) so a thin tail isn't
+    # pinned by one or two contracts. MARKET_QUANTILE is retired (no longer read by fit_market_curves).
+    "MARKET_ANCHOR_LO": (0.30, 0.50),     # mid-WAR band -> median going rate (lowest non-ELC median)
+    "MARKET_ANCHOR_HI": (0.85, 0.97),     # high-WAR band -> observed elite pay (holds the top)
+    "MARKET_QUANTILE": 0.65,              # retired; kept for reference / older model versions
     # Soft-cap to the CBA maximum (a contract cannot exceed ~20% of the cap). Ceiling = mult x the max
     # observed AAV (data-derived); the cap bends in smoothly from KNEE_FRAC x ceiling, always rising.
     "MARKET_CEIL_MULT": 1.05,
@@ -501,6 +579,11 @@ CONTRACT_VALUE = {
     "GROUNDED_MIN_GAMES": 25,    # current-season games to call a WAR estimate "grounded"/high-confidence
     # Band on grounded players: propagate the GAR war_sd through the projection (± this many SDs).
     "BAND_SDS": 1.0,
+    # Pending RFAs are sourced as their own feed (contracts - rfas.csv -> raw_contracts_rfa) and carry
+    # a PROJECTED next deal (proj_cap / proj_term), unioned into mart_player_contracts with
+    # contract_status='rfa_projected'. They are valued by the same projection as a signed player (over
+    # the projected term); the only special handling is capping their confidence at medium (the cost
+    # is projected, not signed) — see compute().
     "MODEL_VERSION": "contract_value_v2",   # v2: cap-share cost + forward cap projection
 }
 

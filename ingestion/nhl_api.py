@@ -275,6 +275,99 @@ def get_prospects(team_abbrev: str) -> dict:
     return response.json()
 
 
+def season_to_api8(season: str) -> str:
+    """Convert a season string "YYYY-YY" -> the 8-digit form the roster API wants.
+
+    "2024-25" -> "20242025". The /roster/{TEAM}/{season8} path uses the 8-digit form.
+    """
+    start = int(season[:4])
+    return f"{start}{start + 1}"
+
+
+def api8_to_season(season8: str | int) -> str:
+    """Convert the API's 8-digit season -> human "YYYY-YY". 20242025 -> "2024-25"."""
+    s = str(season8)
+    return f"{s[:4]}-{s[6:8]}"
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_roster_seasons(team_abbrev: str) -> list[int]:
+    """List every season (8-digit ints) a team has a published roster for.
+
+    Source: api-web.nhle.com/v1/roster-season/{TEAM} -> e.g. [19271928, ..., 20252026].
+    The max() is the current/latest published season — how we resolve "current"
+    deterministically without the /roster/{TEAM}/current 307 redirect.
+    """
+    url = f"{BASE_URL}/v1/roster-season/{team_abbrev}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return [int(s) for s in response.json()]
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_roster_for_season8(team_abbrev: str, season8: str | int) -> dict:
+    """Fetch a team's roster for an 8-digit season (the endpoint that actually serves data).
+
+    Source: api-web.nhle.com/v1/roster/{TEAM}/{season8}. Returns {forwards, defensemen,
+    goalies}; each player object carries id, headshot, firstName/lastName (localized
+    objects), sweaterNumber, positionCode, shootsCatches, height/weight, birth fields.
+    There is NO team field on the player object — affiliation is implied by the per-team
+    endpoint, so callers tag rows with the team_abbrev they requested. Shape verified via
+    scripts/smoke_ingest_roster.py against real output (see scripts/ROSTER_FINDINGS.md).
+    """
+    url = f"{BASE_URL}/v1/roster/{team_abbrev}/{season8}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_roster(team_abbrev: str) -> dict:
+    """Fetch a team's CURRENT active roster (live membership, not game-derived).
+
+    This is the live source of truth for who is on a club RIGHT NOW, so an offseason
+    trade is reflected before the player dresses for a game.
+
+    ENDPOINT DEVIATION (the API wins over the plan): the planned /roster/{TEAM}/current
+    is a 307 redirect (empty body; httpx won't follow it by default and it can land on an
+    unpublished season in the offseason). We instead resolve "current" deterministically
+    as max(/roster-season/{TEAM}) and fetch that season's roster — both confirmed-200,
+    fully-seen schemas. max(roster-season) becomes the new season the instant NHL
+    publishes it, which is exactly the semantics /current points to.
+
+    Returns the {forwards, defensemen, goalies} payload with two convenience keys added:
+    "team_abbrev" (the team requested) and "season8" (the resolved season), so the
+    loader/refresh can tag each row without re-deriving them.
+
+    NOTE (membership != performance): this updates the player's TEAM LABEL only. A
+    just-traded player has zero games with his new club, so his impact/archetype/radar/
+    value still reflect old-team usage until he plays. See stg_roster_current /
+    int_player_current_team and the team-roster surfaces for where this is consumed.
+    """
+    seasons = get_roster_seasons(team_abbrev)
+    if not seasons:
+        raise ValueError(f"no published roster seasons for team {team_abbrev}")
+    season8 = max(seasons)
+    payload = get_roster_for_season8(team_abbrev, season8)
+    payload["team_abbrev"] = team_abbrev
+    payload["season8"] = season8
+    return payload
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_players_by_current_team(team_id: int) -> dict:
+    """Cross-check source: stats-REST players carrying currentTeamId directly.
+
+    Source: api.nhle.com/stats/rest/en/players?cayenneExp=currentTeamId={id}. A second
+    source of truth for current affiliation (the stats host, not api-web). Used ONLY to
+    validate the api-web /roster membership during the smoke; never in the refresh path,
+    so a player can't resolve to two teams.
+    """
+    url = f"{STATS_REST_URL}/players"
+    response = httpx.get(url, params={"cayenneExp": f"currentTeamId={int(team_id)}"}, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_game_right_rail(game_id: str) -> dict:
     """Fetch the gamecenter right-rail payload for a game.

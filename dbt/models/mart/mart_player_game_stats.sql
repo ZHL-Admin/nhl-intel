@@ -128,6 +128,20 @@ team_xg as (
     from {{ ref('mart_team_game_stats') }}
 ),
 
+-- Real ALL-SITUATIONS time on ice per player-game, summed from the shift charts
+-- (stg_shifts: one row per shift, all strengths). This replaces the old 15.0-minute
+-- placeholder so TOI/GP and every per-60 rate below are computed off a real denominator.
+-- The individual counting stats above are all-situations, so all-situations TOI is the
+-- correct denominator for the per-60 rates. (Column keeps the legacy name toi_5v5.)
+player_toi as (
+    select
+        game_id,
+        player_id,
+        sum(duration_seconds) / 60.0 as toi_minutes
+    from {{ ref('stg_shifts') }}
+    group by game_id, player_id
+),
+
 player_stats_combined as (
     select
         r.game_id,
@@ -163,7 +177,9 @@ player_stats_combined as (
         coalesce(pt.n, 0) / nullif(coalesce(rm.takeaways_mult, 1.0), 0) as takeaways_adj,
         coalesce(tx.xgf_pct, 0.5) as team_xgf_pct,
 
-        15.0 as estimated_toi_5v5_minutes
+        -- real all-situations TOI (minutes) from the shift charts; null if a game has no
+        -- shift data for this player (rare), in which case the per-60 rates fall back to 0
+        ptoi.toi_minutes as estimated_toi_5v5_minutes
 
     from rosters r
     left join player_shots ps
@@ -189,6 +205,9 @@ player_stats_combined as (
     left join team_xg tx
         on r.game_id = tx.game_id
         and r.team_id = tx.team_id
+    left join player_toi ptoi
+        on r.game_id = ptoi.game_id
+        and r.player_id = ptoi.player_id
     where r.position_code in ('C', 'L', 'R', 'D', 'G')
 ),
 
@@ -232,7 +251,11 @@ metrics_calculated as (
             else 0.0
         end as ixg_per60,
 
-        ((individual_goals + first_assists) / estimated_toi_5v5_minutes) * 60.0 as primary_points_per60
+        case
+            when estimated_toi_5v5_minutes > 0
+            then ((individual_goals + first_assists) / estimated_toi_5v5_minutes) * 60.0
+            else 0.0
+        end as primary_points_per60
 
     from player_stats_combined
 ),

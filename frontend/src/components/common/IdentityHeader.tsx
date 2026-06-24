@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import './IdentityHeader.css';
 
 interface IdentityHeaderProps {
@@ -14,46 +13,15 @@ interface IdentityHeaderProps {
 }
 
 export default function IdentityHeader({
-  backLink,
-  absoluteBack,
   leftContent,
   centerContent,
   rightContent,
   heroContent,
-  belowContent,
-  teamColors
+  belowContent
 }: IdentityHeaderProps) {
-  const navigate = useNavigate();
-
-  const getBackgroundStyle = () => {
-    if (!teamColors) return {};
-
-    if (teamColors.away && teamColors.home) {
-      return {
-        background: `linear-gradient(to right, color-mix(in srgb, ${teamColors.away} 15%, var(--color-bg-surface)) 0%, var(--color-bg-surface) 50%, color-mix(in srgb, ${teamColors.home} 15%, var(--color-bg-surface)) 100%)`
-      };
-    }
-
-    const singleColor = teamColors.away || teamColors.home;
-    if (singleColor) {
-      return {
-        background: `color-mix(in srgb, ${singleColor} 10%, var(--color-bg-surface))`
-      };
-    }
-
-    return {};
-  };
 
   return (
-    <div className="identity-header" style={getBackgroundStyle()}>
-      {backLink && (
-        <button
-          className={`identity-header__back${absoluteBack ? ' identity-header__back--absolute' : ''}`}
-          onClick={() => navigate(backLink.to)}
-        >
-          <span>{backLink.label}</span>
-        </button>
-      )}
+    <div className="identity-header">
 
       <div className="identity-header__main">
         <div className="identity-header__left">{leftContent}</div>

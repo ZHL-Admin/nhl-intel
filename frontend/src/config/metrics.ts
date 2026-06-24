@@ -5,7 +5,7 @@
  * glossary key exactly once. Components reference these helpers instead of
  * hardcoding stat strings, so renames and proxy labelling happen in one place.
  */
-import type { PowerRatingRow } from '../api/types'
+import type { PowerRatingRow, TeamDetail } from '../api/types'
 
 export type MetricFormat =
   | 'percent' // 0..1 or 0..100 rendered as %
@@ -268,6 +268,68 @@ export const RADAR_ARC_GROUPS: { label: string; startKey: string }[] = [
   { label: 'Special teams & defense', startKey: 'pp_value' },
   { label: 'Style', startKey: 'penalty_diff' },
 ]
+
+/* ============================================================================
+   Team Overview "Season snapshot" — config-driven StatCard groups (TeamProfile Overview)
+   ============================================================================ */
+export interface SnapshotStat {
+  key: string                              // field on TeamDetail, or a derived key resolved below
+  label: string
+  format: 'pct' | 'rate' | 'decimal2'
+  rankKey: string                          // TeamDetail league-rank field; absent on the team -> no chip
+  higherIsBetter: boolean                  // documents direction; the chip tier comes from the rank itself
+  glossaryKey?: string                     // -> SNAPSHOT_TOOLTIPS
+}
+export interface SnapshotGroup { id: string; label: string; stats: SnapshotStat[] }
+
+export const TEAM_SNAPSHOT_GROUPS: SnapshotGroup[] = [
+  { id: 'offense', label: 'Offense', stats: [
+    { key: 'gf_per_gp',  label: 'GF / GP',   format: 'decimal2', rankKey: 'gf_per_gp_rank',  higherIsBetter: true,  glossaryKey: 'gf_per_gp' },
+    { key: 'xgf_pct',    label: 'xGF %',     format: 'pct',      rankKey: 'xgf_pct_rank',    higherIsBetter: true,  glossaryKey: 'xgf_pct' },
+    { key: 'hdcf_per60', label: 'HDCF / 60', format: 'rate',     rankKey: 'hdcf_per60_rank', higherIsBetter: true,  glossaryKey: 'hdcf' },
+  ]},
+  { id: 'defense', label: 'Defense', stats: [
+    { key: 'ga_per_gp',  label: 'GA / GP',   format: 'decimal2', rankKey: 'ga_per_gp_rank',  higherIsBetter: false, glossaryKey: 'ga_per_gp' },
+    { key: 'hdca_per60', label: 'HDCA / 60', format: 'rate',     rankKey: 'hdca_per60_rank', higherIsBetter: false, glossaryKey: 'hdca' },
+    { key: 'xga_per60',  label: 'xGA / 60',  format: 'rate',     rankKey: 'xga_per60_rank',  higherIsBetter: false, glossaryKey: 'xga' },
+  ]},
+  { id: 'possession', label: 'Possession & special teams', stats: [
+    { key: 'cf_pct',                        label: 'CF %',         format: 'pct', rankKey: 'cf_pct_rank',                        higherIsBetter: true, glossaryKey: 'cf_pct' },
+    { key: 'zone_entry_proxy_success_rate', label: 'Zone entry %', format: 'pct', rankKey: 'zone_entry_proxy_success_rate_rank', higherIsBetter: true, glossaryKey: 'zone_entry_proxy' },
+    { key: 'faceoff_win_pct',               label: 'Faceoff %',    format: 'pct', rankKey: 'faceoff_win_pct_rank',               higherIsBetter: true, glossaryKey: 'faceoff_pct' },
+  ]},
+]
+
+export const SNAPSHOT_TOOLTIPS: Record<string, string> = {
+  gf_per_gp: 'Goals for per game played.',
+  ga_per_gp: 'Goals against per game played (lower is better).',
+  xgf_pct: 'Expected-goals share at 5v5.',
+  hdcf: 'High-danger chances FOR per 60 minutes.',
+  hdca: 'High-danger chances AGAINST per 60 (lower is better).',
+  xga: 'Expected goals against per 60 (lower is better).',
+  cf_pct: 'Corsi For % — share of shot attempts at 5v5.',
+  zone_entry_proxy: 'Derived proxy: inferred from consecutive event zone codes, not measured entries.',
+  faceoff_pct: 'Share of faceoffs won (all situations).',
+}
+
+/** One snapshot tile's view model from TeamDetail (handles derived keys + formatting). Config-driven. */
+export function snapshotStatView(t: TeamDetail, stat: SnapshotStat): { value: string; rank?: number; tooltip?: string } {
+  const gp = Math.max(1, t.games_played)
+  const raw: number | null | undefined =
+    stat.key === 'gf_per_gp' ? t.total_goals_for / gp
+    : stat.key === 'ga_per_gp' ? t.total_goals_against / gp
+    : stat.key === 'xgf_pct' ? (t.xgf_per60 + t.xga_per60 > 0 ? t.xgf_per60 / (t.xgf_per60 + t.xga_per60) : null)
+    : (t as unknown as Record<string, number | null | undefined>)[stat.key]
+  let value = '—'
+  if (raw != null) {
+    value = stat.format === 'pct' ? `${(raw * 100).toFixed(1)}%`
+      : stat.format === 'rate' ? raw.toFixed(1)
+      : raw.toFixed(2)
+  }
+  const rankVal = (t as unknown as Record<string, unknown>)[stat.rankKey]
+  const rank = typeof rankVal === 'number' ? rankVal : undefined
+  return { value, rank, tooltip: stat.glossaryKey ? SNAPSHOT_TOOLTIPS[stat.glossaryKey] : undefined }
+}
 
 /** Display label for a metric, appending "(proxy)" for derived metrics. */
 export function metricLabel(key: string): string {

@@ -749,56 +749,56 @@ PLAYERS,TEAM,POS,AGE,CAP HIT,TOTAL,AAV,TERM,SIGN. STATUS,SIGN. AGE,EXPIRY,CONTRA
 "Spellacy, Anthony (AJ)",CHI,RW,20,"$922,917","$947,500","$991,250",3 yrs,,18,RFA,2024,2028,Yes,Kyle Davidson,"$850,000","$97,500","$102,500",ELC
 "Valis, Borya",TOR,RW,22,"$922,500","$947,500","$1,025,000",3 yrs,,20,RFA,2025,2028,Yes,Brad Treliving,"$850,000","$97,500","$102,500",ELC
 "MacDonald, Caleb",CBJ,LD,23,"$922,500","$947,500","$922,500",2 yrs,,22,RFA,2025,2027,Yes,Don Waddell,"$850,000","$97,500",$0,ELC
-"Danford, Ben",TOR,RD,20,"$936,056","$959,500","$936,056",3 yrs,,18,RFA,2024,2029,Yes,Brad Treliving,"$862,000","$97,500",$0,ELC
-"O'Reilly, Sam",TBL,RW,20,"$936,056","$959,500","$936,056",3 yrs,,18,RFA,2024,2029,Yes,Stan Bowman,"$862,000","$97,500",$0,ELC
-"Price, Caden",SEA,LD,20,"$935,556","$940,000","$978,056",3 yrs,,18,RFA,2024,2028,Yes,Ron Francis,"$850,000","$90,000","$35,000",ELC
-"Nordh, Noel",UTA,LW,21,"$935,000","$940,000","$970,000",3 yrs,,19,RFA,2024,2028,Yes,Bill Armstrong,"$850,000","$90,000","$35,000",ELC
-"Ratzlaff, Scott",BUF,G,21,"$935,000","$940,000","$935,000",3 yrs,,19,RFA,2024,2028,Yes,Kevyn Adams,"$850,000","$90,000",$0,ELC
-"Clara, Damian",ANA,G,21,"$934,167","$945,000","$1,005,833",3 yrs,,19,RFA,2024,2028,Yes,Pat Verbeek,"$850,000","$95,000","$80,000",ELC
-"Pinelli, Luca",CBJ,"LW, RW, C",21,"$934,167","$945,000","$1,005,833",3 yrs,,19,RFA,2024,2028,Yes,John Davidson,"$850,000","$95,000","$80,000",ELC
-"Bertucci, Tristan",DAL,LD,20,"$934,167","$945,000","$1,005,833",3 yrs,,18,RFA,2024,2028,Yes,Jim Nill,"$850,000","$95,000","$80,000",ELC
-"Edwards, Ethan",NJD,LD,24,"$933,750","$942,500","$933,750",2 yrs,,22,RFA,2025,2027,Yes,Tom Fitzgerald,"$850,000","$92,500",$0,ELC
-"Hallum, Jackson",VGK,LW,23,"$933,750","$942,500","$933,750",2 yrs,,22,RFA,2025,2027,Yes,Kelly McCrimmon,"$850,000","$92,500",$0,ELC
-"Kirsanov, Kirill",LAK,LD,23,"$933,750","$942,500","$933,750",2 yrs,,22,RFA,2025,2027,Yes,Ken Holland,"$850,000","$92,500",$0,ELC
-"Lachance, Shane",NJD,LW,22,"$933,750","$942,500","$1,183,750",2 yrs,,21,RFA,2025,2027,Yes,Tom Fitzgerald,"$850,000","$92,500","$250,000",ELC
-"Basha, Andrew",CGY,LW,20,"$932,500","$947,500","$1,010,000",3 yrs,,18,RFA,2024,2029,Yes,Craig Conroy,"$850,000","$97,500","$102,500",ELC
-"Badinka, Dominik",CAR,RD,20,"$932,500","$947,500","$1,003,950",3 yrs,,18,RFA,2024,2029,Yes,Eric Tulsky,"$850,000","$97,500","$102,500",ELC
-"Mateiko, Eriks",WSH,LW,20,"$932,500","$947,500","$1,018,333",3 yrs,,18,RFA,2024,2029,Yes,Brian MacLellan,"$850,000","$97,500","$102,500",ELC
-"Protas, Ilya",WSH,"C, LW",19,"$932,500","$947,500","$1,018,333",3 yrs,,17,RFA,2024,2029,Yes,Brian MacLellan,"$850,000","$97,500","$102,500",ELC
-"He, Kevin",WPG,LW,20,"$932,500","$947,500","$1,035,000",3 yrs,,18,RFA,2024,2029,Yes,Kevin Cheveldayoff,"$850,000","$97,500","$102,500",ELC
-"Saarinen, Kim",SEA,G,19,"$932,500","$947,500","$1,035,000",3 yrs,,17,RFA,2024,2029,Yes,Ron Francis,"$850,000","$97,500","$102,500",ELC
-"Muggli, Leon",WSH,LD,19,"$932,500","$947,500","$966,667",3 yrs,,18,RFA,2024,2029,Yes,Brian MacLellan,"$850,000","$97,500","$102,500",ELC
-"Gill, Spencer",PHI,RD,19,"$932,500","$947,500","$985,000",3 yrs,,18,RFA,2024,2029,Yes,Daniel Brière,"$850,000","$97,500","$102,500",ELC
-"Marrelli, Luca",CBJ,RD,20,"$931,944","$945,000","$1,019,444",3 yrs,,19,RFA,2024,2029,Yes,Don Waddell,"$850,000","$95,000","$102,500",ELC
-"Alriksson, Vilmer",VAN,LW,21,"$931,667","$935,000","$931,667",3 yrs,,19,RFA,2024,2028,Yes,Patrik Allvin,"$850,000","$85,000",$0,ELC
-"Peart, Jack",MIN,LD,23,"$930,833","$942,500","$930,833",3 yrs,,20,RFA,2024,2027,Yes,Bill Guerin,"$850,000","$92,500",$0,ELC
-"Ufko, Ryan",NSH,"RD, LD",23,"$930,833","$942,500","$930,833",3 yrs,,20,RFA,2024,2027,Yes,Barry Trotz,"$850,000","$92,500",$0,ELC
-"Buium, Shai",DET,LD,23,"$930,833","$942,500","$930,833",3 yrs,,21,RFA,2024,2027,Yes,Steve Yzerman,"$850,000","$92,500",$0,ELC
-"Broz, Tristan",PIT,C,23,"$930,833","$942,500","$930,833",3 yrs,,21,RFA,2024,2027,Yes,Kyle Dubas,"$850,000","$92,500",$0,ELC
-"Allen, Cam",WSH,RD,21,"$930,000","$945,000","$993,333",3 yrs,,19,RFA,2024,2028,Yes,Brian MacLellan,"$850,000","$95,000","$55,000",ELC
-"Kaplan, Devin",PHI,RW,22,"$930,000","$945,000","$930,000",3 yrs,,21,RFA,2024,2027,Yes,Daniel Brière,"$850,000","$95,000",$0,ELC
-"Gojsic, Hiroki",NSH,RW,20,"$930,000","$940,000","$965,000",3 yrs,,18,RFA,2024,2029,Yes,Barry Trotz,"$850,000","$90,000","$35,000",ELC
-"George, Carter",LAK,G,20,"$929,167","$937,500","$929,167",3 yrs,,18,RFA,2024,2029,Yes,Rob Blake,"$850,000","$87,500",$0,ELC
-"Brunicke, Harrison",PIT,RD,20,"$929,167","$937,500","$929,167",3 yrs,,18,RFA,2024,2029,Yes,Kyle Dubas,"$850,000","$87,500",$0,ELC
-"Howe, Tanner",PIT,LW,20,"$929,167","$937,500","$929,167",3 yrs,,18,RFA,2024,2029,Yes,Kyle Dubas,"$850,000","$87,500",$0,ELC
-"St. Martin, Hunter",FLA,LW,21,"$928,889","$932,500","$928,889",3 yrs,,19,RFA,2024,2028,Yes,Bill Zito,"$850,000","$82,500",$0,ELC
-"Clattenburg, Connor",EDM,"LW, RW, C",21,"$928,333","$930,000","$928,333",3 yrs,,19,RFA,2024,2028,Yes,Stan Bowman,"$850,000","$80,000",$0,ELC
-"Johansson, Loke",BOS,LD,20,"$928,333","$935,000","$928,333",3 yrs,,18,RFA,2024,2029,Yes,Don Sweeney,"$850,000","$85,000",$0,ELC
-"Andonovski, Matthew",OTT,LD,21,"$928,333","$930,000","$928,333",3 yrs,,19,RFA,2024,2028,Yes,Steve Staios,"$850,000","$80,000",$0,ELC
-"Gibson, Andrew",NSH,RD,21,"$925,000","$945,000","$978,333",3 yrs,,19,RFA,2024,2028,Yes,Steve Yzerman,"$850,000","$95,000","$80,000",ELC
-"Miroshnichenko, Ivan",WSH,"RW, LW",22,"$925,000","$900,000","$925,000",2 yrs,RFA,21,RFA,2026,2028,No,Brian MacLellan,"$850,000","$50,000",$0,Std (Ext)
-"Khusnutdinov, Marat",BOS,"LW, RW, C",23,"$925,000","$950,000","$925,000",2 yrs,RFA,22,RFA (Arb),2025,2027,No,Don Sweeney,"$950,000",$0,$0,Std (Ext)
-"Lardis, Nick",CHI,"RW, LW",20,"$925,000","$945,000","$978,333",3 yrs,,18,RFA,2024,2028,Yes,Kyle Davidson,"$850,000","$95,000","$80,000",ELC
-"Tucker, Tyler",STL,"LD, RD",26,"$925,000","$950,000","$925,000",2 yrs,RFA (Arb),24,UFA,2025,2027,No,Doug Armstrong,"$950,000",$0,$0,Std (Ext)
-"Kumpulainen, Rasmus",MIN,C,20,"$924,583","$945,000","$977,083",3 yrs,,18,RFA,2024,2028,Yes,Bill Guerin,"$850,000","$95,000","$55,000",ELC
-"Suniev, Aydar",CGY,"RW, LW",21,"$923,333","$950,000","$923,333",3 yrs,,20,RFA,2024,2027,Yes,Craig Conroy,"$855,000","$95,000",$0,ELC
-"Fortescue, Drew",NYR,LD,21,"$923,333","$950,000","$923,333",3 yrs,,20,RFA,2025,2028,Yes,Chris Drury,"$855,000","$95,000",$0,ELC
-"Kiiskinen, Jesse",DET,RW,20,"$923,333","$950,000","$923,333",3 yrs,,19,RFA,2025,2028,Yes,Steve Yzerman,"$855,000","$95,000",$0,ELC
-"Lutz, Julian",UTA,LW,22,"$923,333","$950,000","$950,000",3 yrs,,20,RFA,2024,2027,Yes,Bill Armstrong,"$855,000","$95,000",$0,ELC
-"Chesley, Ryan",WSH,RD,22,"$923,333","$950,000","$923,333",3 yrs,,21,RFA,2025,2028,Yes,Brian MacLellan,"$855,000","$95,000",$0,ELC
-"Spellacy, Anthony (AJ)",CHI,RW,20,"$922,917","$947,500","$991,250",3 yrs,,18,RFA,2024,2028,Yes,Kyle Davidson,"$850,000","$97,500","$102,500",ELC
-"Valis, Borya",TOR,RW,22,"$922,500","$947,500","$1,025,000",3 yrs,,20,RFA,2025,2028,Yes,Brad Treliving,"$850,000","$97,500","$102,500",ELC
-"MacDonald, Caleb",CBJ,LD,23,"$922,500","$947,500","$922,500",2 yrs,,22,RFA,2025,2027,Yes,Don Waddell,"$850,000","$97,500",$0,ELC
+"Tung, Callum",NYR,G,22,"$922,500","$947,500","$922,500",3 yrs,,21,RFA,2025,2028,Yes,Chris Drury,"$850,000","$97,500",$0,ELC
+"Meneghin, Harrison",TBL,G,21,"$922,500","$947,500","$922,500",3 yrs,,20,RFA,2025,2028,Yes,Julien BriseBois,"$850,000","$97,500",$0,ELC
+"Finnie, Emmitt",DET,"LW, C",20,"$921,667","$920,000","$921,667",3 yrs,,18,RFA,2024,2028,Yes,Steve Yzerman,"$850,000","$70,000",$0,ELC
+"Havelid, Mattias",SJS,RD,22,"$921,667","$945,000","$921,667",3 yrs,,21,RFA,2025,2028,Yes,Mike Grier,"$850,000","$95,000",$0,ELC
+"Loshko, Andrei",SEA,C,21,"$920,000","$945,000","$920,000",3 yrs,,20,RFA,2025,2028,Yes,Ron Francis,"$850,000","$95,000",$0,ELC
+"Johansson, Anton",DET,RD,22,"$920,000","$945,000","$920,000",3 yrs,,20,RFA,2025,2028,Yes,Steve Yzerman,"$850,000","$95,000",$0,ELC
+"Terrance, Carey",NYR,C,21,"$920,000","$945,000","$920,000",3 yrs,,19,RFA,2025,2028,Yes,Pat Verbeek,"$850,000","$95,000",$0,ELC
+"Julien, Jacob",WPG,C,21,"$920,000","$945,000","$975,000",3 yrs,,20,RFA,2025,2028,Yes,Kevin Cheveldayoff,"$850,000","$95,000","$55,000",ELC
+"Thomas, Patrick",WSH,C,21,"$920,000","$945,000","$920,000",3 yrs,,20,RFA,2025,2028,Yes,Brian MacLellan,"$850,000","$95,000",$0,ELC
+"Leinonen, Topias",BUF,G,22,"$920,000","$945,000","$920,000",3 yrs,,21,RFA,2025,2028,Yes,Kevyn Adams,"$850,000","$95,000",$0,ELC
+"Bystedt, Filip",SJS,C,22,"$918,333","$855,000","$1,001,667",3 yrs,,19,RFA,2023,2027,Yes,Mike Grier,"$855,000",$0,"$250,000",ELC
+"Lekkerimaki, Jonathan",VAN,RW,21,"$918,333","$855,000","$1,393,333",3 yrs,,18,RFA,2023,2027,Yes,Patrik Allvin,"$855,000",$0,"$475,000",ELC
+"Bichsel, Lian",DAL,LD,22,"$918,333","$855,000","$1,418,333",3 yrs,,18,RFA,2023,2027,Yes,Jim Nill,"$855,000",$0,"$500,000",ELC
+"Holinka, Miroslav",TOR,C,20,"$918,333","$930,000","$918,333",3 yrs,,19,RFA,2025,2028,Yes,Brad Treliving,"$850,000","$80,000",$0,ELC
+"Smith, Blake",TOR,D,21,"$916,667","$937,500","$916,667",3 yrs,,20,RFA,2025,2028,Yes,Brad Treliving,"$850,000","$87,500",$0,ELC
+"Barkey, Denver",PHI,"LW, C",21,"$916,667","$945,000","$953,333",3 yrs,,18,RFA,2024,2028,Yes,Daniel Brière,"$850,000","$95,000","$30,000",ELC
+"Legault, Charles-Alexis",CAR,RD,22,"$915,833","$950,000","$950,000",3 yrs,,20,RFA,2024,2027,Yes,Don Waddell,"$855,000","$95,000",$0,ELC
+"Hammell, Kaden",SEA,RD,21,"$915,833","$940,000","$958,333",3 yrs,,20,RFA,2025,2028,Yes,Jason Botterill,"$850,000","$90,000","$35,000",ELC
+"Cerrato, Charlie",CAR,C,21,"$915,000","$925,000","$915,000",3 yrs,,21,RFA,2025,2028,Yes,Eric Tulsky,"$850,000","$75,000",$0,ELC
+"Rehkopf, Carson",SEA,LW,21,"$914,167","$950,000","$940,833",3 yrs,,19,RFA,2024,2028,Yes,Ron Francis,"$855,000","$95,000",$0,ELC
+"Dragicevic, Lukas",SEA,RD,21,"$914,167","$950,000","$940,833",3 yrs,,18,RFA,2024,2028,Yes,Ron Francis,"$855,000","$95,000",$0,ELC
+"Molgaard, Oscar Fisker",SEA,C,21,"$914,167","$950,000","$940,833",3 yrs,,19,RFA,2024,2028,Yes,Ron Francis,"$855,000","$95,000",$0,ELC
+"McConnell-Barker, Bryce",NYR,C,22,"$913,333","$850,000","$993,333",3 yrs,,18,RFA,2023,2027,Yes,Chris Drury,"$850,000",$0,"$80,000",ELC
+"Pettersson, Elias",VAN,LD,22,"$913,333","$850,000","$993,333",3 yrs,,19,RFA,2023,2027,Yes,Patrik Allvin,"$850,000",$0,"$80,000",ELC
+"George, Isaiah",NYI,"LD, RD",22,"$913,333","$850,000","$993,333",3 yrs,,19,RFA,2023,2027,Yes,Lou Lamoriello,"$850,000",$0,"$80,000",ELC
+"Filmon, Josh",NJD,LW,22,"$913,333","$850,000","$993,333",3 yrs,,19,RFA,2023,2027,Yes,Tom Fitzgerald,"$850,000",$0,"$80,000",ELC
+"Buchinger, Michael",STL,LD,22,"$913,333","$850,000","$993,333",3 yrs,,18,RFA,2023,2027,Yes,Doug Armstrong,"$850,000",$0,"$80,000",ELC
+"Salin, Otto",LAK,RD,22,"$912,500","$937,500","$912,500",3 yrs,,21,RFA,2025,2028,Yes,Rob Blake,"$850,000","$87,500",$0,ELC
+"Behrens, Sean",COL,LD,23,"$911,667","$942,500","$930,833",3 yrs,,21,RFA,2024,2027,Yes,Chris MacFarland,"$850,000","$92,500",$0,ELC
+"Nelson, Ty",SEA,RD,22,"$911,667","$850,000","$969,167",3 yrs,,19,RFA,2023,2027,Yes,Ron Francis,"$850,000",$0,"$57,500",ELC
+"Gagne, Alex",COL,LD,23,"$910,000","$947,500","$910,000",2 yrs,,23,RFA,2025,2027,Yes,Chris MacFarland,"$850,000","$97,500",$0,ELC
+"Ravinskis, Anri",VAN,RW,23,"$910,000","$947,500","$910,000",2 yrs,,22,RFA,2025,2027,Yes,Patrik Allvin,"$850,000","$97,500",$0,ELC
+"Pietila, Chase",PIT,RD,22,"$910,000","$935,000","$910,000",3 yrs,,21,RFA,2025,2028,Yes,Kyle Dubas,"$850,000","$85,000",$0,ELC
+"Gay, Cooper",COL,RW,24,"$910,000","$947,500","$910,000",2 yrs,,23,RFA,2025,2027,Yes,Chris MacFarland,"$850,000","$97,500",$0,ELC
+"Locmelis, Dans",BOS,C,22,"$910,000","$935,000","$910,000",3 yrs,,21,RFA,2025,2028,Yes,Don Sweeney,"$850,000","$85,000",$0,ELC
+"James, Dominic",TBL,"C, RW",23,"$910,000","$947,500","$910,000",2 yrs,,23,RFA,2025,2027,Yes,Julien BriseBois,"$850,000","$97,500",$0,ELC
+"Olsen, Eskild Bakke",OTT,C,24,"$910,000","$910,000","$910,000",1 yrs,,24,RFA,2026,2027,Yes,Steve Staios,"$850,000","$60,000",$0,ELC
+"Veremyev, Gleb",NYI,C,22,"$910,000","$947,500","$910,000",2 yrs,,21,RFA,2025,2027,Yes,Lou Lamoriello,"$850,000","$97,500",$0,ELC
+"Posch, Isak",NSH,G,24,"$910,000","$947,500","$910,000",2 yrs,,23,RFA,2025,2027,Yes,Chris MacFarland,"$850,000","$97,500",$0,ELC
+"Willis, Joey",NSH,C,21,"$910,000","$935,000","$910,000",3 yrs,,19,RFA,2025,2028,Yes,Barry Trotz,"$850,000","$85,000",$0,ELC
+"Wahlin, Lucas",WPG,RW,25,"$910,000","$910,000","$910,000",1 yrs,,24,RFA,2026,2027,Yes,Kevin Cheveldayoff,"$850,000","$60,000",$0,Std (2-way)
+"Keskinen, Oiva",CBJ,C,22,"$910,000","$935,000","$910,000",3 yrs,,21,RFA,2025,2028,Yes,Don Waddell,"$850,000","$85,000",$0,ELC
+"Pettersson, Oskar",OTT,RW,22,"$910,000","$850,000","$945,000",3 yrs,,19,RFA,2023,2027,Yes,Pierre Dorion,"$850,000",$0,"$35,000",ELC
+"Leskovar, Stevie",MIN,LD,21,"$910,000","$935,000","$910,000",3 yrs,,20,RFA,2025,2028,Yes,Bill Guerin,"$850,000","$85,000",$0,ELC
+"Marjala, Viljami",EDM,LW,23,"$910,000","$947,500","$910,000",2 yrs,,22,RFA,2025,2027,Yes,Stan Bowman,"$850,000","$97,500",$0,ELC
+"Komarov, Vsevolod",BUF,RD,22,"$910,000","$850,000","$945,000",3 yrs,,19,RFA,2023,2027,Yes,Kevyn Adams,"$850,000",$0,"$35,000",ELC
+"Nadeau, Bradly",CAR,"RW, LW",21,"$909,167","$855,000","$909,167",3 yrs,,18,RFA,2023,2028,Yes,Don Waddell,"$855,000",$0,$0,ELC
+"Barlow, Colby",WPG,LW,21,"$909,167","$855,000","$1,159,167",3 yrs,,18,RFA,2023,2028,Yes,Kevin Cheveldayoff,"$855,000",$0,"$250,000",ELC
+"Dvorsky, Dalibor",STL,"C, RW",21,"$909,167","$855,000","$1,692,500",3 yrs,,18,RFA,2023,2028,Yes,Doug Armstrong,"$855,000",$0,"$800,000",ELC
+"Edstrom, David",NSH,C,21,"$909,167","$855,000","$909,167",3 yrs,,18,RFA,2023,2028,Yes,Kelly McCrimmon,"$855,000",$0,$0,ELC
 "Reinbacher, David",MTL,"LD, RD",21,"$909,167","$855,000","$2,075,833",3 yrs,,18,RFA,2023,2028,Yes,Kent Hughes,"$855,000",$0,"$1,000,000",ELC
 "Sale, Eduard",SEA,LW,21,"$909,167","$855,000","$909,167",3 yrs,,18,RFA,2023,2028,Yes,Ron Francis,"$855,000",$0,$0,ELC
 "Danielson, Nate",DET,C,21,"$909,167","$855,000","$1,909,167",3 yrs,,18,RFA,2023,2028,Yes,Steve Yzerman,"$855,000",$0,"$1,000,000",ELC

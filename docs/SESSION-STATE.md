@@ -5,7 +5,54 @@ skills-radar build** also COMPLETE (see the block below). Next: Phase 6 (insight
 layer, site completion). Latest commits: 338d822 (radar FE+methodology), 3174337 (radar backend),
 e25b7ed (radar data layer), b7c9226 (archetypes v2 A3), 3afd20f (v2 A1/A2). Read the **ARCHETYPE V2
 + RADAR** block first (it changes the archetype system Phase 6 detectors consume), then the
-**PHASE 6 KICKOFF** block, then per-phase sections + `nhl-intel-finalization-plan.md`.
+**PHASE 6 KICKOFF** block, then per-phase sections + `nhl-intel-finalization-plan.md`. Also read the
+**LIVE ROSTER MEMBERSHIP** block below (current-team affiliation now comes from a live roster feed).
+
+---
+
+## ===== LIVE ROSTER MEMBERSHIP — current team comes from a live feed, not just games =====
+
+**Why:** a player's "current team" used to be derived only from the team_id on his most recent NHL
+game (game types 01/02/03; intl excluded). In the offseason no games are played, so trades were
+invisible until the traded player dressed for his new club. We added a live-roster feed so MEMBERSHIP
+(the team LABEL) updates immediately.
+
+**CRITICAL CAVEAT — membership != performance:** the live roster fixes the team LABEL only. A
+just-traded player has ZERO games with his new club, so his impact/archetype/radar/value still
+reflect old-team usage until he plays. On the team-roster surface a trade-in shows `games_played: 0`
+and null per-60 rates by design. Do not "fix" that; it is the honest state.
+
+**Pipeline (raw -> resolution -> serving):**
+- `scripts/refresh_rosters.py` (`make roster-refresh`; DAG daily task `roster_refresh`, wired
+  `ingest_task >> roster_refresh >> run_dbt_pre_xg`) -> `ingestion.nhl_api.get_roster()` per team ->
+  `nhl_raw.raw_rosters` (one row per team+ingestion_date; forwards/defensemen/goalies serialized JSON
+  strings + scalar `team_abbrev`/`season8`; autodetect loader, NOT partitioned).
+- **Endpoint deviation (the API won):** the planned `/roster/{TEAM}/current` is a **307 redirect**;
+  we resolve "current" as `max(/roster-season/{TEAM})` -> `/roster/{TEAM}/{season8}` (both 200). In
+  deep offseason this resolves to the just-finished season until NHL publishes the next one, then it
+  tracks the new season automatically. See `scripts/ROSTER_FINDINGS.md` (written from real payloads).
+- `stg_roster_current` (staging): parses the serialized arrays, keeps the **newest ingestion per
+  player** (`row_number() ... order by ingestion_date desc`), resolves team_id from `stg_games`
+  (staging, NOT a mart — avoids a staging->mart inversion).
+- `int_player_current_team` (intermediate): the resolution. `coalesce(live_team, latest_game_team)` —
+  **live roster is source of truth; latest-game (01/02/03 filter) is the fallback so nobody is
+  dropped** (UFAs/minor-leaguers/between-contract keep their last-game team). `team_source` flags which.
+- `models_ml/precompute_serving.build_dim_current_roster` -> `nhl_models.dim_current_roster`: the
+  resolved current team + live-preferred identity (name/pos/headshot), universe = current-season
+  game players UNION live-roster players. **stg_rosters grain is UNCHANGED** (per-game historical).
+
+**SERVING/DuckDB GOTCHA (this is what makes the FE update):** the backend serves request-time reads
+from `data/serving/nhl_intel.duckdb` (`SERVING_BACKEND=duckdb`, the default) using BARE table names;
+only the ~62 tables in `serving_tables.yml` exist there. `int_player_current_team`/`stg_roster_current`
+are NOT exported, so **all request-time membership reads `dim_current_roster`** (which IS a serving
+table and carries the resolved team): player picker/search (`services/tools.py`), `/teams/{id}/roster`,
+`/players/{id}` team label, contract grader. After any membership change the FE only updates once you:
+1) rebuild the dim: `python -m models_ml.precompute_serving --only dim_current_roster`,
+2) re-export BQ->DuckDB: `make export-serving` (atomic swap of the serving file),
+3) **restart the backend** — it runs as a detached `uvicorn main:app --port 8000` (NO --reload), so:
+   `pkill -f "uvicorn main:app"; cd backend && export GOOGLE_APPLICATION_CREDENTIALS=$PWD/../secrets/nhl-intel-sa.json && nohup uvicorn main:app --port 8000 > ../backend_server.log 2>&1 &`
+Verified end-to-end: Brady Tkachuk (8480801) resolves to FLA on `/players/8480801` and appears on
+`/teams/13/roster` with `games_played: 0`. Hermetic tests: `tests/test_roster_ingest.py`.
 
 ---
 

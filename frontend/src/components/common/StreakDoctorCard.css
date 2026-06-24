@@ -79,3 +79,23 @@
 .streak-card__table th { color: var(--color-text-secondary, #888); font-weight: 600; }
 .streak-card__num { text-align: right; font-variant-numeric: tabular-nums; }
 .streak-card__total-row td { font-weight: 700; border-top: 2px solid var(--color-border, rgba(127, 127, 127, 0.3)); }
+
+/* ---- strip variant (Overview hero) — single-sided accent border, background-mounted ---- */
+.streak-strip {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-border); border-radius: 0;
+  background: var(--color-surface);
+}
+.streak-strip--cold { border-left-color: var(--color-danger); }
+.streak-strip--hot { border-left-color: var(--color-success); }
+.streak-strip__tag {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  font-size: var(--text-sm); font-weight: 700; white-space: nowrap;
+}
+.streak-strip--cold .streak-strip__tag { color: var(--color-danger); }
+.streak-strip--hot .streak-strip__tag { color: var(--color-success); }
+.streak-strip__verdict { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.45; min-width: 0; flex: 1 1 200px; }
+.streak-strip__driver { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; color: var(--color-text-primary); white-space: nowrap; }
+.streak-strip__link { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; }
+.streak-strip__link:hover { color: var(--color-text-primary); }
