@@ -591,6 +591,15 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Offseason roster forecast (weekly; offseason-relevant + cheap). Reads team_ratings + the value
+    # tables + line/fit services; trains nothing. Runs after all its model deps so it reads fresh
+    # ratings/GAR/aging/line-fit/needs.
+    roster_forecast = BashOperator(
+        task_id="roster_forecast",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.project_roster_forecast --full"),
+        env=_dbt_env,
+    )
+
     compute_player_radar = BashOperator(
         task_id="compute_player_radar",
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_player_radar"),
@@ -750,6 +759,9 @@ with DAG(
     [write_archetypes, train_rapm] >> train_linefit >> generate_report
     # Phase 5.3 player-fit needs: team need profiles from composite + archetypes + ratings.
     [compute_composite, write_archetypes, compute_ratings] >> compute_team_needs >> generate_report
+    # Offseason roster forecast: needs ratings + value (GAR/goalie GAR) + aging + line-fit + needs.
+    [compute_gar, compute_goalie_gar, fit_aging_curves, compute_ratings,
+     train_linefit, compute_team_needs] >> roster_forecast >> generate_report
     # Skills radar (Part B): per-player spokes + labels from impact/composite/coach-trust/edge/marts
     # + the v2 archetype. Needs archetypes + the player models.
     [write_archetypes, compute_composite] >> compute_player_radar >> generate_report

@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
+.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -97,6 +97,15 @@ linefit:
 # vs the top-8 teams by power rating. Writes nhl_models.team_needs.
 team-needs:
 	python -m models_ml.compute_team_needs
+
+# Offseason roster forecast: project next-season team rating from the moves made, with an honest
+# band, a decomposed move ledger and projected lineup. Reads only. Writes nhl_models.roster_forecast
+# + roster_moves. --backtest runs the 2024-25 -> 2025-26 calibration.
+roster-forecast:
+	python -m models_ml.project_roster_forecast --full
+
+roster-forecast-validate:
+	python -m models_ml.validate_roster_forecast
 
 # Validate the multi-dimension Player Fit rebuild: print disagreement cases (need vs style/quality)
 # and confirm the defenseman-to-strong-defense team no longer scores ~0. Reads only; no writes.
