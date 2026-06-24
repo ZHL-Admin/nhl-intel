@@ -439,26 +439,31 @@ def live_roster_season(bq) -> str:
     return str(df["s"].iloc[0])
 
 
-def robust_roster_membership(bq, season: str, min_games: int) -> dict:
-    """A team's robust end-of-season roster for `season`.
+def robust_roster_membership(bq, season: str, min_games: int, boundary: str = "end") -> dict:
+    """A team's robust roster for `season` at a season BOUNDARY.
 
-    A player is a member of his LATEST-game team that season (so an in-season trade lands him on his
-    final club) IF he played at least `min_games` games (so 1-2 game call-ups are filtered out). This
-    is the honest middle ground: the official 21-man snapshot drops regulars later sent to the AHL,
-    and the raw game-derived list adds cup-of-coffee call-ups. Returns team_id -> [{player_id,
-    position, name}]. Note: a player injured almost the whole season is the one remaining blind spot.
+    This is an OFFSEASON tool, so the comparison is prior-season-END vs next-season-OPENING — only
+    moves made between seasons count, never mid-season trades. So:
+      boundary='end'  -> a player's team in his LATEST game that season (season-end roster).
+      boundary='open' -> a player's team in his EARLIEST game that season (opening-night roster).
+    A mid-season trade therefore does NOT move a player off a team's offseason picture: he was on the
+    club at the relevant boundary. A player counts if he played >= `min_games` (filters cup-of-coffee
+    call-ups). Returns team_id -> [{player_id, position, name}]. The official 21-man snapshot drops
+    regulars later sent to the AHL and the raw dressed list adds 1-game call-ups, so we floor by games;
+    a player injured almost the whole season is the one remaining blind spot.
     """
+    order = "ASC" if boundary == "open" else "DESC"
     sql = f"""
     WITH g AS (
         SELECT player_id, COUNT(*) AS gp,
                ARRAY_AGG(STRUCT(team_id, position_code, first_name, last_name)
-                         ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS latest
+                         ORDER BY game_id {order} LIMIT 1)[OFFSET(0)] AS edge
         FROM {bq.staging('stg_rosters')}
         WHERE season = '{season}' AND {GAME_TYPE_FILTER}
         GROUP BY player_id
     )
-    SELECT player_id, latest.team_id AS team_id, latest.position_code AS position_code,
-           latest.first_name || ' ' || latest.last_name AS name
+    SELECT player_id, edge.team_id AS team_id, edge.position_code AS position_code,
+           edge.first_name || ' ' || edge.last_name AS name
     FROM g WHERE gp >= {int(min_games)}
     """
     out: dict = {}
@@ -553,14 +558,18 @@ def main() -> None:
     # transition is the most recent COMPLETED one (prior -> latest), both sides from the robust
     # game-derived roster so the diff is real moves, not a dressed-vs-published artifact.
     if not args.backtest and _season_year(live) > _season_year(latest):
+        # Real upcoming offseason: base = latest season's END roster, updated = the live published
+        # (opening) roster — already an offseason boundary comparison.
         base_season, updated_season = latest, live
-        base_mem = robust_roster_membership(bq, base_season, floor)
+        base_mem = robust_roster_membership(bq, base_season, floor, "end")
         upd_mem = updated_roster_membership(bq)
     else:
+        # Completed offseason: prior-season END vs next-season OPENING night, so only between-season
+        # moves count (mid-season trades are ignored — the player was on the club at each boundary).
         updated_season = "2025-26" if args.backtest else latest
         base_season = prior_season(updated_season)
-        base_mem = robust_roster_membership(bq, base_season, floor)
-        upd_mem = robust_roster_membership(bq, updated_season, floor)
+        base_mem = robust_roster_membership(bq, base_season, floor, "end")
+        upd_mem = robust_roster_membership(bq, updated_season, floor, "open")
     trans = f"{base_season}->{updated_season}"
     print(f"project_roster_forecast {run_id}: transition {trans} (model_version={CFG['MODEL_VERSION']})")
 
