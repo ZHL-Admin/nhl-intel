@@ -1,4 +1,5 @@
 export { default as Badge } from './Badge'
+export { default as UncertaintyBand } from './UncertaintyBand'
 export { default as PlayerAvatar } from './PlayerAvatar'
 export { default as ChartPanel, useChartPanelHeight } from './ChartPanel'
 export { default as ComparisonRow } from './ComparisonRow'
