@@ -11,12 +11,13 @@
 .sec__title { font-size: var(--text-lg); font-weight: 600; margin: 0; color: var(--color-text-primary); }
 .sec__subtitle { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
 
-/* --- 4.0 hero stats --- */
-.fhero { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: var(--space-6); }
+/* --- 4.0 hero stats: compact 2x2 block (not a stretched row) so the numbers sit close together --- */
+.fhero { display: grid; grid-template-columns: max-content max-content; gap: var(--space-5) var(--space-16); justify-content: center; align-content: center; }
 .fhero__cell { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.fhero__label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); cursor: help; }
+.fhero__cell--wide { min-width: 190px; }
+.fhero__label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-primary); cursor: help; }
 .fhero__value { font-size: var(--text-2xl); font-weight: 600; color: var(--color-text-primary); line-height: 1.1; }
-.fhero__value--xl { font-size: var(--text-3xl); }
+.fhero__value--xl { font-size: var(--text-2xl); }
 .fhero__cell--wide .uband { margin-top: var(--space-2); }
 .fhero__sub { font-size: var(--text-xs); color: var(--color-text-secondary); margin-top: var(--space-1); }
 .fhero__change.is-up { color: var(--color-success); }
