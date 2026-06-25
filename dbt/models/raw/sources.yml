@@ -472,6 +472,26 @@ sources:
           - name: full_name
             description: Player selected (display + the (year, overall) join cross-check; no id in source)
 
+      - name: raw_trades
+        description: >
+          Historical trades snapshot (Handoff 5, Phase D; scripts/load_trades.py). One row per ASSET
+          moved (grouped by trade_id; acquiring_team = the team that received that asset), 2015-16..
+          2025-26, ~1,304 trades. Source-faithful strings: asset_type is Player / Draft Pick / Other
+          ("Future Considerations"); draft picks are round-only ("YYYY Nth Round", no overall, no
+          original owner); notes carries the conditional-pick flag. Typed/parsed/resolved in stg_trades.
+          Dated snapshot (as_of_date); idempotent per snapshot.
+        columns:
+          - name: trade_id
+            description: Trade key (date + teams), groups the asset rows of one trade
+          - name: acquiring_team
+            description: Team abbreviation that RECEIVED this asset
+          - name: asset_type
+            description: Player / Draft Pick / Other
+          - name: asset
+            description: Player name, "YYYY Nth Round", or "Future Considerations" (source string)
+          - name: notes
+            description: Non-empty on conditional picks
+
       - name: raw_player_draft_origin
         description: >
           Each producing player's authoritative draft origin (Handoff 5, Phase A;

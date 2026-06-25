@@ -153,3 +153,10 @@ futures-value:
 # One-shot trade-tool refresh (snapshot -> match -> value); dbt + futures ingest run separately.
 trade-data: contracts-load contracts-match contract-value futures-ingest futures-value
 
+# Trade-outcome retrospective (Handoff 5, Phase D): load the trades CSV, then value/net per team.
+# dbt (stg_trades) runs via `make dbt-build`; needs player_pwar + pick_value_curve + stg_draft_results.
+trades-load:
+	python -m scripts.load_trades
+trade-outcomes:
+	python -m models_ml.compute_trade_outcomes
+

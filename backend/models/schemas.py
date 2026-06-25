@@ -2122,3 +2122,62 @@ class DraftPlayerBlock(BaseModel):
     became_regular: bool
     is_censored: bool             # window not fully observable (drafted 2019+); "still developing"
     is_estimate: bool = True      # pWAR is a wide-band back-cast estimate; never a precise figure
+
+
+# --- Trade-outcome retrospective (Handoff 5, Phase D) ---
+class TradeLedgerEntry(BaseModel):
+    asset: str
+    type: str
+    direction: str                       # in / out
+    player_id: Optional[int] = None
+    became_player_id: Optional[int] = None      # the player a traded pick became (actual lens)
+    became_player_name: Optional[str] = None
+    slot_war: float
+    actual_war: float
+    conditional: bool = False
+    own_pick_assumed: bool = False
+    actual_unresolved: bool = False
+
+
+class TradeOutcomeRow(BaseModel):
+    trade_id: str
+    season: str
+    trade_date: str
+    team: str
+    team_count: int
+    net_war_slot: float
+    net_war_slot_low: float
+    net_war_slot_high: float
+    net_war_actual: float
+    net_war_actual_low: float
+    net_war_actual_high: float
+    received_count: int
+    sent_count: int
+    has_pick: bool
+    has_unresolved: bool
+    actual_censored: bool
+    horizon_incomplete: bool
+    confidence: str
+
+
+class TradeDetailTeam(TradeOutcomeRow):
+    received: List[TradeLedgerEntry] = []
+    sent: List[TradeLedgerEntry] = []
+
+
+class TradeDetail(BaseModel):
+    trade_id: str
+    season: str
+    trade_date: str
+    teams: List[TradeDetailTeam]
+    caveat: str
+
+
+class TeamTradeLedger(BaseModel):
+    team_id: int
+    team_abbrev: str
+    n_trades: int
+    total_net_slot: float
+    total_net_actual: float
+    trades: List[TradeOutcomeRow]
+    caveat: str

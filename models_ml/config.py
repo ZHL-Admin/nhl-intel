@@ -771,6 +771,20 @@ DRAFT_VALUE = {
     "DOLLARS_PER_WAR": 3_000_000,  # mirror FUTURES for dollar display consistency
 }
 
+# --- Trade-outcome retrospective (Handoff 5, Phase D): who won a past trade, in realized WAR ----
+# A retrospective on realized outcomes, NOT a grade of the decision at the time (the information then
+# was different). Two lenses per asset; netted per team per trade, bands in quadrature (reusing the
+# trade engine's propagation). All constants here so nothing is hardcoded in the job.
+TRADE_OUTCOMES = {
+    "MODEL_VERSION": "trade_outcomes_v1",
+    # The one knob: how many seasons of realized value to count after a trade (player lens) / after a
+    # pick's draft (actual-player lens). 5 balances "enough career to judge" against censoring recent
+    # trades. State it in the doc.
+    "REALIZED_HORIZON_YEARS": 5,
+    "PICKS_PER_ROUND": 32,         # round midpoint overall = (round-1)*32 + 16 (mirror FUTURES)
+    "DOLLARS_PER_WAR": 3_000_000,  # for dollar display alongside WAR (mirror FUTURES)
+}
+
 # --- Player Verdict (composed scouting read; Gemini narrates a deterministic two-horizon payload) ---
 VERDICT = {
     "MODEL_VERSION": "verdict_v1",

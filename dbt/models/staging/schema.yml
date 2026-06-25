@@ -563,3 +563,29 @@ models:
         description: Authoritative player id via (draft_year, overall_pick); null = never reached the NHL
       - name: made_nhl
         description: True when the pick resolved to a player in our production data
+
+  - name: stg_trades
+    description: >
+      Typed historical trades (Handoff 5, Phase D), one row per (trade, asset) on the latest snapshot.
+      Player assets carry a resolved_player_id (normalized name + position group; unmatched kept as
+      null, never dropped). Draft picks parse to (pick_year, pick_round, pick_overall_mid). giving_team
+      is the other team in a 2-team trade; null for 3-team (resolved in compute_trade_outcomes).
+    columns:
+      - name: trade_id
+        description: Trade key grouping the asset rows
+        tests: [not_null]
+      - name: trade_date
+        description: Trade date (DATE)
+        tests: [not_null]
+      - name: asset_type
+        description: Player / Draft Pick / Other
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Player', 'Draft Pick', 'Other']
+      - name: match_method
+        description: name+pos / name / unmatched (null for non-players)
+        tests:
+          - accepted_values:
+              values: ['name+pos', 'name', 'unmatched']
+              quote: true

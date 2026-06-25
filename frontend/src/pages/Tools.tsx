@@ -2,7 +2,7 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users, ArrowLeftRight, Scale, FileText, CalendarClock, Trophy } from 'lucide-react'
+import { Users, ArrowLeftRight, Scale, FileText, CalendarClock, Trophy, History } from 'lucide-react'
 import { PageLayout, PageHeader } from '../components/common'
 import './Tools.css'
 
@@ -42,6 +42,12 @@ const TOOLS = [
     icon: Trophy,
     title: 'Draft Value',
     blurb: 'What a pick is actually worth — the empirical value curve fit on what every slot has returned, the honest version of the “most picks bust” claim, and the biggest steals and busts.',
+  },
+  {
+    to: '/tools/trade-outcomes',
+    icon: History,
+    title: 'Trade Outcomes',
+    blurb: 'Who actually won each trade since 2015-16, in realized WAR — picks valued at their slot’s expectation (the headline) or by the player they became, with a per-team trade ledger.',
   },
 ]
 

@@ -12,6 +12,8 @@ const TOOLS = [
   { to: '/tools/trade-fit', label: 'Player Fit' },
   { to: '/tools/trade-builder', label: 'Trade Builder' },
   { to: '/tools/contract-grader', label: 'Contract Grader' },
+  { to: '/tools/draft-value', label: 'Draft Value' },
+  { to: '/tools/trade-outcomes', label: 'Trade Outcomes' },
   { to: '/learn/archetypes', label: 'Player Archetypes' },
 ]
 

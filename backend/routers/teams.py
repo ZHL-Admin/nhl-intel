@@ -683,6 +683,15 @@ async def get_team_offseason(team_id: int, season: Optional[str] = Query(None)) 
     return OffseasonTeamDetail(**payload)
 
 
+@router.get("/{team_id}/trade-ledger")
+@cache(ttl=3600)
+async def get_team_trade_ledger(team_id: int):
+    """A team's trade-outcome ledger (Handoff 5, Phase D) — its past deals netted in realized WAR.
+    Thin alias for the trades router's handler so the URL matches the team-page convention."""
+    from routers.trades import team_ledger as _trade_ledger_handler
+    return await _trade_ledger_handler(team_id)
+
+
 @router.get("/{team_id}/vs/{opponent_id}", response_model=TeamVsOpponent)
 @cache(ttl=600)
 async def get_team_vs_opponent(
