@@ -16,6 +16,7 @@ const LineupLab = lazy(() => import('./pages/LineupLab'))
 const TradeFit = lazy(() => import('./pages/TradeFit'))
 const TradeBuilder = lazy(() => import('./pages/TradeBuilder'))
 const ContractGrader = lazy(() => import('./pages/ContractGrader'))
+const DraftValue = lazy(() => import('./pages/DraftValue'))
 // Learn section (lazy): the archetype explainer is the first page.
 const ArchetypeExplorer = lazy(() => import('./pages/ArchetypeExplorer'))
 // Playoff bracket predictor (lazy): pulls scipy-shaped odds only when visited.
@@ -41,6 +42,7 @@ function App() {
             <Route path="/tools/trade-fit" element={<TradeFit />} />
             <Route path="/tools/trade-builder" element={<TradeBuilder />} />
             <Route path="/tools/contract-grader" element={<ContractGrader />} />
+            <Route path="/tools/draft-value" element={<DraftValue />} />
             <Route path="/learn/archetypes" element={<ArchetypeExplorer />} />
           </Routes>
         </Suspense>

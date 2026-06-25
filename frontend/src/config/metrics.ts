@@ -68,6 +68,56 @@ export const ADJUSTMENT_GLOSSARY = {
 } as const
 
 /**
+ * Draft Value tool concepts (Handoff 5). Keyed for the shared ConceptTip / Tooltip; rendered on the
+ * Draft Value page and the player-page draft line.
+ */
+export const DRAFT_GLOSSARY = {
+  pwar: {
+    term: 'Realized value (pWAR)',
+    shortDef:
+      'A drafted player’s on-ice production over their first seven seasons, in the same WAR ' +
+      'units used across the site. Real WAR exists only from 2021-22 on, so earlier seasons are ' +
+      'estimated from box production and carry a wide band.',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+  pick_value: {
+    term: 'Pick value',
+    shortDef:
+      'What a draft slot has actually returned: the average realized value of the players taken ' +
+      'at that overall pick, fit on outcomes since 2010 rather than a formula.',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+  expected_value_curve: {
+    term: 'Pick-value curve',
+    shortDef:
+      'Expected realized value by overall pick, smoothed across pick number and forced to never ' +
+      'rise for a later pick. The empirical replacement for the old hand-set slot curve.',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+  value_above_slot: {
+    term: 'Value above slot',
+    shortDef:
+      'A player’s realized value minus what was expected for their pick. Positive means the ' +
+      'pick out-returned its slot (a steal); negative means it fell short (a bust).',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+  draft_steal: {
+    term: 'Draft steal',
+    shortDef:
+      'A pick whose realized value far exceeded the expectation for its slot — a late-round ' +
+      'pick who became a star, or a mid-round pick who out-produced the lottery.',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+  draft_bust: {
+    term: 'Draft bust',
+    shortDef:
+      'A pick whose realized value fell well below its slot’s expectation — most often an ' +
+      'early pick who never became a regular. Never-NHL picks count as zero, not missing.',
+    methodologyHref: '/learn/methodology/draft-value',
+  },
+} as const
+
+/**
  * Plain-language tooltips for the Rankings page columns (Phase 3.1). Keyed by column,
  * rendered via the shared Tooltip on table headers. All rating values are goals/game.
  */

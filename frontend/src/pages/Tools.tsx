@@ -2,7 +2,7 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users, ArrowLeftRight, Scale, FileText, CalendarClock } from 'lucide-react'
+import { Users, ArrowLeftRight, Scale, FileText, CalendarClock, Trophy } from 'lucide-react'
 import { PageLayout, PageHeader } from '../components/common'
 import './Tools.css'
 
@@ -36,6 +36,12 @@ const TOOLS = [
     icon: FileText,
     title: 'Contract Grader',
     blurb: 'Grade any deal — actual, hypothetical, or newly signed — against a player’s projected production, and see the league’s best-value and most-overpaid contracts.',
+  },
+  {
+    to: '/tools/draft-value',
+    icon: Trophy,
+    title: 'Draft Value',
+    blurb: 'What a pick is actually worth — the empirical value curve fit on what every slot has returned, the honest version of the “most picks bust” claim, and the biggest steals and busts.',
   },
 ]
 
