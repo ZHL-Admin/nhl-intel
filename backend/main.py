@@ -18,7 +18,7 @@ load_dotenv(dotenv_path=env_path)
 # set before the routers/services import, so the BigQueryService singleton picks it up.
 os.environ.setdefault("SERVING_BACKEND", "duckdb")
 
-from routers import games, teams, players, goalies, rankings, streaks, tools, archetypes, assets, playoffs
+from routers import games, teams, players, goalies, rankings, streaks, tools, archetypes, assets, playoffs, draft
 
 app = FastAPI(
     title="NHL Analytics Dashboard API",
@@ -46,6 +46,7 @@ app.include_router(tools.router, prefix="/tools", tags=["tools"])
 app.include_router(archetypes.router, prefix="/archetypes", tags=["archetypes"])
 app.include_router(assets.router, prefix="/assets", tags=["assets"])
 app.include_router(playoffs.router, prefix="/playoffs", tags=["playoffs"])
+app.include_router(draft.router, prefix="/draft", tags=["draft"])
 
 
 @app.get("/")

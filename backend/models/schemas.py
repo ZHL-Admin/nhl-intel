@@ -533,6 +533,17 @@ GOALIE_GAR_LABELS = [
 ]
 
 
+class SeasonTotalRank(BaseModel):
+    """One Season-totals cell: a counting/rate stat with its LEAGUE-WIDE rank among skaters
+    (or goalies) for the season — the scoring-race position, distinct from the per-position rate
+    ranks elsewhere on the page."""
+    key: str
+    label: str
+    display: str                 # preformatted value (e.g. "49", "1.64", ".912", "+12.3")
+    rank: Optional[int] = None
+    pool: Optional[int] = None   # number ranked, for the percentile/tier color
+
+
 class PlayerDetail(BaseModel):
     """Detailed player information."""
     player_id: int
@@ -553,9 +564,15 @@ class PlayerDetail(BaseModel):
     first_assists: Optional[int] = Field(None, description="Total primary assists")
     second_assists: Optional[int] = Field(None, description="Total secondary assists")
     ihdcf_per60: Optional[float] = Field(None, description="Individual high-danger chances per 60")
-    ozs_pct: Optional[float] = Field(None, description="Offensive zone start percentage")
-    dzs_pct: Optional[float] = Field(None, description="Defensive zone start percentage")
-    nzs_pct: Optional[float] = Field(None, description="Neutral zone start percentage")
+    ozs_pct: Optional[float] = Field(None, description="Offensive zone start share (TEAM faceoff proxy)")
+    dzs_pct: Optional[float] = Field(None, description="Defensive zone start share (TEAM faceoff proxy)")
+    nzs_pct: Optional[float] = Field(None, description="Neutral zone start share (TEAM faceoff proxy)")
+    # Per-player NHL Edge zone starts (official, all situations, season; neutral included in the
+    # denominator). The preferred OZS source; the team faceoff proxy above is a labeled fallback.
+    edge_oz_start_pct: Optional[float] = Field(None, description="NHL Edge OZ start share (all situations)")
+    edge_nz_start_pct: Optional[float] = Field(None, description="NHL Edge NZ start share (all situations)")
+    edge_dz_start_pct: Optional[float] = Field(None, description="NHL Edge DZ start share (all situations)")
+    edge_oz_start_pctile: Optional[float] = Field(None, description="NHL Edge OZ-start league percentile (0-1)")
     relative_cf_pct: Optional[float] = Field(None, description="CF% relative to team average")
     relative_xgf_pct: Optional[float] = Field(None, description="xGF% relative to team average")
     actual_shooting_pct: Optional[float] = Field(None, description="Actual shooting percentage")
@@ -569,6 +586,11 @@ class PlayerDetail(BaseModel):
     composite_components: List[CompositeComponent] = []
     archetypes: List[ArchetypeWeight] = []
     primary_archetype: Optional[str] = None
+    # Durable identity: modal archetype across the last 3 seasons (the verdict's label, not the
+    # current-season flip). Drives the header archetype chip.
+    durable_archetype: Optional[str] = None
+    # Season totals with league-wide rank among skaters/goalies (the Season-totals stat bar).
+    season_totals: List[SeasonTotalRank] = []
     # Within-position display RANKS for the six snapshot rate stats (1 = best among qualified peers
     # at this position). DISPLAY-ONLY ranks over the same values already returned above; no metric
     # formula is changed. `rank_pool` is the size of the qualified position pool.
@@ -712,6 +734,27 @@ class PlayerTrends(BaseModel):
     points_per60_10gp: List[PlayerTrendPoint]
     cf_pct_5gp: List[PlayerTrendPoint]
     cf_pct_10gp: List[PlayerTrendPoint]
+    # Sustainability series (Overview rework): goals vs expected, 5-game rolling, per 60.
+    goals_per60_5gp: List[PlayerTrendPoint] = []
+    ixg_per60_5gp: List[PlayerTrendPoint] = []
+
+
+class ShotQualityBand(BaseModel):
+    """One danger band of a player's unblocked-shot profile vs the positional league pool."""
+    band: str            # 'low' | 'medium' | 'high' (by per-shot xG; see config.DANGER_TIERS)
+    attempts: int
+    goals: int
+    share: float         # this band's share of the player's unblocked attempts
+    league_share: float  # the same band's share for the player's position pool (F or D)
+
+
+class PlayerShotQuality(BaseModel):
+    """Shot-zone quality (Shot Map tab): the player's shot diet by danger vs positional average."""
+    player_id: int
+    season: str
+    pos_group: Optional[str] = None
+    total_attempts: int
+    bands: List[ShotQualityBand]
 
 
 class GamelogEntry(BaseModel):
@@ -922,6 +965,20 @@ class StyleMapTeam(BaseModel):
     team_abbrev: Optional[str] = None
     x: float
     y: float
+
+
+class PlayerVerdict(BaseModel):
+    """Composed scouting read (Workstream B), keyed by player + season. `long` is the 2-4 sentence
+    profile read; `short` is the one-line archetype label. Written by models_ml.generate_verdicts
+    after passing the consistency checker; the profile falls back to the archetype descriptor when
+    no row exists yet."""
+    player_id: int
+    season: str
+    long: str
+    short: Optional[str] = None
+    identity_confidence: Optional[str] = None
+    model_version: Optional[str] = None
+    generated_at: Optional[str] = None
 
 
 class StyleMap(BaseModel):
@@ -1218,7 +1275,10 @@ class EdgePlayerProfile(BaseModel):
     oz_time_pct_es: Optional[float] = None
     dz_time_pct_es: Optional[float] = None
     oz_start_pct: Optional[float] = None
+    nz_start_pct: Optional[float] = None
     dz_start_pct: Optional[float] = None
+    oz_start_pctile: Optional[float] = None
+    dz_start_pctile: Optional[float] = None
     total_sog: Optional[int] = None
     high_danger_sog: Optional[int] = None
     high_danger_goals: Optional[int] = None
@@ -2003,3 +2063,60 @@ class PlayoffBracket(BaseModel):
     pairwise: List[PlayoffPairwise] = Field(
         default_factory=list,
         description="Every pairing's series win prob, for scoring user-built paths")
+
+
+# --- Draft Value tool (Handoff 5) ---
+class PickValueCurveRow(BaseModel):
+    overall_pick: int
+    n: int
+    ev_mean: float
+    ev_median: float
+    ev_mean_smooth: float
+    ev_median_smooth: float
+    p10: float
+    p25: float
+    p75: float
+    p90: float
+    share_never_nhl: float
+    share_regular: float
+
+
+class DraftTheorySummaryRow(BaseModel):
+    pick_range: str
+    picks: int
+    share_below_mean: float
+    share_below_median: float
+    share_never_nhl: float
+    share_became_regular: float
+    mean_realized: float
+    median_realized: float
+
+
+class DraftBoardRow(BaseModel):
+    overall_pick: int
+    draft_year: int
+    full_name: Optional[str] = None
+    pos_group: Optional[str] = None
+    draft_team_abbrev: Optional[str] = None
+    resolved_player_id: Optional[int] = None
+    realized_value: float
+    expected_mean: float
+    value_above_slot: float
+    became_regular: bool
+    made_nhl: bool
+
+
+class DraftPlayerBlock(BaseModel):
+    """The draft line on a player page: where they were taken, expected vs realized, in context."""
+    overall_pick: int
+    draft_year: int
+    round: int
+    draft_team_abbrev: Optional[str] = None
+    realized_pwar: float          # signed realized WAR over the window (estimate)
+    realized_value: float         # floored asset value used vs the curve
+    expected_mean: float          # slot expectation (empirical curve)
+    value_above_slot: float
+    pct_within_range: float       # percentile of realized_value among same-range evaluable picks
+    became_regular: bool
+    is_censored: bool             # window not fully observable (drafted 2019+); "still developing"
+    is_estimate: bool = True      # pWAR is a wide-band back-cast estimate; never a precise figure
