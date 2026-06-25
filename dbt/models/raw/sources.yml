@@ -180,6 +180,27 @@ sources:
           - name: confidence
             description: high (unique name / name+pos / override) or medium (surname-tier)
 
+      - name: player_pwar
+        description: >
+          Realized production value per player-season 2010-11..2025-26 in the SAME WAR units as
+          player_gar (Handoff 5, Phase B; models_ml/compute_pwar.py). war_real where the 2021-26 GAR
+          overlap exists; pwar_hat is the anchored estimate everywhere (BACK-CAST pre-2021-22, wider
+          band + is_backcast=true). The realized-value currency the draft-value curve sums over each
+          drafted player's window. pwar_hat is a labeled wide-band estimate, not a precise figure.
+        columns:
+          - name: player_id
+            description: Canonical NHL player id
+          - name: season
+            description: Season STRING (e.g. "2015-16")
+          - name: pwar_hat
+            description: Anchored realized WAR for the season (estimate; back-cast pre-2021)
+          - name: war_real
+            description: Real GAR-model WAR where it exists (2021-22..2025-26), else null
+          - name: is_backcast
+            description: True for pre-overlap seasons (estimated, wider pwar_sd)
+          - name: pwar_sd
+            description: Band width on pwar_hat (anchor residual sd, inflated for back-cast)
+
   - name: nhl
     database: nhl-intel-498216
     schema: nhl_raw

@@ -40,6 +40,11 @@ vars:
   # Line-fit model (Phase 5.1): minimum shared 5v5 minutes for a forward trio / defense
   # pair to qualify as a line-season in int_line_seasons (the Lineup Lab training set).
   line_min_5v5_minutes: 30
+  # Draft Value tool (Handoff 5). Mirror models_ml/config.DRAFT_VALUE so SQL never hardcodes.
+  draft_eval_window_years: 7    # first N NHL-eligible post-draft seasons summed into realized value
+  draft_eval_class_min: 2010    # classes fully observable under the window (headline universe)
+  draft_eval_class_max: 2018
+  draft_regular_gp: 200         # "became a regular" career-GP threshold (literature)
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]

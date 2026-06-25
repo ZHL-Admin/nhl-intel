@@ -354,3 +354,24 @@ models:
       - name: xgf_pct
         description: On-ice 5v5 xGF / (xGF + xGA) over the line's shared segments
         tests: [not_null]
+
+  - name: int_draft_player_value
+    description: >
+      Realized career value per drafted pick (Handoff 5, Phase B). Universe = every pick in
+      stg_draft_results; never-NHL = realized value 0 (not missing). realized_value (floored at
+      replacement) is summed pWAR over the player's first var('draft_eval_window_years') post-draft
+      seasons. is_evaluable = fully observable class (2010-2018 headline); is_censored = window past
+      the latest season.
+    columns:
+      - name: pick_key
+        description: Surrogate "draft_year-overall_pick" — one row per pick
+        tests: [not_null, unique]
+      - name: realized_value
+        description: Floored (>=0) realized pWAR over the window; the curve/theory quantity
+        tests: [not_null]
+      - name: realized_pwar
+        description: Signed realized pWAR over the window (can be negative)
+        tests: [not_null]
+      - name: made_nhl
+        description: True when the pick resolved to a player in our production data
+        tests: [not_null]

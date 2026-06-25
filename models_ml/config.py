@@ -501,20 +501,19 @@ ROSTER_FORECAST = {
     "AGE_MULT_CEIL": 1.08,
     "AGE_CURVE_FALLBACK": {"F": "All Forwards", "D": "All Defensemen"},  # mirrors CONTRACT_VALUE
 
-    # Regress toward the repeatable lens (do NOT forecast off luck). Shrink weights ARE the measured
-    # reliabilities in GAR_STABILITY_YOY (referenced, never re-derived): each player_gar component
-    # is shrunk toward its position mean by its r. Finishing luck is isolated as (goals - ixg) and
-    # shrunk hardest. Goalie value is ALREADY reliability-shrunk inside goalie_gar (RELIABILITY_K),
-    # so we carry its point + band straight through; its band is ~3x a skater's by design (the
-    # measured goalie-rate reliability is ~0.19, which is exactly why the band stays wide).
-    "SHRINK_R": {
-        "ev_offense": GAR_STABILITY_YOY["production_r"],  # 0.66 actual-goal production
-        "pp":         GAR_STABILITY_YOY["production_r"],  # 0.66
-        "ev_defense": GAR_STABILITY_YOY["rapm_r"],        # 0.38 RAPM-based
-        "pk":         GAR_STABILITY_YOY["rapm_r"],        # 0.38
-        "finishing":  GAR_STABILITY_YOY["finishing_r"],   # 0.35 (goals - ixg) residual
-    },
-    "SHRINK_PASSTHROUGH": ["penalty", "faceoff"],   # tiny, stable terms passed through unshrunk
+    # PROJECTION BASE (shared with the Contract Grader — both tools call compute_contract_value.
+    # blended_war_rate so the same player projects to the same WAR everywhere). A player's next-season
+    # value is a recency- and games-weighted blend of his last PROJ_WINDOWS single-season WARs,
+    # regressed toward replacement by SAMPLE SIZE (thin samples shrink; an established track record is
+    # kept). This REPLACED a per-component shrink-toward-zero that compressed every established player
+    # toward replacement regardless of how stable his production was (the Byram case: 0.23 WAR three
+    # years running projected to ~0.02). Anchoring to the player's own multi-season rate fixes that and
+    # regresses finishing luck more honestly than a flat single-window strip (a one-year shooting spike
+    # is diluted by the other seasons; a repeatable finishing skill is kept). Goalie value is carried
+    # through the same blend but held FLAT (the aging curves are skater points/82); its band stays ~3x
+    # a skater's because the measured goalie-rate reliability is ~0.19.
+    "PROJ_WINDOWS": 5,                # single-season WAR windows feeding the blend (current heaviest)
+    "WAR_SD_FALLBACK": 0.5,           # band for a tracked player whose current-season war_sd is missing
 
     # Chemistry overlay: the line-fit delta (projected top units vs base top units, via score_line
     # xGF%) nudges the rating, BOUNDED so a noisy chemistry read can't dominate the talent signal.
@@ -530,6 +529,13 @@ ROSTER_FORECAST = {
     "BAND_GOALIE_W": 0.25,            # x (goalie value share)           -> extra band
     "BAND_TURNOVER_W": 0.015,         # x (arrivals + departures count)  -> extra band
     "NO_TRACK_RECORD_WAR_SD": 1.2,    # deliberately wide band on a replacement-level no-track player
+
+    # Tier 1 — role/translation uncertainty for an ARRIVAL. A just-acquired player's projection still
+    # reflects his OLD-team usage/role until he plays for the new club; that uncertainty belongs in the
+    # BAND, not in a biased-down point estimate. We widen each arrival's war_sd by this much in
+    # quadrature, which flows into both his per-player UI band and the team forecast band. A holdover
+    # (same club) is untouched. Provisional default; to be calibrated against the backtest in Tier 2.
+    "ARRIVAL_TRANSLATION_SD": 0.35,
 
     # Deep-offseason / negligible-moves guard: when the updated lineup ~ the base lineup (next
     # season's roster not yet published, or a genuinely quiet offseason) the verdict says so
@@ -711,6 +717,58 @@ FUTURES = {
     "ELC_COST": 900_000,
     "PICKS_PER_ROUND": 32,        # representative overall = (round-1)*32 + 16; band spans the round
     "MODEL_VERSION": "futures_value_v1",
+}
+
+# --- Draft Value tool (Handoff 5): empirical pick-value curve + the "85%" theory test ----------
+# All constants for the Phase B model chain (fit_pwar_anchor -> compute_pwar -> int_draft_player_value
+# -> fit_pick_value -> run_draft_theory) live here so SQL/Python never hardcode them.
+DRAFT_VALUE = {
+    "RANDOM_SEED": 7,
+    # --- Currency: realized value in the SAME WAR units as player_gar ---
+    "ANCHOR_VERSION": "pwar_anchor_v1",
+    "PWAR_VERSION": "player_pwar_v1",
+    # Single-season GAR windows where real WAR AND box production both exist (the anchor overlap).
+    "ANCHOR_SEASONS": ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"],
+    # Box production reaches back to here; pre-overlap seasons are BACK-CAST (estimated), wider band.
+    "PWAR_START_SEASON": "2010-11",
+    "BACKCAST_SD_MULT": 1.6,        # inflate pwar_sd for back-cast (pre-2021-22) seasons
+    "GAMES_FULL_82": 82,            # per-82 normalization for points
+    # --- Evaluation window / universe ---
+    "EVAL_WINDOW_YEARS": 7,         # first 7 NHL-eligible post-draft seasons (decision 2.2)
+    "EVAL_CLASS_MIN": 2010,         # classes fully observable under the 7yr window (decision 2.2)
+    "EVAL_CLASS_MAX": 2018,
+    "BACKFILL_CLASS_MIN": 2005,     # ingested floor (older classes shown but not in the headline)
+    "REGULAR_GP": 200,             # "became a regular" threshold, career GP (literature; state it)
+    # --- Anchor model (LightGBM monotone, with a linear baseline for comparison) ---
+    # The original 0.90 Spearman target is NOT achievable from long-history box stats: WAR's value
+    # also lives in RAPM defense, penalties, and deployment, none of which appear in the box score,
+    # and the anchor may only use signals reaching 2010-11 so it can back-cast. Achieved (LOSO):
+    # R2 ~0.54, Spearman ~0.59 (all) / ~0.76 (regulars). Accepted as a labeled wide-band estimate
+    # (decision 2026-06-25): the pick-value curve's shape is dominated by the EXACT never-NHL=0 rate
+    # measured in Phase A, and per-player pWAR noise averages out at the slot level. This floor is a
+    # sanity check (catches a broken anchor), not the original aspiration.
+    "MIN_SPEARMAN": 0.55,          # sanity floor on fitted-vs-real WAR Spearman (overlap, LOSO)
+    # NHL game-type filter applied in every pWAR aggregation (mart includes preseason 01 + international
+    # 09/04/19/.. games that player_gar excludes; keep only regular season 02 + playoffs 03).
+    "NHL_GAME_TYPES": ["02", "03"],
+    "LGB_PARAMS": {
+        "objective": "regression", "metric": "l2", "learning_rate": 0.05,
+        "num_leaves": 16, "min_data_in_leaf": 40, "feature_fraction": 0.9,
+        "bagging_fraction": 0.8, "bagging_freq": 1, "verbose": -1, "seed": 7,
+    },
+    "LGB_NUM_ROUNDS": 600,
+    # --- Empirical pick-value curve (fit_pick_value) ---
+    # Loess is applied in LOG space (the curve spans ~2 orders of magnitude; linear loess crushes the
+    # steep top-pick premium). frac=0.10 preserves #1's premium while smoothing the noisy ~9-sample
+    # tail; the smoothed mean is forced monotone non-increasing. The resulting career-extrapolated #1
+    # (~18 WAR) validates against the old hand-set slot_war proxy (V(1)≈22).
+    "LOESS_FRAC": 0.10,            # loess span across overall pick number (log space)
+    "MAX_OVERALL": 224,            # curve domain (deepest modern draft slot)
+    "CURVE_VERSION": "pick_value_curve_v1",
+    # --- Career extrapolation (decision 2.5): windowed -> whole-career via the aging-curve tail ---
+    "CAREER_EXTRAP_FACTOR": None,  # computed from aging_curves at fit time; None = derive, not hardcode
+    "THEORY_VERSION": "draft_value_v1",
+    "DOLLARS_PER_WAR": 3_000_000,  # mirror FUTURES for dollar display consistency
 }
 
 # --- Player Verdict (composed scouting read; Gemini narrates a deterministic two-horizon payload) ---

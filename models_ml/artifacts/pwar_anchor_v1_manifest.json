@@ -1,0 +1,60 @@
+{
+  "model_version": "pwar_anchor_v1",
+  "artifact_md5": "2e7ba5525f7e",
+  "anchor_seasons": [
+    "2021-22",
+    "2022-23",
+    "2023-24",
+    "2024-25",
+    "2025-26"
+  ],
+  "skater": {
+    "choice": "lgb",
+    "n": 4748,
+    "features": [
+      "points_per82",
+      "ixg_per82",
+      "toi5v5_per_gp",
+      "on_ice_xgf_pct",
+      "games_played",
+      "age",
+      "is_forward"
+    ],
+    "loso": {
+      "lgb": {
+        "r2": 0.5280288049471009,
+        "spearman": 0.599787417982384
+      },
+      "lin": {
+        "r2": 0.3544101920803594,
+        "spearman": 0.6005314507613461
+      }
+    },
+    "in_sample": {
+      "r2": 0.6384414189417411,
+      "spearman": 0.6691924063245096
+    }
+  },
+  "goalie": {
+    "choice": "lgb",
+    "n": 524,
+    "features": [
+      "games_played",
+      "save_pct_vs_league"
+    ],
+    "loso": {
+      "lgb": {
+        "r2": 0.5389594504398147,
+        "spearman": 0.7243635390509386
+      },
+      "lin": {
+        "r2": -0.7560762131567176,
+        "spearman": 0.7479942023097642
+      }
+    },
+    "in_sample": {
+      "r2": 0.6741715823476369,
+      "spearman": 0.7638033797332723
+    }
+  }
+}
