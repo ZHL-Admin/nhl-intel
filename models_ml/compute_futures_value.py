@@ -4,9 +4,11 @@ tool P6), so a future trade engine can net a prospect or a pick against a roster
 
 These are explicit PROXIES, always carried with a wide band and a `proxy` confidence tag, never a
 bare precise number. The spine is a SLOT CURVE: expected career WAR-above-replacement as a function
-of overall draft pick (config.FUTURES; a documented power-law proxy calibrated to public draft-value
-research — round-1 picks dominate, value decays, late picks regress to replacement, busts already
-priced into the expectation). From there:
+of overall draft pick. As of Handoff 5 (Phase C) this is the EMPIRICAL curve fit on our own draft
+outcomes (nhl_models.pick_value_curve, career-extrapolated from its 7-year window), not the old
+hand-set power-law — which remains as a fallback if the curve table is unavailable. Either way:
+round-1 picks dominate, value decays, late picks regress to replacement, busts already priced into
+the expectation. From there:
 
   prospect value = slot(draft_overall)  [undrafted -> floored near replacement]
                    x development decay if lingering past NHL-ready age without an NHL footprint
@@ -34,13 +36,57 @@ from models_ml import bq, config
 
 F = config.FUTURES
 
+# Empirical pick-value curve (Handoff 5, Phase C): replaces the hand-set power-law. Loaded once from
+# nhl_models.pick_value_curve as {overall_pick: career-extrapolated WAR}. The curve is published as a
+# WINDOWED (7yr) quantity; the trade engine values picks in whole-career WAR, so we apply the curve's
+# stored career-extrapolation factor (decision 2.5). Falls back to the documented power-law if the
+# table is unavailable (e.g. before fit_pick_value has run), so this job never hard-depends on it.
+_CURVE: dict | None = None
+_CURVE_LOADED = False
 
-def slot_war(overall: float) -> float:
-    """Expected career WAR above replacement at a given overall pick (proxy power-law curve)."""
-    if overall is None or not np.isfinite(overall) or overall <= 0:
-        return F["UNDRAFTED_WAR"]
+
+def _load_curve() -> dict | None:
+    global _CURVE, _CURVE_LOADED
+    if _CURVE_LOADED:
+        return _CURVE
+    _CURVE_LOADED = True
+    try:
+        df = bq.query_df(f"""
+            select overall_pick, ev_mean_smooth, career_extrap_factor
+            from `{bq.project()}.nhl_models.pick_value_curve`
+            order by overall_pick
+        """)
+        if df.empty:
+            return None
+        factor = float(df["career_extrap_factor"].iloc[0] or 1.0)
+        _CURVE = {int(r.overall_pick): float(r.ev_mean_smooth) * factor for _, r in df.iterrows()}
+        print(f"  pick-value curve: {len(_CURVE)} slots, career-extrap x{factor:.2f} (empirical, Handoff 5)")
+    except Exception as e:  # noqa: BLE001
+        print(f"  pick-value curve unavailable ({str(e)[:60]}); using power-law fallback")
+        _CURVE = None
+    return _CURVE
+
+
+def _power_law(overall: float) -> float:
     v = F["SLOT_A"] / (overall + F["SLOT_C"]) ** F["SLOT_B"]
     return float(max(v, F["SLOT_FLOOR_WAR"]))
+
+
+def slot_war(overall: float) -> float:
+    """Expected whole-career WAR above replacement at a given overall pick.
+
+    Empirical (career-extrapolated nhl_models.pick_value_curve) when available, else the documented
+    power-law proxy. Clamped to the curve's domain; floored at the replacement floor."""
+    if overall is None or not np.isfinite(overall) or overall <= 0:
+        return F["UNDRAFTED_WAR"]
+    curve = _load_curve()
+    if curve:
+        ov = int(round(overall))
+        if ov not in curve:                      # clamp to the curve's domain (1..max sampled)
+            keys = curve.keys()
+            ov = min(max(ov, min(keys)), max(keys))
+        return float(max(curve[ov], F["SLOT_FLOOR_WAR"]))
+    return _power_law(overall)
 
 
 def _band(value: float) -> tuple[float, float]:

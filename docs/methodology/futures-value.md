@@ -22,10 +22,16 @@ own-picks assumption  -> nhl_raw.raw_draft_picks (P5, future picks, ownership in
 - **Draft picks** are future picks (2026–2028 × 7 rounds × 32 teams = 672) as selectable assets.
 
 ### The slot curve (P6, `compute_futures_value.py`)
-The spine is **expected career WAR-above-replacement as a function of overall draft pick** — a
-power-law proxy `V(p) = a / (p + c)^b`, floored near replacement, calibrated to public draft-value
-research: round-1 picks dominate, value decays steeply, late picks regress to replacement. The curve
-is an **expectation over all picks at that slot**, so busts are already priced in.
+The spine is **expected career WAR-above-replacement as a function of overall draft pick**. As of
+Handoff 5 (Phase C) this is the **EMPIRICAL curve fit on our own draft outcomes**
+(`nhl_models.pick_value_curve`, career-extrapolated from its 7-year window — see
+[draft-value.md](draft-value.md)), which **replaces** the hand-set power-law `V(p) = a / (p + c)^b`.
+The power-law constants remain in `config.FUTURES` as a documented fallback used only if the curve
+table is unavailable. Either way the curve is an **expectation over all picks at that slot**, so busts
+are already priced in; round-1 picks dominate and value decays to ~replacement by the third round
+(the empirical curve makes that decay steeper and the late-round floor flatter than the old proxy —
+the data says rounds 3–7 are essentially replacement-level in expectation). It remains a
+performance-based, wide-band proxy (`confidence='proxy'`), not a market curve of what GMs pay.
 
 - **Prospect value** = `slot(draft_overall)` (undrafted → floored near replacement), times a
   development decay if the prospect is lingering past NHL-ready age without an NHL footprint, times a

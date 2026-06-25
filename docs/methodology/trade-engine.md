@@ -48,6 +48,11 @@ For each team, incoming minus outgoing on each axis, pulled from `mart_tradeable
 axes are never collapsed. **Band propagation**: each asset's band is a half-width; the net delta's
 band combines **variances** (`hw_net = sqrt(Σ hw_iÂ²)`) — incoming and outgoing both add uncertainty —
 so a prospect/pick-heavy side shows a wide net band (a star-for-three-picks side spans ~12 WAR).
+Pick/prospect WAR comes from `mart_tradeable_assets` → `nhl_models.futures_value`, whose slot curve is
+now the **empirical** pick-value curve fit on our own draft outcomes (Handoff 5; see
+[futures-value.md](futures-value.md) and [draft-value.md](draft-value.md)), career-extrapolated to the
+whole-career WAR units the engine nets. It stays a wide-band proxy, so pick-heavy sides remain
+`low`-confidence regardless.
 
 ## Retention math
 Retention is a **value lever modeled at evaluation time**, not a static attribute. When the source
