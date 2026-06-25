@@ -94,6 +94,26 @@ number** (Schuckers' approach) and the smoothed mean is forced **monotone non-in
 is never worth more in expectation). Smoothing is done in **log space** — the curve spans two orders of
 magnitude (≈11 WAR at #1 to ≈0 by #200) and linear loess crushes the steep top-pick premium.
 
+### Zero-inflation (why the mean and median diverge so sharply)
+Realized value per pick is a **zero-inflated, right-skewed** distribution, not a bell curve. There is a
+large point mass at exactly **0** — the 43% of picks who never play an NHL game, plus a few who played
+but stayed below replacement (floored to 0) — and then a thin, heavy right tail of the players who hit.
+The consequences run through everything here and should be read with it in mind:
+- **Mean ≫ median, especially early.** At pick #1 the mean is ~11 WAR but the median is ~9; by the
+  second round the *median* is already **0** (the median pick busts) while the mean stays positive on
+  the strength of the occasional star. Reporting only the mean would overstate the typical pick; only
+  the median would hide the upside. We publish both, plus the never-play rate and the p10–p90 band, so
+  the shape is visible rather than collapsed to one number.
+- **"Below the mean" is high by construction.** With a right-skewed spike-at-zero distribution, a large
+  majority of picks fall below the mean — so the headline "most picks bust" is partly an artifact of the
+  distribution's shape, which is exactly why the theory test reports below-mean, below-median, and
+  never-play side by side (below).
+- **The smoothed mean is the right summary for the trade engine.** Because the engine nets *expected*
+  value across many assets, the (zero-inclusive) mean is the unbiased quantity to carry; the median
+  would systematically undervalue the option in a later pick. The band stays wide to reflect the skew.
+- **The lower band is 0 almost everywhere.** The smoothed p10 sits at 0 for all but the very top picks —
+  a faithful read of a distribution whose tenth percentile *is* "never played" outside the lottery.
+
 This curve is the empirical replacement for the hand-set `slot_war` power-law in `config.FUTURES`. It is
 published as the **windowed** (7-year) quantity. For the trade engine, which values picks in whole-career
 WAR, `compute_futures_value` multiplies by a **career-extrapolation factor** (≈2.4×, derived from the

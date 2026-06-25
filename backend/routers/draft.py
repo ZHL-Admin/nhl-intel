@@ -27,7 +27,7 @@ async def pick_value_curve() -> List[PickValueCurveRow]:
     curve = bq_service.get_models_table_id("pick_value_curve")
     sql = f"""
         SELECT overall_pick, n, ev_mean, ev_median, ev_mean_smooth, ev_median_smooth,
-               p10, p25, p75, p90, share_never_nhl, share_regular
+               p10, p25, p75, p90, p10_smooth, p90_smooth, share_never_nhl, share_regular
         FROM {curve} ORDER BY overall_pick
     """
     rows = await run_in_threadpool(bq_service.query, sql)

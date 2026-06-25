@@ -16,6 +16,8 @@ export interface PickValueCurveRow {
   p25: number
   p75: number
   p90: number
+  p10_smooth: number
+  p90_smooth: number
   share_never_nhl: number
   share_regular: number
 }

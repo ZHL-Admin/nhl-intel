@@ -2077,6 +2077,8 @@ class PickValueCurveRow(BaseModel):
     p25: float
     p75: float
     p90: float
+    p10_smooth: float
+    p90_smooth: float
     share_never_nhl: float
     share_regular: float
 

@@ -32,7 +32,7 @@ function CurveChartTip({ active, payload }: any) {
     <div className="dv-charttip">
       <div className="dv-charttip__head">Pick #{d.overall_pick} · {d.n} drafted</div>
       <div className="dv-charttip__row"><span>Expected (mean)</span><span className="mono">{d.ev_mean_smooth.toFixed(1)} WAR</span></div>
-      <div className="dv-charttip__row"><span>Median outcome</span><span className="mono">{d.ev_median_smooth.toFixed(1)} WAR</span></div>
+      <div className="dv-charttip__row"><span>Median outcome</span><span className="mono">{d.ev_median.toFixed(1)} WAR</span></div>
       <div className="dv-charttip__row dv-charttip__row--muted"><span>Middle 80% (p10–p90)</span><span className="mono">{d.p10.toFixed(1)}–{d.p90.toFixed(1)}</span></div>
       <div className="dv-charttip__row dv-charttip__row--muted"><span>Never play NHL</span><span className="mono">{pct0(d.share_never_nhl)}</span></div>
     </div>
@@ -43,11 +43,11 @@ function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annota
   const height = useChartPanelHeight()
   const data = curve.map((r) => ({
     ...r,
-    bandLo: r.p10,
-    bandSpan: Math.max(0, r.p90 - r.p10),
+    bandLo: r.p10_smooth,
+    bandSpan: Math.max(0, r.p90_smooth - r.p10_smooth),
   }))
   const yMax = Math.max(
-    ...data.map((d) => d.p90),
+    ...data.map((d) => d.p90_smooth),
     ...annotations.map((a) => a.realized_value),
     ...data.map((d) => d.ev_mean_smooth),
   )
@@ -55,10 +55,11 @@ function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annota
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 16, right: 16, bottom: 18, left: 4 }}>
         <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
-        <XAxis dataKey="overall_pick" type="number" domain={[1, 'dataMax']} stroke="var(--color-border)"
-          tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
-          ticks={[1, 31, 62, 93, 124, 155, 186, 217]} height={34}>
-          <Label value="Overall pick" position="insideBottom" dy={12}
+        {/* log x so the steep top of the draft (picks 1–30) gets the room it deserves */}
+        <XAxis dataKey="overall_pick" type="number" scale="log" domain={[1, 217]} allowDataOverflow
+          stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+          ticks={[1, 2, 5, 10, 31, 62, 124, 217]} tickFormatter={(v: number) => `${v}`} height={34}>
+          <Label value="Overall pick (log scale)" position="insideBottom" dy={12}
             style={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
         </XAxis>
         <YAxis domain={[0, Math.ceil(yMax)]} stroke="var(--color-border)"
@@ -71,7 +72,7 @@ function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annota
         {/* p10–p90 band */}
         <Area dataKey="bandLo" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
         <Area dataKey="bandSpan" stackId="band" stroke="none" fill="var(--color-data-1)" fillOpacity={0.12} isAnimationActive={false} />
-        <Line type="monotone" dataKey="ev_median_smooth" stroke="var(--color-text-muted)" strokeWidth={1.5}
+        <Line type="monotone" dataKey="ev_median" stroke="var(--color-text-muted)" strokeWidth={1.5}
           strokeDasharray="5 4" dot={false} isAnimationActive={false}>
           <Label value="median" position="right" fill="var(--color-text-muted)" style={{ fontSize: 10 }} />
         </Line>

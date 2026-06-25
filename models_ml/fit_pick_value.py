@@ -121,6 +121,12 @@ def main() -> None:
     sm_med, _ = _smooth_monotone(x, curve["ev_median"].values, args.frac)
     curve["ev_mean_smooth"] = mono_mean
     curve["ev_median_smooth"] = np.clip(sm_med, 0.0, None)
+    # Smoothed p10/p90 band bounds (loess, NOT forced monotone — a band may legitimately widen/narrow
+    # across slots; the raw per-slot quantiles are jagged on ~9 samples). p90_smooth >= p10_smooth >= 0.
+    sm_p10, _ = _smooth_monotone(x, curve["p10"].values, args.frac)
+    sm_p90, _ = _smooth_monotone(x, curve["p90"].values, args.frac)
+    curve["p10_smooth"] = np.clip(sm_p10, 0.0, None)
+    curve["p90_smooth"] = np.maximum(np.clip(sm_p90, 0.0, None), curve["p10_smooth"])
     curve["model_version"] = D["CURVE_VERSION"]
 
     extrap = _career_extrap_factor()
