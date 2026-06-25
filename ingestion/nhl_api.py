@@ -275,6 +275,29 @@ def get_prospects(team_abbrev: str) -> dict:
     return response.json()
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def get_draft_picks(year: int | str, round: str | int = "all") -> dict:
+    """Fetch historical draft RESULTS — every pick of a draft and the player taken.
+
+    Source: api-web.nhle.com/v1/draft/picks/{year}/{round}. The {round} arg does NOT
+    filter the payload (every round is always returned); pass "all". Returns
+    {draftYear, draftYears, selectableRounds, state, picks[]}, where each pick carries
+    round / pickInRound / overallPick / teamId / teamAbbrev and the player's name,
+    positionCode, countryCode, height, weight, amateurLeague, amateurClubName.
+
+    IMPORTANT: the payload carries NO player id (verified all years 1979-2025; see
+    scripts/DRAFT_RESULTS_FINDINGS.md). player_id is resolved downstream by joining
+    (draft_year, overall_pick) to each player's landing draftDetails — never by name.
+
+    This is DISTINCT from raw_draft_picks (future pick ownership, ingest_futures.py):
+    this is the historical record of who was actually selected at each slot.
+    """
+    url = f"{BASE_URL}/v1/draft/picks/{year}/{round}"
+    response = httpx.get(url, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
+
+
 def season_to_api8(season: str) -> str:
     """Convert a season string "YYYY-YY" -> the 8-digit form the roster API wants.
 

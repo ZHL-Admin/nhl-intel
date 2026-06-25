@@ -529,3 +529,37 @@ models:
         tests:
           - accepted_values:
               values: ['assumed_own', 'override']
+
+  - name: stg_draft_results
+    description: >
+      Historical draft RESULTS (Handoff 5, Phase A) — one row per (draft_year, overall_pick), the
+      complete evaluation universe for the Draft Value tool. Every pick kept; players who never
+      reached the NHL resolve to a null resolved_player_id (never-NHL value 0 downstream, not
+      missing). DISTINCT from stg_draft_picks (future ownership). resolved_player_id is the
+      authoritative (draft_year, overall_pick) join to raw_player_draft_origin; name_match is a
+      validation cross-check only.
+    columns:
+      - name: pick_key
+        description: Surrogate "draft_year-overall_pick" — one row per pick
+        tests: [not_null, unique]
+      - name: draft_year
+        description: Draft year
+        tests: [not_null]
+      - name: overall_pick
+        description: Dense overall selection number 1..N
+        tests: [not_null]
+      - name: round
+        description: Draft round (1-9; older drafts had more rounds, so do not restrict to 1-7)
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+              quote: false
+      - name: pos_group
+        description: F / D / G
+        tests:
+          - accepted_values:
+              values: ['F', 'D', 'G']
+      - name: resolved_player_id
+        description: Authoritative player id via (draft_year, overall_pick); null = never reached the NHL
+      - name: made_nhl
+        description: True when the pick resolved to a player in our production data

@@ -430,6 +430,47 @@ sources:
           - name: ownership_source
             description: assumed_own (default) or override (from the manual file)
 
+      - name: raw_draft_results
+        description: >
+          Historical draft RESULTS — who was actually selected at each pick (Handoff 5, Phase A;
+          scripts/ingest_draft_results.py -> /v1/draft/picks/{year}/all). One row per pick, the
+          complete evaluation UNIVERSE for the Draft Value tool (every pick kept, incl. players who
+          never reached the NHL = never-NHL value 0 downstream). DISTINCT from raw_draft_picks
+          (future pick ownership). The source carries NO player_id and NO birth_date; player_id is
+          resolved in stg_draft_results by a (draft_year, overall_pick) join to raw_player_draft_origin.
+          Idempotent per draft_year (delete-then-append). Backfilled 2005-2025.
+        columns:
+          - name: draft_year
+            description: Draft year (e.g. 2015)
+          - name: overall_pick
+            description: Dense overall selection number 1..N within the year
+          - name: round
+            description: Draft round (1-9; 7 since 2005, more pre-2005)
+          - name: team_abbrev
+            description: Team that made the selection
+          - name: full_name
+            description: Player selected (display + the (year, overall) join cross-check; no id in source)
+
+      - name: raw_player_draft_origin
+        description: >
+          Each producing player's authoritative draft origin (Handoff 5, Phase A;
+          scripts/ingest_player_draft_origin.py -> /v1/player/{id}/landing draftDetails). One row per
+          player in the producing universe (mart_player_game_stats). The reliable resolver for draft
+          results: stg_draft_results joins raw_draft_results on (draft_year, overall_pick) to this
+          table's draft_overall to attach resolved_player_id. Undrafted players kept (null draft fields,
+          is_undrafted=true) so they are known-checked, not skipped.
+        columns:
+          - name: player_id
+            description: Canonical NHL player id (the resolution target)
+          - name: draft_year
+            description: Year the player was drafted (null if undrafted)
+          - name: draft_overall
+            description: Overall pick the player was taken at (the join key; null if undrafted)
+          - name: full_name
+            description: Player name from the landing payload (join cross-check vs raw_draft_results)
+          - name: is_undrafted
+            description: True when the landing payload has no draftDetails
+
       - name: raw_ppt_replay
         description: >
           ppt-replay goal tracking, one row per (game_id, event_id) goal. Real per-frame

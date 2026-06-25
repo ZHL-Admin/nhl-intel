@@ -162,3 +162,75 @@ def load_json_to_bigquery(
             f"Loaded {result.output_rows} rows to {table_id}, but {len(cleaned_data)} rows were provided. "
             f"Some rows may have had unknown values that were ignored."
         )
+
+
+# Historical draft RESULTS — an EXPLICIT schema (not autodetect), because this table is the
+# evaluation universe for the Draft Value tool and the never-NHL=0 denominator must be exact.
+# Distinct from raw_draft_picks (future ownership). The source carries no player_id and no
+# birth_date (see scripts/DRAFT_RESULTS_FINDINGS.md); player_id is resolved downstream by a
+# (draft_year, overall_pick) join in stg_draft_results.
+DRAFT_RESULTS_SCHEMA = [
+    bigquery.SchemaField("draft_year", "INTEGER"),
+    bigquery.SchemaField("round", "INTEGER"),
+    bigquery.SchemaField("pick_in_round", "INTEGER"),
+    bigquery.SchemaField("overall_pick", "INTEGER"),
+    bigquery.SchemaField("team_id", "INTEGER"),
+    bigquery.SchemaField("team_abbrev", "STRING"),
+    bigquery.SchemaField("full_name", "STRING"),
+    bigquery.SchemaField("first_name", "STRING"),
+    bigquery.SchemaField("last_name", "STRING"),
+    bigquery.SchemaField("position_code", "STRING"),
+    bigquery.SchemaField("country_code", "STRING"),
+    bigquery.SchemaField("height_in", "INTEGER"),
+    bigquery.SchemaField("weight_lb", "INTEGER"),
+    bigquery.SchemaField("amateur_league", "STRING"),
+    bigquery.SchemaField("amateur_club", "STRING"),
+    bigquery.SchemaField("ingestion_year", "INTEGER"),
+    bigquery.SchemaField("_loaded_at", "TIMESTAMP"),
+]
+
+
+def load_draft_results_to_bigquery(
+    project_id: str,
+    dataset_id: str,
+    rows: List[dict],
+    draft_year: int,
+) -> int:
+    """Load one draft year's results to nhl_raw.raw_draft_results with an explicit schema.
+
+    Idempotent per draft year: deletes that year's rows, then appends. Rows must already be
+    flattened to the DRAFT_RESULTS_SCHEMA columns (the ingest script does that). Returns the
+    table's new total row count.
+    """
+    client = bigquery.Client(project=project_id)
+    table_ref = f"{project_id}.{dataset_id}.raw_draft_results"
+
+    try:
+        client.get_table(table_ref)
+    except Exception:
+        client.create_table(bigquery.Table(table_ref, schema=DRAFT_RESULTS_SCHEMA))
+        logger.info("created %s", table_ref)
+
+    loaded_at = datetime.utcnow().isoformat()
+    for r in rows:
+        r["ingestion_year"] = draft_year
+        r["_loaded_at"] = loaded_at
+
+    client.query(
+        f"DELETE FROM `{table_ref}` WHERE draft_year = {int(draft_year)}"
+    ).result()
+
+    ndjson = "\n".join(json.dumps(r) for r in rows)
+    job = client.load_table_from_file(
+        BytesIO(ndjson.encode("utf-8")),
+        table_ref,
+        job_config=bigquery.LoadJobConfig(
+            schema=DRAFT_RESULTS_SCHEMA,
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        ),
+    )
+    job.result()
+    total = list(client.query(f"SELECT COUNT(*) n FROM `{table_ref}`").result())[0].n
+    logger.info("loaded %d draft-%d rows -> %s (now %d total)", len(rows), draft_year, table_ref, total)
+    return total

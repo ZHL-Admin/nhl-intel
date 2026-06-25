@@ -278,6 +278,22 @@ def refresh_weekly_aux(**context):
                 print(f"Loaded {len(terms)} glossary terms")
         except Exception as e:
             print(f"Error refreshing glossary: {e}")
+
+    # Historical draft RESULTS (Handoff 5, Phase A). Drafts are annual (late June), so a weekly
+    # cadence is plenty. fetch_year self-guards on state=='over' (incomplete drafts return no rows),
+    # and the loader is idempotent per draft_year — so attempting the current and prior draft year
+    # is safe and keeps the just-completed draft fresh. The player-origin enrichment that resolves
+    # these to player_ids is refreshed alongside player bio in the trajectories block.
+    try:
+        from scripts.ingest_draft_results import fetch_year
+        from ingestion.loaders import load_draft_results_to_bigquery
+        for dy in (execution_date.year, execution_date.year - 1):
+            rows = fetch_year(dy)
+            if rows:
+                load_draft_results_to_bigquery(project_id, dataset_raw, rows, dy)
+                print(f"Loaded {len(rows)} draft-results rows for {dy}")
+    except Exception as e:
+        print(f"Error refreshing draft results: {e}")
     else:
         print(f"Glossary already present ({n} terms); skipping.")
 
@@ -526,6 +542,13 @@ with DAG(
         bash_command=_mon.format("cd /opt/airflow && python -m scripts.ingest_player_bio"),
         env=_dbt_env,
     )
+    # Draft-origin enrichment (Handoff 5, Phase A): incremental — fetches landing draftDetails only
+    # for producing players not yet present, so new NHL arrivals become resolvable in stg_draft_results.
+    refresh_player_draft_origin = BashOperator(
+        task_id="refresh_player_draft_origin",
+        bash_command=_mon.format("cd /opt/airflow && python -m scripts.ingest_player_draft_origin"),
+        env=_dbt_env,
+    )
     fit_aging_curves = BashOperator(
         task_id="fit_aging_curves",
         bash_command=_mon.format("cd /opt/airflow && python -m models_ml.fit_aging_curves"),
@@ -765,6 +788,9 @@ with DAG(
     [write_archetypes, compute_player_radar] >> compute_archetype_explainer >> generate_report
     [refresh_player_bio, run_dbt_marts] >> compute_twins >> generate_report
     run_dbt_marts >> compute_physical >> generate_report
+    # Draft-origin enrichment (Handoff 5): resolves draft results to player_ids via stg_draft_results
+    # (a view). Runs weekly after the draft-results ingest in weekly_aux_task; in the graph so it fires.
+    weekly_aux_task >> refresh_player_draft_origin >> generate_report
     # Phase 5.1 line-fit: needs int_line_seasons (built upstream in run_dbt_pre_xg) plus
     # archetypes (member archetype mix) and RAPM impact (member off/def features).
     [write_archetypes, train_rapm] >> train_linefit >> generate_report
