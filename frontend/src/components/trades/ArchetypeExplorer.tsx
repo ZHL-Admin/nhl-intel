@@ -66,6 +66,7 @@ export default function ArchetypeExplorer({ lens }: { lens: 'slot' | 'actual' })
 
   return (
     <div className="arch">
+      <div className="t-panel">
       <Tabs options={aggs.map((a) => ({ value: a.archetype, label: a.label }))}
         value={current.archetype} onChange={setPick} />
       <p className="arch-insight">{insight(current)}</p>
@@ -95,7 +96,9 @@ export default function ArchetypeExplorer({ lens }: { lens: 'slot' | 'actual' })
           </p>
         </div>
       )}
+      </div>{/* /.t-panel */}
 
+      <div className="dos-section-title">Notable deals</div>
       <Exemplars a={current} lens={lens} />
       <p className="arch-note">
         Archetypes are tagged from the trade data alone. Rental and salary-dump deals are not shown — they

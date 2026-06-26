@@ -41,7 +41,7 @@ export default function Leaderboards({ lens, onOpenTrade, onOpenEntity }: {
   }, [tab, teams, gms, entitySort])
 
   return (
-    <div className="lb">
+    <div className="lb t-panel">
       <div className="lb-controls">
         <Tabs options={[{ value: 'trades', label: 'Trades' }, { value: 'team', label: 'Teams' }, { value: 'gm', label: 'GMs' }]}
           value={tab} onChange={(v) => setTab(v as Tab)} />

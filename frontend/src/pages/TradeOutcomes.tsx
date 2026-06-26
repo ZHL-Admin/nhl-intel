@@ -84,22 +84,23 @@ export default function TradeOutcomes() {
       <div className="to">
         <PageHeader
           title="Trade outcomes"
-          subtitle="Who actually wins trades — by team, by GM, and by the kind of deal. Realized value in WAR; a retrospective on outcomes, not a grade of the decision at the time."
-        />
-
-        {!isDossier && !isLeaf && (
-          <div className="to-controls">
-            <Tabs options={[{ value: 'overview', label: 'Overview' }, { value: 'traders', label: 'Traders' }, { value: 'patterns', label: 'Patterns' }]}
-              value={mode} onChange={(v) => setMode(v as Mode)} />
-            {mode === 'traders' && (
-              <Tabs options={[{ value: 'team', label: 'Teams' }, { value: 'gm', label: 'GMs' }]}
-                value={entityKind} onChange={(v) => setEntityKind(v as Kind)} />
-            )}
-            <Tabs options={[{ value: 'slot', label: 'Slot lens' }, { value: 'actual', label: 'Actual lens' }]}
-              value={lens} onChange={(v) => setLens(v as Lens)} />
-            <TradeSearch onPickEntity={openEntity} onPickTrade={openTrade} />
-          </div>
-        )}
+          subtitle="Who actually wins trades? View by team, by GM, and by the kind of deal. Retrospective on outcomes."
+        >
+          {!isDossier && !isLeaf && (
+            <div className="to-controls">
+              <Tabs options={[{ value: 'overview', label: 'Overview' }, { value: 'traders', label: 'Traders' }, { value: 'patterns', label: 'Patterns' }]}
+                value={mode} onChange={(v) => setMode(v as Mode)} />
+              {mode === 'traders' && (
+                <Tabs options={[{ value: 'team', label: 'Teams' }, { value: 'gm', label: 'GMs' }]}
+                  value={entityKind} onChange={(v) => setEntityKind(v as Kind)} />
+              )}
+              <Tabs options={[{ value: 'slot', label: 'Slot lens' }, { value: 'actual', label: 'Actual lens' }]}
+                value={lens} onChange={(v) => setLens(v as Lens)} />
+              <span className="to-controls__spacer" />
+              <TradeSearch onPickEntity={openEntity} onPickTrade={openTrade} />
+            </div>
+          )}
+        </PageHeader>
 
         {isLeaf ? (
           <section className="to-section">

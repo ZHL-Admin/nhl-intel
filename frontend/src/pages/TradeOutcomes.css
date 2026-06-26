@@ -1,6 +1,10 @@
 .to { max-width: 1040px; margin: 0 auto; }
 
-.to-section { margin-top: var(--space-10); }
+/* page controls live inside the PageHeader card (under its divider), like the other index pages */
+.to-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.to-controls__spacer { flex: 1 1 auto; }
+
+.to-section { margin-top: var(--space-8); }
 .to-h2 { font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); margin: 0 0 var(--space-2); }
 .to-sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
 

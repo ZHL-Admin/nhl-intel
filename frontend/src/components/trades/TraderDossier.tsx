@@ -106,6 +106,7 @@ export default function TraderDossier({ kind, id, lens, onBack }: {
     <div className="dos">
       <button className="dos-back" onClick={onBack}><ChevronLeft size={16} /> back to the map</button>
 
+      <div className="t-panel dos-panel">
       <div className="dos-header">
         <span className="dos-title">
           {kind === 'team' && <img src={getTeamLogoUrl(id)} alt="" className="tbl-logo" style={{ width: 28, height: 28 }} />}
@@ -148,6 +149,7 @@ export default function TraderDossier({ kind, id, lens, onBack }: {
           </div>
         </>
       )}
+      </div>{/* /.dos-panel */}
 
       <div className="dos-section-title">Best and worst deals</div>
       <div className="dos-cols">

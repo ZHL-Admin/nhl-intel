@@ -19,6 +19,13 @@
   font-size: var(--text-xs); color: var(--color-text-muted); }
 .tbl-gmline__item { display: inline-flex; align-items: center; gap: 4px; }
 
+/* shared panel card — same family as ChartPanel, for the page's non-chart sections. Holds row/grid
+   content only (never nests a TradeBalanceCard, which is itself a card). */
+.t-panel { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: var(--space-5); }
+.t-panel__title { font-size: var(--text-lg); font-weight: 500; color: var(--color-text-primary); margin: 0 0 var(--space-1); }
+.t-panel__sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
+
 /* tilt motif (shared, 3 sizes) */
 .tilt { position: relative; width: 100%; background: var(--color-bg-elevated); border-radius: var(--radius-sm); overflow: hidden; }
 .tilt--full { height: 30px; margin: var(--space-3) 0 var(--space-2); }
