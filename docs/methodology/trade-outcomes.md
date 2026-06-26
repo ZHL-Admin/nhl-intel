@@ -27,20 +27,52 @@ trades, 22 three-team. Draft picks are **round-only** ("YYYY Nth Round") — no 
 original owner**. 221 picks are flagged conditional. The CSV is committed at the repo root like
 `contracts.csv`; `raw_trades` is a source-faithful dated snapshot.
 
-## The horizon (the one knob)
+## The horizon and the tenure cap (what each side actually realized)
 
-`REALIZED_HORIZON_YEARS = 5` (`config.TRADE_OUTCOMES`). A player's realized value is their `pwar_hat`
-summed over the **5 seasons following the trade**; a drafted player's value (actual lens) is their first
-**5 post-draft seasons**. Five balances "enough career to judge the trade" against censoring recent
-deals. It is the single tuning constant; raising it lengthens the window and censors more recent trades.
+`REALIZED_HORIZON_YEARS = 5` (`config.TRADE_OUTCOMES`) is a **maximum lookahead, not a flat sum**. A
+trade credits each side only with the realized value of the assets it **received, during the window
+those assets were under its control** — never value a player produced after he left.
 
-The post-trade season is derived from the trade date: Oct–Dec → that season; Jan–Apr → the in-progress
-season; May–Sep (including draft-day June) → offseason, so the player starts the next season.
+**Player asset (both lenses):** the player's realized `pwar_hat` from the trade until he leaves the
+acquiring team, **capped at `min(exit_date, trade_date + 5 years)`**. Accrual is attributed at the
+**game level** from the roster-membership feed (`mart_player_game_stats`, NHL regular+playoff games via
+`substr(cast(game_id as string),5,2) in ('02','03')`): only games played **for the acquiring team**
+count, and a partial season **prorates** the season's `pwar_hat` by `(games for that team in the window)
+/ (the player's total games that season)` — not a whole-season sum.
+
+- **Exit detection** (roster feed is the source of truth): a player's exit is the first game he plays
+  for a **different team** after the trade. This catches both trade-driven departures and free-agent /
+  buyout departures (he simply stops appearing for the team). `stg_trades` corroborates trade-driven
+  exits, but tenure is read from games played. A later return to the team is a separate stint and is
+  correctly excluded (no games for the team between exit and return). The horizon caps the rest.
+- **Symmetry:** the team that gave the player up is charged the **same tenure-capped quantity** the
+  acquiring team realized — never the player's full post-trade career. Value received = value
+  surrendered, so the two sides of a two-team trade are exact mirrors.
+
+An unmatched player, one who never played in our data, or one on an unmapped (relocated) franchise is
+**0 — not missing**.
+
+**Pick asset — ACTUAL lens:** the **same tenure cap** — the drafted player's realized `pwar_hat` only
+while he is on the team that drafted him (assumed to be the acquirer), prorated by games, within 5
+seasons of the draft. The **slot lens is unaffected** (it values the pick asset at its slot's
+expectation, not a tenure).
+
+Why this matters: a deadline rental who plays a partial season and leaves now credits only those games,
+not five seasons. The previous build summed a flat five seasons from the trade date regardless of team,
+over-crediting the acquirer with value the player produced **after he left** and symmetrically
+over-charging the team that traded him.
+
+### Worked example — Panarin for Saad (2017-06-23, CBJ/CHI)
+Panarin left Columbus as a UFA in 2019, so his Columbus credit is only his **two Columbus seasons
+(~4.6 WAR)**; his later Rangers production contributes **zero** to this trade (it followed a free-agent
+signing, not a trade, so it belongs to no trade). Chicago's side is Saad's **Chicago tenure**
+(~1.0 WAR, capped at his 2020 departure). Net for Columbus drops from the old flat-window
+**+10.7** to **+4.0 WAR** — still a Columbus win, but no longer inflated by value that left.
+
+The post-trade anchor season is derived from the trade date: Oct–Dec → that season; Jan–Apr → the
+in-progress season; May–Sep (incl. draft-day June) → the next season.
 
 ## The two lenses (per asset)
-
-**Player asset (both lenses):** realized `pwar_hat` over the 5-season window. An unmatched player, or one
-who never played in our data, is **0 — not missing** (the same outcome either way: no realized WAR).
 
 **Pick asset — SLOT lens (headline):** the empirical `pick_value_curve` value at the pick's round
 midpoint (overall = (round−1)·32 + 16), **career-extrapolated** (×~2.4) to whole-career WAR, with the
@@ -50,8 +82,9 @@ worth?", independent of who was later drafted, and it does not censor.
 **Pick asset — ACTUAL lens (secondary):** the realized value of the player the pick **actually became**.
 Because picks are round-only with no owner, we resolve via the **acquiring team's own selection in that
 round** (`stg_draft_results`): the team that received the pick is the one most likely to have used it.
-When unique, that player's first-5-season `pwar_hat` is the pick's value. This lens **conflates the trade
-with the drafting** (a great pick wasted on a bust scores 0) and is explicitly secondary.
+When unique, that player's tenure-capped `pwar_hat` with the drafting team (≤5 post-draft seasons,
+prorated by games) is the pick's value. This lens **conflates the trade with the drafting** (a great
+pick wasted on a bust scores 0) and is explicitly secondary.
 
 **Other ("Future Considerations"):** value **0, labeled** — a real asset we cannot value, not a missing
 player. **Conditional picks** (notes flag): valued at expectation under both lenses, flagged conditional.
@@ -80,9 +113,11 @@ complete are flagged `horizon_incomplete` and excluded from the headline board b
   the team relocated (abbrev mismatch), or the draft is too recent. This is expected for a round-only
   feed and is why the actual lens is **secondary**; the slot lens (headline) does not depend on it.
 
-Smell test (slot lens, biggest one-sided wins): CBJ on Panarin-for-Saad (+10.7), VGK on the Mark Stone
-deal (+9.9), NYR on Brassard-for-Zibanejad (+8.3), NJD on Taylor-Hall-for-Larsson (+7.5), FLA on the Sam
-Reinhart trade (+8.4) — all correctly attributed to the side that got the better realized player.
+Smell test (slot lens, tenure-capped net to the winner): CBJ on Panarin-for-Saad **+4.0** (Panarin's
+two Columbus seasons only), VGK on the Mark Stone deal **+9.3** (Stone stayed, so barely changed from
+the old +9.9), NYR on Brassard-for-Zibanejad **+8.4** (Zibanejad stayed, ~unchanged), NJD on
+Taylor-Hall-for-Larsson **+6.5** (down from +7.5 — Hall was later traded out, so his post-NJD value is
+removed). Players who stayed move little; players who left drop — exactly the tenure cap working.
 
 ## Censoring
 

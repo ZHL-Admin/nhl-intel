@@ -33,6 +33,8 @@ import argparse
 import datetime as _dt
 import json
 import math
+from collections import defaultdict
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -95,33 +97,6 @@ def _draft_index(draft: pd.DataFrame) -> dict:
 
 
 # --------------------------------------------------------------------------- horizon / valuation
-def effective_start_year(d) -> int:
-    """The season start-year a traded player first contributes to the new team.
-    Oct-Dec -> that calendar year's season; Jan-Apr -> the in-progress season (year-1);
-    May-Sep (incl. draft-day June) -> offseason, next season starts that calendar year."""
-    y, m = d.year, d.month
-    if m >= 10:
-        return y
-    if m <= 4:
-        return y - 1
-    return y
-
-
-def _window_sum(pidx: dict, pid: int | None, start: int, latest: int) -> tuple[float, float, bool]:
-    """Realized pwar summed over [start, start+H-1]; hw = sqrt(Σ sd²); complete if window observed."""
-    if pid is None or pid not in pidx:
-        return 0.0, 0.0, True            # unmatched/never-played -> 0 (not missing)
-    seasons = pidx[pid]
-    val, var = 0.0, 0.0
-    for yr in range(start, start + H):
-        if yr in seasons:
-            v, sd = seasons[yr]
-            val += v
-            var += sd * sd
-    complete = (start + H - 1) <= latest
-    return val, math.sqrt(var), complete
-
-
 def _pick_slot(cidx: dict, factor: float, overall: int) -> tuple[float, float, float]:
     """Career-extrapolated slot value + band at an overall pick (clamped to the curve domain)."""
     if overall not in cidx:
@@ -133,6 +108,93 @@ def _pick_slot(cidx: dict, factor: float, overall: int) -> tuple[float, float, f
 
 def _hw(lo, hi) -> float:
     return abs(float(hi) - float(lo)) / 2.0
+
+
+def _add_years(d: date, n: int) -> date:
+    try:
+        return d.replace(year=d.year + n)
+    except ValueError:                       # Feb 29 -> Feb 28
+        return d.replace(year=d.year + n, day=28)
+
+
+def _team_id_map() -> dict:
+    """Current franchise abbrev -> team_id (most recent abbrev per id). Note: relocated franchises
+    (ARI->UTA, ATL->WPG) map the CURRENT abbrev, so pre-relocation games under the old id will not
+    match the acquiring team — a documented under-credit edge case for those few clubs."""
+    P = bq.project()
+    df = bq.query_df(f"""
+        select team_id, array_agg(team_abbrev order by game_date desc limit 1)[offset(0)] as abbrev
+        from `{P}.nhl_mart.mart_team_game_stats`
+        where team_abbrev is not null
+        group by team_id
+    """)
+    return {r.abbrev: int(r.team_id) for r in df.itertuples(index=False)}
+
+
+def _load_gamelog(player_ids: set) -> dict:
+    """player_id -> sorted [(game_date, season, team_id)] over NHL regular+playoff games. The
+    game-level player-to-team feed (the substr('02','03') game-type filter) used to cap accrual to a
+    player's tenure with the acquiring team and prorate partial seasons by games actually played."""
+    if not player_ids:
+        return {}
+    ids = ",".join(str(int(p)) for p in player_ids)
+    P = bq.project()
+    df = bq.query_df(f"""
+        select player_id, game_date, season, team_id
+        from `{P}.nhl_mart.mart_player_game_stats`
+        where substr(cast(game_id as string), 5, 2) in ('02', '03')
+          and player_id in ({ids})
+    """)
+    log: dict[int, list] = defaultdict(list)
+    for r in df.itertuples(index=False):
+        log[int(r.player_id)].append((pd.to_datetime(r.game_date).date(), r.season, int(r.team_id)))
+    for v in log.values():
+        v.sort()
+    return log
+
+
+def _tenure_value(log: dict, pidx: dict, pid: int | None, team_id: int | None,
+                  anchor: date, horizon_end: date, last_data: date) -> tuple[float, float, bool]:
+    """Realized pWAR the acquiring team actually got from a received PLAYER: the player's value while on
+    that team, from `anchor` (the trade, or the draft for the pick actual-lens) until the earlier of his
+    exit from the team and the horizon cap. Attributed at the game level — only games for `team_id`
+    count — and partial seasons prorate by games played for that team over the player's total games that
+    season. never-played / unmatched / unmapped -> 0 (not missing).
+
+    Exit = the first game the player plays for a DIFFERENT team after the anchor (roster feed is the
+    source of truth; this captures trade-driven and free-agent departures alike). After he leaves, he
+    has no games for the team, so a later return (a separate stint) is correctly excluded."""
+    if pid is None or team_id is None:
+        return 0.0, 0.0, True
+    games = log.get(pid)
+    if not games:
+        return 0.0, 0.0, True
+    exit_date = None
+    for (d, _s, tid) in games:
+        if d > anchor and tid != team_id:
+            exit_date = d
+            break
+    cap = horizon_end if exit_date is None else min(exit_date, horizon_end)
+    gft: dict[str, int] = defaultdict(int)   # games for the team, in [anchor, cap], per season
+    tot: dict[str, int] = defaultdict(int)   # the player's total games per season (the proration base)
+    for (d, s, tid) in games:
+        tot[s] += 1
+        if tid == team_id and anchor <= d <= cap:
+            gft[s] += 1
+    seasons_pw = pidx.get(pid, {})
+    val = var = 0.0
+    for s, n in gft.items():
+        if n == 0:
+            continue
+        sy = int(s[:4])
+        if sy in seasons_pw:
+            v, sd = seasons_pw[sy]
+            frac = n / tot[s] if tot[s] else 0.0
+            val += v * frac
+            var += (sd * frac) ** 2
+    # complete once we have observed his exit (tenure fully seen) or the horizon has elapsed in our data
+    complete = (exit_date is not None) or (horizon_end <= last_data)
+    return val, math.sqrt(var), complete
 
 
 # --------------------------------------------------------------------------- pre-trade team (3-team)
@@ -165,11 +227,12 @@ def _pretrade_teams(trades: pd.DataFrame) -> dict:
 
 
 # --------------------------------------------------------------------------- per-asset valuation
-def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest) -> pd.DataFrame:
+def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, team_ids) -> pd.DataFrame:
     rows = []
+    last_data = date(latest + 1, 6, 30)      # ~end of the latest observed season
     for r in trades.itertuples(index=False):
         td = pd.to_datetime(r.trade_date).date()
-        start = effective_start_year(td)
+        acq_id = team_ids.get(r.acquiring_team)
         slot_v = slot_hw = act_v = act_hw = 0.0
         flags = {"unresolved": False, "conditional": bool(r.is_conditional),
                  "actual_censored": False, "own_pick_assumed": False, "actual_unresolved": False,
@@ -180,12 +243,14 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest) -> pd.DataF
 
         if r.asset_type == "Player":
             pid = int(r.resolved_player_id) if pd.notna(r.resolved_player_id) else None
-            v, hw, complete = _window_sum(pidx, pid, start, latest)
+            # tenure-capped: only the value the acquiring team realized while he was on it, prorated by
+            # games played for that team, up to min(exit, trade_date + horizon). Not a flat 5 seasons.
+            v, hw, complete = _tenure_value(gamelog, pidx, pid, acq_id, td, _add_years(td, H), last_data)
             slot_v = act_v = v
             slot_hw = act_hw = hw
             flags["unresolved"] = pid is None
             if not complete:
-                # the player's post-trade realized window isn't fully observed yet (recent trade);
+                # the realized window isn't fully observed yet (recent trade, player still on the team);
                 # affects BOTH lenses, so it's a row-level recency caveat, not actual-lens censoring
                 flags["horizon_incomplete"] = True
 
@@ -204,7 +269,11 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest) -> pd.DataF
                 flags["own_pick_assumed"] = True       # resolved via the acquirer's selection that round
                 became_id, became_name = pids[0]
                 dy = int(r.pick_year)
-                av, ahw, complete = _window_sum(pidx, became_id, dy, latest)
+                # same tenure cap: credit the drafted player's value only while on the drafting team
+                # (assumed = the acquirer), from the draft to min(exit, draft + horizon).
+                anchor = date(dy, 7, 1)
+                av, ahw, complete = _tenure_value(gamelog, pidx, became_id, acq_id, anchor,
+                                                  _add_years(anchor, H), last_data)
                 act_v, act_hw = av, ahw
                 if not complete:
                     flags["actual_censored"] = True   # 2019+ drafts: incomplete realized career
@@ -333,10 +402,22 @@ def main() -> None:
     cidx, factor = _curve_index(curve)
     didx = _draft_index(draft)
     pretrade = _pretrade_teams(trades)
-    print(f"loaded {trades.trade_id.nunique()} trades; latest pwar season start={latest}; "
-          f"career-extrap x{factor:.2f}; horizon={H}y")
+    team_ids = _team_id_map()
 
-    av = value_assets(trades, pidx, cidx, factor, didx, pretrade, latest)
+    # the players whose tenure we need to value: traded players + the players picks became
+    need_ids: set = set()
+    for r in trades.itertuples(index=False):
+        if r.asset_type == "Player" and pd.notna(r.resolved_player_id):
+            need_ids.add(int(r.resolved_player_id))
+        elif r.asset_type == "Draft Pick" and pd.notna(r.pick_year) and pd.notna(r.pick_round):
+            pids = didx.get((int(r.pick_year), int(r.pick_round), r.acquiring_team), [])
+            if len(pids) == 1:
+                need_ids.add(pids[0][0])
+    gamelog = _load_gamelog(need_ids)
+    print(f"loaded {trades.trade_id.nunique()} trades; latest pwar season start={latest}; "
+          f"career-extrap x{factor:.2f}; horizon={H}y; gamelog players={len(gamelog)}")
+
+    av = value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, team_ids)
     outc = net_trades(av)
     _report(av, outc)
 
