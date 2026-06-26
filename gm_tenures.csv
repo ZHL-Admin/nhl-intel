@@ -1,0 +1,83 @@
+gm_id,gm_name,team_abbrev,start_date,end_date,title,note
+bob_murray,Bob Murray,ANA,2008-11-12,2022-02-03,gm,resigned 2021-11-10; interim Jeff Solomon folded into boundary - verify
+pat_verbeek,Pat Verbeek,ANA,2022-02-03,,gm,current
+don_sweeney,Don Sweeney,BOS,2015-05-20,,gm,current
+tim_murray,Tim Murray,BUF,2014-01-09,2017-04-20,gm,fired Apr 2017 - verify exact date
+jason_botterill,Jason Botterill,BUF,2017-05-11,2020-06-16,gm,
+kevyn_adams,Kevyn Adams,BUF,2020-06-16,2025-12-15,gm,
+jarmo_kekalainen,Jarmo Kekalainen,BUF,2025-12-15,,gm,current; replaced Adams (NHL.com 2025-12-15)
+brad_treliving,Brad Treliving,CGY,2014-04-28,2023-05-23,gm,
+craig_conroy,Craig Conroy,CGY,2023-05-23,,gm,current
+ron_francis,Ron Francis,CAR,2014-04-28,2018-03-07,gm,moved to president - verify end date
+don_waddell,Don Waddell,CAR,2018-05-08,2024-05-01,gm,GM/president; left for CBJ - verify end date
+eric_tulsky,Eric Tulsky,CAR,2024-05-01,,gm,current; interim then permanent 2024-06-18
+stan_bowman,Stan Bowman,CHI,2009-07-14,2021-10-26,gm,resigned 2021-10-26
+kyle_davidson,Kyle Davidson,CHI,2021-10-26,,gm,current; interim 2021-10-26, permanent 2022-03-01
+joe_sakic,Joe Sakic,COL,2014-05-10,2022-07-11,gm,EVP/GM; to POHO - verify start
+chris_macfarland,Chris MacFarland,COL,2022-07-11,,gm,current
+jarmo_kekalainen,Jarmo Kekalainen,CBJ,2013-02-13,2024-02-15,gm,fired 2024-02-15
+don_waddell,Don Waddell,CBJ,2024-05-28,,gm,current; CBJ interim Feb-May 2024 unfilled here - verify deadline attribution
+jim_nill,Jim Nill,DAL,2013-04-29,,gm,current
+ken_holland,Ken Holland,DET,1997-07-18,2019-04-19,gm,
+steve_yzerman,Steve Yzerman,DET,2019-04-19,,gm,current
+peter_chiarelli,Peter Chiarelli,EDM,2015-04-24,2019-01-22,gm,fired 2019-01-22
+keith_gretzky,Keith Gretzky,EDM,2019-01-22,2019-05-07,interim,
+ken_holland,Ken Holland,EDM,2019-05-07,2024-07-24,gm,
+stan_bowman,Stan Bowman,EDM,2024-07-24,,gm,current; replaced Holland (NHL.com 2024-07-24)
+dale_tallon,Dale Tallon,FLA,2010-05-17,2016-05-12,gm,to president - verify
+tom_rowe,Tom Rowe,FLA,2016-05-12,2017-04-09,gm,GM for 2016-17 only; verify both dates
+dale_tallon,Dale Tallon,FLA,2017-04-09,2020-09-02,gm,resumed GM - verify
+bill_zito,Bill Zito,FLA,2020-09-02,,gm,current
+dean_lombardi,Dean Lombardi,LAK,2006-04-21,2017-04-10,gm,
+rob_blake,Rob Blake,LAK,2017-04-10,2025-05-14,gm,
+ken_holland,Ken Holland,LAK,2025-05-14,,gm,current (NHL.com 2025-05-14)
+chuck_fletcher,Chuck Fletcher,MIN,2009-05-22,2018-04-23,gm,
+paul_fenton,Paul Fenton,MIN,2018-05-21,2019-07-30,gm,fired after one year
+bill_guerin,Bill Guerin,MIN,2019-08-21,,gm,current
+marc_bergevin,Marc Bergevin,MTL,2012-05-02,2021-11-28,gm,fired 2021-11-28
+kent_hughes,Kent Hughes,MTL,2022-01-18,,gm,current; interim period (Gorton EVP) before - verify
+david_poile,David Poile,NSH,1998-07-09,2023-06-30,gm,longtime GM; verify start
+barry_trotz,Barry Trotz,NSH,2023-07-01,,gm,current; replaced Poile
+ray_shero,Ray Shero,NJD,2015-05-04,2020-01-12,gm,fired 2020-01-12
+tom_fitzgerald,Tom Fitzgerald,NJD,2020-01-12,2026-04-16,gm,interim then permanent
+sunny_mehta,Sunny Mehta,NJD,2026-04-16,,gm,current; very recent (NHL.com 2026-04-16) - verify
+garth_snow,Garth Snow,NYI,2006-07-18,2018-06-05,gm,
+lou_lamoriello,Lou Lamoriello,NYI,2018-06-05,2025-05-23,gm,
+mathieu_darche,Mathieu Darche,NYI,2025-05-23,,gm,current (Sportsnet 2025-05-23)
+jeff_gorton,Jeff Gorton,NYR,2015-07-01,2021-05-05,gm,fired 2021-05-05
+chris_drury,Chris Drury,NYR,2021-05-05,,gm,current
+bryan_murray,Bryan Murray,OTT,2007-06-18,2016-04-10,gm,
+pierre_dorion,Pierre Dorion,OTT,2016-04-10,2023-11-01,gm,
+steve_staios,Steve Staios,OTT,2023-11-01,,gm,current
+ron_hextall,Ron Hextall,PHI,2014-05-07,2018-11-26,gm,fired 2018-11-26
+chuck_fletcher,Chuck Fletcher,PHI,2018-12-03,2023-03-10,gm,fired 2023-03-10
+daniel_briere,Daniel Briere,PHI,2023-03-10,,gm,current; interim 2023-03-10, permanent 2023-05-11
+jim_rutherford,Jim Rutherford,PIT,2014-06-06,2021-01-27,gm,resigned 2021-01-27; interim Allvin to 2021-02-09
+ron_hextall,Ron Hextall,PIT,2021-02-09,2023-04-14,gm,fired 2023-04-14
+kyle_dubas,Kyle Dubas,PIT,2023-06-01,,gm,current; POHO/GM (NHL.com 2023-06-01); PIT gap Apr-Jun 2023 - verify
+doug_wilson,Doug Wilson,SJS,2003-05-13,2021-11-25,gm,took leave 2021-11; formally stepped down 2022-04 - verify
+joe_will,Joe Will,SJS,2021-11-25,2022-07-05,interim,Wilson on leave; 2022 deadline likely under Will - verify
+mike_grier,Mike Grier,SJS,2022-07-05,,gm,current (NHL.com 2022-07-05)
+ron_francis,Ron Francis,SEA,2019-07-18,2025-04-22,gm,expansion GM; to POHO
+jason_botterill,Jason Botterill,SEA,2025-04-22,,gm,current (NHL.com 2025-04-22)
+doug_armstrong,Doug Armstrong,STL,2010-07-01,,gm,current; verify any planned 2025-26 succession
+steve_yzerman,Steve Yzerman,TBL,2010-05-25,2018-09-11,gm,
+julien_brisebois,Julien BriseBois,TBL,2018-09-11,,gm,current
+lou_lamoriello,Lou Lamoriello,TOR,2015-07-23,2018-05-11,gm,
+kyle_dubas,Kyle Dubas,TOR,2018-05-11,2023-05-18,gm,not retained May 2023 - verify
+brad_treliving,Brad Treliving,TOR,2023-05-31,2026-05-03,gm,
+john_chayka,John Chayka,TOR,2026-05-03,,gm,current; with Mats Sundin (Sportsnet 2026-05-03) - very recent, verify
+don_maloney,Don Maloney,ARI,2007-07-01,2016-04-11,gm,fired 2016-04-11 - verify start
+john_chayka,John Chayka,ARI,2016-05-05,2020-07-26,gm,resigned 2020-07-26
+steve_sullivan,Steve Sullivan,ARI,2020-07-26,2020-09-17,interim,
+bill_armstrong,Bill Armstrong,ARI,2020-09-17,2024-04-18,gm,Coyotes era
+bill_armstrong,Bill Armstrong,UTA,2024-04-18,,gm,current; franchise relocated to Utah 2024, same GM
+jim_benning,Jim Benning,VAN,2014-05-23,2021-12-05,gm,fired 2021-12-05
+stan_smyl,Stan Smyl,VAN,2021-12-05,2022-01-26,interim,
+patrik_allvin,Patrik Allvin,VAN,2022-01-26,2026-05-14,gm,
+ryan_johnson,Ryan Johnson,VAN,2026-05-14,,gm,current; Sedins run hockey ops (NHL.com 2026-05-14) - very recent, verify
+george_mcphee,George McPhee,VGK,2016-07-13,2019-05-02,gm,expansion; to POHO
+kelly_mccrimmon,Kelly McCrimmon,VGK,2019-05-02,,gm,current
+brian_maclellan,Brian MacLellan,WSH,2014-05-26,2024-07-08,gm,to POHO
+chris_patrick,Chris Patrick,WSH,2024-07-08,,gm,current (NHL.com 2024-07-08)
+kevin_cheveldayoff,Kevin Cheveldayoff,WPG,2011-06-08,,gm,current

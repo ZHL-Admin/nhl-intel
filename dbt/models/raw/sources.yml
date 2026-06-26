@@ -492,6 +492,23 @@ sources:
           - name: notes
             description: Non-empty on conditional picks
 
+      - name: raw_gm_tenures
+        description: >
+          Curated GM-tenure reference (Handoff 6; scripts/load_gm_tenures.py). One row per GM stint
+          (gm_id stable across stints; a GM with multiple teams/returns has multiple rows). The SOURCE
+          OF TRUTH for trade-outcome GM attribution — front-office history is in no feed. Source-faithful
+          strings (dates parsed in stg_gm_tenures); dated snapshot. The GM is the decision-maker of
+          RECORD, not the sole one, and dates are approximate near handovers — flagged everywhere it surfaces.
+        columns:
+          - name: gm_id
+            description: Stable slug across stints (e.g. "steve_yzerman")
+          - name: team_abbrev
+            description: Current franchise abbrev (matches mart_team_game_stats)
+          - name: start_date
+            description: Date the GM took control of trade decisions
+          - name: end_date
+            description: End date, or blank for the current GM
+
       - name: raw_player_draft_origin
         description: >
           Each producing player's authoritative draft origin (Handoff 5, Phase A;

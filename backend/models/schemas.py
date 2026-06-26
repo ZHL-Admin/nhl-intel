@@ -2181,3 +2181,105 @@ class TeamTradeLedger(BaseModel):
     total_net_actual: float
     trades: List[TradeOutcomeRow]
     caveat: str
+
+
+# --- Trade board / GM layer (Handoff 6): entity-first surfaces -----------------------------------
+class TraderRecord(BaseModel):
+    decisive_wins: int = 0
+    leans: int = 0
+    too_close: int = 0
+    losses: int = 0
+
+
+class TradeBoardAsset(BaseModel):
+    asset_type: str
+    label: str
+    war_slot: float
+    war_actual: Optional[float] = None
+    resolved: bool
+    player_id: Optional[int] = None
+    became_player_id: Optional[int] = None
+    became_player_name: Optional[str] = None
+    conditional: bool = False
+
+
+class TradeBoardSide(BaseModel):
+    team_id: Optional[int] = None
+    team_abbrev: str
+    gm_id: Optional[str] = None
+    gm_name: Optional[str] = None
+    gm_transition: bool = False
+    slot_war_received: float
+    actual_war_received: Optional[float] = None
+    assets: List[TradeBoardAsset] = []
+
+
+class TradeBoardItem(BaseModel):
+    trade_id: str
+    date: str
+    season: str
+    team_count: int
+    sides: List[TradeBoardSide]
+    margin_slot: float
+    band_hw_slot: float
+    margin_actual: Optional[float] = None
+    band_hw_actual: Optional[float] = None
+    winner_team_id: Optional[int] = None
+    winner_gm_id: Optional[str] = None
+    verdict: str                       # decisive | lean | too_close
+    incomplete: bool
+    realized_year: int
+    is_player_for_picks: bool
+    archetype: str
+    confidence: str
+
+
+class ValueMapPoint(BaseModel):
+    kind: str                          # team | gm
+    id: str                            # team_abbrev or gm_id
+    label: str
+    team_abbrev_for_color: str
+    given_up_war: float
+    gained_war: float
+    net_war: float
+    net_band_hw: float
+    trade_count: int
+    record: TraderRecord
+
+
+class DossierTenure(BaseModel):
+    team_abbrev: str
+    start_date: str
+    end_date: Optional[str] = None
+    title: Optional[str] = None
+
+
+class DossierTimelinePoint(BaseModel):
+    date: str
+    cumulative_net_war: float
+    trade_id: str
+    regime_key: str
+
+
+class TraderDossier(BaseModel):
+    kind: str
+    id: str
+    label: str
+    tenures: List[DossierTenure]
+    net_war: float
+    net_band_hw: float
+    trade_count: int
+    record: TraderRecord
+    timeline: List[DossierTimelinePoint]
+    best: List[str]
+    worst: List[str]
+    deals: List[str]
+    caveat: str
+
+
+class ArchetypeAgg(BaseModel):
+    archetype: str
+    label: str
+    trade_count: int
+    split: dict
+    exemplars: dict

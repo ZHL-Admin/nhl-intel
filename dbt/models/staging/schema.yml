@@ -589,3 +589,19 @@ models:
           - accepted_values:
               values: ['name+pos', 'name', 'unmatched']
               quote: true
+
+  - name: stg_gm_tenures
+    description: >
+      Typed curated GM tenures (Handoff 6), one row per (gm_id, team_abbrev, start_date). The source of
+      truth for trade-outcome GM attribution; tenures per team are non-overlapping (singular test
+      assert_gm_tenures_no_overlap). end_date null = current GM.
+    columns:
+      - name: gm_id
+        description: Stable slug across stints
+        tests: [not_null]
+      - name: team_abbrev
+        description: Current franchise abbrev
+        tests: [not_null]
+      - name: start_date
+        description: Tenure start
+        tests: [not_null]

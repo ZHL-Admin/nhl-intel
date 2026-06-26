@@ -785,6 +785,20 @@ TRADE_OUTCOMES = {
     "DOLLARS_PER_WAR": 3_000_000,  # for dollar display alongside WAR (mirror FUTURES)
 }
 
+# --- Trade board / GM layer (Handoff 6): entity-first trade-outcome surfaces ----------------------
+# Read-time composition over nhl_models.trade_outcomes + stg_gm_tenures; all thresholds here so no
+# literals scatter into SQL/TSX. WAR throughout (same units as mart_tradeable_assets).
+TRADE_BOARD = {
+    "DECISIVE_WAR": 2.0,       # |margin| - band_hw >= this => a decisive win (else lean / too-close)
+    "ARCHETYPE_SHARE": 0.70,   # a side is "player-" or "pick-"heavy at >= this share of received value
+    "BLOCKBUSTER_WAR": 8.0,    # total WAR moved across the trade >= this => blockbuster
+    "WAR_DOMAIN": 12.0,        # balance-bar x-axis domain (+/-), front end mirrors this
+    "REALIZED_HORIZON_YEARS": 5,   # mirrors TRADE_OUTCOMES; for "through year k of 5" labels
+}
+GM_LAYER = {
+    "TRANSITION_WINDOW_DAYS": 14,   # trade within this many days of a tenure boundary => attribution flagged
+}
+
 # --- Player Verdict (composed scouting read; Gemini narrates a deterministic two-horizon payload) ---
 VERDICT = {
     "MODEL_VERSION": "verdict_v1",
