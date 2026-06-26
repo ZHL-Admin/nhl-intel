@@ -2201,6 +2201,8 @@ class TradeBoardAsset(BaseModel):
     became_player_id: Optional[int] = None
     became_player_name: Optional[str] = None
     conditional: bool = False
+    retention: bool = False
+    retained_pct: Optional[int] = None
 
 
 class TradeBoardSide(BaseModel):

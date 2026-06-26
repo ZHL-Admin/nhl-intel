@@ -97,6 +97,8 @@ export interface TradeBoardAsset {
   became_player_id: number | null
   became_player_name: string | null
   conditional: boolean
+  retention: boolean
+  retained_pct: number | null
 }
 
 export interface TradeBoardSide {

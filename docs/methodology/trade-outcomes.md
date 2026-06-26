@@ -102,6 +102,16 @@ A side's **confidence** is `low` whenever it contains a pick, a Future-Considera
 unmatched player (all wide-band proxies), else `medium`. Recent trades whose 5-season window is not yet
 complete are flagged `horizon_incomplete` and excluded from the headline board by default.
 
+**Salary retention.** A third team sometimes brokers a deal by retaining part of a player's salary in
+exchange for a pick (e.g. Detroit retaining 50% of Yanni Gourde in the 2025 Tampa/Seattle trade). The
+source records that as the broker "acquiring" the player, with a `% retained` note. We do **not** count
+it as an acquisition: a player asset whose note says retained AND whose real post-trade club (his first
+game after the trade) is a *different* team is tagged a **retention** row — valued at 0 WAR (a cap
+mechanism, not on-ice value) and shown as "{player} · {pct}% retained", so the same player never appears
+as "received" by two teams. The team's actual return is the pick it got back. Conditional picks are
+flagged only when the note literally says "conditional" — the notes column also carries retention and
+other annotations, which must not be mistaken for a conditional pick.
+
 ## Match rates (reported, not hidden)
 
 - **Player name → id:** 86.0% matched on normalized name + position group, 0.8% on a unique name,

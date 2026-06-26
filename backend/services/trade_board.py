@@ -167,6 +167,8 @@ def build_all() -> list:
                 "became_player_id": e.get("became_player_id"),
                 "became_player_name": e.get("became_player_name"),
                 "conditional": bool(e.get("conditional")),
+                "retention": bool(e.get("retention")),
+                "retained_pct": e.get("retained_pct"),
             } for e in recv]
             recv_slot = sum(a["war_slot"] for a in assets)
             recv_actual = sum((a["war_actual"] or 0.0) for a in assets)

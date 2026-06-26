@@ -252,6 +252,7 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
         is_proxy = False
         label = r.asset
         became_id, became_name = None, None      # the player a pick became (actual lens, for linking)
+        retained_pct = None                       # % salary retained on a retention broker row
 
         if r.asset_type == "Player":
             pid = int(r.resolved_player_id) if pd.notna(r.resolved_player_id) else None
@@ -261,8 +262,7 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
             post = _post_team(gamelog, pid, td)
             if bool(r.is_retention) and post is not None and acq_id is not None and post != acq_id:
                 flags["retention"] = True
-                pct = int(r.retained_pct) if pd.notna(r.retained_pct) else None
-                label = f"{r.asset} — {pct}% retained" if pct else f"{r.asset} — retained salary"
+                retained_pct = int(r.retained_pct) if pd.notna(r.retained_pct) else None
                 slot_v = act_v = slot_hw = act_hw = 0.0
             else:
                 # tenure-capped: only the value the acquiring team realized while he was on it, prorated
@@ -320,6 +320,7 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
             "slot_war": round(slot_v, 3), "slot_hw": round(slot_hw, 3),
             "actual_war": round(act_v, 3), "actual_hw": round(act_hw, 3),
             "became_player_id": became_id, "became_player_name": became_name,
+            "retained_pct": retained_pct,
             "is_proxy": is_proxy, **flags,
         })
     return pd.DataFrame(rows)
@@ -347,7 +348,7 @@ def _ledger_entry(a: dict, direction: str) -> dict:
             "slot_war": a["slot_war"], "actual_war": a["actual_war"],
             "conditional": a["conditional"], "unresolved": a["unresolved"],
             "own_pick_assumed": a["own_pick_assumed"], "actual_unresolved": a["actual_unresolved"],
-            "retention": a.get("retention", False)}
+            "retention": a.get("retention", False), "retained_pct": _clean_id(a.get("retained_pct"))}
 
 
 def net_trades(av: pd.DataFrame) -> pd.DataFrame:

@@ -32,6 +32,7 @@ function AssetLine({ a }: { a: TradeBoardAsset }) {
           <span className="tbl-asset__became"> → <Link to={`/players/${a.became_player_id}`}>{a.became_player_name}</Link></span>
         )}
         {pick && a.became_player_id == null && <span className="tbl-tag tbl-tag--muted">unresolved</span>}
+        {a.retention && <span className="tbl-tag tbl-tag--muted">{a.retained_pct ? `${a.retained_pct}% retained` : 'retained salary'}</span>}
         {a.conditional && <span className="tbl-tag">conditional</span>}
       </span>
       <span className="tbl-asset__vals">

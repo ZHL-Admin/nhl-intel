@@ -59,7 +59,12 @@ trades as (
         coalesce(lower(notes) like '%conditional%', false)              as is_conditional,
         -- salary retention: a brokered row ("X% retained") is a cap mechanism, not an acquisition
         coalesce(lower(notes) like '%retain%', false)                  as is_retention,
-        safe_cast(regexp_extract(notes, r'(\d+)\s*%') as int64)         as retained_pct,
+        -- the first number in the note is the retained %, which may be a decimal
+        -- ("9.999...% retained"); round it and keep only a sane 1..100 value
+        case when round(safe_cast(regexp_extract(notes, r'(\d+(?:\.\d+)?)') as float64))
+                  between 1 and 100
+             then cast(round(safe_cast(regexp_extract(notes, r'(\d+(?:\.\d+)?)') as float64)) as int64)
+        end                                                             as retained_pct,
         -- player position group (for resolution + display)
         case when upper(position) = 'G' then 'G'
              when upper(position) in ('D', 'LD', 'RD') then 'D'
