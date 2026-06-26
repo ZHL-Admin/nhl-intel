@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from models.schemas import (
     TradeOutcomeRow, TradeLedgerEntry, TradeDetail, TradeDetailTeam, TeamTradeLedger,
-    TradeBoardItem, ArchetypeAgg,
+    TradeBoardItem, ArchetypeAgg, ThesisSummary,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -41,6 +41,14 @@ async def board(
         trade_board.board, sort, lens, archetype, include_incomplete,
         season_from, season_to, limit, offset)
     return [TradeBoardItem(**t) for t in items]
+
+
+@router.get("/thesis-summary", response_model=ThesisSummary)
+@cache(ttl=3600)
+async def thesis_summary(lens: str = Query("slot", pattern="^(slot|actual)$")) -> ThesisSummary:
+    """Headline figures for the Overview hero band (trades graded, decisive/too-close share, the
+    biggest fleece, and the player-for-picks split)."""
+    return ThesisSummary(**await run_in_threadpool(trade_board.thesis_summary, lens))
 
 
 @router.get("/board/{trade_id}", response_model=TradeBoardItem)

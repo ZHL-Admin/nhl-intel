@@ -87,6 +87,19 @@ def _attribute(team: str, d: date) -> tuple:
 
 
 # --------------------------------------------------------------------------- build
+def _timing_bucket(d: date) -> str:
+    """Trade context by date (we have dates, not cap/expiry — an honest proxy, not a rental tag).
+    deadline: Feb 15 - Mar 15; draft: June; offseason: Jul-Sep; else in-season."""
+    m, day = d.month, d.day
+    if (m == 2 and day >= 15) or (m == 3 and day <= 15):
+        return "deadline"
+    if m == 6:
+        return "draft"
+    if m in (7, 8, 9):
+        return "offseason"
+    return "in_season"
+
+
 def _verdict(margin: float, band_hw: float) -> str:
     if (margin - band_hw) <= 0 <= (margin + band_hw):
         return "too_close"
@@ -230,6 +243,7 @@ def build_all() -> list:
             "confidence": confidence,
             "total_war": round(total_war, 2),
             "actual_ok": actual_ok,
+            "timing": _timing_bucket(tdate),
         })
     return out
 
@@ -374,6 +388,24 @@ def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
     ranked = sorted(rows, key=lambda x: float(x[1][net_k] or 0.0), reverse=True)
     deal_ids = [t["trade_id"] for _, _, t in ranked]
     deal_items = [_to_board_item(t) for _, _, t in ranked]
+
+    # matchup layer: this entity's net against each opposing TEAM (the other side(s) of each trade)
+    pacc: dict = {}
+    for idx, s, t in rows:
+        net = float(s[net_k] or 0.0)
+        for j, opp in enumerate(t["sides"]):
+            if j == idx:
+                continue
+            p = pacc.setdefault(opp["team_abbrev"],
+                                {"opponent": opp["team_abbrev"], "kind": "team",
+                                 "trade_count": 0, "net_war": 0.0, "var": 0.0})
+            p["trade_count"] += 1
+            p["net_war"] += net
+            p["var"] += float(s[hw_k] or 0.0) ** 2
+    partners = sorted(
+        ({"opponent": p["opponent"], "kind": p["kind"], "trade_count": p["trade_count"],
+          "net_war": round(p["net_war"], 1), "band_hw": round(p["var"] ** 0.5, 1)} for p in pacc.values()),
+        key=lambda p: (-p["trade_count"], -abs(p["net_war"])))
     tenures = (_gm_tenure_rows(entity_id) if kind == "gm"
                else [{"team_abbrev": entity_id, "start_date": rows[0][2]["date"],
                       "end_date": None, "title": None}])
@@ -382,7 +414,7 @@ def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
         "net_war": round(net, 1), "net_band_hw": round(var ** 0.5, 1), "trade_count": len(rows),
         "record": record, "timeline": timeline,
         "best": deal_ids[:2], "worst": deal_ids[-2:][::-1] if len(deal_ids) > 1 else [],
-        "deals": deal_ids, "deal_items": deal_items, "caveat": CAVEAT,
+        "deals": deal_ids, "deal_items": deal_items, "partners": partners, "caveat": CAVEAT,
     }
 
 
@@ -426,6 +458,46 @@ def archetypes(lens="slot", season_from=None, season_to=None) -> list:
         # biggest_for_a / biggest_for_b: the two ends; closest: smallest margin
         exemplars = {"biggest_for_a": srt[0]["trade_id"], "biggest_for_b": srt[-1]["trade_id"],
                      "closest": min(ts, key=lambda t: t["margin_slot"])["trade_id"]}
+        # timing breakdown (by date context, an honest proxy for rentals; we have dates, not cap)
+        timing = []
+        for b in ("deadline", "draft", "offseason", "in_season"):
+            bt = [t for t in ts if t["timing"] == b]
+            if bt:
+                dec = sum(1 for t in bt if t["verdict"] != "too_close")
+                timing.append({"bucket": b, "count": len(bt), "decisive_pct": round(100 * dec / len(bt))})
         out.append({"archetype": arch, "label": ARCHETYPE_LABELS[arch], "trade_count": n,
-                    "split": split, "exemplars": exemplars})
+                    "split": split, "exemplars": exemplars, "timing": timing})
     return out
+
+
+def thesis_summary(lens="slot") -> dict:
+    """Headline figures for the Overview hero band — frames the dataset and the founding question."""
+    pool = [t for t in build_all() if not t["incomplete"]]
+    n = len(pool)
+    if not n:
+        return {"trades_graded": 0}
+    decisive = sum(1 for t in pool if t["verdict"] == "decisive")
+    too_close = sum(1 for t in pool if t["verdict"] == "too_close")
+    fleece = max(pool, key=lambda t: t["margin_slot"])
+    fleece_win = next((s for s in fleece["sides"] if s["team_id"] == fleece["winner_team_id"]), None)
+    pfp = [t for t in pool if t["is_player_for_picks"]]
+    pf_won = sum(1 for t in pfp if t["winner_idx_slot"] is not None
+                 and t["sides"][t["winner_idx_slot"]]["kind"] == "player")
+    pk_won = sum(1 for t in pfp if t["winner_idx_slot"] is not None
+                 and t["sides"][t["winner_idx_slot"]]["kind"] != "player"
+                 and t["verdict"] != "too_close")
+    pfp_even = sum(1 for t in pfp if t["verdict"] == "too_close")
+    pn = max(1, len(pfp))
+    return {
+        "trades_graded": n,
+        "decisive_pct": round(100 * decisive / n),
+        "too_close_pct": round(100 * too_close / n),
+        "biggest_fleece": {"trade_id": fleece["trade_id"],
+                           "winner": (fleece_win["team_abbrev"] if fleece_win else None),
+                           "margin": fleece["margin_slot"], "date": fleece["date"]},
+        "player_for_picks": {"trade_count": len(pfp),
+                             "player_side_won_pct": round(100 * pf_won / pn),
+                             "pick_side_won_pct": round(100 * pk_won / pn),
+                             "even_pct": round(100 * pfp_even / pn)},
+        "caveat": CAVEAT,
+    }

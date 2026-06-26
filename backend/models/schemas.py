@@ -2277,7 +2277,25 @@ class TraderDossier(BaseModel):
     worst: List[str]
     deals: List[str]
     deal_items: List[TradeBoardItem] = []
+    partners: List["DossierPartner"] = []
     caveat: str
+
+
+class DossierPartner(BaseModel):
+    opponent: str
+    kind: str
+    trade_count: int
+    net_war: float
+    band_hw: float
+
+
+class ThesisSummary(BaseModel):
+    trades_graded: int
+    decisive_pct: int = 0
+    too_close_pct: int = 0
+    biggest_fleece: dict = {}
+    player_for_picks: dict = {}
+    caveat: str = ""
 
 
 class ArchetypeAgg(BaseModel):
@@ -2286,3 +2304,4 @@ class ArchetypeAgg(BaseModel):
     trade_count: int
     split: dict
     exemplars: dict
+    timing: List[dict] = []
