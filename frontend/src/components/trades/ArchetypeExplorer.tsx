@@ -78,6 +78,24 @@ export default function ArchetypeExplorer({ lens }: { lens: 'slot' | 'actual' })
         ))}
         <div className="arch-stat"><span className="arch-stat__v">{current.trade_count}</span><span className="arch-stat__l">deals</span></div>
       </div>
+      {current.timing.length > 0 && (
+        <div className="arch-timing">
+          <div className="dos-section-title">When these trades happen</div>
+          <div className="arch-timing__row">
+            {current.timing.map((t) => (
+              <div key={t.bucket} className="arch-timing__cell">
+                <span className="arch-stat__v">{t.decisive_pct}%</span>
+                <span className="arch-stat__l">{t.bucket.replace('_', '-')}</span>
+                <span className="tbl-muted" style={{ fontSize: 'var(--text-xs)' }}>{t.count} deals · decisive</span>
+              </div>
+            ))}
+          </div>
+          <p className="tbl-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
+            By timing, not contract status — we have trade dates, not cap or expiry, so the deadline bucket is an honest proxy for rentals, not a salary-dump tag.
+          </p>
+        </div>
+      )}
+
       <Exemplars a={current} lens={lens} />
       <p className="arch-note">
         Archetypes are tagged from the trade data alone. Rental and salary-dump deals are not shown — they

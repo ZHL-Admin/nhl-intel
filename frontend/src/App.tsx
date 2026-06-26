@@ -45,6 +45,8 @@ function App() {
             <Route path="/tools/contract-grader" element={<ContractGrader />} />
             <Route path="/tools/draft-value" element={<DraftValue />} />
             <Route path="/tools/trade-outcomes" element={<TradeOutcomes />} />
+            <Route path="/tools/trade-outcomes/trade/:tradeId" element={<TradeOutcomes />} />
+            <Route path="/tools/trade-outcomes/:kind/:id" element={<TradeOutcomes />} />
             <Route path="/learn/archetypes" element={<ArchetypeExplorer />} />
           </Routes>
         </Suspense>

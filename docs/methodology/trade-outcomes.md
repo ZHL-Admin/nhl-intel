@@ -158,3 +158,22 @@ widen the band (they do not count as zero), so a missing match can only soften a
 `three_team`. **Rental and salary-dump archetypes are deliberately NOT exposed** — they require
 contract-expiry-at-trade-time and cap context the trades CSV does not carry. Inventing them would be
 faking a tag, so they are omitted, not guessed.
+
+## The page (Handoff 7): one motif, three scales
+
+The UI is built around a single **tilt** motif — a track centered on an even line that fills toward the
+winner by the realized margin, with the uncertainty band drawn on the same track so a band crossing
+center reads as **too close to call**. It recurs at three scales (the same component): the league
+**value map** (the 2D generalization, every entity vs a break-even diagonal), the entity **dossier
+timeline** (an entity's running tilt over time, banded by regime), and the **trade leaf** (one trade),
+plus an inline **sparkline** in every leaderboard and partner row.
+
+Navigation is entity-first, not a sorted list: an **Overview** dashboard (hero figures, the most
+lopsided trade as a marquee, the value map beside leaderboards, a patterns teaser) → **Traders** (the
+map foregrounded, Teams|GMs) → a **dossier** (verdict header, regime-banded timeline, **record by trade
+partner**, best/worst, full list) → the **trade leaf**. **Patterns** tests the archetype theses with a
+**timing** breakdown (deadline/draft/offseason/in-season — by date, an honest proxy for rentals, not a
+cap-based tag). Routes are deep-linkable (`/tools/trade-outcomes/{team|gm}/{id}`, `/trade/{id}`); a
+returning visitor lands on their remembered entity. Slot is the headline lens everywhere; the actual
+lens never shows a zero column. League rollups sum over teams or over GMs, never both (the two are
+lenses on the same trades).

@@ -10,11 +10,10 @@ import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { getTeamColor, getTeamLogoUrl, getTeamName } from '../../utils/teams'
 import { TradeBoardItem, TradeBoardSide, TradeBoardAsset } from '../../api/trades'
+import Tilt from './Tilt'
 import './trades.css'
 
-const WAR_DOMAIN = 12
 const fmt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
-const xPct = (v: number) => 50 + (Math.max(-WAR_DOMAIN, Math.min(WAR_DOMAIN, v)) / WAR_DOMAIN) * 50
 
 function sideNet(s: TradeBoardSide, lens: 'slot' | 'actual'): number | null {
   return lens === 'actual' ? s.net_war_actual : s.net_war_slot
@@ -39,28 +38,6 @@ function AssetLine({ a }: { a: TradeBoardAsset }) {
         <span className="mono">{a.war_slot.toFixed(1)}</span>
         <span className="mono tbl-muted">{a.war_actual == null ? '—' : a.war_actual.toFixed(1)}</span>
       </span>
-    </div>
-  )
-}
-
-function Bar({ signed, bandHw, color, tooClose, incomplete }: {
-  signed: number; bandHw: number; color: string; tooClose: boolean; incomplete: boolean
-}) {
-  const lo = xPct(signed - bandHw)
-  const hi = xPct(signed + bandHw)
-  const tick = xPct(signed)
-  return (
-    <div className={`tbl-bar ${incomplete ? 'tbl-bar--incomplete' : ''}`} role="img"
-      aria-label={`balance ${signed >= 0 ? 'right' : 'left'} by ${Math.abs(signed).toFixed(1)} WAR`}>
-      <div className="tbl-bar__center" />
-      <div className="tbl-bar__band" style={{
-        left: `${Math.min(lo, hi)}%`, width: `${Math.abs(hi - lo)}%`,
-        background: tooClose ? 'var(--color-bg-elevated)' : `${color}38`,
-        border: tooClose ? '0.5px dashed var(--color-border-strong)' : 'none',
-      }} />
-      <div className="tbl-bar__tick" style={{
-        left: `${tick}%`, background: tooClose ? 'var(--color-text-muted)' : color,
-      }} />
     </div>
   )
 }
@@ -120,8 +97,8 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
       )}
 
       {!threeTeam ? (
-        <Bar signed={signed} bandHw={bandHw}
-          color={winnerColor} tooClose={trade.verdict === 'too_close'} incomplete={trade.incomplete} />
+        <Tilt signed={signed} bandHw={bandHw} color={winnerColor}
+          tooClose={trade.verdict === 'too_close'} incomplete={trade.incomplete} size="full" />
       ) : (
         <div className="tbl-multibar">
           {sides.map((s) => {
@@ -129,7 +106,7 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
             return (
               <div key={s.team_abbrev} className="tbl-multibar__row">
                 <span className="tbl-multibar__lbl mono">{s.team_abbrev}</span>
-                <Bar signed={net} bandHw={0} color={getTeamColor(s.team_abbrev)} tooClose={false} incomplete={trade.incomplete} />
+                <Tilt signed={net} bandHw={0} color={getTeamColor(s.team_abbrev)} tooClose={false} incomplete={trade.incomplete} size="compact" />
                 <span className="mono tbl-multibar__v">{fmt(net)}</span>
               </div>
             )

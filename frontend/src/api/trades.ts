@@ -151,6 +151,7 @@ export interface TraderDossier {
   timeline: DossierTimelinePoint[]
   best: string[]; worst: string[]; deals: string[]
   deal_items: TradeBoardItem[]
+  partners: DossierPartner[]
   caveat: string
 }
 
@@ -158,6 +159,16 @@ export interface ArchetypeAgg {
   archetype: string; label: string; trade_count: number
   split: Record<string, number>
   exemplars: Record<string, string>
+  timing: { bucket: string; count: number; decisive_pct: number }[]
+}
+
+export interface DossierPartner { opponent: string; kind: string; trade_count: number; net_war: number; band_hw: number }
+
+export interface ThesisSummary {
+  trades_graded: number; decisive_pct: number; too_close_pct: number
+  biggest_fleece: { trade_id: string; winner: string | null; margin: number; date: string }
+  player_for_picks: { trade_count: number; player_side_won_pct: number; pick_side_won_pct: number; even_pct: number }
+  caveat: string
 }
 
 export async function getTradeBoard(params: {
@@ -185,5 +196,10 @@ export async function getDossier(kind: 'team' | 'gm', id: string, lens: 'slot' |
 
 export async function getArchetypes(lens: 'slot' | 'actual' = 'slot'): Promise<ArchetypeAgg[]> {
   const { data } = await apiClient.get<ArchetypeAgg[]>('/trades/archetypes', { params: { lens } })
+  return data
+}
+
+export async function getThesisSummary(lens: 'slot' | 'actual' = 'slot'): Promise<ThesisSummary> {
+  const { data } = await apiClient.get<ThesisSummary>('/trades/thesis-summary', { params: { lens } })
   return data
 }

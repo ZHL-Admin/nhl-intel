@@ -13,6 +13,7 @@ import { SkeletonLoader, Tooltip } from '../common'
 import { getTeamColor, getTeamLogoUrl } from '../../utils/teams'
 import { getDossier, TraderDossier as Dossier, TradeBoardItem } from '../../api/trades'
 import TradeBalanceCard from './TradeBalanceCard'
+import Tilt from './Tilt'
 import './trades.css'
 
 const fmt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
@@ -131,6 +132,22 @@ export default function TraderDossier({ kind, id, lens, onBack }: {
       <p className="dos-sentence">{trendInsight(d)}</p>
 
       <Timeline d={d} />
+
+      {d.partners.length > 1 && (
+        <>
+          <div className="dos-section-title">Record by trade partner</div>
+          <div className="dos-partners">
+            {d.partners.slice(0, 8).map((p) => (
+              <div key={p.opponent} className="dos-partner">
+                <span className="dos-partner__opp"><img src={getTeamLogoUrl(p.opponent)} alt="" className="tbl-logo" /> <span className="mono">{p.opponent}</span></span>
+                <span className="dos-partner__n tbl-muted">{p.trade_count} {p.trade_count === 1 ? 'trade' : 'trades'}</span>
+                <Tilt signed={p.net_war} bandHw={p.band_hw} color={getTeamColor(p.opponent)} tooClose={false} incomplete={false} size="sparkline" animate={false} />
+                <span className={`mono ${p.net_war >= 0 ? 'dos-pos' : 'dos-neg'}`}>{fmt(p.net_war)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="dos-section-title">Best and worst deals</div>
       <div className="dos-cols">
