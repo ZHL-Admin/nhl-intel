@@ -129,6 +129,27 @@ export async function getPlayerRadar(playerId: number | string, season?: string)
   return r.data
 }
 
+/** Shot-zone quality: the player's shot diet by danger vs positional average (Shot Map tab). */
+export async function getPlayerShotQuality(playerId: number | string, season?: string): Promise<import('./types').PlayerShotQuality | null> {
+  try {
+    const r = await apiClient.get(`/players/${playerId}/shot-quality`, { params: season ? { season } : undefined })
+    return r.data
+  } catch {
+    return null
+  }
+}
+
+/** Composed scouting read (Workstream B). Returns null when none has been generated yet (404),
+ *  so the profile falls back to the archetype descriptor. */
+export async function getPlayerVerdict(playerId: number | string, season?: string): Promise<import('./types').PlayerVerdict | null> {
+  try {
+    const r = await apiClient.get(`/players/${playerId}/verdict`, { params: season ? { season } : undefined })
+    return r.data
+  } catch {
+    return null
+  }
+}
+
 /** Fast single-query season stat line for the Players-card expansion. */
 export async function getPlayerSummary(playerId: number | string, season?: string): Promise<import('./types').PlayerSummary> {
   const r = await apiClient.get(`/players/${playerId}/summary`, { params: season ? { season } : undefined })

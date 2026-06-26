@@ -31,15 +31,30 @@
 .dv-charttip__row--muted { color: var(--color-text-muted); }
 .dv-charttip .mono { color: var(--color-text-primary); }
 
+/* card surface — same family as ChartPanel (radius + shadow); table content fills it edge-to-edge */
+.dv-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.dv-card__controls {
+  display: flex; flex-wrap: wrap; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
 /* tables */
 .dv-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .dv-table th {
-  font-size: var(--text-xs); font-weight: 500; color: var(--color-text-muted);
-  text-transform: uppercase; letter-spacing: 0.06em; text-align: left;
-  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; text-align: left;
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border);
 }
 .dv-table th.num, .dv-table td.num { text-align: right; }
-.dv-table td { padding: var(--space-3); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); }
+.dv-table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); }
+.dv-table tbody tr:last-child td { border-bottom: none; }
 .dv-table .mono { font-family: var(--font-mono); }
 .dv-muted { color: var(--color-text-muted); }
 .dv-pos { color: var(--color-success); }
@@ -48,12 +63,9 @@
 .dv-theory__pooled td { font-weight: 600; border-top: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 
 /* board */
-.dv-controls { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-4); }
-.dv-board__row--link td { padding: 0; }
-.dv-board__link { display: block; text-decoration: none; color: inherit; }
+.dv-board__row--link { cursor: pointer; }
 .dv-board__row--link:hover { background: var(--color-bg-elevated); }
-.dv-board__inner { width: 100%; border-collapse: collapse; }
-.dv-board__inner td { border: none; padding: var(--space-3); }
+.dv-board__row--link:focus-visible { outline: 2px solid var(--color-team-primary); outline-offset: -2px; }
 .dv-board__player { display: flex; align-items: center; gap: var(--space-3); min-width: 220px; }
 .dv-board__name { display: flex; flex-direction: column; line-height: 1.25; }
 .dv-board__meta { font-size: var(--text-xs); color: var(--color-text-muted); }

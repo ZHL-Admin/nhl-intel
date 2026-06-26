@@ -1,8 +1,7 @@
-import { UncertaintyBand } from '../common'
+import { UncertaintyBand, PlayerAvatar } from '../common'
 import { OffseasonLineupSlot } from '../../api/types'
 import { fmtWar } from '../../utils/forecastFormat'
 
-const VALUE_DOMAIN: [number, number] = [0, 8]
 const FWD_ORDER: Record<string, number> = { L: 0, C: 1, R: 2 }
 
 function chunk<T>(arr: T[], n: number): T[][] {
@@ -11,10 +10,26 @@ function chunk<T>(arr: T[], n: number): T[][] {
   return out
 }
 
-function SlotRow({ s, isIn }: { s: OffseasonLineupSlot; isIn: boolean }) {
+/** Track max for a position group's uncertainty bars: the largest (value + sd) in the group, padded,
+ * floored so a weak group still has a sane scale. Shared within the group so the bars are comparable
+ * and each value's tick position reads as relative strength (replaces the old fixed [0, 8] that made
+ * every bar a tiny stub on the left). */
+function bandMax(slots: OffseasonLineupSlot[]): number {
+  const reals = slots.filter((s) => s.player_id != null && !s.replacement)
+  return Math.max(0.5, ...reals.map((s) => s.projected_war + s.war_sd)) * 1.05
+}
+
+function SlotRow({ s, isIn, team, domainMax }: {
+  s: OffseasonLineupSlot; isIn: boolean; team?: string | null; domainMax: number
+}) {
   const v = s.projected_war
   return (
     <div className="lslot">
+      {s.player_id != null && (
+        <div className="lslot__avatar">
+          <PlayerAvatar id={s.player_id} team={team} name={s.name} size={72} showTeamLogo={false} />
+        </div>
+      )}
       <div className="lslot__top">
         {s.position && <span className="lslot__pos mono">{s.position}</span>}
         <span className="lslot__name">{s.name ?? `#${s.player_id}`}</span>
@@ -23,26 +38,28 @@ function SlotRow({ s, isIn }: { s: OffseasonLineupSlot; isIn: boolean }) {
       </div>
       <div className="lslot__band">
         <UncertaintyBand value={v} lo={v - s.war_sd} hi={v + s.war_sd}
-          domainMin={VALUE_DOMAIN[0]} domainMax={VALUE_DOMAIN[1]} />
+          domainMin={0} domainMax={domainMax} size="md" />
         <span className="lslot__sd mono">±{s.war_sd.toFixed(1)}</span>
       </div>
     </div>
   )
 }
 
-function LineCard({ title, slots, arrivals }: { title: string; slots: OffseasonLineupSlot[]; arrivals: Set<number> }) {
+function LineCard({ title, slots, arrivals, team, domainMax }: {
+  title: string; slots: OffseasonLineupSlot[]; arrivals: Set<number>; team?: string | null; domainMax: number
+}) {
   return (
     <div className="lcard">
       <div className="lcard__head">{title}</div>
-      {slots.map((s) => <SlotRow key={s.slot} s={s} isIn={s.player_id != null && arrivals.has(s.player_id)} />)}
+      <div className="lcard__line">{slots.map((s) => <SlotRow key={s.slot} s={s} team={team} domainMax={domainMax} isIn={s.player_id != null && arrivals.has(s.player_id)} />)}</div>
     </div>
   )
 }
 
 /** §04 — Forwards (4 trios) · Defense (3 pairs) · Goaltending (starter + backup). Real line data is
  * not in the payload, so units are grouped by projected value and labeled illustrative. */
-export default function ProjectedLineup({ lineup, arrivals }: {
-  lineup: OffseasonLineupSlot[]; arrivals: Set<number>
+export default function ProjectedLineup({ lineup, arrivals, team }: {
+  lineup: OffseasonLineupSlot[]; arrivals: Set<number>; team?: string | null
 }) {
   const realPlayers = lineup.filter((s) => s.player_id != null && !s.replacement)
   const fwd = realPlayers.filter((s) => s.position && 'CLR'.includes(s.position))
@@ -52,6 +69,11 @@ export default function ProjectedLineup({ lineup, arrivals }: {
   const fwdLines = chunk(fwd, 3).slice(0, 4).map((trio) =>
     [...trio].sort((a, b) => (FWD_ORDER[a.position ?? ''] ?? 3) - (FWD_ORDER[b.position ?? ''] ?? 3)))
   const defPairs = chunk(def, 2).slice(0, 3)
+
+  // Bars share a scale within a position group so they're comparable; goalies get their own (their
+  // bands are ~3x wider, which would otherwise crush the skater bars onto one fixed scale).
+  const skaterMax = bandMax([...fwd, ...def])
+  const goalieMax = bandMax(goalies)
 
   return (
     <div className="plineup">
@@ -63,14 +85,14 @@ export default function ProjectedLineup({ lineup, arrivals }: {
       <div className="plineup__group">
         <div className="plineup__gtitle">Forwards</div>
         <div className="plineup__grid plineup__grid--fwd">
-          {fwdLines.map((trio, i) => <LineCard key={i} title={`Line ${i + 1}`} slots={trio} arrivals={arrivals} />)}
+          {fwdLines.map((trio, i) => <LineCard key={i} title={`Line ${i + 1}`} slots={trio} arrivals={arrivals} team={team} domainMax={skaterMax} />)}
         </div>
       </div>
 
       <div className="plineup__group">
         <div className="plineup__gtitle">Defense</div>
         <div className="plineup__grid plineup__grid--def">
-          {defPairs.map((pair, i) => <LineCard key={i} title={`Pair ${i + 1}`} slots={pair} arrivals={arrivals} />)}
+          {defPairs.map((pair, i) => <LineCard key={i} title={`Pair ${i + 1}`} slots={pair} arrivals={arrivals} team={team} domainMax={skaterMax} />)}
         </div>
       </div>
 
@@ -80,13 +102,13 @@ export default function ProjectedLineup({ lineup, arrivals }: {
           <div className="lcard">
             <div className="lcard__head">Starter</div>
             {goalies[0]
-              ? <SlotRow s={goalies[0]} isIn={goalies[0].player_id != null && arrivals.has(goalies[0].player_id)} />
+              ? <SlotRow s={goalies[0]} team={team} domainMax={goalieMax} isIn={goalies[0].player_id != null && arrivals.has(goalies[0].player_id)} />
               : <div className="lslot lslot--empty">Not yet projected —</div>}
           </div>
           <div className="lcard">
             <div className="lcard__head">Backup</div>
             {goalies[1]
-              ? <SlotRow s={goalies[1]} isIn={goalies[1].player_id != null && arrivals.has(goalies[1].player_id)} />
+              ? <SlotRow s={goalies[1]} team={team} domainMax={goalieMax} isIn={goalies[1].player_id != null && arrivals.has(goalies[1].player_id)} />
               : <div className="lslot lslot--empty">Not yet projected —</div>}
           </div>
         </div>

@@ -54,7 +54,12 @@ trades as (
         asset,
         nullif(position, '')                                            as position,
         nullif(notes, '')                                               as notes,
-        notes is not null and trim(notes) != ''                         as is_conditional,
+        -- conditional ONLY when the note actually says so (the notes column also carries other
+        -- annotations, e.g. "50% retained", which must NOT be flagged as a conditional pick)
+        coalesce(lower(notes) like '%conditional%', false)              as is_conditional,
+        -- salary retention: a brokered row ("X% retained") is a cap mechanism, not an acquisition
+        coalesce(lower(notes) like '%retain%', false)                  as is_retention,
+        safe_cast(regexp_extract(notes, r'(\d+)\s*%') as int64)         as retained_pct,
         -- player position group (for resolution + display)
         case when upper(position) = 'G' then 'G'
              when upper(position) in ('D', 'LD', 'RD') then 'D'
@@ -98,6 +103,8 @@ select
     k.pos_group,
     k.notes,
     k.is_conditional,
+    k.is_retention,
+    k.retained_pct,
     k.pick_year,
     k.pick_round,
     k.pick_overall_mid,

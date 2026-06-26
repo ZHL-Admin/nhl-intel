@@ -4,7 +4,7 @@
  * an explicit wide-band estimate before 2021. Reuses ChartPanel, PlayerAvatar, Tabs, Tooltip.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RTooltip, ReferenceDot, Label,
@@ -126,6 +126,7 @@ function TheoryTable({ rows }: { rows: DraftTheorySummaryRow[] }) {
 
 // ---------------------------------------------------------------- board
 function Board({ rows }: { rows: DraftBoardRow[] }) {
+  const navigate = useNavigate()
   return (
     <table className="dv-table dv-board">
       <thead>
@@ -136,8 +137,13 @@ function Board({ rows }: { rows: DraftBoardRow[] }) {
       </thead>
       <tbody>
         {rows.map((r) => {
-          const body = (
-            <>
+          const to = r.resolved_player_id ? `/players/${r.resolved_player_id}` : null
+          return (
+            <tr key={r.overall_pick + '-' + r.draft_year}
+              className={`dv-board__row${to ? ' dv-board__row--link' : ''}`}
+              onClick={to ? () => navigate(to) : undefined}
+              tabIndex={to ? 0 : undefined}
+              onKeyDown={to ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to) } } : undefined}>
               <td className="dv-board__player">
                 {r.resolved_player_id
                   ? <PlayerAvatar id={r.resolved_player_id} team={r.draft_team_abbrev} name={r.full_name} size={28} />
@@ -153,18 +159,7 @@ function Board({ rows }: { rows: DraftBoardRow[] }) {
               <td className={`num mono ${r.value_above_slot >= 0 ? 'dv-pos' : 'dv-neg'}`}>
                 {r.value_above_slot >= 0 ? '+' : '−'}{Math.abs(r.value_above_slot).toFixed(1)}
               </td>
-            </>
-          )
-          return r.resolved_player_id ? (
-            <tr key={r.overall_pick + '-' + r.draft_year} className="dv-board__row dv-board__row--link">
-              <td colSpan={5} style={{ padding: 0 }}>
-                <Link to={`/players/${r.resolved_player_id}`} className="dv-board__link">
-                  <table className="dv-board__inner"><tbody><tr>{body}</tr></tbody></table>
-                </Link>
-              </td>
             </tr>
-          ) : (
-            <tr key={r.overall_pick + '-' + r.draft_year} className="dv-board__row">{body}</tr>
           )
         })}
       </tbody>
@@ -214,7 +209,7 @@ export default function DraftValue() {
       <div className="dv">
         <PageHeader
           title="Draft Value"
-          subtitle="What a pick is actually worth — measured on what every slot has returned since 2010, not a formula. Value is realized production over a player's first seven seasons, in the same WAR units used across the site (an estimate for older seasons, shown with its band)."
+          subtitle="What's a pick actually worth? Measuring what every slot returns. Value is realized production over a player's first 7 seasons."
         />
 
         {/* curve */}
@@ -240,19 +235,23 @@ export default function DraftValue() {
           <p className="dv-section__sub">
             The folk claim that the vast majority of picks bust is roughly true — but how you count matters. Most picks fall below their slot's <em>mean</em> because a few stars pull the average up; the <em>median</em> tells a gentler story. Both are shown, with the never-play rate, so the number is read honestly.
           </p>
-          {summary ? <TheoryTable rows={summary} /> : <SkeletonLoader height={220} />}
+          <div className="dv-card">
+            {summary ? <TheoryTable rows={summary} /> : <SkeletonLoader height={220} />}
+          </div>
         </section>
 
         {/* board */}
         <section className="dv-section">
           <h2 className="dv-section__title">Steals and busts</h2>
           <p className="dv-section__sub">Evaluable picks (classes 2010–2018) ranked by how far their realized value beat or trailed the expectation for their slot.</p>
-          <div className="dv-controls">
-            <Tabs options={[{ value: 'steals', label: 'Steals' }, { value: 'busts', label: 'Busts' }]}
-              value={boardType} onChange={(v) => setBoardType(v as 'steals' | 'busts')} />
-            <Tabs options={POS_TABS} value={pos} onChange={setPos} />
+          <div className="dv-card">
+            <div className="dv-card__controls">
+              <Tabs options={[{ value: 'steals', label: 'Steals' }, { value: 'busts', label: 'Busts' }]}
+                value={boardType} onChange={(v) => setBoardType(v as 'steals' | 'busts')} />
+              <Tabs options={POS_TABS} value={pos} onChange={setPos} />
+            </div>
+            {board ? <Board rows={board} /> : <SkeletonLoader height={400} />}
           </div>
-          {board ? <Board rows={board} /> : <SkeletonLoader height={400} />}
         </section>
 
         <p className="dv-footnote">

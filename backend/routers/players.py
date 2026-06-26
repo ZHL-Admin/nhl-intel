@@ -13,6 +13,7 @@ from google.cloud import bigquery
 from models.schemas import (
     PlayerDetail, PlayerTrends, PlayerTrendPoint, PlayerGamelog, GamelogEntry,
     PlayerShots, ShotLocation, PlayerVsOpponent, PlayerSituational, EdgePlayerProfile,
+    PlayerShotQuality, ShotQualityBand, SeasonTotalRank,
     CompositeComponent, ArchetypeWeight, ArchetypeRankRow, COMPOSITE_LABELS,
     PlayerReconciliation, ClutchProfile, ConsistencyProfile, CoachTrustProfile,
     GameScorePoint, DivergenceBoardRow,
@@ -22,6 +23,7 @@ from models.schemas import (
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
     PlayerContract, CapShareYear,
     ValueNeighbor, ValueNeighborhood,
+    PlayerVerdict,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -57,6 +59,126 @@ def _archetype_mix(player_id: int, season: str) -> tuple[List[ArchetypeWeight], 
     mix = [ArchetypeWeight(archetype=a["archetype"], weight=a["weight"])
            for a in json.loads(rows[0]["archetypes"])]
     return mix, rows[0]["primary_archetype"]
+
+
+_DURABLE_SEASONS = ['2021-22', '2022-23', '2023-24', '2024-25', '2025-26']
+
+
+def _durable_archetype(player_id: int) -> Optional[str]:
+    """The DURABLE archetype label: the modal primary_archetype across the last three seasons (ties
+    break toward the more recent). Same rule the verdict builder uses, so the header chip and the
+    composed verdict read one identity, not the current-season flip."""
+    rows = bq_service.query(f"""
+        SELECT season, primary_archetype
+        FROM {bq_service.get_models_table_id('player_archetypes')}
+        WHERE player_id = {player_id}
+          AND season IN ({", ".join(f"'{s}'" for s in _DURABLE_SEASONS)})
+        ORDER BY season DESC
+    """)
+    last3 = [r['primary_archetype'] for r in (rows or [])[:3] if r.get('primary_archetype')]
+    if not last3:
+        return None
+    counts: dict = {}
+    for a in last3:
+        counts[a] = counts.get(a, 0) + 1
+    top = max(counts.values())
+    for a in last3:  # most-recent among the labels tied for the top count (last3 is newest-first)
+        if counts[a] == top:
+            return a
+    return last3[0]
+
+
+def _season_totals(player_id: int, season: str, is_goalie: bool) -> List[SeasonTotalRank]:
+    """Season totals with LEAGUE-WIDE rank (scoring-race position for skaters; among goalies for
+    goalies). Computed from full-league season aggregates, NOT the per-position rate ranks elsewhere.
+    Skaters rank on goals/assists/points/points-per-GP/shots; goalies on GAA/SV%/GSAx/wins/shutouts.
+    Shots-on-goal are derived from int_shot_attempts_all (is_on_net), since the skater mart has shot
+    ATTEMPTS, not SOG."""
+    pgs = bq_service.get_full_table_id('mart_player_game_stats')
+    nhl = "SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')"
+    out: List[SeasonTotalRank] = []
+    if not is_goalie:
+        sa = bq_service.get_full_table_id('int_shot_attempts_all')
+        rows = bq_service.query(f"""
+            WITH agg AS (
+                SELECT player_id,
+                       COUNT(DISTINCT game_id) AS gp,
+                       SUM(individual_goals) AS g,
+                       SUM(first_assists) + SUM(second_assists) AS a,
+                       SUM(individual_goals) + SUM(first_assists) + SUM(second_assists) AS p
+                FROM {pgs}
+                WHERE season = '{season}' AND {nhl} AND position_code IN ('C', 'L', 'R', 'D')
+                GROUP BY player_id
+            ),
+            sog AS (
+                SELECT COALESCE(shooting_player_id, scoring_player_id) AS pid, COUNT(*) AS s
+                FROM {sa}
+                WHERE season = '{season}' AND {nhl} AND is_on_net
+                GROUP BY COALESCE(shooting_player_id, scoring_player_id)
+            ),
+            j AS (
+                SELECT a.player_id, a.gp, a.g, a.a, a.p,
+                       CASE WHEN a.gp > 0 THEN a.p * 1.0 / a.gp ELSE NULL END AS p_gp,
+                       COALESCE(sog.s, 0) AS s
+                FROM agg a LEFT JOIN sog ON sog.pid = a.player_id
+                WHERE a.gp >= 1
+            ),
+            ranked AS (
+                SELECT player_id, g, a, p, p_gp, s,
+                       COUNT(*) OVER () AS pool,
+                       RANK() OVER (ORDER BY g DESC) AS g_rank,
+                       RANK() OVER (ORDER BY a DESC) AS a_rank,
+                       RANK() OVER (ORDER BY p DESC) AS p_rank,
+                       RANK() OVER (ORDER BY p_gp DESC NULLS LAST) AS pgp_rank,
+                       RANK() OVER (ORDER BY s DESC) AS s_rank
+                FROM j
+            )
+            SELECT * FROM ranked WHERE player_id = {int(player_id)}
+        """)
+        if not rows:
+            return out
+        r = rows[0]
+        pool = r.get('pool')
+        out.append(SeasonTotalRank(key='goals', label='Goals', display=str(int(r.get('g') or 0)), rank=r.get('g_rank'), pool=pool))
+        out.append(SeasonTotalRank(key='assists', label='Assists', display=str(int(r.get('a') or 0)), rank=r.get('a_rank'), pool=pool))
+        out.append(SeasonTotalRank(key='points', label='Points', display=str(int(r.get('p') or 0)), rank=r.get('p_rank'), pool=pool))
+        out.append(SeasonTotalRank(key='points_per_gp', label='Points/GP',
+                                   display=f"{float(r['p_gp']):.2f}" if r.get('p_gp') is not None else '—',
+                                   rank=r.get('pgp_rank'), pool=pool))
+        out.append(SeasonTotalRank(key='shots', label='Shots', display=str(int(r.get('s') or 0)), rank=r.get('s_rank'), pool=pool))
+        return out
+
+    # goalie variant
+    gs = bq_service.get_full_table_id('mart_goalie_season')
+    rows = bq_service.query(f"""
+        WITH qual AS (
+            SELECT goalie_id, gaa, save_pct, gsax, wins, shutouts
+            FROM {gs} WHERE season = '{season}' AND games_played >= 1
+        ),
+        ranked AS (
+            SELECT goalie_id, gaa, save_pct, gsax, wins, shutouts,
+                   COUNT(*) OVER () AS pool,
+                   RANK() OVER (ORDER BY gaa ASC NULLS LAST) AS gaa_rank,
+                   RANK() OVER (ORDER BY save_pct DESC NULLS LAST) AS svp_rank,
+                   RANK() OVER (ORDER BY gsax DESC NULLS LAST) AS gsax_rank,
+                   RANK() OVER (ORDER BY wins DESC NULLS LAST) AS wins_rank,
+                   RANK() OVER (ORDER BY shutouts DESC NULLS LAST) AS so_rank
+            FROM qual
+        )
+        SELECT * FROM ranked WHERE goalie_id = {int(player_id)}
+    """)
+    if not rows:
+        return out
+    r = rows[0]
+    pool = r.get('pool')
+    out.append(SeasonTotalRank(key='gaa', label='GAA', display=f"{float(r['gaa']):.2f}" if r.get('gaa') is not None else '—', rank=r.get('gaa_rank'), pool=pool))
+    out.append(SeasonTotalRank(key='save_pct', label='SV%',
+                               display=(f"{float(r['save_pct']):.3f}".lstrip('0') if r.get('save_pct') is not None else '—'),
+                               rank=r.get('svp_rank'), pool=pool))
+    out.append(SeasonTotalRank(key='gsax', label='GSAx', display=(f"{float(r['gsax']):+.1f}" if r.get('gsax') is not None else '—'), rank=r.get('gsax_rank'), pool=pool))
+    out.append(SeasonTotalRank(key='wins', label='Wins', display=str(int(r.get('wins') or 0)), rank=r.get('wins_rank'), pool=pool))
+    out.append(SeasonTotalRank(key='shutouts', label='Shutouts', display=str(int(r.get('shutouts') or 0)), rank=r.get('so_rank'), pool=pool))
+    return out
 
 
 def _composite(player_id: int, season: str) -> Optional[dict]:
@@ -531,6 +653,37 @@ def _value_neighbors_sync(player_id: int, season: Optional[str], half: int = 3) 
         rank=idx + 1, n=n, neighbors=neighbors)
 
 
+@router.get("/{player_id}/verdict", response_model=PlayerVerdict)
+@cache(ttl=1800)
+async def get_player_verdict(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest)"),
+) -> PlayerVerdict:
+    """The composed scouting read (Workstream B). 404 if no verdict has been generated yet, so the
+    profile falls back to the archetype descriptor. Read-only; the prose is written by the weekly
+    models_ml.generate_verdicts job after the consistency check."""
+    def _q() -> Optional[dict]:
+        try:
+            tbl = bq_service.get_models_table_id('player_verdict')
+            s = season
+            if not s:
+                r = bq_service.query(f"SELECT MAX(season) AS s FROM {tbl} WHERE player_id = {int(player_id)}")
+                s = r[0]['s'] if r and r[0].get('s') else None
+            if not s:
+                return None
+            rows = bq_service.query(
+                f"SELECT player_id, season, long, short, identity_confidence, model_version, "
+                f"CAST(generated_at AS STRING) AS generated_at "
+                f"FROM {tbl} WHERE player_id = {int(player_id)} AND season = '{s}' LIMIT 1")
+            return rows[0] if rows else None
+        except Exception:
+            return None  # table not created yet -> fall back
+    row = await run_in_threadpool(_q)
+    if not row:
+        raise HTTPException(status_code=404, detail="No composed verdict yet")
+    return PlayerVerdict(**{k: row.get(k) for k in PlayerVerdict.model_fields})
+
+
 @router.get("/{player_id}/value-neighbors", response_model=ValueNeighborhood)
 @cache(ttl=1800)
 async def get_player_value_neighbors(
@@ -772,6 +925,29 @@ def _rate_stat_ranks(player_id: int, season: str) -> dict:
         return {}   # ranks are a display nicety; never fail the detail load over them
 
 
+def _edge_zone_starts(player_id: int, season: str) -> dict:
+    """Per-player NHL Edge zone starts (official, all situations, season, regular season) for the
+    Role & deployment line and verdict. Neutral is included in Edge's denominator. Returns {} if
+    the player has no Edge zone-time row (e.g. pre-2021-22), so the UI falls back to the team proxy."""
+    sid = _season_str_to_id(season)
+    if not sid:
+        return {}
+    try:
+        rows = bq_service.query(f"""
+            SELECT oz_start_pct AS edge_oz_start_pct, nz_start_pct AS edge_nz_start_pct,
+                   dz_start_pct AS edge_dz_start_pct, oz_start_pctile AS edge_oz_start_pctile
+            FROM {bq_service.get_full_table_id('mart_edge_player_profile')}
+            WHERE player_id = {int(player_id)} AND season_id = {int(sid)} AND game_type = 2
+            LIMIT 1""")
+        if not rows:
+            return {}
+        r = rows[0]
+        keys = ('edge_oz_start_pct', 'edge_nz_start_pct', 'edge_dz_start_pct', 'edge_oz_start_pctile')
+        return {k: (float(r[k]) if r.get(k) is not None else None) for k in keys}
+    except Exception:
+        return {}
+
+
 @router.get("/{player_id}", response_model=PlayerDetail)
 @cache(ttl=600)
 async def get_player_detail(
@@ -888,6 +1064,11 @@ async def get_player_detail(
     comp = _composite(row['player_id'], season)
     components = _components_from_row(comp) if comp else []
     archetypes, primary_archetype = _archetype_mix(row['player_id'], season)
+    durable_archetype = _durable_archetype(row['player_id'])
+    try:
+        season_totals = _season_totals(row['player_id'], season, row['position'] == 'G')
+    except Exception:
+        season_totals = []
 
     return PlayerDetail(
         player_id=row['player_id'],
@@ -919,8 +1100,11 @@ async def get_player_detail(
         composite_components=components,
         archetypes=archetypes,
         primary_archetype=primary_archetype,
+        durable_archetype=durable_archetype,
+        season_totals=season_totals,
         value=_value_block(row['player_id'], season),
         **_rate_stat_ranks(row['player_id'], season),
+        **_edge_zone_starts(row['player_id'], season),
     )
 
 
@@ -1010,41 +1194,43 @@ async def get_player_trends(
     Raises:
         HTTPException: If player not found.
     """
-    # Get current season if not provided
+    # Default to the player's latest season (mart season is a string like '2025-26').
     if not season:
-        season_sql = f"""
-        SELECT MAX(season) as current_season
-        FROM {bq_service.get_full_table_id('stg_boxscores')}
-        """
-        season_result = bq_service.query(season_sql)
-        season = season_result[0]['current_season'] if season_result else 20232024
+        season_result = bq_service.query(
+            f"SELECT MAX(season) AS s FROM {bq_service.get_full_table_id('mart_player_game_stats')} "
+            f"WHERE player_id = {player_id}")
+        season = season_result[0]['s'] if season_result and season_result[0].get('s') else None
+    if not season:
+        raise HTTPException(status_code=404, detail="Player not found or insufficient data")
 
-    # Calculate rolling averages
+    # Season-scoped, NHL games only (reg + playoffs). 5-game rolling. Goals/60 and ixG/60 are
+    # volume-weighted over the window (sum/sum), the correct per-60 basis for a sustainability read;
+    # individual_goals and ixg share one shot source, so the two lines are apples-to-apples.
     sql = f"""
     WITH ordered_games AS (
         SELECT
             game_date,
             primary_points_per60,
-            on_ice_xgf_pct as cf_pct,
-            ROW_NUMBER() OVER (ORDER BY game_date) as game_num
+            on_ice_xgf_pct AS cf_pct,
+            individual_goals,
+            ixg,
+            toi_5v5,
+            ROW_NUMBER() OVER (ORDER BY game_date) AS game_num
         FROM {bq_service.get_full_table_id('mart_player_game_stats')}
-        WHERE player_id = {player_id}
+        WHERE player_id = {player_id} AND season = '{season}'
+          AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
     )
     SELECT
         game_date,
-        AVG(primary_points_per60) OVER (
-            ORDER BY game_date
-            ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-        ) as points_per60_5gp,
-        AVG(cf_pct) OVER (
-            ORDER BY game_date
-            ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-        ) as cf_pct_5gp,
+        AVG(primary_points_per60) OVER w AS points_per60_5gp,
+        AVG(cf_pct) OVER w AS cf_pct_5gp,
+        SAFE_DIVIDE(SUM(individual_goals) OVER w, SUM(toi_5v5) OVER w) * 60 AS goals_per60_5gp,
+        SAFE_DIVIDE(SUM(ixg) OVER w, SUM(toi_5v5) OVER w) * 60 AS ixg_per60_5gp,
         game_num
     FROM ordered_games
-    WHERE game_num >= 5
+    WINDOW w AS (ORDER BY game_date ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)
     ORDER BY game_date
-    LIMIT 50
+    LIMIT 200
     """
 
     results = bq_service.query(sql)
@@ -1055,16 +1241,16 @@ async def get_player_trends(
     points_per60_10gp = []  # TODO: Add 10-game rolling
     cf_pct_5gp = []
     cf_pct_10gp = []  # TODO: Add 10-game rolling
+    goals_per60_5gp = []
+    ixg_per60_5gp = []
 
     for row in results:
-        points_per60_5gp.append(PlayerTrendPoint(
-            game_date=row['game_date'],
-            value=row['points_per60_5gp']
-        ))
-        cf_pct_5gp.append(PlayerTrendPoint(
-            game_date=row['game_date'],
-            value=row['cf_pct_5gp']
-        ))
+        points_per60_5gp.append(PlayerTrendPoint(game_date=row['game_date'], value=row['points_per60_5gp']))
+        cf_pct_5gp.append(PlayerTrendPoint(game_date=row['game_date'], value=row['cf_pct_5gp']))
+        if row.get('goals_per60_5gp') is not None:
+            goals_per60_5gp.append(PlayerTrendPoint(game_date=row['game_date'], value=row['goals_per60_5gp']))
+        if row.get('ixg_per60_5gp') is not None:
+            ixg_per60_5gp.append(PlayerTrendPoint(game_date=row['game_date'], value=row['ixg_per60_5gp']))
 
     return PlayerTrends(
         player_id=player_id,
@@ -1072,8 +1258,80 @@ async def get_player_trends(
         points_per60_5gp=points_per60_5gp,
         points_per60_10gp=points_per60_10gp,
         cf_pct_5gp=cf_pct_5gp,
-        cf_pct_10gp=cf_pct_10gp
+        cf_pct_10gp=cf_pct_10gp,
+        goals_per60_5gp=goals_per60_5gp,
+        ixg_per60_5gp=ixg_per60_5gp,
     )
+
+
+@router.get("/{player_id}/shot-quality", response_model=PlayerShotQuality)
+@cache(ttl=1800)
+async def get_player_shot_quality(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (e.g., 2025-26)"),
+) -> PlayerShotQuality:
+    """Shot-zone quality (Shot Map tab): the player's unblocked-shot diet bucketed by per-shot xG
+    into low/medium/high danger, with each band's share alongside the positional league pool (F vs D)
+    so the bars read as 'how this player's shot quality compares to his position'."""
+    if not season:
+        sr = bq_service.query(
+            f"SELECT MAX(season) AS s FROM {bq_service.get_full_table_id('mart_player_game_stats')} "
+            f"WHERE player_id = {player_id}")
+        season = sr[0]['s'] if sr and sr[0].get('s') else None
+    if not season:
+        raise HTTPException(status_code=404, detail="No shot data for this player")
+
+    # Danger bands by per-shot xG (config.DANGER_TIERS): low [0,0.05), medium [0.05,0.15), high [0.15,1].
+    sql = f"""
+    WITH pos AS (
+        SELECT player_id, CASE WHEN MAX(position_code) = 'D' THEN 'D' ELSE 'F' END AS pos_group
+        FROM {bq_service.get_full_table_id('mart_player_game_stats')}
+        GROUP BY player_id
+    ),
+    banded AS (
+        -- credit goals to the scorer: goals carry scoring_player_id with a null shooter (see mart).
+        SELECT COALESCE(s.shooting_player_id, s.scoring_player_id) AS pid, p.pos_group, s.is_goal,
+            CASE WHEN s.xg_value < 0.05 THEN 'low'
+                 WHEN s.xg_value < 0.15 THEN 'medium' ELSE 'high' END AS band
+        FROM {bq_service.get_full_table_id('int_shot_attempts_all')} s
+        JOIN pos p ON COALESCE(s.shooting_player_id, s.scoring_player_id) = p.player_id
+        WHERE s.season = '{season}'
+          AND SUBSTR(CAST(s.game_id AS STRING), 5, 2) IN ('02', '03')
+          AND s.xg_value IS NOT NULL
+    )
+    SELECT band,
+        SUM(CASE WHEN pid = {player_id} THEN 1 ELSE 0 END) AS p_attempts,
+        SUM(CASE WHEN pid = {player_id} AND is_goal THEN 1 ELSE 0 END) AS p_goals,
+        SUM(CASE WHEN pos_group = (SELECT pos_group FROM pos WHERE player_id = {player_id}) THEN 1 ELSE 0 END) AS pool_attempts
+    FROM banded
+    GROUP BY band
+    """
+    rows = bq_service.query(sql)
+    by_band = {r['band']: r for r in rows}
+    total = sum(int(by_band.get(b, {}).get('p_attempts') or 0) for b in ('low', 'medium', 'high'))
+    pool_total = sum(int(by_band.get(b, {}).get('pool_attempts') or 0) for b in ('low', 'medium', 'high'))
+    if total == 0:
+        raise HTTPException(status_code=404, detail="No shot data for this player")
+
+    pos_group = None
+    pg = bq_service.query(
+        f"SELECT CASE WHEN MAX(position_code) = 'D' THEN 'D' ELSE 'F' END AS g "
+        f"FROM {bq_service.get_full_table_id('mart_player_game_stats')} WHERE player_id = {player_id}")
+    if pg and pg[0].get('g'):
+        pos_group = pg[0]['g']
+
+    bands = []
+    for b in ('high', 'medium', 'low'):  # present high danger first
+        r = by_band.get(b, {})
+        p_att = int(r.get('p_attempts') or 0)
+        pool_att = int(r.get('pool_attempts') or 0)
+        bands.append(ShotQualityBand(
+            band=b, attempts=p_att, goals=int(r.get('p_goals') or 0),
+            share=(p_att / total) if total else 0.0,
+            league_share=(pool_att / pool_total) if pool_total else 0.0,
+        ))
+    return PlayerShotQuality(player_id=player_id, season=season, pos_group=pos_group,
+                             total_attempts=total, bands=bands)
 
 
 @router.get("/{player_id}/gamelog", response_model=PlayerGamelog)

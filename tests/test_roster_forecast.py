@@ -17,7 +17,7 @@ from models_ml import config                                            # noqa: 
 from models_ml import project_roster_forecast as J                     # noqa: E402
 from models_ml.project_roster_forecast import (                        # noqa: E402
     PlayerProj, forecast_team, forecast_band, build_lineup, age_multiplier,
-    shrink_skater_gar, isolate_finishing, make_player_proj, is_negligible,
+    project_skater_war, project_goalie_war, inflate_arrival_bands, make_player_proj, is_negligible,
 )
 
 CFG = config.ROSTER_FORECAST
@@ -74,8 +74,7 @@ def test_departed_slot_filled_at_replacement_not_dropped():
 
 # ---------------------------------------------------------------- no-track-record: wide band, no point estimate
 def test_no_track_record_gets_replacement_and_wide_band():
-    p = make_player_proj(555, "Rookie", "C", gar_rows={}, goalie_rows={},
-                         aging={}, ages={}, archetypes={}, project_value=True)
+    p = make_player_proj(555, "Rookie", "C", {}, {}, {}, {}, {}, True)
     assert p.no_track_record is True
     assert p.projected_war == CFG["REPLACEMENT_WAR"]              # replacement level, never fabricated
     assert p.war_sd == CFG["NO_TRACK_RECORD_WAR_SD"] >= 1.0       # deliberately wide band
@@ -97,24 +96,52 @@ def test_goalie_band_wider_than_skater_band():
     assert forecast_band(with_goalie_move, 1) > forecast_band(skater_move[:len(base)], 1)
 
 
-# ---------------------------------------------------------------- regression toward the stable lens
-def test_finishing_residual_is_shrunk_hardest():
-    # two skaters with equal ev_offense, but one's production is all finishing luck (goals >> ixg)
-    lucky = {"ev_offense": 4.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
-             "faceoff": 0.0, "goals": 4.0, "ixg": 1.0}     # 3.0 of finishing luck
-    skilled = {"ev_offense": 4.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
-               "faceoff": 0.0, "goals": 1.0, "ixg": 4.0}   # sustainable, negative finishing luck
-    # the lucky finisher projects below the skilled one despite identical raw ev_offense
-    assert shrink_skater_gar(lucky) < shrink_skater_gar(skilled)
-    # and a depth player at ~replacement is NOT inflated above replacement by the shrink
-    scrub = {"ev_offense": 0.0, "pp": 0.0, "ev_defense": 0.0, "pk": 0.0, "penalty": 0.0,
-             "faceoff": 0.0, "goals": 0.0, "ixg": 0.0}
-    assert abs(shrink_skater_gar(scrub)) < 1e-9
+# ---------------------------------------------------------------- multi-season blend (Tier 0)
+def test_blend_anchors_projection_to_track_record():
+    # a player with a consistent ~0.2 WAR across three full seasons must project NEAR 0.2, not collapse
+    # toward replacement (the Byram failure of the old shrink-toward-zero). curve {} -> no aging.
+    steady = [(0, 0.20, 82), (1, 0.20, 82), (2, 0.20, 82)]
+    proj = project_skater_war(steady, {}, age_t=25)
+    assert 0.13 < proj < 0.21, f"established value should be kept, got {proj}"
 
 
-def test_finishing_isolation_split():
-    sust, fin = isolate_finishing(ev_offense=5.0, goals=3.0, ixg=1.0)
-    assert fin == 2.0 and sust == 3.0
+def test_thin_sample_regresses_harder_than_full_sample():
+    # SAME underlying per-82 rate (~0.2), but a 20-game sample is shrunk toward replacement more than a
+    # 246-game one — regression is by SAMPLE SIZE, which is what protects depth players automatically.
+    thin = [(0, 0.20 * 20 / 82, 20)]                       # 0.2 per-82 over only 20 games
+    full = [(0, 0.20, 82), (1, 0.20, 82), (2, 0.20, 82)]   # 0.2 per-82 over 246 games
+    assert project_skater_war(thin, {}, 25) < project_skater_war(full, {}, 25)
+
+
+def test_goalie_projection_is_flat_and_regressed():
+    # goalie value is the same blend, held flat (no skater aging curve) and still sample-regressed
+    from models_ml.compute_contract_value import blended_war_rate
+    seasons = [(0, 0.30, 50), (1, 0.30, 50)]
+    blended, _ = blended_war_rate(seasons)
+    proj = project_goalie_war(seasons)
+    assert proj == blended                       # flat: the shared blend, no skater aging applied
+    assert proj < 0.30 * 82 / 50                 # regressed below the raw per-82 rate by sample size
+
+
+# ---------------------------------------------------------------- Tier 1: arrival band, not point estimate
+def test_arrival_band_widens_without_moving_the_projection():
+    base = _full_roster()
+    arrival = _skater(999, 1.5, sd=0.4)                    # a real player NOT on the base roster
+    upd = [p for p in base if p.player_id != 1] + [arrival]
+    f = _forecast(base, upd, n_moves=1)
+    got = next(p for p in f["updated_lineup"] if p.player_id == 999)
+    import math
+    assert abs(got.war_sd - math.hypot(0.4, CFG["ARRIVAL_TRANSLATION_SD"])) < 1e-9, "arrival band widened"
+    assert got.projected_war == 1.5, "the central projection must be untouched"
+    # a holdover (still on the base roster) keeps his raw band
+    holdover = next(p for p in f["updated_lineup"] if p.player_id == 2)
+    assert holdover.war_sd == 0.4, "holdover band unchanged"
+
+
+def test_inflate_arrival_bands_is_a_noop_when_disabled():
+    lineup = [_skater(11, 1.0, sd=0.5)]
+    inflate_arrival_bands(lineup, base_roster_ids=set(), cfg={**CFG, "ARRIVAL_TRANSLATION_SD": 0.0})
+    assert lineup[0].war_sd == 0.5
 
 
 # ---------------------------------------------------------------- aging multiplier is clamped

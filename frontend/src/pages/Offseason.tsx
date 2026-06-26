@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Info } from 'lucide-react'
 import { PageLayout, PageHeader, Tabs, Select, SkeletonLoader } from '../components/common'
 import { getOffseasonBoard, getTeamOffseason } from '../api/offseason'
 import { RosterForecastRow, OffseasonTeamDetail } from '../api/types'
@@ -40,18 +39,16 @@ function TeamDetail({ detail, loading, error, onRetry }: {
       </div>
     )
   }
+
   const f = detail.forecast
   const arrivals = new Set(
     detail.moves.filter((m) => m.move_type === 'arrival' && m.player_id != null).map((m) => m.player_id as number))
-  // Supporting note = largest driver (NOT the style note, which lives only in §02).
-  const driverNote = detail.reasons.find((r) => r !== detail.style_note)
 
   return (
     <div className="off-detail">
       <section className="sec">
         <SectionHead n="01" title="The verdict" />
         <p className="verdict__lead">{detail.verdict}</p>
-        {driverNote && <p className="verdict__note"><span className="verdict__dot" />{driverNote}</p>}
       </section>
 
       <section className="sec">
@@ -69,13 +66,8 @@ function TeamDetail({ detail, loading, error, onRetry }: {
 
       <section className="sec">
         <SectionHead n="04" title="Projected lineup" />
-        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals} />
+        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals} team={detail.forecast.team_abbrev} />
       </section>
-
-      <div className="off-caption">
-        <Info size={18} className="off-caption__icon" aria-hidden />
-        <p>{detail.limitations}</p>
-      </div>
     </div>
   )
 }
@@ -88,7 +80,7 @@ export default function Offseason() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailErr, setDetailErr] = useState(false)
 
-  const view = params.get('view') === 'league' ? 'league' : 'team'
+  const view = params.get('view') === 'team' ? 'team' : 'league'
 
   // Load the league board once.
   useEffect(() => {
@@ -114,7 +106,8 @@ export default function Offseason() {
   }
   const setView = (v: string) => {
     const next = new URLSearchParams(params)
-    if (v === 'league') next.set('view', 'league'); else next.delete('view')
+    // League is the default (no param); Team is the explicit one — must match the `view` resolver above.
+    if (v === 'team') next.set('view', 'team'); else next.delete('view')
     setParams(next, { replace: true })
   }
 
@@ -146,11 +139,11 @@ export default function Offseason() {
       <div className="off">
         <PageHeader
           title="Offseason Forecast"
-          subtitle="How good each team projects next season from the moves it has made — value over last season's roster, with honest uncertainty shown throughout."
+          subtitle="How each team projects next season from the moves it has made."
         >
           <div className="off__toolbar">
             <Tabs value={view} onChange={setView}
-              options={[{ value: 'team', label: 'Team' }, { value: 'league', label: 'League' }]} />
+              options={[{ value: 'league', label: 'League' }, { value: 'team', label: 'Team' }]} />
             {view === 'team' && selected && (
               <Select ariaLabel="Choose team" value={String(selected.team_id)} options={teamOptions}
                 onChange={(v) => selectTeam(Number(v), true)} />

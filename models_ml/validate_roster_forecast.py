@@ -38,10 +38,10 @@ def main() -> None:
     print(f"roster-forecast backtest: {base_season} -> {next_s}")
 
     # Projected: run the same pipeline the job runs under --backtest (updated = actual next rosters).
-    window = J.value_season_window(bq, base_season)
+    n_back = J.CFG["PROJ_WINDOWS"]
     ratings = J.load_team_ratings(bq, base_season)
-    gar_rows = J.load_skater_gar(bq, window)
-    goalie_rows = J.load_goalie_gar(bq, window)
+    skater_data = J.load_skater_war_multi(bq, base_season, n_back)
+    goalie_data = J.load_goalie_war_multi(bq, base_season, n_back)
     archetypes = J.load_archetypes(bq, base_season)
     aging = J.load_aging(bq)
     ages = J.load_ages(bq, base_season)
@@ -49,7 +49,7 @@ def main() -> None:
     base_mem = J.robust_roster_membership(bq, base_season, floor, "end")   # 2024-25 season-end
     upd_mem = J.robust_roster_membership(bq, next_s, floor, "open")        # 2025-26 opening night
     trans = f"{base_season}->{next_s}"
-    forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
+    forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
                               aging, ages, archetypes, trans, "backtest")
     J._rank_and_finalize(forecasts)
 

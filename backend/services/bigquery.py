@@ -821,7 +821,11 @@ class BigQueryService:
         Returns:
             List with single zone deployment record.
         """
-        # mart_player_zone_deployment is per-game; aggregate to a season row.
+        # mart_player_zone_deployment is per-game; aggregate to a season row. Restrict to NHL game
+        # types (drops 2026 Olympic/4-Nations type-09 games) and drop faceoff-less rows the mart
+        # zero-fills (coalesce(...,0)), which otherwise drag the per-game AVG down (the zero-fill
+        # bug). This is the TEAM faceoff proxy; the per-player Edge OZS on the player-detail
+        # endpoint is the preferred source.
         sql = f"""
         SELECT
             player_id,
@@ -833,6 +837,8 @@ class BigQueryService:
         FROM {self.get_full_table_id('mart_player_zone_deployment')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+            AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')
+            AND NOT (ozs_pct = 0 AND nzs_pct = 0 AND dzs_pct = 0)
         GROUP BY player_id, season
         """
 
@@ -864,6 +870,7 @@ class BigQueryService:
         FROM {self.get_full_table_id('mart_player_shooting_luck')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+            AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')  -- NHL games only (no Olympic/4-Nations)
         GROUP BY player_id, season
         """
 
@@ -893,6 +900,7 @@ class BigQueryService:
         FROM {self.get_full_table_id('mart_player_relative')}
         WHERE player_id = {player_id}
             AND season = '{season}'
+            AND SUBSTR(CAST(game_id AS STRING), 5, 2) IN ('02', '03')  -- NHL games only (no Olympic/4-Nations)
         GROUP BY player_id, season
         """
 

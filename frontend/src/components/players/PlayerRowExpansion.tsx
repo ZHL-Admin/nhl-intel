@@ -10,6 +10,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 // (headshot/logo helpers now live in the shared PlayerAvatar)
 import SkillRadar from '../visualizations/SkillRadar'
+import { familyRadar } from '../../utils/radar'
 import OverallSummary from '../common/OverallSummary'
 import PlayerAvatar from '../common/PlayerAvatar'
 import SkeletonLoader from '../common/SkeletonLoader'
@@ -212,7 +213,10 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
         )}
         <div className="pxe__radar">
           {hasRadar
-            ? <SkillRadar spokes={radarSpokes} baseline={payload.radar?.baseline ?? `percentile within ${posNoun}, ${season}`} size={440} />
+            ? (() => { const fr = familyRadar(radarSpokes); return (
+                <SkillRadar spokes={fr.spokes} arcGroups={fr.arcGroups} shapeOnly
+                  baseline={payload.radar?.baseline ?? `percentile within ${posNoun}, ${season}`} />
+              ) })()
             : <p className="pxe__empty">No radar this season.</p>}
         </div>
       </div>

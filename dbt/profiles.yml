@@ -8,7 +8,7 @@ nhl_intel:
       dataset: nhl_staging
       keyfile: /Users/codytownsend/Desktop/nhl/NIR/secrets/nhl-intel-sa.json
       threads: 4
-      timeout_seconds: 300
+      timeout_seconds: 1800
       location: US
       priority: interactive
     prod:
@@ -18,6 +18,6 @@ nhl_intel:
       dataset: "{{ env_var('GCP_DATASET_STAGING') }}"
       keyfile: /opt/airflow/secrets/nhl-intel-sa.json
       threads: 4
-      timeout_seconds: 300
+      timeout_seconds: 1800
       location: US
       priority: interactive

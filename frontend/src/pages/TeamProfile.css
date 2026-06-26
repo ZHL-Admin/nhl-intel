@@ -1,11 +1,3 @@
-/* Team Profile Page Styles */
-
-.team-profile {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
 .team-profile__content {
   max-width: 1280px;
   margin: 0 auto;

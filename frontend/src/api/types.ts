@@ -337,6 +337,13 @@ export interface TeamVsOpponent {
 // Player Types
 // ============================================================================
 
+export interface SeasonTotalRank {
+  key: string
+  label: string
+  display: string
+  rank?: number | null
+  pool?: number | null
+}
 export interface PlayerDetail {
   player_id: number
   player_name: string
@@ -358,6 +365,12 @@ export interface PlayerDetail {
   ozs_pct?: number | null
   dzs_pct?: number | null
   nzs_pct?: number | null
+  // Per-player NHL Edge zone starts (official, all situations, season; neutral in denominator).
+  // Preferred OZS source; ozs_pct above is the team faceoff proxy fallback.
+  edge_oz_start_pct?: number | null
+  edge_nz_start_pct?: number | null
+  edge_dz_start_pct?: number | null
+  edge_oz_start_pctile?: number | null
   relative_cf_pct?: number | null
   relative_xgf_pct?: number | null
   actual_shooting_pct?: number | null
@@ -369,6 +382,8 @@ export interface PlayerDetail {
   composite_components?: CompositeComponent[]
   archetypes?: ArchetypeWeight[]
   primary_archetype?: string | null
+  durable_archetype?: string | null   // modal-3yr durable label (header chip; matches the verdict)
+  season_totals?: SeasonTotalRank[]   // league-wide ranked season totals (Season-totals stat bar)
   // within-position display ranks for the six snapshot rate stats (1 = best); rank_pool = pool size
   rank_pool?: number | null
   toi_rank?: number | null
@@ -494,6 +509,24 @@ export interface PlayerTrends {
   points_per60_10gp: PlayerTrendPoint[]
   cf_pct_5gp: PlayerTrendPoint[]
   cf_pct_10gp: PlayerTrendPoint[]
+  // Sustainability series (Overview rework): goals vs expected, 5-game rolling, per 60.
+  goals_per60_5gp?: PlayerTrendPoint[]
+  ixg_per60_5gp?: PlayerTrendPoint[]
+}
+
+export interface ShotQualityBand {
+  band: string          // 'low' | 'medium' | 'high'
+  attempts: number
+  goals: number
+  share: number         // share of the player's unblocked attempts in this band
+  league_share: number  // the same band's share for the player's position pool
+}
+export interface PlayerShotQuality {
+  player_id: number
+  season: string
+  pos_group?: string | null
+  total_attempts: number
+  bands: ShotQualityBand[]
 }
 
 export interface GamelogEntry {
@@ -1194,6 +1227,16 @@ export interface PlayerRadar {
   descriptor?: string | null
   identity_line?: string | null
   baseline?: string | null
+}
+/** Composed scouting read (Workstream B): Gemini narrates a deterministic payload, consistency-checked. */
+export interface PlayerVerdict {
+  player_id: number
+  season: string
+  long: string
+  short?: string | null
+  identity_confidence?: string | null
+  model_version?: string | null
+  generated_at?: string | null
 }
 export interface GoalieRadar {
   goalie_id: number

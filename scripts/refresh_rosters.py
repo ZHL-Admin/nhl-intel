@@ -71,6 +71,20 @@ def _done_today(client: bigquery.Client) -> set[str]:
         return set()
 
 
+def _delete_today(client: bigquery.Client, teams: list[str]) -> None:
+    """Remove today's rows for the given teams so --force can re-fetch a FRESH same-day snapshot
+    (rather than skip them, or stack a duplicate ingestion that would re-tie the dedup). raw_rosters is
+    loaded via load jobs, so these rows are immediately deletable (no streaming buffer)."""
+    if not teams:
+        return
+    inlist = ",".join(f"'{t}'" for t in teams)
+    client.query(
+        f"DELETE FROM `{PROJECT}.{DATASET_RAW}.{TABLE}` "
+        f"WHERE ingestion_date = CURRENT_DATE() AND team_abbrev IN ({inlist})"
+    ).result()
+    logger.info("  --force: cleared today's rows for %d teams (fresh re-fetch)", len(teams))
+
+
 def _flush(client: bigquery.Client, rows: list[dict]) -> int:
     """Load accumulated team rows, grouped by their RESOLVED season so each row's
     season column matches the roster it carries (offseason teams may resolve to a newer
@@ -88,15 +102,21 @@ def _flush(client: bigquery.Client, rows: list[dict]) -> int:
 
 def refresh_rosters(client: bigquery.Client, season: str = "2025-26",
                     limit: int | None = None, sleep_ms: int = 100,
-                    flush_size: int = 16) -> int:
+                    flush_size: int = 16, force: bool = False) -> int:
     """Fetch every current team's roster and load to raw_rosters. Returns rows loaded.
 
     Reusable from the DAG. `season` only selects which season's team list to iterate
-    (the roster fetched per team is its current/latest published season).
+    (the roster fetched per team is its current/latest published season). `force` re-fetches teams
+    already pulled today (replacing today's snapshot) — use it for an intraday refresh after a trade.
     """
     teams = _team_abbrevs(client, season, limit)
-    done = _done_today(client)
-    logger.info("Refreshing rosters: %d teams (%d already done today)", len(teams), len(done))
+    if force:
+        _delete_today(client, teams)
+        done: set[str] = set()
+    else:
+        done = _done_today(client)
+    logger.info("Refreshing rosters: %d teams (%d already done today)%s",
+                len(teams), len(done), " [--force]" if force else "")
 
     rows: list[dict] = []
     loaded = 0
@@ -124,10 +144,13 @@ def main() -> None:
     ap.add_argument("--season", default="2025-26", help="Season whose team list to iterate")
     ap.add_argument("--limit", type=int, help="Cap teams (for sampling)")
     ap.add_argument("--sleep-ms", type=int, default=100)
+    ap.add_argument("--force", action="store_true",
+                    help="re-fetch teams already pulled today (replaces today's snapshot) — "
+                         "use for an intraday refresh after a trade")
     args = ap.parse_args()
 
     client = bigquery.Client(project=PROJECT)
-    refresh_rosters(client, args.season, args.limit, args.sleep_ms)
+    refresh_rosters(client, args.season, args.limit, args.sleep_ms, force=args.force)
     logger.info("Roster refresh complete.")
 
 

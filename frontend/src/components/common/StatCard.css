@@ -54,6 +54,13 @@
   line-height: 1;
 }
 
+/* thin within-position percentile fill bar (Overview production cards) */
+.stat-card__pctbar {
+  height: 4px; border-radius: 2px;
+  background: var(--color-border-subtle); overflow: hidden;
+}
+.stat-card__pctbar > span { display: block; height: 100%; border-radius: 2px; }
+
 .stat-card__rank--top {
   color: var(--color-success);
   background-color: var(--color-success-bg);

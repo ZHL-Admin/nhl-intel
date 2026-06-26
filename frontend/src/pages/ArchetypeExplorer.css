@@ -1,7 +1,6 @@
 /* ============================================================================
    Archetype explainer — gallery + style-map
    ============================================================================ */
-.arch { max-width: 1200px; margin: 0 auto; }
 .arch__msg { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-6) 0; }
 
 /* now lives inside the PageHeader card — a layout container, not its own card */

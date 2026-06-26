@@ -1,12 +1,3 @@
-/* ============================================================================
-   Rankings — Power Ratings + Deserved Standings. Shares the Players-page grammar:
-   consolidated top card, on-demand legend, one uniform list, simple magnitude bar.
-   ============================================================================ */
-.rankings {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
 .rankings__msg { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-6) 0; }
 .rankings__count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
 .rankings__tip { border-bottom: 1px dotted var(--color-text-muted); cursor: help; }

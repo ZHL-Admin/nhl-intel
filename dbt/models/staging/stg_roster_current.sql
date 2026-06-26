@@ -4,6 +4,13 @@
 -- NEWEST ingestion per player: a trade between runs resolves to the latest snapshot, and a player
 -- can never resolve to two teams. team_id is resolved from team_abbrev via the canonical map.
 --
+-- TRADE-DAY TIE-BREAK: mid-trade, BOTH clubs may list a player on the SAME ingestion day (the
+-- acquiring team has added him before the former team has dropped him). ingestion_date then ties, so
+-- ranking on it alone is NON-DETERMINISTIC (the player flickers between the two teams across queries).
+-- We resolve it deterministically to the ACQUIRING team -- the club whose membership for him is
+-- NEWEST -- by tie-breaking on when he first appeared on each team (team_joined_date desc), with
+-- team_abbrev as a final stable tiebreak so the result never depends on scan order.
+--
 -- CAVEAT (membership != performance): this fixes the team LABEL only. A just-traded player has
 -- zero games with his new club, so his impact/archetype/radar/value still reflect old-team usage
 -- until he plays. Consumed by int_player_current_team (live-first current-team resolution).
@@ -41,11 +48,21 @@ parsed as (
     from players
 ),
 
--- Newest snapshot per player wins (authoritative current membership).
+-- When each player FIRST appeared on each team, to break a same-day two-team tie toward the acquirer.
+joined as (
+    select player_id, team_abbrev, min(ingestion_date) as team_joined_date
+    from parsed group by player_id, team_abbrev
+),
+
+-- Newest snapshot per player wins; a same-day tie resolves to the team he most recently joined.
 ranked as (
-    select *,
-        row_number() over (partition by player_id order by ingestion_date desc) as rn
-    from parsed
+    select p.*,
+        row_number() over (
+            partition by p.player_id
+            order by p.ingestion_date desc, j.team_joined_date desc, p.team_abbrev
+        ) as rn
+    from parsed p
+    join joined j using (player_id, team_abbrev)
 ),
 
 -- Canonical team_abbrev -> team_id map (abbrev is unique per current franchise). Sourced from

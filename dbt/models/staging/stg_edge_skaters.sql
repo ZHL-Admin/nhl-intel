@@ -82,7 +82,12 @@ per_report as (
             from unnest(json_extract_array(data, '$.zoneTimeDetails')) x
             where json_extract_scalar(x, '$.strengthCode') = 'es' limit 1) end as dz_time_pct_es,
         case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.offensiveZoneStartsPctg') as float64) end as oz_start_pct,
-        case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.defensiveZoneStartsPctg') as float64) end as dz_start_pct
+        case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.neutralZoneStartsPctg') as float64) end as nz_start_pct,
+        case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.defensiveZoneStartsPctg') as float64) end as dz_start_pct,
+        -- league percentiles for the zone starts (all situations). The OZ-start percentile is the
+        -- cleanest league-relative lean signal (sidesteps the neutral-in-denominator issue).
+        case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.offensiveZoneStartsPctgPercentile') as float64) end as oz_start_pctile,
+        case when report = 'zone-time' then safe_cast(json_extract_scalar(data, '$.zoneStarts.defensiveZoneStartsPctgPercentile') as float64) end as dz_start_pctile
     from dedup
 )
 
@@ -109,6 +114,9 @@ select
     max(oz_time_pct_es) as oz_time_pct_es,
     max(dz_time_pct_es) as dz_time_pct_es,
     max(oz_start_pct) as oz_start_pct,
-    max(dz_start_pct) as dz_start_pct
+    max(nz_start_pct) as nz_start_pct,
+    max(dz_start_pct) as dz_start_pct,
+    max(oz_start_pctile) as oz_start_pctile,
+    max(dz_start_pctile) as dz_start_pctile
 from per_report
 group by player_id, season_id, game_type

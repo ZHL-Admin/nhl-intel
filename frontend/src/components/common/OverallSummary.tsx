@@ -23,8 +23,8 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
-const NOTE = 'A within-position summary that averages and re-percentiles the component lenses — ' +
-  'shown only with its parts, never as a ranking.'
+const NOTE = 'A within-position summary that averages and re-percentiles the component lenses, ' +
+  'shown only with its parts; never as a ranking.'
 
 function toneClass(p: number): string {
   if (p >= 0.66) return 'ovr-mini--good'
@@ -40,9 +40,12 @@ interface Props {
   variant?: 'card' | 'strip'
   /** Optional value readout (e.g. WAR/GAR) rendered to the right in 'strip' mode. */
   aside?: React.ReactNode
+  /** Show the Impact-vs-Value read even when the lenses agree (card variant), so it can fill a
+   *  fixed-height column instead of leaving the build bars floating. Default only-on-divergence. */
+  showReadAlways?: boolean
 }
 
-export default function OverallSummary({ overall, read, variant = 'card', aside }: Props) {
+export default function OverallSummary({ overall, read, variant = 'card', aside, showReadAlways }: Props) {
   const comps = overall.components ?? []
   // HARD RULE: no components -> render nothing (never the number alone).
   if (comps.length === 0) return null
@@ -117,12 +120,12 @@ export default function OverallSummary({ overall, read, variant = 'card', aside 
         <PercentileBarList items={items} />
       </div>
 
-      {diverges && read && (
+      {(diverges || showReadAlways) && read && (
         <p className="ovr__read"><strong>{read.headline}</strong> {read.body}</p>
       )}
       <p className="ovr__note">
-        A within-position summary that averages and re-percentiles the lenses above — shown only
-        with its parts, never as a ranking.
+        A within-position summary that averages and re-percentiles the lenses above, shown only
+        with its parts; never as a ranking.
       </p>
     </div>
   )

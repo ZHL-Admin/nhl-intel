@@ -1,5 +1,11 @@
 """Offseason roster forecast: project how good a team will be next season from its moves.
 
+Each player's next-season WAR is the SHARED projection core (compute_contract_value.blended_war_rate):
+a recency/games-weighted blend of his last PROJ_WINDOWS single-season WARs, sample-regressed toward
+replacement, then aged one season forward (goalies held flat). Both this tool and the Contract Grader
+call it, so a player projects to the same WAR in both. This replaced a per-component shrink-toward-zero
+that compressed every established player toward replacement regardless of how stable his record was.
+
 READS ONLY (trains nothing): nhl_models.team_ratings, player_gar, goalie_gar, aging_curves,
 player_archetypes; nhl_staging.stg_rosters (base = prior season-end membership) and
 int_player_current_team (updated = current membership); and the score_line / score_team_fit
@@ -25,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from models_ml import config
+from models_ml.compute_contract_value import blended_war_rate   # SHARED projection primitive (Tier 0)
 
 CFG = config.ROSTER_FORECAST
 GPW = CFG["GOALS_PER_WIN"]
@@ -44,45 +51,11 @@ class PlayerProj:
     pos_group: str         # F/D/G
     is_goalie: bool
     base_war: float        # this-season realized value (the base_rating already reflects this)
-    projected_war: float   # next-season value: skater = shrunk + aged; goalie = carried through
+    projected_war: float   # next-season value: skater = blended + aged; goalie = blended flat
     war_sd: float          # band on the projected value (goalie ~3x skater by design)
     no_track_record: bool  # no GAR row at all -> replacement level + a deliberately wide band
     replacement: bool = False   # a filled-but-empty lineup slot (player_id None)
     slot: str | None = None     # which lineup slot it fills/vacates (e.g. "F1".."F12","D1".."D6","G")
-
-
-def isolate_finishing(ev_offense: float, goals: float, ixg: float) -> tuple[float, float]:
-    """Split actual-goal production into a sustainable part and a finishing-luck residual (goals).
-
-    player_gar.ev_offense is actual-goal production above replacement, so it carries finishing luck
-    by design. Swapping actual goals for individual xG removes that luck, so the residual is
-    ~(goals - ixg) and the sustainable part is ~(ev_offense - residual). Both in goals.
-    """
-    fin = float(goals) - float(ixg)
-    return float(ev_offense) - fin, fin
-
-
-def shrink_skater_gar(row: dict, cfg: dict = CFG) -> float:
-    """Regress a skater's GAR (goals) toward the repeatable lens — do NOT forecast off luck.
-
-    Each component is value ABOVE REPLACEMENT, so we keep the REPEATABLE FRACTION of it: the
-    projected component = its MEASURED reliability (config.GAR_STABILITY_YOY, via cfg['SHRINK_R'])
-    times the observed value, i.e. regressed toward replacement (0). The finishing residual
-    (goals - ixg; its mean is ~0) is shrunk hardest; the tiny penalty/faceoff terms pass through.
-    This leans on the repeatable parts without INFLATING depth players toward a positive pool mean.
-    Returns shrunk GAR in goals.
-    """
-    r = cfg["SHRINK_R"]
-    sust, fin = isolate_finishing(row["ev_offense"], row["goals"], row["ixg"])
-    shrunk = (
-        r["ev_offense"] * sust       # sustainable production, repeatable fraction
-        + r["finishing"] * fin       # finishing residual, shrunk hardest (toward its ~0 mean)
-        + r["pp"] * row["pp"]
-        + r["ev_defense"] * row["ev_defense"]
-        + r["pk"] * row["pk"]
-    )
-    shrunk += sum(float(row.get(k, 0.0)) for k in cfg["SHRINK_PASSTHROUGH"])
-    return shrunk
 
 
 def age_multiplier(curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
@@ -101,9 +74,25 @@ def age_multiplier(curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
     return float(min(cfg["AGE_MULT_CEIL"], max(cfg["AGE_MULT_FLOOR"], a1 / a0)))
 
 
-def project_skater(row: dict, curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
-    """Skater projected WAR = (shrunk GAR / goals-per-win) * aging multiplier."""
-    return (shrink_skater_gar(row, cfg) / cfg["GOALS_PER_WIN"]) * age_multiplier(curve_by_age, age_t, cfg)
+def project_skater_war(seasons: list, curve_by_age: dict, age_t, cfg: dict = CFG) -> float:
+    """Skater next-season WAR = a recency/games-weighted blend of his last seasons (the SHARED
+    blended_war_rate, also used by the Contract Grader), aged one season forward.
+
+    seasons = [(years_ago, war_total, games), ...]; years_ago 0 = current. blended_war_rate is
+    sample-regressed toward replacement, so a thin sample shrinks but an established track record is
+    kept at its own level — the projection is anchored to the player's OWN production, not pulled
+    toward zero. This is what makes a consistently-good player project near his real value (the Byram
+    fix) and keeps the two tools consistent. Finishing luck regresses naturally: a one-year shooting
+    spike is diluted by his other seasons; a repeatable finishing skill is kept.
+    """
+    blended, _games = blended_war_rate(seasons)
+    return blended * age_multiplier(curve_by_age, age_t, cfg)
+
+
+def project_goalie_war(seasons: list, cfg: dict = CFG) -> float:
+    """Goalie next-season WAR = the same multi-season blend, held FLAT (no skater aging curve)."""
+    blended, _games = blended_war_rate(seasons)
+    return blended
 
 
 def build_lineup(players: list[PlayerProj], n_slots: int, value_attr: str,
@@ -223,11 +212,30 @@ def forecast_band(updated_lineup: list[PlayerProj], n_moves: int, cfg: dict = CF
     return float(max(cfg["BAND_FLOOR"], band))
 
 
-def is_negligible(net_delta_war: float, n_moves: int, cfg: dict = CFG) -> bool:
-    """Deep-offseason / quiet-offseason guard: the updated lineup ~ the base lineup. The verdict
-    then says so explicitly instead of rendering a confident near-zero forecast (no zeroed empties).
+def inflate_arrival_bands(updated_lineup: list[PlayerProj], base_roster_ids: set, cfg: dict = CFG) -> None:
+    """Tier 1 — widen the band for each ARRIVAL (a real player in the updated lineup who was NOT on the
+    base roster), in place. A just-acquired player's projection still reflects his OLD-team usage/role
+    until he plays for the new club; that uncertainty belongs in the BAND, not in a biased-down point
+    estimate. We add ARRIVAL_TRANSLATION_SD in quadrature, so the central projection is untouched and
+    the wider sd flows into both his per-player UI band and the team forecast_band. Holdovers (on the
+    base roster) and replacement fills are left alone. No-op when the config term is zero.
     """
-    return abs(net_delta_war) <= cfg["NEGLIGIBLE_NET_WAR"] and n_moves <= cfg["NEGLIGIBLE_MOVES"]
+    add = cfg["ARRIVAL_TRANSLATION_SD"]
+    if add <= 0:
+        return
+    for p in updated_lineup:
+        if p.player_id is not None and not p.replacement and p.player_id not in base_roster_ids:
+            p.war_sd = math.sqrt(p.war_sd ** 2 + add ** 2)
+
+
+def is_negligible(net_delta_war: float, n_moves: int, cfg: dict = CFG) -> bool:
+    """Quiet-offseason guard: TRUE only when the team has made NO logged lineup move at all (zero
+    arrivals or departures among the projected lineups) — next season's roster isn't published yet, or
+    the summer has genuinely been silent. The verdict then says so ('check back') instead of a confident
+    near-zero forecast. A team that HAS made a move — even a single small one, like losing a third-line
+    center — is NOT negligible: its ledger and verdict must show that move, not hide it behind a quiet
+    state. (Previously also fired for 1-2 small-net moves, which hid real departures.)"""
+    return n_moves == 0
 
 
 def project_rating(base_rating: float, net_delta_war: float, chemistry_adj: float,
@@ -265,6 +273,9 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     # Roster membership sets classify a move as a real join/leave (vs a lineup promotion/demotion).
     base_roster_ids = {p.player_id for p in base_players if p.player_id is not None}
     updated_roster_ids = {p.player_id for p in updated_players if p.player_id is not None}
+    # Tier 1: an arrival carries role/translation uncertainty -> widen his BAND (never his projection)
+    # BEFORE the ledger + band are built, so it shows in both the per-player band and the team band.
+    inflate_arrival_bands(upd_lineup, base_roster_ids, cfg)
     net_delta, ledger = reconcile_ledger(base_lineup, upd_lineup, base_roster_ids, updated_roster_ids, cfg)
     n_moves = sum(1 for m in ledger if m["move_type"] in ("arrival", "departure"))
     chem = chemistry_adjustment(xgf_share_delta, cfg)
@@ -345,15 +356,16 @@ def next_season(season: str) -> str:
     return f"{start}-{str(start + 1)[2:]}"
 
 
-def value_season_window(bq, base_season: str) -> str:
-    """Prefer the stable 3-yr GAR window when it ENDS at the base season (leak-free for the live
-    transition); else the single-season row (leak-free for the 2024-25 backtest)."""
-    df = bq.query_df(f"SELECT DISTINCT season_window FROM {bq.models('player_gar')}")
-    windows = set(df["season_window"].astype(str))
-    for w in windows:
-        if "_" in w and w.split("_")[1] == base_season:   # e.g. 2023-24_2025-26 ends 2025-26
-            return w
-    return base_season
+def _season_str(start_year: int) -> str:
+    return f"{start_year}-{str(start_year + 1)[2:]}"
+
+
+def proj_windows(base_season: str, n_back: int) -> dict:
+    """The single-season WAR windows feeding the blend: {season_window: years_ago}, years_ago 0 = the
+    base season, then back n_back-1 seasons. All END at or before the base season, so the blend is
+    leak-free for both the live forward forecast and the 2024-25 backtest."""
+    base_y = _season_year(base_season)
+    return {_season_str(base_y - k): k for k in range(n_back)}
 
 
 # ---- loaders (one BigQuery round-trip each; the joins are documented in the methodology doc) ----
@@ -376,30 +388,71 @@ def load_team_ratings(bq, season: str) -> dict:
     return out
 
 
-def load_skater_gar(bq, window: str) -> dict:
-    """player_id -> gar row for the given season_window (the reliability shrink regresses each
-    above-replacement component toward 0, so no position means are needed)."""
+def load_skater_war_multi(bq, base_season: str, n_back: int) -> dict:
+    """player_id -> {seasons, current_war, war_sd, position} from up to n_back single-season WAR
+    windows. seasons = [(years_ago, war_total, games)] feeds the shared blended_war_rate; current_war +
+    war_sd are the most-recent-season anchors used for the ledger's base value and the band."""
+    windows = proj_windows(base_season, n_back)
+    inlist = ",".join(f"'{w}'" for w in windows)
     sql = f"""
-    SELECT player_id, position, gar, war, gar_sd, war_sd, ev_offense, pp, ev_defense, pk,
-           penalty, faceoff, goals, ixg, is_replacement
-    FROM {bq.models('player_gar')} WHERE season_window = '{window}'
+    SELECT player_id, season_window, position, war, war_sd, games
+    FROM {bq.models('player_gar')} WHERE season_window IN ({inlist})
     """
-    rows = {}
+    out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
-        d = {k: (float(x[k]) if x[k] is not None else 0.0) for k in
-             ("gar", "war", "gar_sd", "war_sd", "ev_offense", "pp", "ev_defense", "pk",
-              "penalty", "faceoff", "goals", "ixg")}
-        d["position"] = str(x.position)
-        rows[int(x.player_id)] = d
-    return rows
+        k = windows.get(str(x.season_window))
+        if k is None or x.war is None:
+            continue
+        d = out.setdefault(int(x.player_id),
+                           {"seasons": [], "current_war": None, "war_sd": None, "position": None,
+                            "_recent": None})
+        d["seasons"].append((k, float(x.war), float(x.games or 0)))
+        sd = float(x.war_sd) if x.war_sd is not None else None
+        if k == 0:
+            d["current_war"], d["war_sd"], d["position"] = float(x.war), sd, str(x.position)
+        if d["_recent"] is None or k < d["_recent"]:
+            d["_recent"], d["_recent_war"], d["_recent_sd"], d["_recent_pos"] = (
+                k, float(x.war), sd, str(x.position))
+    return _finalize_war_multi(out, ("position",))
 
 
-def load_goalie_gar(bq, window: str) -> dict:
+def load_goalie_war_multi(bq, base_season: str, n_back: int) -> dict:
+    """goalie_id -> {seasons, current_war, war_sd} from up to n_back single-season windows (games_played
+    as games). Same multi-season blend as skaters, carried through flat (no skater aging curve)."""
+    windows = proj_windows(base_season, n_back)
+    inlist = ",".join(f"'{w}'" for w in windows)
     sql = f"""
-    SELECT goalie_id, war, war_sd FROM {bq.models('goalie_gar')} WHERE season_window = '{window}'
+    SELECT goalie_id, season_window, war, war_sd, games_played AS games
+    FROM {bq.models('goalie_gar')} WHERE season_window IN ({inlist})
     """
-    return {int(x.goalie_id): {"war": float(x.war), "war_sd": float(x.war_sd)}
-            for _, x in bq.query_df(sql).iterrows()}
+    out: dict = {}
+    for _, x in bq.query_df(sql).iterrows():
+        k = windows.get(str(x.season_window))
+        if k is None or x.war is None:
+            continue
+        d = out.setdefault(int(x.goalie_id),
+                           {"seasons": [], "current_war": None, "war_sd": None, "_recent": None})
+        d["seasons"].append((k, float(x.war), float(x.games or 0)))
+        sd = float(x.war_sd) if x.war_sd is not None else None
+        if k == 0:
+            d["current_war"], d["war_sd"] = float(x.war), sd
+        if d["_recent"] is None or k < d["_recent"]:
+            d["_recent"], d["_recent_war"], d["_recent_sd"], d["_recent_pos"] = (
+                k, float(x.war), sd, None)
+    return _finalize_war_multi(out, ())
+
+
+def _finalize_war_multi(out: dict, extra: tuple) -> dict:
+    """If a player has no current-season (years_ago 0) row, fall back to his most-recent season for the
+    display/band anchors; then drop the bookkeeping `_recent*` keys."""
+    for d in out.values():
+        if d["current_war"] is None:
+            d["current_war"], d["war_sd"] = d["_recent_war"], d["_recent_sd"]
+            for k in extra:
+                d[k] = d["_recent_pos"]
+        for k in ("_recent", "_recent_war", "_recent_sd", "_recent_pos"):
+            d.pop(k, None)
+    return out
 
 
 def load_archetypes(bq, season: str) -> dict:
@@ -570,31 +623,34 @@ def _pos_group(position: str) -> str:
     return "D" if position == "D" else "F"
 
 
-def make_player_proj(pid, name, position, gar_rows, goalie_rows, aging, ages,
+def make_player_proj(pid, name, position, skater_data, goalie_data, aging, ages,
                      archetypes, project_value: bool, cfg=CFG) -> PlayerProj:
-    """Build a PlayerProj. project_value=False -> base_war only (this-season realized); True -> also
-    fill projected_war (skater = shrunk+aged; goalie = carried through). A player with no GAR row is
-    no_track_record: replacement level + a deliberately wide band, never a fabricated value."""
+    """Build a PlayerProj. base_war = the player's most-recent realized WAR (display); project_value
+    True -> also fill projected_war from the multi-season blend (skater = blended+aged, goalie = blended
+    flat). A player with no WAR window at all is no_track_record: replacement level + a deliberately
+    wide band, never a fabricated value. skater_data/goalie_data come from the *_war_multi loaders."""
     pg = _pos_group(position)
     is_g = pg == "G"
+    sd_fallback = cfg["WAR_SD_FALLBACK"]
     if is_g:
-        row = goalie_rows.get(pid)
-        if row is None:
+        d = goalie_data.get(pid)
+        if not d or not d["seasons"]:
             return PlayerProj(pid, name, position, "G", True, cfg["REPLACEMENT_WAR"],
                               cfg["REPLACEMENT_WAR"], cfg["NO_TRACK_RECORD_WAR_SD"], no_track_record=True)
-        proj = row["war"] if project_value else 0.0   # goalie value carried through (already shrunk)
-        return PlayerProj(pid, name, position, "G", True, row["war"], proj, row["war_sd"], False)
-    row = gar_rows.get(pid)
-    if row is None:
+        proj = project_goalie_war(d["seasons"], cfg) if project_value else 0.0
+        return PlayerProj(pid, name, position, "G", True, d["current_war"], proj,
+                          d["war_sd"] if d["war_sd"] is not None else sd_fallback, False)
+    d = skater_data.get(pid)
+    if not d or not d["seasons"]:
         return PlayerProj(pid, name, position, pg, False, cfg["REPLACEMENT_WAR"],
                           cfg["REPLACEMENT_WAR"], cfg["NO_TRACK_RECORD_WAR_SD"], no_track_record=True)
-    base_war = row["war"]
     proj = 0.0
     if project_value:
         arch = (archetypes.get(pid) or {}).get("archetype") or cfg["AGE_CURVE_FALLBACK"][pg]
         curve = aging.get(arch) or aging.get(cfg["AGE_CURVE_FALLBACK"][pg]) or {}
-        proj = project_skater(row, curve, ages.get(pid), cfg)
-    return PlayerProj(pid, name, position, pg, False, base_war, proj, row["war_sd"], False)
+        proj = project_skater_war(d["seasons"], curve, ages.get(pid), cfg)
+    return PlayerProj(pid, name, position, pg, False, d["current_war"], proj,
+                      d["war_sd"] if d["war_sd"] is not None else sd_fallback, False)
 
 
 def main() -> None:
@@ -653,16 +709,17 @@ def main() -> None:
         _print_byte_estimate(bq, base_season)
 
     # Value/aging/ratings are keyed to the BASE season — the realized rating the projection starts
-    # from, and the value each player carries into the next season.
-    window = value_season_window(bq, base_season)
+    # from, and the multi-season value each player carries into the next season.
+    n_back = CFG["PROJ_WINDOWS"]
+    window = f"{n_back} single-season windows ending {base_season}"
     ratings = load_team_ratings(bq, base_season)
-    gar_rows = load_skater_gar(bq, window)
-    goalie_rows = load_goalie_gar(bq, window)
+    skater_data = load_skater_war_multi(bq, base_season, n_back)
+    goalie_data = load_goalie_war_multi(bq, base_season, n_back)
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
     ages = load_ages(bq, base_season)
 
-    forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows,
+    forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
                                     aging, ages, archetypes, trans, run_id, sample=args.sample)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
@@ -675,11 +732,11 @@ def main() -> None:
     _write_tables(bq, forecasts, move_rows)
 
 
-def _projected_players(team_id, mem, gar_rows, goalie_rows, aging, ages, archetypes, project_value):
+def _projected_players(team_id, mem, skater_data, goalie_data, aging, ages, archetypes, project_value):
     out = []
     for m in mem.get(team_id, []):
-        out.append(make_player_proj(m["player_id"], m.get("name"), m["position"], gar_rows,
-                                    goalie_rows, aging, ages, archetypes, project_value))
+        out.append(make_player_proj(m["player_id"], m.get("name"), m["position"], skater_data,
+                                    goalie_data, aging, ages, archetypes, project_value))
     return out
 
 
@@ -740,7 +797,7 @@ def _style_note(bq, team_id, upd_lineup, season):
     return ""
 
 
-def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, aging, ages, archetypes,
+def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ages, archetypes,
              trans, run_id, sample=None):
     scored_at = datetime.now(timezone.utc).isoformat()
     names = load_player_names(bq)
@@ -753,9 +810,9 @@ def _run_all(bq, ratings, base_mem, upd_mem, gar_rows, goalie_rows, aging, ages,
     for tid in team_ids:
         if tid not in ratings:
             continue
-        base_players = _projected_players(tid, base_mem, gar_rows, goalie_rows, aging, ages,
+        base_players = _projected_players(tid, base_mem, skater_data, goalie_data, aging, ages,
                                           archetypes, project_value=True)
-        upd_players = _projected_players(tid, upd_mem, gar_rows, goalie_rows, aging, ages,
+        upd_players = _projected_players(tid, upd_mem, skater_data, goalie_data, aging, ages,
                                          archetypes, project_value=True)
         rc = ratings[tid]
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the

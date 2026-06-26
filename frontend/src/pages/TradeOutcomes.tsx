@@ -131,14 +131,6 @@ export default function TradeOutcomes() {
             </ChartPanel>
           </section>
         )}
-
-        <p className="to-footnote">
-          GM attribution is to the decision-maker of record from a curated tenure table (approximate near
-          handovers; the GM is not the sole decision-maker). The slot lens values picks at their slot's
-          expectation and isolates the trade; the actual lens values a pick by the player it became and is
-          partly unresolved. Bands are real; "too close" means even within the margin; incomplete recent
-          trades are excluded by default. See the <Link to="/learn/archetypes">methodology</Link>.
-        </p>
       </div>
     </PageLayout>
   )

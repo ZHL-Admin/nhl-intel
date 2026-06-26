@@ -3,6 +3,8 @@
 .skill-radar__empty { font-size: 0.85rem; color: var(--color-text-secondary); padding: 16px 0; }
 
 .skill-radar__ring { fill: none; stroke: var(--color-border); stroke-width: 1; opacity: 0.6; }
+/* league-median (50th-percentile) reference ring */
+.skill-radar__ring--median { stroke: var(--color-text-muted); stroke-width: 1.25; opacity: 0.9; stroke-dasharray: 3 3; }
 .skill-radar__ring-label { font-size: 8px; fill: var(--color-text-muted, var(--color-text-secondary)); }
 .skill-radar__axis { stroke: var(--color-border); stroke-width: 1; opacity: 0.4; }
 .skill-radar__poly { fill: color-mix(in srgb, var(--color-accent, #3b82f6) 22%, transparent);
@@ -17,6 +19,20 @@
   fill: var(--color-text-muted); paint-order: stroke; stroke: var(--color-bg-surface);
   stroke-width: 3px;
 }
+/* Shape-only radar (Player Overview §6) */
+.skill-radar--shape .skill-radar__svg { max-width: 460px; }
+.skill-radar__ring--guide { fill: none; stroke: var(--color-border-subtle); stroke-width: 0.5; }
+.skill-radar__ring--med { fill: none; stroke: var(--color-border); stroke-width: 0.5; stroke-dasharray: 3 3; }
+.skill-radar__poly--shape { fill: rgba(59, 130, 246, 0.13); stroke: #3b82f6; stroke-width: 1.4; }
+.skill-radar__node { stroke: var(--color-bg-surface); stroke-width: 1; transition: r 120ms; }
+.skill-radar--shape .skill-radar__arc {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: none;
+  fill: var(--color-text-muted); stroke: none;
+}
+.skill-radar--shape .skill-radar__legend { gap: 14px; }
+.skill-radar--shape .skill-radar__legend-item { font-size: 11px; color: var(--color-text-muted); }
+.skill-radar--shape .skill-radar__legend-dot { width: 8px; height: 8px; }
+
 .skill-radar__whisker { stroke: var(--color-text-secondary); stroke-width: 2; opacity: 0.35; stroke-linecap: round; }
 .skill-radar__dot { stroke: var(--color-bg-surface, #fff); stroke-width: 1.5; transition: r 120ms; }
 .skill-radar__spoke-label { font-size: 10px; font-weight: 600; fill: var(--color-text); }

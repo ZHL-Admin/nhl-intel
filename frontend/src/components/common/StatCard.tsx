@@ -10,13 +10,20 @@ interface StatCardProps {
    *  `rank` and skips the NHL-wide wording/tiering. Pair with `rankTier` for color. */
   rankText?: string
   rankTier?: 'top' | 'mid' | 'bottom'
+  /** 0..1 within-position percentile. Renders a thin fill bar and drives a green/amber/red
+   *  gradient on the rank pill (so e.g. 6th and 129th do not read as equally good). */
+  percentile?: number | null
   tooltip?: string
   sparklineData?: number[]
   trendDelta?: number
   trendLabel?: string
 }
 
-function StatCard({ label, value, rank, rankText, rankTier, tooltip, sparklineData, trendDelta, trendLabel }: StatCardProps) {
+// Percentile -> design-token color (green strong / amber soft / red weak).
+const pctFg = (p: number) => (p >= 0.66 ? 'var(--color-success)' : p >= 0.33 ? 'var(--color-warning)' : 'var(--color-danger)')
+const pctBgVar = (p: number) => (p >= 0.66 ? 'var(--color-success-bg)' : p >= 0.33 ? 'var(--color-warning-bg)' : 'var(--color-danger-bg)')
+
+function StatCard({ label, value, rank, rankText, rankTier, percentile, tooltip, sparklineData, trendDelta, trendLabel }: StatCardProps) {
   const getRankTier = (rank: number): string => {
     if (rank <= 10) return 'top'
     if (rank >= 23) return 'bottom'
@@ -89,8 +96,15 @@ function StatCard({ label, value, rank, rankText, rankTier, tooltip, sparklineDa
         )}
       </div>
       <div className="stat-card__value mono">{value}</div>
+      {percentile != null && (
+        <div className="stat-card__pctbar" aria-hidden="true">
+          <span style={{ width: `${Math.round(percentile * 100)}%`, background: pctFg(percentile) }} />
+        </div>
+      )}
       {rankText !== undefined ? (
-        <div className={`stat-card__rank stat-card__rank--${rankTier ?? 'mid'}`}>
+        <div
+          className={`stat-card__rank${percentile == null ? ` stat-card__rank--${rankTier ?? 'mid'}` : ''}`}
+          style={percentile != null ? { color: pctFg(percentile), background: pctBgVar(percentile) } : undefined}>
           {rankText}
         </div>
       ) : rank !== undefined && (

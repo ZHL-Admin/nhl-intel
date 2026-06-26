@@ -1,11 +1,3 @@
-/* ============================================================================
-   Lineup Lab — visual line builder (Phase 5.2 redesign)
-   ============================================================================ */
-.lab {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
 .lab__header { margin-bottom: var(--space-6); }
 .lab__back { font-size: var(--text-sm); color: var(--color-text-secondary); }
 .lab__back:hover { color: var(--color-text-primary); }

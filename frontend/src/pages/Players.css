@@ -1,8 +1,3 @@
-/* ============================================================================
-   Players index — one consolidated control region + a single uniform ranked list
-   ============================================================================ */
-.players { max-width: 1200px; margin: 0 auto; }
-
 .players__msg { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-6) 0; }
 .players__count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); margin-left: auto; }
 .players__subtitle { font-size: var(--text-xs); color: var(--color-text-secondary); line-height: 1.5; margin: var(--space-2) 0; }

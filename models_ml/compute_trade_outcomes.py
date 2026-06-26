@@ -50,7 +50,7 @@ def _load():
     P = bq.project()
     trades = bq.query_df(f"""
         select trade_id, season, trade_date, trade_label, acquiring_team, giving_team, team_count,
-               asset_type, asset, position, pos_group, is_conditional,
+               asset_type, asset, position, pos_group, is_conditional, is_retention, retained_pct,
                pick_year, pick_round, pick_overall_mid, resolved_player_id, match_method
         from `{P}.nhl_staging.stg_trades`
         order by trade_date, trade_id
@@ -153,6 +153,18 @@ def _load_gamelog(player_ids: set) -> dict:
     return log
 
 
+def _post_team(log: dict, pid: int | None, anchor: date) -> int | None:
+    """The team_id of the player's first NHL game strictly after `anchor` — his real post-trade club.
+    Used to tell a salary-retention broker (a team that 'received' a player it never iced) from the
+    team that actually acquired him."""
+    if pid is None:
+        return None
+    for (d, _s, tid) in (log.get(pid) or []):
+        if d > anchor:
+            return tid
+    return None
+
+
 def _tenure_value(log: dict, pidx: dict, pid: int | None, team_id: int | None,
                   anchor: date, horizon_end: date, last_data: date) -> tuple[float, float, bool]:
     """Realized pWAR the acquiring team actually got from a received PLAYER: the player's value while on
@@ -236,23 +248,32 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
         slot_v = slot_hw = act_v = act_hw = 0.0
         flags = {"unresolved": False, "conditional": bool(r.is_conditional),
                  "actual_censored": False, "own_pick_assumed": False, "actual_unresolved": False,
-                 "horizon_incomplete": False}
+                 "horizon_incomplete": False, "retention": False}
         is_proxy = False
         label = r.asset
         became_id, became_name = None, None      # the player a pick became (actual lens, for linking)
 
         if r.asset_type == "Player":
             pid = int(r.resolved_player_id) if pd.notna(r.resolved_player_id) else None
-            # tenure-capped: only the value the acquiring team realized while he was on it, prorated by
-            # games played for that team, up to min(exit, trade_date + horizon). Not a flat 5 seasons.
-            v, hw, complete = _tenure_value(gamelog, pidx, pid, acq_id, td, _add_years(td, H), last_data)
-            slot_v = act_v = v
-            slot_hw = act_hw = hw
-            flags["unresolved"] = pid is None
-            if not complete:
-                # the realized window isn't fully observed yet (recent trade, player still on the team);
-                # affects BOTH lenses, so it's a row-level recency caveat, not actual-lens censoring
-                flags["horizon_incomplete"] = True
+            # Salary-retention broker row: a "X% retained" note where the player's real post-trade club
+            # is a DIFFERENT team — the retaining team facilitated the deal, it did not acquire him. It
+            # carries no on-ice value and must not show as a second team "receiving" the same player.
+            post = _post_team(gamelog, pid, td)
+            if bool(r.is_retention) and post is not None and acq_id is not None and post != acq_id:
+                flags["retention"] = True
+                pct = int(r.retained_pct) if pd.notna(r.retained_pct) else None
+                label = f"{r.asset} — {pct}% retained" if pct else f"{r.asset} — retained salary"
+                slot_v = act_v = slot_hw = act_hw = 0.0
+            else:
+                # tenure-capped: only the value the acquiring team realized while he was on it, prorated
+                # by games for that team, up to min(exit, trade_date + horizon). Not a flat 5 seasons.
+                v, hw, complete = _tenure_value(gamelog, pidx, pid, acq_id, td, _add_years(td, H), last_data)
+                slot_v = act_v = v
+                slot_hw = act_hw = hw
+                flags["unresolved"] = pid is None
+                if not complete:
+                    # realized window not fully observed yet (recent trade); a row-level recency caveat
+                    flags["horizon_incomplete"] = True
 
         elif r.asset_type == "Draft Pick":
             is_proxy = True
@@ -288,6 +309,8 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
         from_team = r.giving_team
         if from_team is None and r.asset_type == "Player" and pd.notna(r.resolved_player_id):
             from_team = pretrade.get((int(r.resolved_player_id), td))
+        if flags["retention"]:
+            from_team = None     # a retention is a cap mechanism, not a player move charged to a team
 
         rows.append({
             "trade_id": r.trade_id, "season": r.season, "trade_date": td, "team_count": int(r.team_count),
@@ -323,7 +346,8 @@ def _ledger_entry(a: dict, direction: str) -> dict:
             "became_player_name": _clean_str(a["became_player_name"]),
             "slot_war": a["slot_war"], "actual_war": a["actual_war"],
             "conditional": a["conditional"], "unresolved": a["unresolved"],
-            "own_pick_assumed": a["own_pick_assumed"], "actual_unresolved": a["actual_unresolved"]}
+            "own_pick_assumed": a["own_pick_assumed"], "actual_unresolved": a["actual_unresolved"],
+            "retention": a.get("retention", False)}
 
 
 def net_trades(av: pd.DataFrame) -> pd.DataFrame:

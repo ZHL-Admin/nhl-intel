@@ -4,7 +4,7 @@
 }
 
 .page-layout__container {
-  max-width: 1280px;
+  max-width: 1024px;
   margin: 0 auto;
   padding: var(--space-8) 0;
 }

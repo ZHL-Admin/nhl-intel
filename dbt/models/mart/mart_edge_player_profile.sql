@@ -48,7 +48,10 @@ select
     e.oz_time_pct_es,
     e.dz_time_pct_es,
     e.oz_start_pct,
+    e.nz_start_pct,
     e.dz_start_pct,
+    e.oz_start_pctile,
+    e.dz_start_pctile,
 
     -- Danger profile
     e.total_sog,

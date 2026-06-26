@@ -13,8 +13,9 @@ export function fmtSigned(v: number | null | undefined, d: number): string {
 
 /** Ratings & changes: signed, two decimals. */
 export const fmtRating = (v: number | null | undefined) => fmtSigned(v, 2)
-/** WAR: signed, one decimal. */
-export const fmtWar = (v: number | null | undefined) => fmtSigned(v, 1)
+/** WAR: signed, two decimals. Player-season WAR is small (often |v| < 1), so one decimal collapses
+ * a real value to "0.0" (e.g. a 0.02 projection reads as zero); two decimals keeps it legible. */
+export const fmtWar = (v: number | null | undefined) => fmtSigned(v, 2)
 /** Band endpoints share the underlying metric's precision; rendered "{lo} to {hi}". */
 export const fmtBand = (lo: number, hi: number, d: number) => `${fmtSigned(lo, d)} to ${fmtSigned(hi, d)}`
 export const fmtRank = (n: number | null | undefined) => (n == null ? '—' : `#${n}`)
