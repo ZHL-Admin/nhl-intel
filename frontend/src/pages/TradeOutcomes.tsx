@@ -25,21 +25,6 @@ const LS_KIND = 'nhlintel.trades.kind'
 const LS_SEL = 'nhlintel.trades.selected'
 const BASE = '/tools/trade-outcomes'
 
-/** A clean "kind/id" path from the remembered value, or null. Tolerates the legacy JSON format
- * ({"kind":"gm","id":"..."}) that an earlier build stored, so a stale value never builds a bad URL. */
-function rememberedPath(raw: string | null): string | null {
-  if (!raw) return null
-  let kind: string | undefined, id: string | undefined
-  if (raw[0] === '{') {
-    try { const o = JSON.parse(raw); kind = o.kind; id = o.id } catch { return null }
-  } else {
-    const [k, ...rest] = raw.split('/')
-    kind = k; id = rest.join('/')
-  }
-  if ((kind === 'team' || kind === 'gm') && id) return `${kind}/${id}`
-  return null
-}
-
 function Breadcrumb({ trail }: { trail: { label: string; to?: string }[] }) {
   return (
     <nav className="to-crumb">
@@ -74,15 +59,11 @@ export default function TradeOutcomes() {
 
   useEffect(() => { localStorage.setItem(LS_KIND, entityKind) }, [entityKind])
 
-  // remember the open entity; on a bare landing, return a previous visitor to their dossier
+  // remember the open entity (so other surfaces can offer a "resume" later), but the base route
+  // always lands on Overview — no auto-redirect into a dossier.
   useEffect(() => {
-    if (pKind && pId) { localStorage.setItem(LS_SEL, `${pKind}/${pId}`); return }
-    if (!tradeId && !sp.get('mode')) {
-      const remembered = rememberedPath(localStorage.getItem(LS_SEL))
-      if (remembered) navigate(`${BASE}/${remembered}`, { replace: true })
-      else localStorage.removeItem(LS_SEL)
-    }
-  }, [pKind, pId, tradeId]) // eslint-disable-line
+    if (pKind && pId) localStorage.setItem(LS_SEL, `${pKind}/${pId}`)
+  }, [pKind, pId])
 
   // value map for the foregrounded Traders mode
   useEffect(() => {
