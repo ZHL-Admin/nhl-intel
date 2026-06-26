@@ -454,10 +454,33 @@ def archetypes(lens="slot", season_from=None, season_to=None) -> list:
         else:
             decisive = sum(1 for t in ts if t["verdict"] != "too_close")
             split = {"decisive_pct": round(100 * decisive / n), "even_pct": round(100 * even / n)}
-        srt = sorted(ts, key=lambda t: t["margin_slot"], reverse=True)
-        # biggest_for_a / biggest_for_b: the two ends; closest: smallest margin
-        exemplars = {"biggest_for_a": srt[0]["trade_id"], "biggest_for_b": srt[-1]["trade_id"],
-                     "closest": min(ts, key=lambda t: t["margin_slot"])["trade_id"]}
+        # Exemplars as a labeled, de-duplicated list. margin_slot is always the WINNER's non-negative
+        # net, so "the other way" only means something where the archetype has a real two-sided axis
+        # (player vs picks). Symmetric archetypes (player-for-player, picks-for-picks, blockbuster,
+        # three-team) have no such axis, so we show the two most lopsided results and the closest call
+        # instead of a meaningless "other way" (which used to duplicate the closest call).
+        def _ex(label, t):
+            return {"label": label, "trade_id": t["trade_id"]}
+
+        if arch == "player_for_picks":
+            def _pnet(t):                                   # signed: + = the player-receiving side ahead
+                ps = next((s for s in t["sides"] if s["kind"] == "player"), None)
+                return ps["net_slot"] if ps else 0.0
+            by = sorted(ts, key=_pnet)
+            cands = [_ex("Player side's biggest win", by[-1]),
+                     _ex("Pick side's biggest win", by[0]),
+                     _ex("Closest call", min(ts, key=lambda t: abs(_pnet(t))))]
+        else:
+            srt = sorted(ts, key=lambda t: t["margin_slot"], reverse=True)
+            cands = [_ex("Most lopsided", srt[0])]
+            if len(srt) > 2:
+                cands.append(_ex("Another lopsided result", srt[1]))
+            cands.append(_ex("Closest call", min(ts, key=lambda t: t["margin_slot"])))
+        seen, exemplars = set(), []
+        for c in cands:                                     # distinct trades only (no duplicate cards)
+            if c["trade_id"] not in seen:
+                seen.add(c["trade_id"])
+                exemplars.append(c)
         # timing breakdown (by date context, an honest proxy for rentals; we have dates, not cap)
         timing = []
         for b in ("deadline", "draft", "offseason", "in_season"):

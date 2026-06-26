@@ -2303,5 +2303,5 @@ class ArchetypeAgg(BaseModel):
     label: str
     trade_count: int
     split: dict
-    exemplars: dict
+    exemplars: List[dict] = []      # ordered, labeled, distinct: [{label, trade_id}]
     timing: List[dict] = []

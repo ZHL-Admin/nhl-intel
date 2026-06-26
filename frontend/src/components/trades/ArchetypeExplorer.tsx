@@ -28,25 +28,20 @@ function insight(a: ArchetypeAgg): string {
 
 function Exemplars({ a, lens }: { a: ArchetypeAgg; lens: 'slot' | 'actual' }) {
   const [items, setItems] = useState<Record<string, TradeBoardItem>>({})
-  const ids = useMemo(() => Array.from(new Set(Object.values(a.exemplars))).filter(Boolean), [a])
+  const ids = useMemo(() => Array.from(new Set(a.exemplars.map((e) => e.trade_id))).filter(Boolean), [a])
   useEffect(() => {
     let live = true
     Promise.all(ids.map((id) => getBoardItem(id).then((t) => [id, t] as const).catch(() => null)))
       .then((res) => { if (live) setItems(Object.fromEntries(res.filter(Boolean) as any)) })
     return () => { live = false }
   }, [a.archetype])
-  const order: [string, string][] = [
-    ['biggest_for_a', 'Biggest win one way'],
-    ['biggest_for_b', 'Biggest win the other way'],
-    ['closest', 'Closest call'],
-  ]
   return (
     <div className="arch-exemplars">
-      {order.map(([k, label]) => {
-        const t = items[a.exemplars[k]]
+      {a.exemplars.map((ex) => {
+        const t = items[ex.trade_id]
         return (
-          <div key={k}>
-            <div className="arch-stat__l" style={{ marginBottom: 'var(--space-2)' }}>{label}</div>
+          <div key={ex.label}>
+            <div className="arch-stat__l" style={{ marginBottom: 'var(--space-2)' }}>{ex.label}</div>
             {t ? <TradeBalanceCard trade={t} lens={lens} defaultOpen /> : <SkeletonLoader height={120} />}
           </div>
         )

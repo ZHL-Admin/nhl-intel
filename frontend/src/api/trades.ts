@@ -158,7 +158,7 @@ export interface TraderDossier {
 export interface ArchetypeAgg {
   archetype: string; label: string; trade_count: number
   split: Record<string, number>
-  exemplars: Record<string, string>
+  exemplars: { label: string; trade_id: string }[]
   timing: { bucket: string; count: number; decisive_pct: number }[]
 }
 
