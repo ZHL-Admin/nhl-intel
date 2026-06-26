@@ -99,3 +99,62 @@ headline board so it is not topped by trades with no observed outcomes yet.
 - Relocated franchises (ARI→UTA, ATL→WPG) can break the actual-lens draft-team match for older picks.
 - Everything is realized **WAR with wide bands**; pre-2021 pWAR is an estimate. This is not advice and
   not a decision grade — only a record of how the assets turned out.
+
+---
+
+# The entity-first surfaces (Handoff 6)
+
+The raw retrospective above is one row per trade-team. The product reads it as **entities and
+hypotheses**, not a sorted ledger: a team or GM you want a verdict on, or a kind of trade you want to
+test. Everything below composes the shipped `trade_outcomes` table (plus the GM layer); nothing is
+recomputed.
+
+## The GM attribution layer
+
+GM history is in no feed, so it is **curated** — `gm_tenures.csv` at the repo root (the same way
+contracts are sourced), one row per GM stint, loaded to `nhl_raw.raw_gm_tenures` →
+`stg_gm_tenures` (typed; a singular test asserts no two tenures for one team overlap). Coverage is
+2015-16 to present (~82 stints, 66 GMs); `gm_id` is stable across stints so a GM who changes teams or
+returns is one entity.
+
+**Attribution rule:** a trade side (team, date) is attributed to the tenure whose `team_abbrev` matches
+and whose `[start_date, end_date]` contains the trade date (a null end = the current GM, through today).
+A date within `GM_LAYER.TRANSITION_WINDOW_DAYS` (14) of a tenure boundary sets a `gm_transition` flag
+("attribution uncertain near a handover"). A gap in the curated table attributes to `unknown`, flagged,
+never dropped. The team abbrevs align 33/33 with the trade data, so attribution is complete.
+
+**Honesty (also in the UI):** the GM is the decision-maker **of record**, not the sole one (AGMs,
+ownership, cap, POHO all shape a deal); tenure dates are curated and approximate near handovers. This is
+the same family of caveat as "a retrospective on outcomes, not a grade of the decision at the time."
+
+## Reading the board (the balance bar)
+
+Each trade is a balance bar over a fixed ±`TRADE_BOARD.WAR_DOMAIN` (12 WAR) domain. The tick sits at the
+signed margin (the winning side's net received minus the losing side's); the shaded rectangle is the
+margin's uncertainty band. The verdict is computed from the margin against the band:
+- **too close** when the band straddles zero (`margin − band_hw ≤ 0 ≤ margin + band_hw`) — rendered
+  neutral, never a team fill, because the trade is even *within the margin we can measure*;
+- **decisive** when `|margin| − band_hw ≥ TRADE_BOARD.DECISIVE_WAR` (2.0);
+- **lean** in between.
+An **incomplete** trade (realized window not finished) is dashed, dimmed, sorted last, and excluded by
+default — its bar reads "still maturing — through year k of 5" instead of a verdict. Unmatched players
+widen the band (they do not count as zero), so a missing match can only soften a verdict, never flip it.
+
+## Entity surfaces
+
+- **Value map** (`/traders/value-map?kind=team|gm`): one bubble per entity, value given up (x) vs gained
+  (y), a 45° break-even diagonal, bubble colored by team and sized by trade volume. Above the diagonal is
+  a net winner.
+- **Dossier** (`/traders/{kind}/{id}/dossier`): a team or GM's verdict header (net WAR ± band, record),
+  a **cumulative-net timeline banded by regime** — by attributed GM for a team, by franchise for a GM, so
+  a regime change and any slope reversal are visible — then best/worst deals and the full deal list. A GM
+  who changed teams shows one continuous record across stints.
+
+## Archetype taggability (the Patterns explorer)
+
+`/trades/archetypes` aggregates by **only the archetypes the data can tag cleanly**: `player_for_picks`
+(one side ≥ `ARCHETYPE_SHARE` = 70% of received value from players, the other from picks),
+`player_for_player`, `picks_for_picks`, `blockbuster` (≥ `BLOCKBUSTER_WAR` = 8 WAR moved), and
+`three_team`. **Rental and salary-dump archetypes are deliberately NOT exposed** — they require
+contract-expiry-at-trade-time and cap context the trades CSV does not carry. Inventing them would be
+faking a tag, so they are omitted, not guessed.

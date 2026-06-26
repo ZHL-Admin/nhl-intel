@@ -245,6 +245,8 @@ def _to_board_item(t: dict) -> dict:
             "gm_id": s["gm_id"], "gm_name": s["gm_name"], "gm_transition": s["gm_transition"],
             "slot_war_received": s["slot_war_received"],
             "actual_war_received": (s["actual_war_received"] if t["actual_ok"] else None),
+            "net_war_slot": round(s["net_slot"], 2),
+            "net_war_actual": (round(s["net_actual"], 2) if t["actual_ok"] else None),
             "assets": s["assets"],
         } for s in t["sides"]],
         "margin_slot": t["margin_slot"], "band_hw_slot": t["band_hw_slot"],
@@ -371,6 +373,7 @@ def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
                          "trade_id": t["trade_id"], "regime_key": regime})
     ranked = sorted(rows, key=lambda x: float(x[1][net_k] or 0.0), reverse=True)
     deal_ids = [t["trade_id"] for _, _, t in ranked]
+    deal_items = [_to_board_item(t) for _, _, t in ranked]
     tenures = (_gm_tenure_rows(entity_id) if kind == "gm"
                else [{"team_abbrev": entity_id, "start_date": rows[0][2]["date"],
                       "end_date": None, "title": None}])
@@ -379,7 +382,7 @@ def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
         "net_war": round(net, 1), "net_band_hw": round(var ** 0.5, 1), "trade_count": len(rows),
         "record": record, "timeline": timeline,
         "best": deal_ids[:2], "worst": deal_ids[-2:][::-1] if len(deal_ids) > 1 else [],
-        "deals": deal_ids, "caveat": CAVEAT,
+        "deals": deal_ids, "deal_items": deal_items, "caveat": CAVEAT,
     }
 
 

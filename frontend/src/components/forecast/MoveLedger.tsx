@@ -10,7 +10,7 @@ function initials(name: string | null | undefined): string {
   return ((p[0]?.[0] ?? '') + (p[p.length - 1]?.[0] ?? '')).toUpperCase()
 }
 
-function MoveRow({ m, dir, fitNote }: { m: RosterMove; dir: 'in' | 'out'; fitNote?: string | null }) {
+function MoveRow({ m, dir }: { m: RosterMove; dir: 'in' | 'out'; fitNote?: string | null }) {
   const v = m.delta_contribution
   const lo = v - m.war_sd
   const hi = v + m.war_sd
@@ -27,22 +27,17 @@ function MoveRow({ m, dir, fitNote }: { m: RosterMove; dir: 'in' | 'out'; fitNot
         <UncertaintyBand value={v} lo={lo} hi={hi} domainMin={WAR_DOMAIN[0]} domainMax={WAR_DOMAIN[1]} />
         <span className="mrow__bandtext mono">{fmtBand(lo, hi, 1)}</span>
       </span>
-      {fitNote && <p className="mrow__fit">{fitNote}</p>}
     </div>
   )
 }
 
 /** §02 — OUT and IN columns with a full-width net row. The per-row value is delta_contribution and the
  * columns reconcile to net_delta_war. The team style note attaches once, to the arrival it names. */
-export default function MoveLedger({ moves, styleNote, netWar, netGoals }: {
+export default function MoveLedger({ moves, netWar, netGoals }: {
   moves: RosterMove[]; styleNote?: string | null; netWar: number; netGoals: number
 }) {
   const ins = moves.filter((m) => m.move_type === 'arrival')
   const outs = moves.filter((m) => m.move_type === 'departure')
-  // The style note (one per team, about the biggest arrival) attaches to the arrival it names.
-  const fitTargetId = styleNote
-    ? (ins.find((m) => m.name && styleNote.includes(m.name)) ?? ins[0])?.player_id
-    : null
 
   return (
     <div className="mledger">
@@ -57,8 +52,7 @@ export default function MoveLedger({ moves, styleNote, netWar, netGoals }: {
           <div className="mledger__coltag mledger__coltag--in">IN <span className="mono">{ins.length}</span></div>
           {ins.length === 0 && <p className="mledger__none">No arrivals logged.</p>}
           {ins.map((m, i) => (
-            <MoveRow key={`${m.player_id}-${i}`} m={m} dir="in"
-              fitNote={m.player_id === fitTargetId ? styleNote : null} />
+            <MoveRow key={`${m.player_id}-${i}`} m={m} dir="in" />
           ))}
         </div>
       </div>

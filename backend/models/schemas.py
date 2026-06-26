@@ -2211,6 +2211,8 @@ class TradeBoardSide(BaseModel):
     gm_transition: bool = False
     slot_war_received: float
     actual_war_received: Optional[float] = None
+    net_war_slot: float = 0.0
+    net_war_actual: Optional[float] = None
     assets: List[TradeBoardAsset] = []
 
 
@@ -2274,6 +2276,7 @@ class TraderDossier(BaseModel):
     best: List[str]
     worst: List[str]
     deals: List[str]
+    deal_items: List[TradeBoardItem] = []
     caveat: str
 
 
