@@ -128,7 +128,7 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
         <div className="tbl-ledger">
           {sides.map((s) => (
             <div key={s.team_abbrev} className="tbl-ledger__col">
-              <div className="tbl-ledger__head">{s.team_abbrev} got <span className="tbl-muted">(slot · actual)</span></div>
+              <div className="tbl-ledger__head"><span>{s.team_abbrev} got</span><span className="tbl-muted">slot · actual</span></div>
               {s.assets.length ? s.assets.map((a, i) => <AssetLine key={i} a={a} />)
                 : <div className="tbl-muted">—</div>}
             </div>

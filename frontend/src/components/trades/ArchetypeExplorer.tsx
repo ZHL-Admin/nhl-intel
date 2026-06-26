@@ -47,7 +47,7 @@ function Exemplars({ a, lens }: { a: ArchetypeAgg; lens: 'slot' | 'actual' }) {
         return (
           <div key={k}>
             <div className="arch-stat__l" style={{ marginBottom: 'var(--space-2)' }}>{label}</div>
-            {t ? <TradeBalanceCard trade={t} lens={lens} /> : <SkeletonLoader height={120} />}
+            {t ? <TradeBalanceCard trade={t} lens={lens} defaultOpen /> : <SkeletonLoader height={120} />}
           </div>
         )
       })}
