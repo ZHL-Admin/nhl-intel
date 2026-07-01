@@ -78,9 +78,9 @@ sources:
 
       - name: player_archetypes
         description: >
-          Player archetypes (Phase 4.2; models_ml/fit_archetypes.py): per (player_id,
+          Player archetypes (Phase 4.2; models_ml/fit_archetypes_v2.py): per (player_id,
           season) soft archetype memberships from per-position Gaussian mixtures. Names are
-          hand-assigned (config.ARCHETYPE_NAMES) from the labeling report.
+          hand-assigned (config.ARCHETYPE_NAMES_V2) from the labeling report.
 
       - name: roster_forecast
         description: >
