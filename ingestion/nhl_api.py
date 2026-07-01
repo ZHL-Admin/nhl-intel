@@ -336,7 +336,7 @@ def get_roster_for_season8(team_abbrev: str, season8: str | int) -> dict:
     objects), sweaterNumber, positionCode, shootsCatches, height/weight, birth fields.
     There is NO team field on the player object — affiliation is implied by the per-team
     endpoint, so callers tag rows with the team_abbrev they requested. Shape verified via
-    scripts/smoke_ingest_roster.py against real output (see scripts/ROSTER_FINDINGS.md).
+    archive/scripts/smoke_ingest_roster.py against real output (see archive/scripts/ROSTER_FINDINGS.md).
     """
     url = f"{BASE_URL}/v1/roster/{team_abbrev}/{season8}"
     response = httpx.get(url, timeout=30.0)

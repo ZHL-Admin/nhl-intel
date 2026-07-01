@@ -381,7 +381,7 @@ GOALIE_GAR_CONFIG = {
     # conditional league mean in proportion to MEASURED reliability — the same regularization logic
     # already applied to low-sample skaters (RAPM ridge, player-finishing shrinkage), extended to
     # goalies. reliability(shots) = shots / (shots + k); k is the shots at which the rate is 50%
-    # signal. MEASURED per danger tier by method of moments in models_ml/measure_goalie_reliability.py
+    # signal. MEASURED per danger tier by method of moments in archive/models_ml/measure_goalie_reliability.py
     # (single-season rows 2021-22..2025-26) — NOT hand-tuned. 'ld' showed var_true <= 0 (no reliable
     # talent on routine low-danger shots — goalies don't repeatably differ there), so it is set to a
     # large k => reliability ~ 0 => low-danger value fully regressed to average. Re-run that script
@@ -487,6 +487,69 @@ ROSTER_FORECAST = {
     # GOALS_PER_WIN restated for a self-contained block; asserted == GAR_CONFIG at import so a
     # WAR delta converts to goals on the SAME scale the team rating uses (principle 2: fail loud).
     "GOALS_PER_WIN": 6.0,
+
+    # Rating -> projected 82-game standings points: P = intercept + slope*rating, clamped to
+    # [0, ceiling]. The rating is expected goal differential per game (league mean ~0), so the
+    # intercept is league-average points and the slope is points per goal/game of differential.
+    # Empirical OLS of final team_ratings.total_rating vs deserved_standings.actual_points
+    # (see models_ml/validate_roster_forecast.py, which recomputes these). The slope runs above the
+    # naive 2-points-per-win first principle (~27) because OT/SO award a third point and the
+    # opponent-adjusted rating is compressed vs raw goal differential. ceiling = 82 games * 2.
+    "FORECAST_POINTS": {"intercept": 91.5, "slope": 35.8, "ceiling": 164},
+
+    # ── Roster Builder ABSOLUTE rating (the offseason tool does NOT need these) ──────────────────
+    # The offseason forecast trusts a team's MEASURED rating for its returning core and only adjusts
+    # for moves. The Roster Builder grades an ARBITRARY user-built roster with no trustworthy base, so
+    # it derives an absolute rating from the roster's OWN projected value (see absolute_rating() in
+    # project_roster_forecast):
+    #   rating_abs = (total_iced_lineup_WAR - LEAGUE_AVG_LINEUP_WAR) * WAR_TO_RATING (+ chemistry)
+    # Calibrated by models_ml/calibrate_roster_builder.py on the two completed forward transitions
+    # (2023-24->2024-25, 2024-25->2025-26 opening rosters, 63 team-seasons), icing the lineup
+    # POSITION-AWARE (the same C/L/R + handedness assignment the tool ices — a pure top-by-WAR lineup
+    # overstates the total since you cannot ice 7 centers):
+    #   * LEAGUE_AVG_LINEUP_WAR = the league-mean projected iced-lineup WAR, so an average roster maps
+    #     to rating_abs ~= 0 (~= 91.5 league-average points).
+    #   * WAR_TO_RATING = OLS slope of MEASURED team rating on centered total lineup WAR. It is ~half
+    #     the move-scale GOALS_PER_WIN/GAMES (6/82 = 0.073): summed lineup WAR maps to team goal-diff
+    #     at a COMPRESSED rate (shared ice, opponent-adjusted regression, a replacement baseline that
+    #     does not stack linearly), so the naive 6/82 overstates spread. Fitting it against the
+    #     de-lucked measured rating keeps the rating->points step the separate, already-validated map.
+    # VALIDATION (reported by the calibration script): REALIZED roster WAR tracks the measured rating
+    # at corr ~0.82 (the value system reconciles), but the season-AHEAD projection carries real
+    # forecasting uncertainty (projected corr ~0.44; projected vs actual points MAE ~10.5, of which
+    # ~5.2 is irreducible in-season luck). The Roster Builder is therefore DELTA-led (the change vs the
+    # real roster, where shared players cancel and only relative value matters) with absolute points a
+    # secondary, BANDED read — never presented as a measured rating. See docs/methodology/roster-builder.md.
+    # Recalibrated in Handoff 12 for the component projection model (project_roster_player), whose WAR
+    # scale differs from the old project_skater_war these were first fit on. Roster-Builder-only
+    # (absolute_rating is not used by the offseason tool).
+    "LEAGUE_AVG_LINEUP_WAR": 11.28,   # league-mean projected POSITION-VALID iced-lineup WAR (above replacement)
+    "WAR_TO_RATING": 0.03353,         # goals/game of team rating per 1 WAR of centered lineup value
+
+    # Roster Builder band calibration (Handoff 12 — used ONLY by roster-evaluate, not the offseason
+    # tool). The ABSOLUTE points band is sqrt((kappa * talent_quad_pts)^2 + luck_floor^2): the iced
+    # players' calibrated projection sds quadratured to points, scaled by kappa, plus the irreducible
+    # 82-game luck floor. kappa>1 because the season-ahead team error is dominated by a COMMON,
+    # systematic component that does NOT shrink with sqrt(N) the way independent quadrature assumes —
+    # fit so a 1-sigma absolute band covers ~68% of team-seasons (models_ml/project_roster_player.py).
+    # The DELTA band uses RAW quadrature of only the CHANGED players (no kappa, no luck floor): that
+    # common error cancels between two rosters, and a talent comparison is not a realized-season bet.
+    "ROSTER_BUILDER_BAND_KAPPA": 3.50,   # (legacy) bottom-up absolute-band team multiplier
+    "SEASON_LUCK_FLOOR_PTS": 6.15,       # irreducible 82-game outcome SD (Handoff-11 diagnostic)
+
+    # Hybrid base+delta (Handoff 13 — Roster Builder only). projected_rating = R_bottomup(built) +
+    # w*(R_measured - R_bottomup(actual)): anchor on the team's measured predictive rating, use player
+    # projections only for the change, and fade to pure bottom-up as the roster turns over (w = retained
+    # value share). R_measured = a 2-year recency-weighted, league-mean-regressed measured rating (beats
+    # single-season and the bottom-up reconstruction at predicting next-year strength). Bands: the
+    # absolute band interpolates the anchor/bottom-up strength error by w, in quadrature with the luck
+    # floor (~68% coverage); the delta band is the changed players' projection sds plus a small
+    # offset-fade term (no luck floor — a talent comparison). See docs/methodology/roster-projection.md.
+    "ROSTER_BUILDER_BASE_W": [1.0, 0.5],   # R_measured recency weights (2-year)
+    "ROSTER_BUILDER_BASE_K": 1.0,          # R_measured regression-to-league-mean strength
+    "ROSTER_BUILDER_STRENGTH_ANCHOR": 11.45,  # anchor strength-prediction SD, points (w=1 band term)
+    "ROSTER_BUILDER_STRENGTH_BU": 11.34,      # bottom-up strength SD, points (w=0 band term)
+    "ROSTER_BUILDER_DELTA_OFFSET_W": 0.30,    # offset-fade uncertainty fraction in the delta band
 
     # Replacement-level fill for an unfilled lineup slot, or a vacated slot with no arrival. WAR is
     # value ABOVE replacement, so a replacement player is 0.0 WAR BY DEFINITION — but the slot still
@@ -776,11 +839,18 @@ DRAFT_VALUE = {
 # was different). Two lenses per asset; netted per team per trade, bands in quadrature (reusing the
 # trade engine's propagation). All constants here so nothing is hardcoded in the job.
 TRADE_OUTCOMES = {
-    "MODEL_VERSION": "trade_outcomes_v1",
-    # The one knob: how many seasons of realized value to count after a trade (player lens) / after a
-    # pick's draft (actual-player lens). 5 balances "enough career to judge" against censoring recent
-    # trades. State it in the doc.
+    "MODEL_VERSION": "trade_outcomes_v2",   # v2: incomplete trades graded on realized-to-date + widened band
+    # The one knob: how many seasons of realized value to count after a trade (player tenure cap). 5
+    # balances "enough career to judge" against the recency of new trades. Distinct from the Draft Value
+    # tool's separate fixed 7-year curve window (EVAL_WINDOW_YEARS) — do not conflate. State it in the doc.
     "REALIZED_HORIZON_YEARS": 5,
+    # Maturity-band widening: a trade whose horizon has not fully elapsed is still GRADED on its
+    # realized-to-date value (never zeroed, never projected), but its net band is widened to reflect the
+    # value still to accrue. The added uncertainty (in quadrature) is MATURITY_BAND_SCALE * |net| *
+    # (REALIZED_HORIZON_YEARS - years_elapsed) / REALIZED_HORIZON_YEARS, so a trade one season in is far
+    # wider than one four seasons in, and a settled trade is unchanged. This is honest uncertainty on
+    # what HAS happened, not a forecast of what will.
+    "MATURITY_BAND_SCALE": 1.0,
     "PICKS_PER_ROUND": 32,         # round midpoint overall = (round-1)*32 + 16 (mirror FUTURES)
     "DOLLARS_PER_WAR": 3_000_000,  # for dollar display alongside WAR (mirror FUTURES)
 }
@@ -789,11 +859,34 @@ TRADE_OUTCOMES = {
 # Read-time composition over nhl_models.trade_outcomes + stg_gm_tenures; all thresholds here so no
 # literals scatter into SQL/TSX. WAR throughout (same units as mart_tradeable_assets).
 TRADE_BOARD = {
-    "DECISIVE_WAR": 2.0,       # |margin| - band_hw >= this => a decisive win (else lean / too-close)
+    # Three-tier verdict (realized-only): decisive when |margin| - band_hw >= DECISIVE_WAR (the only
+    # claim the band must clear); "even" when |margin| < EDGE_FLOOR_WAR (the realized value came out
+    # level); edge otherwise (the sign is known and exceeds the floor but doesn't clear the band — a
+    # directional-but-uncertain call). NOTE: the third tier was renamed too_close -> even (label only;
+    # the EDGE_FLOOR_WAR threshold and all band/verdict math are unchanged).
+    "DECISIVE_WAR": 2.0,       # |margin| - band_hw >= this => a decisive win
+    "EDGE_FLOOR_WAR": 0.5,     # |margin| < this => "even" (realized value came out level)
     "ARCHETYPE_SHARE": 0.70,   # a side is "player-" or "pick-"heavy at >= this share of received value
     "BLOCKBUSTER_WAR": 8.0,    # total WAR moved across the trade >= this => blockbuster
     "WAR_DOMAIN": 12.0,        # balance-bar x-axis domain (+/-), front end mirrors this
     "REALIZED_HORIZON_YEARS": 5,   # mirrors TRADE_OUTCOMES; for "through year k of 5" labels
+    # Confidence-aware entity ranking (Teams & GMs tab). The point-estimate net records are mostly inside
+    # band noise, so the ranked list is SHRUNK rather than a false 1..N ordering. band_hw is the native
+    # uncertainty unit (a mixed empirical-pick-p10/p90 + player-sd interval) — NO normal-interval factor.
+    #   z_i      = net_i / band_hw_i                                  (standardized distance from even)
+    #   mu       = mean(net_i) for this kind (~0)
+    #   tau2     = max(0, sample_var(net_i) - mean(band_hw_i^2))      (estimated true between-entity var)
+    #   B_i      = tau2 / (tau2 + band_hw_i^2)                        (shrinkage weight in [0,1])
+    #   rank_i   = mu + B_i*(net_i - mu)                              (shrunk record = default sort key)
+    # method "eb" (default) uses the above; "net_minus_k" uses sign(net)*max(0,|net|-K*band_hw).
+    "RANKING": {
+        "method": "eb",                 # "eb" | "net_minus_k"
+        "uncertainty_unit": "band_hw",
+        "K": 1.0,                        # used only by net_minus_k
+        "MIN_SETTLED": 5,               # below this -> low_n flag (muted in UI), never dropped
+        "CLEAR_Z": 2.0,                 # |z| >= this => separation "clear"
+        "LEANS_Z": 1.0,                 # |z| >= this => "leans"; else "noise"
+    },
 }
 GM_LAYER = {
     "TRANSITION_WINDOW_DAYS": 14,   # trade within this many days of a tenure boundary => attribution flagged

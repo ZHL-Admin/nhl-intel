@@ -126,7 +126,7 @@ def compute(agg: pd.DataFrame, window_label: str) -> pd.DataFrame:
 
     # RELIABILITY SHRINKAGE (empirical Bayes). Goaltending is low-signal, so the honest point
     # estimate regresses the raw value toward the workload-conditional league mean in proportion to
-    # MEASURED reliability(shots) = shots / (shots + k) (k per tier, measure_goalie_reliability.py).
+    # MEASURED reliability(shots) = shots / (shots + k) (k per tier, archive/models_ml/measure_goalie_reliability.py).
     # Per tier: neutral_b = (league above-replacement rate in tier b) × this goalie's tier shots —
     # i.e. what an average goalie produces on this workload; we keep volume credit and only regress
     # the rate. Low-workload / low-signal tiers (esp. low-danger, k→∞) pull hard to neutral; high-
