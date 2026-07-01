@@ -584,7 +584,7 @@ with DAG(
         env=_dbt_env,
     )
 
-    # Archetypes (Phase 4.2): loads the committed, canonical GMM (archetypes_v1.joblib) and
+    # Archetypes (Phase 4.2): loads the committed, canonical GMM (archetypes_v2.joblib) and
     # writes soft memberships — deterministic, no refit. Single-threaded BLAS for safety.
     write_archetypes = BashOperator(
         task_id="write_archetypes",
