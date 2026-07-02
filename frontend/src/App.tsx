@@ -16,6 +16,7 @@ const LineupLab = lazy(() => import('./pages/LineupLab'))
 const TradeFit = lazy(() => import('./pages/TradeFit'))
 const TradeBuilder = lazy(() => import('./pages/TradeBuilder'))
 const ContractGrader = lazy(() => import('./pages/ContractGrader'))
+const RosterBuilder = lazy(() => import('./pages/RosterBuilder'))
 const DraftValue = lazy(() => import('./pages/DraftValue'))
 const TradeOutcomes = lazy(() => import('./pages/TradeOutcomes'))
 // Learn section (lazy): the archetype explainer is the first page.
@@ -43,6 +44,7 @@ function App() {
             <Route path="/tools/trade-fit" element={<TradeFit />} />
             <Route path="/tools/trade-builder" element={<TradeBuilder />} />
             <Route path="/tools/contract-grader" element={<ContractGrader />} />
+            <Route path="/tools/roster-builder" element={<RosterBuilder />} />
             <Route path="/tools/draft-value" element={<DraftValue />} />
             <Route path="/tools/trade-outcomes" element={<TradeOutcomes />} />
             <Route path="/tools/trade-outcomes/trade/:tradeId" element={<TradeOutcomes />} />

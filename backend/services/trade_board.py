@@ -11,6 +11,7 @@ of the decision at the time; GM is the decision-maker of record, not the sole on
 from __future__ import annotations
 
 import json
+import statistics
 from datetime import date, datetime
 from functools import lru_cache
 
@@ -101,11 +102,16 @@ def _timing_bucket(d: date) -> str:
 
 
 def _verdict(margin: float, band_hw: float) -> str:
-    if (margin - band_hw) <= 0 <= (margin + band_hw):
-        return "too_close"
+    """Three-tier, realized-only, evaluated in this order (margin = realized net, band_hw = its half-width):
+      decisive  — |margin| - band_hw >= DECISIVE_WAR (a confident call; the only tier the band must clear)
+      even      — |margin| < EDGE_FLOOR_WAR (the realized value came out level)
+      edge      — otherwise (the sign of the realized margin is known and exceeds the floor, but it does not
+                  clear the band; a directional-but-uncertain call)."""
     if abs(margin) - band_hw >= TB["DECISIVE_WAR"]:
         return "decisive"
-    return "lean"
+    if abs(margin) < TB["EDGE_FLOOR_WAR"]:
+        return "even"
+    return "edge"
 
 
 def _side_kind(assets: list) -> str:
@@ -131,12 +137,11 @@ def _latest_start_year() -> int:
 
 @lru_cache(maxsize=1)
 def build_all() -> list:
-    """One composed object per trade (both lenses, GM-attributed). Cached for the process."""
+    """One composed object per trade (value-based slot net, GM-attributed). Cached for the process."""
     rows = bq_service.query(f"""
         SELECT trade_id, season, trade_date, team, team_count,
                net_war_slot, net_war_slot_low, net_war_slot_high,
-               net_war_actual, net_war_actual_low, net_war_actual_high,
-               has_pick, has_unresolved, actual_censored, horizon_incomplete, confidence,
+               has_pick, has_unresolved, horizon_incomplete, window_progress, confidence,
                received_ledger, sent_ledger
         FROM {bq_service.get_models_table_id('trade_outcomes')}
     """)
@@ -153,29 +158,19 @@ def build_all() -> list:
         tdate = _d(meta["trade_date"])
         sides = []
         total_war = 0.0
-        any_actual_unresolved = False
         for r in srows:
             recv = json.loads(r["received_ledger"]) if r["received_ledger"] else []
-            sent = json.loads(r["sent_ledger"]) if r["sent_ledger"] else []
             assets = [{
                 "asset_type": e["type"], "label": e["asset"],
                 "war_slot": float(e.get("slot_war") or 0.0),
-                "war_actual": (None if (e.get("actual_unresolved") or e.get("unresolved"))
-                               else float(e.get("actual_war") or 0.0)),
-                "resolved": not (e.get("actual_unresolved") or e.get("unresolved")),
                 "player_id": e.get("player_id"),
-                "became_player_id": e.get("became_player_id"),
-                "became_player_name": e.get("became_player_name"),
                 "conditional": bool(e.get("conditional")),
+                "unvaluable": bool(e.get("unvaluable")),
                 "retention": bool(e.get("retention")),
                 "retained_pct": e.get("retained_pct"),
             } for e in recv]
             recv_slot = sum(a["war_slot"] for a in assets)
-            recv_actual = sum((a["war_actual"] or 0.0) for a in assets)
-            sent_slot = sum(float(e.get("slot_war") or 0.0) for e in sent)
-            sent_actual = sum(float(e.get("actual_war") or 0.0) for e in sent)
-            side_unresolved = any(e.get("actual_unresolved") or e.get("unresolved") for e in recv + sent)
-            any_actual_unresolved = any_actual_unresolved or side_unresolved
+            sent_slot = sum(float(e.get("slot_war") or 0.0) for e in json.loads(r["sent_ledger"] or "[]"))
             gm_id, gm_name, transition = _attribute(r["team"], tdate)
             total_war += recv_slot
             sides.append({
@@ -183,29 +178,19 @@ def build_all() -> list:
                 "team_abbrev": r["team"],
                 "gm_id": gm_id, "gm_name": gm_name, "gm_transition": transition,
                 "slot_war_received": round(recv_slot, 2),
-                "actual_war_received": round(recv_actual, 2),
-                "sent_slot": sent_slot, "sent_actual": sent_actual,
+                "sent_slot": sent_slot,
                 "net_slot": float(r["net_war_slot"] or 0.0),
                 "net_slot_hw": _hw(r["net_war_slot_low"], r["net_war_slot_high"]),
-                "net_actual": float(r["net_war_actual"] or 0.0),
-                "net_actual_hw": _hw(r["net_war_actual_low"], r["net_war_actual_high"]),
                 "kind": _side_kind(assets),
                 "assets": assets,
             })
 
-        # winner / margin under each lens = the side with the highest net
+        # winner / margin = the side with the highest net (single value-based verdict)
         win_slot = max(range(len(sides)), key=lambda i: sides[i]["net_slot"])
         margin_slot = sides[win_slot]["net_slot"]
         band_hw_slot = sides[win_slot]["net_slot_hw"]
         verdict = _verdict(margin_slot, band_hw_slot)
-        winner = sides[win_slot] if verdict != "too_close" else None
-
-        actual_ok = not any_actual_unresolved
-        margin_actual = band_hw_actual = None
-        if actual_ok:
-            wa = max(range(len(sides)), key=lambda i: sides[i]["net_actual"])
-            margin_actual = sides[wa]["net_actual"]
-            band_hw_actual = sides[wa]["net_actual_hw"]
+        winner = sides[win_slot] if verdict != "even" else None
 
         # archetype (single primary tag) + the is_player_for_picks flag (independent)
         kinds = [s["kind"] for s in sides]
@@ -223,8 +208,11 @@ def build_all() -> list:
         else:
             archetype = "player_for_player"   # mixed fallback (a player is involved on a side)
 
-        realized_year = max(0, min(TB["REALIZED_HORIZON_YEARS"],
-                                   latest - int(meta["season"][:4]) + 1))
+        # window_progress (seasons of the horizon observed) is written by the model; realized_year is the
+        # same quantity kept for back-compat. Both equal k in "still maturing — year k of H".
+        wp = meta.get("window_progress")
+        realized_year = (int(wp) if wp is not None
+                         else max(0, min(TB["REALIZED_HORIZON_YEARS"], latest - int(meta["season"][:4]) + 1)))
         conf_rank = {"low": 0, "medium": 1, "high": 2}
         confidence = min((r["confidence"] for r in srows), key=lambda c: conf_rank.get(c, 0))
 
@@ -232,19 +220,19 @@ def build_all() -> list:
             "trade_id": trade_id, "date": str(tdate), "season": meta["season"],
             "team_count": int(meta["team_count"]), "sides": sides,
             "margin_slot": round(margin_slot, 2), "band_hw_slot": round(band_hw_slot, 2),
-            "margin_actual": (round(margin_actual, 2) if margin_actual is not None else None),
-            "band_hw_actual": (round(band_hw_actual, 2) if band_hw_actual is not None else None),
             "winner_team_id": winner["team_id"] if winner else None,
             "winner_gm_id": winner["gm_id"] if winner else None,
             "winner_idx_slot": win_slot if winner else None,
             "verdict": verdict,
-            "incomplete": bool(meta["horizon_incomplete"]),
+            # a trade is still maturing if EITHER side's window is unfinished (one side can be settled
+            # — e.g. picks only — while the other holds a player still accruing).
+            "incomplete": any(bool(r["horizon_incomplete"]) for r in srows),
             "realized_year": realized_year,
+            "window_progress": realized_year,
             "is_player_for_picks": is_pfp,
             "archetype": archetype,
             "confidence": confidence,
             "total_war": round(total_war, 2),
-            "actual_ok": actual_ok,
             "timing": _timing_bucket(tdate),
         })
     return out
@@ -260,15 +248,13 @@ def _to_board_item(t: dict) -> dict:
             "team_id": s["team_id"], "team_abbrev": s["team_abbrev"],
             "gm_id": s["gm_id"], "gm_name": s["gm_name"], "gm_transition": s["gm_transition"],
             "slot_war_received": s["slot_war_received"],
-            "actual_war_received": (s["actual_war_received"] if t["actual_ok"] else None),
             "net_war_slot": round(s["net_slot"], 2),
-            "net_war_actual": (round(s["net_actual"], 2) if t["actual_ok"] else None),
             "assets": s["assets"],
         } for s in t["sides"]],
         "margin_slot": t["margin_slot"], "band_hw_slot": t["band_hw_slot"],
-        "margin_actual": t["margin_actual"], "band_hw_actual": t["band_hw_actual"],
         "winner_team_id": t["winner_team_id"], "winner_gm_id": t["winner_gm_id"],
         "verdict": t["verdict"], "incomplete": t["incomplete"], "realized_year": t["realized_year"],
+        "window_progress": t["window_progress"],
         "is_player_for_picks": t["is_player_for_picks"], "archetype": t["archetype"],
         "confidence": t["confidence"],
     }
@@ -278,20 +264,22 @@ def _season_ok(t: dict, sf: str | None, st: str | None) -> bool:
     return (not sf or t["season"] >= sf) and (not st or t["season"] <= st)
 
 
-def board(sort="lopsided", lens="slot", archetype=None, include_incomplete=False,
-          season_from=None, season_to=None, limit=40, offset=0) -> list:
+def board(sort="lopsided", archetype=None, season_from=None, season_to=None, limit=40, offset=0) -> list:
+    """The trade list. Shows EVERYTHING — settled and still-maturing — with no toggle; maturing trades
+    carry their own inline callout (dashed bar, widened band, "still maturing" tag) and always sort last
+    so they never interleave with settled verdicts."""
     items = [t for t in build_all()
-             if (include_incomplete or not t["incomplete"])
-             and _season_ok(t, season_from, season_to)
+             if _season_ok(t, season_from, season_to)
              and (not archetype or t["archetype"] == archetype or
                   (archetype == "player_for_picks" and t["is_player_for_picks"]))]
-    m = "margin_actual" if lens == "actual" else "margin_slot"
     if sort == "recent":
         items.sort(key=lambda t: t["date"], reverse=True)
     elif sort == "closest":
-        items.sort(key=lambda t: (t.get(m) if t.get(m) is not None else 1e9))
+        items.sort(key=lambda t: t["margin_slot"])
     else:  # lopsided
-        items.sort(key=lambda t: (t.get(m) if t.get(m) is not None else -1e9), reverse=True)
+        items.sort(key=lambda t: t["margin_slot"], reverse=True)
+    # maturing trades always sort last (stable sort preserves the per-bucket order above).
+    items.sort(key=lambda t: t["incomplete"])
     return [_to_board_item(t) for t in items[offset:offset + limit]]
 
 
@@ -304,17 +292,63 @@ def get_trade(trade_id: str) -> dict | None:
 
 # --------------------------------------------------------------------------- value map / dossier
 def _record_bucket(side_net: float, verdict: str, is_winner: bool) -> str:
-    if verdict == "too_close":
-        return "too_close"
+    if verdict == "even":
+        return "even"
     if is_winner:
-        return "decisive_wins" if verdict == "decisive" else "leans"
+        return "decisive_wins" if verdict == "decisive" else "edge"
     return "losses"
 
 
-def _entity_sides(kind: str, lens: str, sf, st):
-    """Yield (entity_id, label, color_abbrev, side, trade) for each entity-side under the filter."""
+def _apply_ranking(entities: list) -> dict:
+    """Add confidence-aware ranking fields to a list of entity dicts (one kind), IN PLACE: rank_value
+    (the shrunk record — the default sort key), z (standardized distance from even, net/band_hw),
+    separation ("clear"|"leans"|"noise"), and low_n. band_hw is the native uncertainty unit — no
+    normal-interval factor. Returns {mu, tau2, var, mean_b2, b_range} for reporting/telemetry.
+
+    The point-estimate spread is mostly noise, so empirical-Bayes shrinks records toward the league mean:
+    tau2 (estimated true between-entity variance) is small relative to band_hw^2, B_i is small, and the
+    middle of the pack collapses toward mu (~0) while genuinely separated entities keep more of their net.
+    """
+    cfg = TB.get("RANKING", {})
+    method = cfg.get("method", "eb")
+    min_settled = cfg.get("MIN_SETTLED", 5)
+    clear_z, leans_z = cfg.get("CLEAR_Z", 2.0), cfg.get("LEANS_Z", 1.0)
+    nets = [float(e["net_war"]) for e in entities]
+    bands = [float(e["net_band_hw"]) for e in entities]
+    n = len(nets)
+    mu = statistics.fmean(nets) if n else 0.0
+    var = statistics.variance(nets) if n > 1 else 0.0
+    mean_b2 = statistics.fmean([b * b for b in bands]) if n else 0.0
+    tau2 = max(0.0, var - mean_b2)        # method-of-moments true variance (clamped at 0 = "all noise")
+    b_lo, b_hi = 1.0, 0.0
+    for e in entities:
+        b = float(e["net_band_hw"]); net = float(e["net_war"])
+        z = net / b if b > 0 else 0.0
+        if method == "net_minus_k":
+            k = cfg.get("K", 1.0)
+            rv = (1.0 if net >= 0 else -1.0) * max(0.0, abs(net) - k * b)
+            B = None
+        else:                              # empirical-Bayes (default)
+            B = tau2 / (tau2 + b * b) if (tau2 + b * b) > 0 else 0.0
+            rv = mu + B * (net - mu)
+            b_lo, b_hi = min(b_lo, B), max(b_hi, B)
+        e["rank_value"] = round(rv, 2)
+        e["z"] = round(z, 2)
+        e["separation"] = "clear" if abs(z) >= clear_z else "leans" if abs(z) >= leans_z else "noise"
+        e["low_n"] = int(e.get("settled_count", 0)) < min_settled
+    return {"mu": round(mu, 3), "tau2": round(tau2, 3), "var": round(var, 3),
+            "mean_b2": round(mean_b2, 3), "b_range": (round(b_lo, 3), round(b_hi, 3)) if method == "eb" else None}
+
+
+def _entity_sides(kind: str, sf, st, include_incomplete: bool = False):
+    """Yield (entity_id, label, color_abbrev, side_idx, side, trade) for each entity-side under the
+    filter. Incomplete (still-maturing) trades are yielded only when include_incomplete is set; callers
+    that aggregate settled-by-default pass True and gate on t["incomplete"] themselves so they can still
+    count incomplete trades without letting them contribute to the net."""
     for t in build_all():
-        if t["incomplete"] or not _season_ok(t, sf, st):
+        if not _season_ok(t, sf, st):
+            continue
+        if t["incomplete"] and not include_incomplete:
             continue
         for i, s in enumerate(t["sides"]):
             if kind == "team":
@@ -325,33 +359,40 @@ def _entity_sides(kind: str, lens: str, sf, st):
                 yield s["gm_id"], (s["gm_name"] or s["gm_id"]), s["team_abbrev"], i, s, t
 
 
-def value_map(kind="team", lens="slot", season_from=None, season_to=None) -> list:
-    net_k = "net_actual" if lens == "actual" else "net_slot"
-    hw_k = "net_actual_hw" if lens == "actual" else "net_slot_hw"
-    sent_k = "sent_actual" if lens == "actual" else "sent_slot"
-    recv_k = "actual_war_received" if lens == "actual" else "slot_war_received"
+def value_map(kind="team", season_from=None, season_to=None) -> list:
+    """One bubble per entity. Nets/records are SETTLED-ONLY (a still-maturing trade never contributes as if
+    it were settled — preserves the player-still-accruing vs pick-already-full anti-bias). settled_count /
+    maturing_count are returned alongside so the denominator is explicit in the UI."""
     agg: dict = {}
-    for eid, label, color, idx, s, t in _entity_sides(kind, lens, season_from, season_to):
+    # walk every side (settled + maturing) so maturing trades can be COUNTED; only settled ones aggregate.
+    for eid, label, color, idx, s, t in _entity_sides(kind, season_from, season_to, include_incomplete=True):
         a = agg.setdefault(eid, {"kind": kind, "id": eid, "label": label,
                                  "team_abbrev_for_color": color, "given_up_war": 0.0, "gained_war": 0.0,
                                  "net_war": 0.0, "var": 0.0, "trade_count": 0,
-                                 "record": {"decisive_wins": 0, "leans": 0, "too_close": 0, "losses": 0},
+                                 "settled_count": 0, "maturing_count": 0,
+                                 "record": {"decisive_wins": 0, "edge": 0, "even": 0, "losses": 0},
                                  "_last": t["date"]})
-        a["given_up_war"] += float(s[sent_k] or 0.0)
-        a["gained_war"] += float(s[recv_k] or 0.0)
-        a["net_war"] += float(s[net_k] or 0.0)
-        a["var"] += float(s[hw_k] or 0.0) ** 2
-        a["trade_count"] += 1
         if t["date"] >= a["_last"]:               # GM bubble colored by most-recent stint's team
             a["_last"], a["team_abbrev_for_color"] = t["date"], color
+        if t["incomplete"]:
+            a["maturing_count"] += 1              # counted for the denominator, never in the net/record
+            continue
+        a["settled_count"] += 1
+        a["given_up_war"] += float(s["sent_slot"] or 0.0)
+        a["gained_war"] += float(s["slot_war_received"] or 0.0)
+        a["net_war"] += float(s["net_slot"] or 0.0)
+        a["var"] += float(s["net_slot_hw"] or 0.0) ** 2
+        a["trade_count"] += 1
         is_winner = (t["winner_idx_slot"] == idx)
         a["record"][_record_bucket(0, t["verdict"], is_winner)] += 1
     out = []
     for a in agg.values():
-        out.append({k: a[k] for k in ("kind", "id", "label", "team_abbrev_for_color", "trade_count")}
+        out.append({k: a[k] for k in ("kind", "id", "label", "team_abbrev_for_color", "trade_count",
+                                      "settled_count", "maturing_count")}
                    | {"given_up_war": round(a["given_up_war"], 1), "gained_war": round(a["gained_war"], 1),
                       "net_war": round(a["net_war"], 1), "net_band_hw": round(a["var"] ** 0.5, 1),
                       "record": a["record"]})
+    _apply_ranking(out)                   # adds rank_value / z / separation / low_n (confidence-aware)
     out.sort(key=lambda x: x["net_war"], reverse=True)
     return out
 
@@ -367,34 +408,50 @@ def _gm_tenure_rows(gm_id: str) -> list:
     return out
 
 
-def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
-    net_k = "net_actual" if lens == "actual" else "net_slot"
-    hw_k = "net_actual_hw" if lens == "actual" else "net_slot_hw"
-    rows = [(idx, s, t) for eid, label, color, idx, s, t in _entity_sides(kind, lens, None, None)
-            if eid == entity_id]
-    if not rows:
+def dossier(kind: str, entity_id: str) -> dict | None:
+    """A team or GM's full record. Net / record / partners and the cumulative TIMELINE LINE are
+    SETTLED-ONLY (preserves the maturing-trade anti-bias); the deal LIST shows EVERYTHING (settled +
+    maturing, the latter flagged), and the timeline plots all trades as points while the cumulative
+    advances only on settled ones. settled_count / maturing_count make the denominator explicit."""
+    all_rows = [(idx, s, t) for eid, label, color, idx, s, t
+                in _entity_sides(kind, None, None, include_incomplete=True) if eid == entity_id]
+    if not all_rows:
         return None
-    label = (rows[0][1]["team_abbrev"] if kind == "team"
-             else (rows[0][1]["gm_name"] or entity_id))
-    rows.sort(key=lambda x: x[2]["date"])
-    net = sum(float(s[net_k] or 0.0) for _, s, _ in rows)
-    var = sum(float(s[hw_k] or 0.0) ** 2 for _, s, _ in rows)
-    record = {"decisive_wins": 0, "leans": 0, "too_close": 0, "losses": 0}
-    timeline, cum = [], 0.0
-    for idx, s, t in rows:
-        cum += float(s[net_k] or 0.0)
+    all_rows.sort(key=lambda x: x[2]["date"])
+    settled_rows = [r for r in all_rows if not r[2]["incomplete"]]
+    settled_count = len(settled_rows)
+    maturing_count = len(all_rows) - settled_count
+    label = (all_rows[0][1]["team_abbrev"] if kind == "team"
+             else (all_rows[0][1]["gm_name"] or entity_id))
+
+    # rollups: net / band / record over SETTLED rows only
+    net = sum(float(s["net_slot"] or 0.0) for _, s, _ in settled_rows)
+    var = sum(float(s["net_slot_hw"] or 0.0) ** 2 for _, s, _ in settled_rows)
+    record = {"decisive_wins": 0, "edge": 0, "even": 0, "losses": 0}
+    for idx, s, t in settled_rows:
         record[_record_bucket(0, t["verdict"], t["winner_idx_slot"] == idx)] += 1
+
+    # timeline: plot ALL trades as points; the cumulative line advances only on settled trades, so a
+    # maturing point sits at the carried-forward cumulative and is flagged.
+    timeline, cum = [], 0.0
+    for idx, s, t in all_rows:
+        if not t["incomplete"]:
+            cum += float(s["net_slot"] or 0.0)
         regime = (s["gm_id"] or "unknown") if kind == "team" else s["team_abbrev"]
         timeline.append({"date": t["date"], "cumulative_net_war": round(cum, 1),
-                         "trade_id": t["trade_id"], "regime_key": regime})
-    ranked = sorted(rows, key=lambda x: float(x[1][net_k] or 0.0), reverse=True)
-    deal_ids = [t["trade_id"] for _, _, t in ranked]
-    deal_items = [_to_board_item(t) for _, _, t in ranked]
+                         "trade_id": t["trade_id"], "regime_key": regime, "incomplete": t["incomplete"]})
 
-    # matchup layer: this entity's net against each opposing TEAM (the other side(s) of each trade)
+    # deal list shows EVERYTHING (ranked by realized-to-date net); best/worst are SETTLED verdicts only.
+    ranked_all = sorted(all_rows, key=lambda x: float(x[1]["net_slot"] or 0.0), reverse=True)
+    deal_ids = [t["trade_id"] for _, _, t in ranked_all]
+    deal_items = [_to_board_item(t) for _, _, t in ranked_all]
+    ranked_settled = [t["trade_id"] for _, _, t in
+                      sorted(settled_rows, key=lambda x: float(x[1]["net_slot"] or 0.0), reverse=True)]
+
+    # matchup layer (settled only): this entity's net against each opposing TEAM
     pacc: dict = {}
-    for idx, s, t in rows:
-        net = float(s[net_k] or 0.0)
+    for idx, s, t in settled_rows:
+        net_side = float(s["net_slot"] or 0.0)
         for j, opp in enumerate(t["sides"]):
             if j == idx:
                 continue
@@ -402,20 +459,21 @@ def dossier(kind: str, entity_id: str, lens="slot") -> dict | None:
                                 {"opponent": opp["team_abbrev"], "kind": "team",
                                  "trade_count": 0, "net_war": 0.0, "var": 0.0})
             p["trade_count"] += 1
-            p["net_war"] += net
-            p["var"] += float(s[hw_k] or 0.0) ** 2
+            p["net_war"] += net_side
+            p["var"] += float(s["net_slot_hw"] or 0.0) ** 2
     partners = sorted(
         ({"opponent": p["opponent"], "kind": p["kind"], "trade_count": p["trade_count"],
           "net_war": round(p["net_war"], 1), "band_hw": round(p["var"] ** 0.5, 1)} for p in pacc.values()),
         key=lambda p: (-p["trade_count"], -abs(p["net_war"])))
     tenures = (_gm_tenure_rows(entity_id) if kind == "gm"
-               else [{"team_abbrev": entity_id, "start_date": rows[0][2]["date"],
+               else [{"team_abbrev": entity_id, "start_date": all_rows[0][2]["date"],
                       "end_date": None, "title": None}])
     return {
         "kind": kind, "id": entity_id, "label": label, "tenures": tenures,
-        "net_war": round(net, 1), "net_band_hw": round(var ** 0.5, 1), "trade_count": len(rows),
+        "net_war": round(net, 1), "net_band_hw": round(var ** 0.5, 1), "trade_count": settled_count,
+        "settled_count": settled_count, "maturing_count": maturing_count,
         "record": record, "timeline": timeline,
-        "best": deal_ids[:2], "worst": deal_ids[-2:][::-1] if len(deal_ids) > 1 else [],
+        "best": ranked_settled[:2], "worst": ranked_settled[-2:][::-1] if len(ranked_settled) > 1 else [],
         "deals": deal_ids, "deal_items": deal_items, "partners": partners, "caveat": CAVEAT,
     }
 
@@ -431,16 +489,20 @@ def _matches_archetype(t: dict, arch: str) -> bool:
     return t["archetype"] == arch
 
 
-def archetypes(lens="slot", season_from=None, season_to=None) -> list:
-    pool = [t for t in build_all() if not t["incomplete"] and _season_ok(t, season_from, season_to)]
+def archetypes(season_from=None, season_to=None) -> list:
+    # splits/exemplars/timing are SETTLED-ONLY; maturing trades are only COUNTED for the denominator note.
+    scoped = [t for t in build_all() if _season_ok(t, season_from, season_to)]
+    pool = [t for t in scoped if not t["incomplete"]]
+    maturing = [t for t in scoped if t["incomplete"]]
     out = []
     for arch in ("player_for_picks", "player_for_player", "picks_for_picks", "blockbuster", "three_team"):
         ts = [t for t in pool if _matches_archetype(t, arch)]
         if not ts:
             continue
+        maturing_n = sum(1 for t in maturing if _matches_archetype(t, arch))
         won = lost = even = 0
         for t in ts:
-            if t["verdict"] == "too_close":
+            if t["verdict"] == "even":
                 even += 1
             elif arch == "player_for_picks":
                 # did the player-heavy side win?
@@ -454,7 +516,7 @@ def archetypes(lens="slot", season_from=None, season_to=None) -> list:
             split = {"player_side_won_pct": round(100 * won / n), "pick_side_won_pct": round(100 * lost / n),
                      "even_pct": round(100 * even / n)}
         else:
-            decisive = sum(1 for t in ts if t["verdict"] != "too_close")
+            decisive = sum(1 for t in ts if t["verdict"] != "even")
             split = {"decisive_pct": round(100 * decisive / n), "even_pct": round(100 * even / n)}
         # Exemplars as a labeled, de-duplicated list. margin_slot is always the WINNER's non-negative
         # net, so "the other way" only means something where the archetype has a real two-sided axis
@@ -488,35 +550,52 @@ def archetypes(lens="slot", season_from=None, season_to=None) -> list:
         for b in ("deadline", "draft", "offseason", "in_season"):
             bt = [t for t in ts if t["timing"] == b]
             if bt:
-                dec = sum(1 for t in bt if t["verdict"] != "too_close")
+                dec = sum(1 for t in bt if t["verdict"] != "even")
                 timing.append({"bucket": b, "count": len(bt), "decisive_pct": round(100 * dec / len(bt))})
         out.append({"archetype": arch, "label": ARCHETYPE_LABELS[arch], "trade_count": n,
+                    "settled_count": n, "maturing_count": maturing_n,
                     "split": split, "exemplars": exemplars, "timing": timing})
     return out
 
 
-def thesis_summary(lens="slot") -> dict:
-    """Headline figures for the Overview hero band — frames the dataset and the founding question."""
-    pool = [t for t in build_all() if not t["incomplete"]]
-    n = len(pool)
+def thesis_summary() -> dict:
+    """Headline figures for the Overview hero band — frames the dataset and the founding question.
+
+    Every trade is graded on realized-to-date value (trades_graded = all). The decisive/edge/even SPLITS
+    are computed over SETTLED trades only (an unfinished window has no hard verdict yet); settled_count and
+    maturing_count are returned so the denominator behind the percentages is explicit, not hidden."""
+    allt = build_all()
+    graded = len(allt)
+    settled = [t for t in allt if not t["incomplete"]]
+    maturing_n = graded - len(settled)
+    n = len(settled)                      # denominator for the verdict splits (settled only)
     if not n:
-        return {"trades_graded": 0}
-    decisive = sum(1 for t in pool if t["verdict"] == "decisive")
-    too_close = sum(1 for t in pool if t["verdict"] == "too_close")
-    fleece = max(pool, key=lambda t: t["margin_slot"])
+        return {"trades_graded": graded, "settled_count": 0, "maturing_count": maturing_n}
+    decisive = sum(1 for t in settled if t["verdict"] == "decisive")
+    edge = sum(1 for t in settled if t["verdict"] == "edge")
+    even = sum(1 for t in settled if t["verdict"] == "even")
+    directional = decisive + edge                 # a known directional call (clears the floor)
+    fleece = max(settled, key=lambda t: t["margin_slot"])
     fleece_win = next((s for s in fleece["sides"] if s["team_id"] == fleece["winner_team_id"]), None)
-    pfp = [t for t in pool if t["is_player_for_picks"]]
+    pfp = [t for t in settled if t["is_player_for_picks"]]
     pf_won = sum(1 for t in pfp if t["winner_idx_slot"] is not None
                  and t["sides"][t["winner_idx_slot"]]["kind"] == "player")
     pk_won = sum(1 for t in pfp if t["winner_idx_slot"] is not None
                  and t["sides"][t["winner_idx_slot"]]["kind"] != "player"
-                 and t["verdict"] != "too_close")
-    pfp_even = sum(1 for t in pfp if t["verdict"] == "too_close")
+                 and t["verdict"] != "even")
+    pfp_even = sum(1 for t in pfp if t["verdict"] == "even")
     pn = max(1, len(pfp))
     return {
-        "trades_graded": n,
+        "trades_graded": graded,
+        "settled_count": n,
+        "maturing_count": maturing_n,
+        # three-tier split over settled, with raw counts and a directional total (decisive + edge)
+        "decisive_count": decisive, "edge_count": edge, "even_count": even,
+        "directional_count": directional,
         "decisive_pct": round(100 * decisive / n),
-        "too_close_pct": round(100 * too_close / n),
+        "edge_pct": round(100 * edge / n),
+        "even_pct": round(100 * even / n),
+        "directional_pct": round(100 * directional / n),
         "biggest_fleece": {"trade_id": fleece["trade_id"],
                            "winner": (fleece_win["team_abbrev"] if fleece_win else None),
                            "margin": fleece["margin_slot"], "date": fleece["date"]},

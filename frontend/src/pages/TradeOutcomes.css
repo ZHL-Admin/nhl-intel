@@ -8,6 +8,8 @@
 .to-h2 { font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); margin: 0 0 var(--space-2); }
 .to-sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
 
+.t-panel .tabs { margin-bottom: var(--space-4); }
+
 /* card surface — same family as ChartPanel; the table fills it edge-to-edge */
 .to-card {
   background: var(--color-bg-surface);
@@ -115,3 +117,9 @@ a.to-led__name:hover { text-decoration: underline; }
 .to-crumb a:hover { text-decoration: underline; }
 .to-crumb__sep { color: var(--color-text-muted); margin: 0 2px; }
 @media (max-width: 880px) { .ov-two { grid-template-columns: 1fr; } }
+
+
+/* GM Bubble Chart */
+.to .chart-panel-content {
+  height: 100% !important;
+}

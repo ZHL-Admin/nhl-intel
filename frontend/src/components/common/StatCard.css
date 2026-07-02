@@ -13,6 +13,14 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* Flat — a stat tile inside a PageCard: a subtle inset (keeps the grid readable) with no card chrome. */
+.stat-card--flat {
+  background-color: var(--color-bg-elevated);
+  box-shadow: none;
+  padding: var(--space-4) var(--space-5);
+}
+.stat-card--flat:hover { box-shadow: none; }
+
 .stat-card__header {
   display: flex;
   align-items: center;

@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { PageCardContext } from './PageCard';
 import './IdentityHeader.css';
 
 interface IdentityHeaderProps {
@@ -19,9 +21,10 @@ export default function IdentityHeader({
   heroContent,
   belowContent
 }: IdentityHeaderProps) {
+  const insidePageCard = useContext(PageCardContext);
 
   return (
-    <div className="identity-header">
+    <div className={`identity-header${insidePageCard ? ' identity-header--flat' : ''}`}>
 
       <div className="identity-header__main">
         <div className="identity-header__left">{leftContent}</div>

@@ -11,6 +11,8 @@ from models.schemas import (
     TradeEvaluateRequest, TradeEvaluateResponse,
     ContractGradeRequest, ContractGrade,
     RosterForecastRow,
+    RosterEvaluateRequest, RosterEvaluateResponse,
+    RosterSuggestRequest, RosterSuggestResponse,
 )
 from services import tools as tool_svc
 from services import trade_engine
@@ -60,6 +62,37 @@ async def post_line_fit(req: LineFitRequest) -> LineFitProjection:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return LineFitProjection(**payload)
+
+
+@router.post("/roster-evaluate", response_model=RosterEvaluateResponse)
+@cache(ttl=900)
+async def post_roster_evaluate(req: RosterEvaluateRequest) -> RosterEvaluateResponse:
+    """Evaluate a user-built roster (Roster Builder): project it forward and grade it, points-led.
+    DELTA vs the team's real roster is the headline (reliable — shared players cancel); projected
+    points + band is the secondary absolute read (a forward projection, not a measured rating). Reuses
+    the offseason forecast engine + the Lineup Lab line grades. No cap/salary anywhere."""
+    roster = [s.model_dump() for s in req.roster] if req.roster is not None else None
+    try:
+        payload = await run_in_threadpool(
+            tool_svc.roster_evaluate, req.team_id, roster, req.optimize, req.season)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return RosterEvaluateResponse(**payload)
+
+
+@router.post("/roster-suggest", response_model=RosterSuggestResponse)
+@cache(ttl=900)
+async def post_roster_suggest(req: RosterSuggestRequest) -> RosterSuggestResponse:
+    """Line-aware 'great fit' candidates for one depth-chart slot (Roster Builder picker). Caliber is
+    tiered to the line/pair so a top-line star is never offered for a bottom-line hole; ranked by the
+    cold-start line fit with the slot's current linemates."""
+    roster = [s.model_dump() for s in req.roster] if req.roster is not None else None
+    try:
+        payload = await run_in_threadpool(
+            tool_svc.roster_slot_suggestions, req.team_id, req.slot, roster, req.season)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return RosterSuggestResponse(**payload)
 
 
 @router.post("/line-fit/suggestions", response_model=LineSuggestionsResponse)

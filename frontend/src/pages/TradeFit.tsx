@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Check, Info, ArrowRight, RotateCcw, Share2, Zap, Sparkles, Search, X } from 'lucide-react'
-import { PageLayout, PageHeader, SkeletonLoader, Tooltip } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, Tooltip } from '../components/common'
 import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
 import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
@@ -260,11 +260,11 @@ export default function TradeFit() {
   return (
     <PageLayout>
       <div className="tf">
-        <PageHeader
+        <PageCard
           title="Player Fit"
           subtitle="How well does a player fit into a specific team?"
-        />
-
+          bodyClassName="tf__body"
+        >
         {showResult ? (
           <div className="tf__result">
             <div className="tf__result-bar">
@@ -278,8 +278,11 @@ export default function TradeFit() {
             </div>
             <Hero result={result!} player={player} team={team} />
             {player && (
-              <BestTeamFits playerId={player.player_id} excludeTeamId={team?.team_id ?? null}
-                teams={teams} onPick={switchTeam} />
+              <>
+                <div className="page-divider" />
+                <BestTeamFits playerId={player.player_id} excludeTeamId={team?.team_id ?? null}
+                  teams={teams} onPick={switchTeam} />
+              </>
             )}
           </div>
         ) : loading ? (
@@ -357,12 +360,15 @@ export default function TradeFit() {
               )}
             </div>
 
+            <div className="page-divider" />
+
             {/* ONE contextual picker, driven by the active card */}
             {mode === 'team'
               ? <TeamGrid teams={teams} activeId={team?.team_id} onPick={pickTeam} />
               : <PlayerPickerPanel onPick={pickPlayer} selectedId={player?.player_id ?? null} />}
           </>
         )}
+        </PageCard>
       </div>
     </PageLayout>
   )

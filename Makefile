@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
+.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate roster-builder-calibrate roster-player-projection contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -106,6 +106,18 @@ roster-forecast:
 
 roster-forecast-validate:
 	python -m models_ml.validate_roster_forecast
+
+# Roster Builder absolute-rating calibration: fit LEAGUE_AVG_LINEUP_WAR + WAR_TO_RATING and validate
+# the chain (realized-WAR<->rating reconciliation, projected-points MAE vs actual). Reads only; run
+# with SERVING_BACKEND=duckdb to read the local serving file. Holds (flags) if MAE is implausible.
+roster-builder-calibrate:
+	python -m models_ml.calibrate_roster_builder
+
+# Roster Builder component projection (Handoff 12): a regularized per-component Marcel with backtest-
+# calibrated heteroscedastic uncertainty, used ONLY by roster-evaluate. Fits, backtests vs the naive
+# and Marcel baselines, and writes nhl_models.roster_player_projection. Reads only otherwise.
+roster-player-projection:
+	python -m models_ml.project_roster_player --write
 
 # Validate the multi-dimension Player Fit rebuild: print disagreement cases (need vs style/quality)
 # and confirm the defenseman-to-strong-defense team no longer scores ~0. Reads only; no writes.

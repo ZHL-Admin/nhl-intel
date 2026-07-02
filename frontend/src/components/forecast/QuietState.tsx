@@ -8,8 +8,8 @@ export default function QuietState({ nextSeason }: { nextSeason: string }) {
       <div className="qstate__body">
         <p className="qstate__head">No impactful moves logged yet</p>
         <p className="qstate__text">
-          This roster still projects essentially as last season for {nextSeason}. As trades and
-          signings are logged, the ledger and the rating change will fill in here.
+          Projected points are unchanged — this roster still projects essentially as last season for
+          {' '}{nextSeason}. As trades and signings are logged, the ledger and the points change will fill in here.
         </p>
       </div>
     </div>

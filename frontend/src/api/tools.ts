@@ -1,5 +1,29 @@
 import { apiClient } from './client'
-import { PlayerSearchResult, LineFitProjection, TeamLines, TradeFitResult, LineSuggestions, BestTeamFit } from './types'
+import {
+  PlayerSearchResult, LineFitProjection, TeamLines, TradeFitResult, LineSuggestions, BestTeamFit,
+  RosterSlotInput, RosterEvaluateResponse, RosterSuggestResponse,
+} from './types'
+
+/** Line-aware 'great fit' candidates for one depth-chart slot (caliber-tiered to the line). */
+export async function rosterSuggest(
+  team_id: number, slot: string, roster?: RosterSlotInput[], season?: string,
+): Promise<RosterSuggestResponse> {
+  const response = await apiClient.post<RosterSuggestResponse>('/tools/roster-suggest', {
+    team_id, slot, roster, ...(season ? { season } : {}),
+  })
+  return response.data
+}
+
+/** Evaluate a user-built roster (Roster Builder). roster omitted => auto-build the optimal lineup
+ * from the team's current roster; optimize=true => re-sort the placed pool optimally. */
+export async function rosterEvaluate(
+  team_id: number, roster?: RosterSlotInput[], optimize = false, season?: string,
+): Promise<RosterEvaluateResponse> {
+  const response = await apiClient.post<RosterEvaluateResponse>('/tools/roster-evaluate', {
+    team_id, roster, optimize, ...(season ? { season } : {}),
+  })
+  return response.data
+}
 
 /** Current-roster players matching `q` for the PlayerPicker (Phase 5.2). */
 export async function searchPlayers(q: string, limit = 12, season?: string): Promise<PlayerSearchResult[]> {

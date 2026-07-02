@@ -1545,6 +1545,13 @@ export interface RosterForecastRow {
   band_low: number          // band is on projected_rating
   band_high: number
   band_goals: number        // half-width (goals/game)
+  // Projected 82-game standings points — a validated linear transform of the rating, carried with its
+  // band; points_delta is the offseason move-impact in points. Optional: a stale serving table may omit them.
+  base_points?: number | null
+  projected_points?: number | null
+  points_low?: number | null
+  points_high?: number | null
+  points_delta?: number | null
   net_delta_war: number
   chemistry_adj?: number | null
   base_rank?: number | null
@@ -1590,4 +1597,101 @@ export interface OffseasonTeamDetail {
   verdict: string
   reasons: string[]
   limitations: string
+}
+
+// ── Roster Builder (POST /tools/roster-evaluate) ─────────────────────────────────
+export interface RosterSlotInput {
+  player_id: number
+  slot?: string | null
+}
+
+export interface RosterPlayerOut {
+  player_id: number | null
+  name: string | null
+  pos: string | null
+  shoots: string | null
+  slot: string | null
+  age: number | null
+  base_war: number
+  projected_war: number
+  war_sd: number
+  no_track_record: boolean
+  on_new_team: boolean
+  replacement: boolean
+}
+
+export interface LineFit {
+  grade: string | null
+  xgf_pct: number | null
+}
+
+export interface RosterLine {
+  slots: RosterPlayerOut[]
+  fit: LineFit | null
+}
+
+export interface RosterGoalies {
+  starter: RosterPlayerOut
+  backup: RosterPlayerOut | null
+}
+
+export interface RosterComponents {
+  play_5v5: number
+  finishing: number
+  special_teams: number
+  goaltending: number
+}
+
+export interface PositionalValues {
+  forward_war: number
+  defense_war: number
+  goaltending_war: number
+}
+
+export interface RosterEvaluateResponse {
+  team_id: number
+  base_season: string
+  points_delta: number
+  delta_band: number
+  delta_low: number
+  delta_high: number
+  baseline_points: number
+  baseline_rating: number
+  projected_points: number
+  points_low: number
+  points_high: number
+  abs_band: number
+  band_goals: number
+  rating_abs: number
+  r_bottomup: number
+  retained_share: number
+  total_lineup_war: number
+  chemistry_adj: number
+  components: RosterComponents
+  positional: PositionalValues
+  forward_lines: RosterLine[]
+  defense_pairs: RosterLine[]
+  goalies: RosterGoalies
+  scratches: RosterPlayerOut[]
+  arrivals: number
+  departures: number
+  negligible: boolean
+}
+
+export interface RosterSuggestion {
+  player_id: number
+  name: string | null
+  pos: string | null
+  team_id: number | null
+  team_abbrev: string | null
+  headshot_url: string | null
+  projected_war: number
+  war_sd: number
+  grade: string | null
+  xgf_pct: number | null
+}
+
+export interface RosterSuggestResponse {
+  slot: string
+  suggestions: RosterSuggestion[]
 }

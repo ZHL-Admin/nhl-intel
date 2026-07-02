@@ -15,7 +15,7 @@ estimates; pWAR before 2021-22 is itself a back-cast (see [draft-value.md](draft
 Trades 2015-2026.csv  (one row per asset moved; acquiring_team received it)
   -> nhl_raw.raw_trades        (load_trades.py; source-faithful dated snapshot, idempotent)
   -> stg_trades                (typed; parsed picks; resolved_player_id for players; giving_team)
-nhl_models.player_pwar + pick_value_curve (career-extrapolated) + stg_draft_results
+nhl_models.player_pwar + pick_value_curve (career-extrapolated)
   -> models_ml/compute_trade_outcomes.py -> nhl_models.trade_outcomes   (one row per trade+team)
 ```
 
@@ -31,9 +31,11 @@ original owner**. 221 picks are flagged conditional. The CSV is committed at the
 
 `REALIZED_HORIZON_YEARS = 5` (`config.TRADE_OUTCOMES`) is a **maximum lookahead, not a flat sum**. A
 trade credits each side only with the realized value of the assets it **received, during the window
-those assets were under its control** — never value a player produced after he left.
+those assets were under its control** — never value a player produced after he left. This trade horizon
+is **distinct from the Draft Value tool's separate, fixed 7-year curve window** (`EVAL_WINDOW_YEARS`):
+the two tools answer different questions and do not share a window — do not conflate them.
 
-**Player asset (both lenses):** the player's realized `pwar_hat` from the trade until he leaves the
+**Player asset:** the player's realized `pwar_hat` from the trade until he leaves the
 acquiring team, **capped at `min(exit_date, trade_date + 5 years)`**. Accrual is attributed at the
 **game level** from the roster-membership feed (`mart_player_game_stats`, NHL regular+playoff games via
 `substr(cast(game_id as string),5,2) in ('02','03')`): only games played **for the acquiring team**
@@ -50,12 +52,7 @@ count, and a partial season **prorates** the season's `pwar_hat` by `(games for 
   surrendered, so the two sides of a two-team trade are exact mirrors.
 
 An unmatched player, one who never played in our data, or one on an unmapped (relocated) franchise is
-**0 — not missing**.
-
-**Pick asset — ACTUAL lens:** the **same tenure cap** — the drafted player's realized `pwar_hat` only
-while he is on the team that drafted him (assumed to be the acquirer), prorated by games, within 5
-seasons of the draft. The **slot lens is unaffected** (it values the pick asset at its slot's
-expectation, not a tenure).
+**0 — not missing** (it widens the band; it never silently flips a verdict).
 
 Why this matters: a deadline rental who plays a partial season and leaves now credits only those games,
 not five seasons. The previous build summed a flat five seasons from the trade date regardless of team,
@@ -72,35 +69,41 @@ signing, not a trade, so it belongs to no trade). Chicago's side is Saad's **Chi
 The post-trade anchor season is derived from the trade date: Oct–Dec → that season; Jan–Apr → the
 in-progress season; May–Sep (incl. draft-day June) → the next season.
 
-## The two lenses (per asset)
+## Asset valuation (per asset)
 
-**Pick asset — SLOT lens (headline):** the empirical `pick_value_curve` value at the pick's round
-midpoint (overall = (round−1)·32 + 16), **career-extrapolated** (×~2.4) to whole-career WAR, with the
-curve's own p10–p90 band. This **isolates the trade decision** — it asks "what was the slot you traded
-worth?", independent of who was later drafted, and it does not censor.
+One value-based verdict — every asset is priced in WAR by what its *kind* is worth, with players and
+picks valued on the bases that fit each.
 
-**Pick asset — ACTUAL lens (secondary):** the realized value of the player the pick **actually became**.
-Because picks are round-only with no owner, we resolve via the **acquiring team's own selection in that
-round** (`stg_draft_results`): the team that received the pick is the one most likely to have used it.
-When unique, that player's tenure-capped `pwar_hat` with the drafting team (≤5 post-draft seasons,
-prorated by games) is the pick's value. This lens **conflates the trade with the drafting** (a great
-pick wasted on a bust scores 0) and is explicitly secondary.
+**Pick asset:** the empirical `pick_value_curve` value at the pick's round midpoint
+(overall = (round−1)·32 + 16), **career-extrapolated** (×~2.4) to whole-career WAR, with the curve's own
+p10–p90 band. This values the **slot** — "what was a pick at that round worth?" — independent of who was
+later drafted. A pick with no parseable round, or a draft year earlier than the trade season, is a **bad
+input**: flagged `unvaluable` (distinct from a normal 0-value asset) and valued 0.
 
 **Other ("Future Considerations"):** value **0, labeled** — a real asset we cannot value, not a missing
-player. **Conditional picks** (notes flag): valued at expectation under both lenses, flagged conditional.
+player. **Conditional picks** (notes flag): valued at expectation, flagged conditional.
+
+### A deliberate asymmetry (named, not hidden)
+Players are valued at **realized** tenure pWAR (what actually happened); picks are valued at the slot's
+**expectation** (what a pick there is typically worth, not what this one became). The two are not the
+same basis, on purpose: the pick value isolates the trade decision from the drafting that followed, so a
+team is not retroactively credited or blamed for a scout's later hit or miss. The realized "what the pick
+**actually became**" analysis — resolving a pick to the player drafted with it and following the
+trade-tree — is a **separate, deferred asset-lineage tool** fed by `stg_draft_results`. It answers a
+different question (drafting + development, not the trade), and is deliberately **not** part of this value
+verdict.
 
 ## Netting
 
-Per team per trade: **net = value received − value sent**, under each lens, with bands combined in
+Per team per trade: **net = value received − value sent**, with bands combined in
 **quadrature** (variances add — the trade engine's exact band propagation). `received` = assets the team
 acquired; `sent` = assets it gave up. The giving team is the other team in a two-team trade
 (deterministic); for **three-team trades** the giving team for a player is their **pre-trade NHL team**
 (last game before the trade), and picks/other in three-team deals are flagged rather than mis-attributed.
 N-team netting is reused as-is — three-team trades are not special-cased.
 
-A side's **confidence** is `low` whenever it contains a pick, a Future-Considerations asset, or an
-unmatched player (all wide-band proxies), else `medium`. Recent trades whose 5-season window is not yet
-complete are flagged `horizon_incomplete` and excluded from the headline board by default.
+A side's **confidence** is `low` whenever it contains a pick, a Future-Considerations asset, an unmatched
+player (all wide-band proxies), or a still-maturing window, else `medium`.
 
 **Salary retention.** A third team sometimes brokers a deal by retaining part of a player's salary in
 exchange for a pick (e.g. Detroit retaining 50% of Yanni Gourde in the 2025 Tampa/Seattle trade). The
@@ -118,30 +121,55 @@ other annotations, which must not be mistaken for a conditional pick.
   **13.2% unmatched** (players with no footprint in our roster/bio data — depth/AHL players who value to
   0 anyway). Unmatched players are kept with a null id and flagged, never dropped. Spot-checks (Taylor
   Hall, P.K. Subban, Mark Stone, Jack Eichel, Brayden Point) all resolve correctly.
-- **Pick → player (actual lens):** ~40% of traded picks resolve to a unique drafted player; the rest are
-  unresolved because the pick was flipped again, the acquirer made zero or multiple picks in that round,
-  the team relocated (abbrev mismatch), or the draft is too recent. This is expected for a round-only
-  feed and is why the actual lens is **secondary**; the slot lens (headline) does not depend on it.
-
-Smell test (slot lens, tenure-capped net to the winner): CBJ on Panarin-for-Saad **+4.0** (Panarin's
+Smell test (value lens, tenure-capped net to the winner): CBJ on Panarin-for-Saad **+4.0** (Panarin's
 two Columbus seasons only), VGK on the Mark Stone deal **+9.3** (Stone stayed, so barely changed from
 the old +9.9), NYR on Brassard-for-Zibanejad **+8.4** (Zibanejad stayed, ~unchanged), NJD on
 Taylor-Hall-for-Larsson **+6.5** (down from +7.5 — Hall was later traded out, so his post-NJD value is
 removed). Players who stayed move little; players who left drop — exactly the tenure cap working.
 
-## Censoring
+## Grading incomplete trades (realized-to-date, never projected)
 
-The **actual-player lens censors picks from 2019+ drafts** — those players' careers are incomplete, so
-their first-5-season pWAR understates them; the row is flagged `actual_censored`. The **slot lens does
-not censor** (it uses the fixed empirical curve). Separately, any trade whose own 5-season realized
-window has not finished (recent deals) is flagged `horizon_incomplete` and kept out of the default
-headline board so it is not topped by trades with no observed outcomes yet.
+**Every trade is graded** — including those whose 5-season window has not fully elapsed. We do **not**
+drop recent trades from the graded set (that previously cost us ~28% of all trades, every deal from the
+last ~4 seasons). An incomplete trade keeps its **realized-to-date** tenure-capped net, exactly as a
+settled one, and is flagged `horizon_incomplete` with `window_progress` (the seasons of the horizon
+observed, _k_ in "year _k_ of 5").
+
+To stay honest about value still accruing, an incomplete trade's **net band is widened** by a maturity
+factor tied to how much of the horizon remains: the added uncertainty (combined in quadrature) scales
+with `(REALIZED_HORIZON_YEARS − years_elapsed) / REALIZED_HORIZON_YEARS`, so a trade one season in carries
+a far wider band than one four seasons in, and a settled trade is unchanged. **This is the only thing the
+unfinished window changes — the net itself is realized value to date.**
+
+There is **no projection of future value anywhere** — no expected-rest-of-career, no extrapolated WAR.
+The verdict stays a *retrospective on what has happened so far, with honest uncertainty*, never a forecast.
+In the product, settled trades are the clean default; the **"Include maturing"** toggle folds incomplete
+trades in — flagged with a dashed bar, the widened band, and a "still maturing — year _k_ of 5" tag in
+place of a hard verdict, always sorted last. Aggregates (thesis splits, value-map nets, dossier net and
+record) compute on **settled** by default and report the **settled / incomplete counts alongside** so the
+denominator is explicit; the toggle includes the maturing trades (with their widened bands) when asked.
+
+Picks are valued at the fixed empirical curve, so the pick side does **not** censor with draft recency.
 
 ## Limitations
 - Pick **ownership** and **three-team sub-deals** are not in the feed; both are assumed and flagged.
-- The actual lens attributes a pick to the acquiring team's selection in that round — wrong when the pick
-  was flipped; treat it as a rough, secondary read.
-- Relocated franchises (ARI→UTA, ATL→WPG) can break the actual-lens draft-team match for older picks.
+- Picks are valued at the slot's expectation, not at the player they became — a great pick spent on a
+  bust still scores the slot. Following a pick to its player is the job of the separate asset-lineage
+  tool, not this verdict.
+- **Pick-band understatement (deferred):** the career-extrapolation factor (~×2.41) is applied to *both*
+  a pick's point value *and* its uncertainty band, which treats the extrapolation step as certain and may
+  understate the uncertainty on early-round picks. Adding a proper extrapolation-uncertainty term is
+  deferred; the factor and band math are unchanged for now.
+- **Unmatched players default to zero (resolution gap):** a traded player we cannot resolve to an id is
+  valued 0 with a widened band. Of the **240 distinct unmatched names (288 asset-rows)**, ~95% are genuine
+  depth/AHL/junior bodies with no NHL footprint (correctly ~0); only **~12 are real-career players** and
+  **~5 carry career pWAR ≥ 2** (Matt Murray, Mathew Dumba, Mike Cammalleri, Patrick Maroon, Erik
+  Gustafsson), so a few trades can land **even** when one side actually held hidden value. The misses are nickname/registered-name (Pat/Patrick, Mike/Michael,
+  Matt/Mathew), transliteration (Sergei/Sergey), and ambiguous full names the matcher's uniqueness gate
+  drops (two Matt Murrays, two Erik Gustafssons). Tightening `stg_trades` matching is a separate, deferred
+  fix — and must guard against first-initial collisions (a naive initial+last-name match wrongly pulls
+  *Elias* Pettersson for "Emil Pettersson", *Jordan* Greenway for "James Greenway"). Executive rows logged
+  as players (e.g. Lou Lamoriello) are caught by cross-referencing GM names.
 - Everything is realized **WAR with wide bands**; pre-2021 pWAR is an estimate. This is not advice and
   not a decision grade — only a record of how the assets turned out.
 
@@ -176,14 +204,74 @@ the same family of caveat as "a retrospective on outcomes, not a grade of the de
 
 Each trade is a balance bar over a fixed ±`TRADE_BOARD.WAR_DOMAIN` (12 WAR) domain. The tick sits at the
 signed margin (the winning side's net received minus the losing side's); the shaded rectangle is the
-margin's uncertainty band. The verdict is computed from the margin against the band:
-- **too close** when the band straddles zero (`margin − band_hw ≤ 0 ≤ margin + band_hw`) — rendered
-  neutral, never a team fill, because the trade is even *within the margin we can measure*;
-- **decisive** when `|margin| − band_hw ≥ TRADE_BOARD.DECISIVE_WAR` (2.0);
-- **lean** in between.
-An **incomplete** trade (realized window not finished) is dashed, dimmed, sorted last, and excluded by
-default — its bar reads "still maturing — through year k of 5" instead of a verdict. Unmatched players
-widen the band (they do not count as zero), so a missing match can only soften a verdict, never flip it.
+margin's uncertainty band. The verdict is a **three-tier, realized-only** rule on the point-estimate
+margin and the band, evaluated in this order:
+- **decisive** when `|margin| − band_hw ≥ TRADE_BOARD.DECISIVE_WAR` (2.0) — a confident call; the margin
+  clears the band. Rendered as a solid tilt in the winner's color.
+- **even** when `|margin| < TRADE_BOARD.EDGE_FLOOR_WAR` (0.5) — the realized value came out level.
+  Rendered centered and neutral. (Renamed from "too_close" — see below.)
+- **edge** otherwise — the sign of the realized margin is known and exceeds the floor, but it does not
+  clear the band: a directional-but-uncertain call. Rendered as a faint tilt in the winner's color, **with
+  the band still drawn** so an edge visibly shows its band crossing zero (the honesty is preserved — the
+  bar says "tilts this way, but the band is wide").
+
+This replaces an earlier two-gate rule whose "band straddles zero ⇒ too-close" test collapsed ~73% of
+genuinely directional small-margin trades; the floor-based rule reserves the third tier for near-zero
+margins and surfaces the directional calls as **edge**. The verdict is realized-only — no projection. The
+dossier record counts **decisive / edge / even / losses** (losses = whichever side is on the negative end
+of a decisive or edge trade).
+
+**Naming (label-only).** The third tier was renamed **`too_close` → `even`** across the service, schema,
+API, UI and tests. "Too-close" describes the measurement; the user cares about the outcome — the trade
+came out **even** (we say "even," not "fair," because the metric is realized outcome, not a judgment of
+the deal at the time). The `EDGE_FLOOR_WAR = 0.5` threshold and all band/verdict math are **unchanged**;
+only the label moved.
+An **incomplete** trade (realized window not finished) is still graded on realized value to date: its bar
+is dashed with the widened maturity band and reads "still maturing — year _k_ of 5" (from `window_progress`)
+in place of a hard verdict, and it sorts last. It is hidden from the settled-only default view and shown
+when the **"Include maturing"** toggle is on — flagged, never silently mixed into settled verdicts.
+Unmatched players widen the band (they do not count as zero), so a missing match can only soften a
+verdict, never flip it.
+
+## Ranking entities under uncertainty
+
+A verification diagnostic showed the team/GM net-record spread is wide in **point estimates** but mostly
+**inside band noise**: only one team (Vegas, +32.9 / ±16.4 ≈ 2σ) and one GM (Joe Sakic, +23.4 / ±11.6 ≈
+2σ) separate from even beyond ~2σ; ~80% of entities are within ~1σ of zero. So the Teams & GMs ranking is
+made **confidence-aware** rather than a false 1-through-N ordering of the middle (`config.TRADE_BOARD.RANKING`).
+
+**Uncertainty unit.** Each entity's aggregate band half-width `band_hw` (the quadrature sum of its trades'
+band half-widths — empirical pick p10/p90 combined with player sd) is its **native** unit of uncertainty.
+We do **not** apply any normal-interval conversion factor; `band_hw` is a mixed-source interval and is
+used as-is. The standardized distance of a record from even is `z = net / band_hw` (z = 0 if `band_hw = 0`).
+
+**Empirical-Bayes shrinkage (default sort key).** Per entity-kind, settled-only, method-of-moments EB
+toward the league mean:
+
+```
+mu     = mean(net_i)                                   # league mean for this kind (~0)
+tau2   = max(0, sample_var(net_i) − mean(band_hw_i^2))  # estimated true between-entity variance
+B_i    = tau2 / (tau2 + band_hw_i^2)                    # shrinkage weight in [0,1]
+rank_i = mu + B_i*(net_i − mu)                          # shrunk record = default ranking value
+```
+
+Because the spread is mostly noise, `tau2` is small relative to `band_hw_i^2`, so `B_i` is small and
+`rank_i` collapses toward `mu` for the middle while separated entities keep more of their value. **In the
+current data `tau2` clamps to 0 for both teams and GMs** (the observed between-entity variance is fully
+explained by measurement noise), so `B_i = 0` and every `rank_value` equals `mu` — the honest statement
+that no entity's true trade-skill is distinguishable from league-average on this evidence. The signal then
+lives entirely in the **separation cue** below; the ranked list breaks the `rank_value` tie on raw net.
+
+**Separation cue.** `separation = clear` if `|z| ≥ 2`, `leans` if `1 ≤ |z| < 2`, else `noise`
+(`CLEAR_Z` / `LEANS_Z` in config). Entities with fewer than `MIN_SETTLED` (default 5) settled trades are
+flagged `low_n` (a tiny band can manufacture a large `|z|` on a meaningless net) — muted/set aside, never
+dropped. The UI emphasizes `clear` entities, lightens `leans`, and collapses the `noise` majority into a
+single "within noise of even — not distinguishable from luck" cluster.
+
+**Alternative method (config-switchable, not default).** `{"method": "net_minus_k", "K": 1.0}` computes
+`sign(net)·max(0, |net| − K·band_hw)` — a confidence-discounted net. The math lives in one helper
+(`_apply_ranking`) so the method is swappable. Plainly: point-estimate records are mostly within noise, so
+the ranking is shrunk and the middle is presented as a cluster, not a leaderboard.
 
 ## Entity surfaces
 
@@ -207,8 +295,9 @@ faking a tag, so they are omitted, not guessed.
 ## The page (Handoff 7): one motif, three scales
 
 The UI is built around a single **tilt** motif — a track centered on an even line that fills toward the
-winner by the realized margin, with the uncertainty band drawn on the same track so a band crossing
-center reads as **too close to call**. It recurs at three scales (the same component): the league
+winner by the realized margin, with the uncertainty band drawn on the same track. A solid fill is a
+**decisive** call, a faint fill an **edge** (directional but the band still crosses center), and a
+centered neutral tick an **even** trade (realized value came out level). It recurs at three scales (the same component): the league
 **value map** (the 2D generalization, every entity vs a break-even diagonal), the entity **dossier
 timeline** (an entity's running tilt over time, banded by regime), and the **trade leaf** (one trade),
 plus an inline **sparkline** in every leaderboard and partner row.
@@ -219,6 +308,5 @@ map foregrounded, Teams|GMs) → a **dossier** (verdict header, regime-banded ti
 partner**, best/worst, full list) → the **trade leaf**. **Patterns** tests the archetype theses with a
 **timing** breakdown (deadline/draft/offseason/in-season — by date, an honest proxy for rentals, not a
 cap-based tag). Routes are deep-linkable (`/tools/trade-outcomes/{team|gm}/{id}`, `/trade/{id}`); a
-returning visitor lands on their remembered entity. Slot is the headline lens everywhere; the actual
-lens never shows a zero column. League rollups sum over teams or over GMs, never both (the two are
-lenses on the same trades).
+returning visitor lands on their remembered entity. One value-based verdict everywhere — there is no lens
+toggle. League rollups sum over teams or over GMs, never both (the two are views on the same trades).

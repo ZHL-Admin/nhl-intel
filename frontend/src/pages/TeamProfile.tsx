@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, StatCard, Badge, IdentityHeader, PlayerAvatar, StreakDoctorCard, StandingsLadder, InsightCard } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, StatCard, Badge, IdentityHeader, PlayerAvatar, StreakDoctorCard, StandingsLadder, InsightCard } from '../components/common'
 import type { StandingsLadderTeam } from '../components/common'
 import { Flame, Shield, Gauge, Crosshair, Zap, ShieldCheck, Sparkles, Hand, Lightbulb } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -284,33 +284,35 @@ function TeamProfile() {
     return (
       <PageLayout>
         <div className="team-profile">
-          {/* Header skeleton */}
-          <div className="team-profile__header-skeleton">
-            <SkeletonLoader height={120} />
-          </div>
-
-          {/* Stat cards skeleton */}
-          <div className="team-profile__section">
-            <h2 className="team-profile__section-title">Season Snapshot</h2>
-            <div className="team-profile__stat-grid">
-              {[...Array(8)].map((_, i) => (
-                <SkeletonLoader key={i} height={100} />
-              ))}
+          <PageCard title="Team">
+            {/* Header skeleton */}
+            <div className="team-profile__header-skeleton">
+              <SkeletonLoader height={120} />
             </div>
-          </div>
 
-          {/* Charts skeleton */}
-          <div className="team-profile__section">
-            <SkeletonLoader height={300} />
-          </div>
-          <div className="team-profile__section">
-            <SkeletonLoader height={300} />
-          </div>
+            {/* Stat cards skeleton */}
+            <div className="team-profile__section">
+              <h2 className="team-profile__section-title">Season Snapshot</h2>
+              <div className="team-profile__stat-grid">
+                {[...Array(8)].map((_, i) => (
+                  <SkeletonLoader key={i} height={100} />
+                ))}
+              </div>
+            </div>
 
-          {/* Roster skeleton */}
-          <div className="team-profile__section">
-            <SkeletonLoader height={400} />
-          </div>
+            {/* Charts skeleton */}
+            <div className="team-profile__section">
+              <SkeletonLoader height={300} />
+            </div>
+            <div className="team-profile__section">
+              <SkeletonLoader height={300} />
+            </div>
+
+            {/* Roster skeleton */}
+            <div className="team-profile__section">
+              <SkeletonLoader height={400} />
+            </div>
+          </PageCard>
         </div>
       </PageLayout>
     )
@@ -320,13 +322,17 @@ function TeamProfile() {
   if (detailError || !teamDetail) {
     return (
       <PageLayout>
-        <div className="team-profile__error">
-          <p className="team-profile__error-message">
-            {detailError || 'Team not found'}
-          </p>
-          <button onClick={handleRetryDetail} className="team-profile__retry-button">
-            Retry
-          </button>
+        <div className="team-profile">
+          <PageCard title="Team">
+            <div className="team-profile__error">
+              <p className="team-profile__error-message">
+                {detailError || 'Team not found'}
+              </p>
+              <button onClick={handleRetryDetail} className="team-profile__retry-button">
+                Retry
+              </button>
+            </div>
+          </PageCard>
         </div>
       </PageLayout>
     )
@@ -340,80 +346,49 @@ function TeamProfile() {
   return (
     <PageLayout>
       <div className="team-profile">
-        {/* Identity Header (compact, packed) */}
-        {/* Header + standings as two side-by-side cards (per comp), not nested. */}
-        <div className="team-hd-row">
-          <IdentityHeader
-            leftContent={
-              <div className="team-hd">
-                <img src={getTeamLogoUrl(teamDetail.team_abbrev)} alt={teamFullName} className="team-hd__logo" />
-                <div className="team-hd__id">
-                  <h1 className="team-hd__name">{teamFullName}</h1>
-                  <div className="team-hd__context">
-                    {[teamDetail.division, teamDetail.conference,
-                      teamDetail.division_rank != null ? `${ordinal(teamDetail.division_rank)} in division` : null]
-                      .filter(Boolean).join(' · ')}
+        <PageCard
+          header={
+            /* Identity + division ladder, side by side; chrome now comes from the PageCard. */
+            <div className="team-hd-row">
+              <IdentityHeader
+                leftContent={
+                  <div className="team-hd">
+                    <img src={getTeamLogoUrl(teamDetail.team_abbrev)} alt={teamFullName} className="team-hd__logo" />
+                    <div className="team-hd__id">
+                      <h1 className="team-hd__name">{teamFullName}</h1>
+                      <div className="team-hd__context">
+                        {[teamDetail.division, teamDetail.conference,
+                          teamDetail.division_rank != null ? `${ordinal(teamDetail.division_rank)} in division` : null]
+                          .filter(Boolean).join(' · ')}
+                      </div>
+                      <hr className="team-hd__divider" />
+                      <div className="team-hd__hero">
+                        <span className="team-hd__record mono">{teamDetail.wins}-{teamDetail.losses}-{teamDetail.otl}</span>
+                        <span className="team-hd__pts">{teamDetail.points} PTS</span>
+                        {power && (
+                          <span className={`team-hd__power team-hd__power--r${power.rank <= 5 ? '1' : power.rank <= 11 ? '2' : power.rank <= 21 ? '3' : '4'}`}>
+                            Power Ranking: #{power.rank} of {power.n}
+                          </span>
+                        )}
+                      </div>
+                      <p className="team-hd__verdict">{teamVerdict(teamDetail, streakCard, netRating)}</p>
+                    </div>
                   </div>
-                  <hr className="team-hd__divider" />
-                  <div className="team-hd__hero">
-                    <span className="team-hd__record mono">{teamDetail.wins}-{teamDetail.losses}-{teamDetail.otl}</span>
-                    <span className="team-hd__pts">{teamDetail.points} PTS</span>
-                    {power && (
-                      <span className={`team-hd__power team-hd__power--r${power.rank <= 5 ? '1' : power.rank <= 11 ? '2' : power.rank <= 21 ? '3' : '4'}`}>
-                        Power Ranking: #{power.rank} of {power.n}
-                      </span>
-                    )}
-                  </div>
-                  <p className="team-hd__verdict">{teamVerdict(teamDetail, streakCard, netRating)}</p>
-                </div>
-              </div>
-            }
-            teamColors={{ home: teamColor }}
-          />
-          {ladder && (
-            <StandingsLadder
-              division={ladder.division}
-              teams={ladder.teams}
-              playoffCutAfterRank={PLAYOFF_CUT}
-              showHeader={false}
-              size="md"
-            />
-          )}
-        </div>
-
-        {/* Upcoming Game Strip (conditional) */}
-        {upcomingGame && (
-          <div
-            className="team-profile__upcoming-game"
-            onClick={() => navigate(`/games/${upcomingGame.game_id}`)}
-          >
-            <div className="team-profile__upcoming-game-label">
-              Next Game
+                }
+                teamColors={{ home: teamColor }}
+              />
+              {ladder && (
+                <StandingsLadder
+                  division={ladder.division}
+                  teams={ladder.teams}
+                  playoffCutAfterRank={PLAYOFF_CUT}
+                  showHeader={false}
+                  size="md"
+                />
+              )}
             </div>
-            <div className="team-profile__upcoming-game-info">
-              <div className="team-profile__upcoming-game-opponent">
-                {upcomingGame.home_team_id === teamDetail.team_id ? 'vs' : '@'}{' '}
-                <span className="team-profile__upcoming-game-opponent-name">
-                  {upcomingGame.home_team_id === teamDetail.team_id
-                    ? getTeamName(upcomingGame.away_team_abbrev)
-                    : getTeamName(upcomingGame.home_team_abbrev)}
-                </span>
-              </div>
-              <div className="team-profile__upcoming-game-date">
-                {new Date(upcomingGame.game_date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'short',
-                  day: 'numeric'
-                })}
-              </div>
-            </div>
-            <div className="team-profile__upcoming-game-arrow">→</div>
-          </div>
-        )}
-        
-        {/* Tabs + tab content together in one card */}
-        <div className="team-tabs-card">
-          <div className="team-tabs-card__nav">
+          }
+          controls={
             <Tabs
               options={[
                 { value: 'overview', label: 'Overview' },
@@ -426,7 +401,38 @@ function TeamProfile() {
               value={currentTab}
               onChange={handleTabChange}
             />
-          </div>
+          }
+        >
+          {/* Upcoming Game Strip (conditional) — a subtle inset, not its own card */}
+          {upcomingGame && (
+            <button
+              type="button"
+              className="team-profile__upcoming-game page-inset"
+              onClick={() => navigate(`/games/${upcomingGame.game_id}`)}
+            >
+              <div className="team-profile__upcoming-game-label">
+                Next Game
+              </div>
+              <div className="team-profile__upcoming-game-info">
+                <div className="team-profile__upcoming-game-opponent">
+                  {upcomingGame.home_team_id === teamDetail.team_id ? 'vs' : '@'}{' '}
+                  <span className="team-profile__upcoming-game-opponent-name">
+                    {upcomingGame.home_team_id === teamDetail.team_id
+                      ? getTeamName(upcomingGame.away_team_abbrev)
+                      : getTeamName(upcomingGame.home_team_abbrev)}
+                  </span>
+                </div>
+                <div className="team-profile__upcoming-game-date">
+                  {new Date(upcomingGame.game_date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </div>
+              </div>
+              <div className="team-profile__upcoming-game-arrow">→</div>
+            </button>
+          )}
 
           {/* Tab Content */}
           {currentTab === 'overview' && teamId && (
@@ -461,6 +467,7 @@ function TeamProfile() {
                 <h2 className="team-profile__section-title">Lines</h2>
                 <LineBoard teamId={parseInt(teamId)} />
               </div>
+              <div className="page-divider" />
               <div className="team-profile__section">
                 <h2 className="team-profile__section-title">Experiment with a swap</h2>
                 <p className="team-profile__section-sub">Swap any player into a current line to see the projected grade and xGF% change.</p>
@@ -481,7 +488,7 @@ function TeamProfile() {
               navigate={navigate}
             />
           )}
-        </div>
+        </PageCard>
       </div>
     </PageLayout>
   )

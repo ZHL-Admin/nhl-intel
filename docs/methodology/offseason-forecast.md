@@ -135,6 +135,13 @@ import so a WAR delta and the team rating share one goals scale.
    `|net_delta_war| <= NEGLIGIBLE_NET_WAR (0.5)` and moves `<= NEGLIGIBLE_MOVES (2)`, the verdict
    says "no material moves yet" rather than asserting a confident near-zero forecast.
 
+7. **Projected points (the headline).** The rating is converted to 82-game standings points via the
+   single validated map in `power-ratings.md` → *Rating → projected points*
+   (`rating_to_points`, constants in `config.ROSTER_FORECAST["FORECAST_POINTS"]`): `projected_points`,
+   `points_low`/`points_high` (the rating band carried through the same map), and `points_delta`
+   (`SLOPE × Δrating`, the move impact in points). Points lead the UI; the rating is the underlying
+   mechanism. The map is not re-derived here — it is defined once at the rating's source.
+
 ## Limitations (verbatim in every verdict)
 
 The projection moves only the team LABEL of value from the roster's moves; the band excludes salary
@@ -160,3 +167,17 @@ camp/prospect reality the model cannot see (which is exactly why the band is wid
 foregrounds it). It is a directional prior, not a precise rank prediction. (One team is dropped from
 the 32 when a franchise id is not present in both seasons' `team_ratings`, e.g. a relocation.)
 
+
+---
+
+## Related: the Roster Builder (absolute vs anchored rating)
+
+This tool **anchors on the measured power rating** for the returning core and only projects the
+move-delta. Its sibling, the [Roster Builder](roster-builder.md), grades an *arbitrary* user-built
+roster that has no trustworthy base, so it derives an **absolute** rating from the roster's own
+projected value (`absolute_rating`, with the calibrated `LEAGUE_AVG_LINEUP_WAR` / `WAR_TO_RATING`).
+The two share the projection engine and the `rating_to_points` map; the documented difference is that
+the Roster Builder is a pure forward projection (it will not assume a team's current
+over/under-performance of its roster talent repeats), which is why it is delta-led with a wider band.
+See roster-builder.md for the calibration (realized-WAR↔rating corr ≈ 0.82; projected points MAE ≈
+10.5, ~5 of it irreducible luck) and the cross-tool consistency check (unbiased, mean gap −0.6 pts).

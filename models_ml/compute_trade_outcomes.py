@@ -1,23 +1,32 @@
 """Trade-outcome retrospective (Handoff 5, Phase D) — who won each past trade, in realized WAR.
 
-For every historical trade (stg_trades), value each moved asset two ways and net per team per trade
-under each lens, in the SAME WAR units as mart_tradeable_assets, with wide bands combined in quadrature
-(the trade engine's band propagation). This is a RETROSPECTIVE on realized outcomes, never a grade of
-the decision at the time — the information available then was different. Output nhl_models.trade_outcomes,
-one row per (trade, team).
+For every historical trade (stg_trades), value each moved asset on ONE value-based lens, net per team
+per trade, in the SAME WAR units as mart_tradeable_assets, with wide bands combined in quadrature (the
+trade engine's band propagation). A RETROSPECTIVE on realized outcomes, never a grade of the decision at
+the time. Output nhl_models.trade_outcomes, one row per (trade, team).
 
-Two lenses, per asset:
-  * Player asset (both lenses): realized pwar_hat summed over REALIZED_HORIZON_YEARS seasons from the
-    trade date. Unmatched / never-played = 0 (not missing).
-  * Pick asset, SLOT lens (headline): the empirical pick_value_curve career-extrapolated value at the
-    pick's round midpoint, with its band. No censoring; isolates the trade decision (what the slot was
-    worth), not the drafting execution.
-  * Pick asset, ACTUAL lens (secondary): resolve the pick to the giving team's own pick that year/round
-    (stg_draft_results) and take THAT player's realized pwar over their first REALIZED_HORIZON_YEARS
-    post-draft seasons. Conflates trade and drafting; flags the own-pick assumption; censors 2019+ drafts
-    (incomplete careers).
+Per asset:
+  * Player asset: realized pwar_hat the acquiring team actually got, TENURE-CAPPED — summed only over
+    the games he played for that team, from the trade until min(exit, trade + REALIZED_HORIZON_YEARS),
+    prorating partial seasons by games for that team (_tenure_value). Unmatched player -> 0 value with a
+    widened band / low confidence (never silently zero in a way that flips a verdict).
+  * Pick asset: the empirical pick_value_curve value at the pick's round midpoint, career-extrapolated,
+    with its band (_pick_slot). This values the SLOT — what a pick at that round is worth — and isolates
+    the trade decision from the drafting that followed. A pick with no parseable round, or a draft year
+    earlier than the trade, is a bad input and flagged unvaluable (distinct from a normal 0-value asset).
   * Other ("Future Considerations"): value 0, labeled (not a missing player).
-  * Conditional picks (notes flag): valued at expectation under both lenses, flagged conditional.
+  * Salary retention ("X% retained" broker row whose real post-trade club is another team): value 0,
+    flagged; a cap mechanism, not an acquisition.
+
+EVERY trade is graded on its realized-to-date value — including those whose REALIZED_HORIZON_YEARS window
+has not fully elapsed. An incomplete trade is NOT dropped or zeroed: it keeps its realized-to-date net and
+is flagged horizon_incomplete with window_progress (seasons observed), and its net band is WIDENED by a
+maturity factor tied to how much of the horizon remains (net_trades). This is realized-only honesty about
+what has happened so far — there is NO projection or expected-future value anywhere in this model.
+
+The realized "what the pick actually became" analysis (resolving a pick to the player drafted with it)
+is a SEPARATE, deferred asset-lineage tool fed by stg_draft_results — deliberately NOT part of this
+value verdict, which judges the slot, not the drafting.
 
 from_team (who SENT each asset): the other team in a two-team trade (stg_trades.giving_team); for
 three-team trades, the player's pre-trade NHL team (players) — picks/other in 3-team deals are flagged.
@@ -36,7 +45,6 @@ import math
 from collections import defaultdict
 from datetime import date
 
-import numpy as np
 import pandas as pd
 
 from models_ml import bq, config
@@ -63,12 +71,7 @@ def _load():
         select overall_pick, ev_mean_smooth, p10_smooth, p90_smooth, career_extrap_factor
         from `{P}.nhl_models.pick_value_curve`
     """)
-    draft = bq.query_df(f"""
-        select draft_year, round, draft_team_abbrev, resolved_player_id, full_name
-        from `{P}.nhl_staging.stg_draft_results`
-        where resolved_player_id is not null
-    """)
-    return trades, pwar, curve, draft
+    return trades, pwar, curve
 
 
 def _pwar_index(pwar: pd.DataFrame) -> dict:
@@ -85,15 +88,6 @@ def _curve_index(curve: pd.DataFrame) -> tuple[dict, float]:
     idx = {int(r.overall_pick): (float(r.ev_mean_smooth), float(r.p10_smooth), float(r.p90_smooth))
            for r in curve.itertuples(index=False)}
     return idx, factor
-
-
-def _draft_index(draft: pd.DataFrame) -> dict:
-    """(draft_year, round, team_abbrev) -> [(player_id, name), ...] (the team's picks that round)."""
-    idx: dict[tuple, list[tuple]] = {}
-    for r in draft.itertuples(index=False):
-        idx.setdefault((int(r.draft_year), int(r.round), r.draft_team_abbrev), []).append(
-            (int(r.resolved_player_id), r.full_name))
-    return idx
 
 
 # --------------------------------------------------------------------------- horizon / valuation
@@ -168,8 +162,8 @@ def _post_team(log: dict, pid: int | None, anchor: date) -> int | None:
 def _tenure_value(log: dict, pidx: dict, pid: int | None, team_id: int | None,
                   anchor: date, horizon_end: date, last_data: date) -> tuple[float, float, bool]:
     """Realized pWAR the acquiring team actually got from a received PLAYER: the player's value while on
-    that team, from `anchor` (the trade, or the draft for the pick actual-lens) until the earlier of his
-    exit from the team and the horizon cap. Attributed at the game level — only games for `team_id`
+    that team, from `anchor` (the trade date) until the earlier of his exit from the team and the horizon
+    cap. Attributed at the game level — only games for `team_id`
     count — and partial seasons prorate by games played for that team over the player's total games that
     season. never-played / unmatched / unmapped -> 0 (not missing).
 
@@ -239,19 +233,17 @@ def _pretrade_teams(trades: pd.DataFrame) -> dict:
 
 
 # --------------------------------------------------------------------------- per-asset valuation
-def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, team_ids) -> pd.DataFrame:
+def value_assets(trades, pidx, cidx, factor, pretrade, latest, gamelog, team_ids) -> pd.DataFrame:
     rows = []
     last_data = date(latest + 1, 6, 30)      # ~end of the latest observed season
     for r in trades.itertuples(index=False):
         td = pd.to_datetime(r.trade_date).date()
         acq_id = team_ids.get(r.acquiring_team)
-        slot_v = slot_hw = act_v = act_hw = 0.0
+        slot_v = slot_hw = 0.0
         flags = {"unresolved": False, "conditional": bool(r.is_conditional),
-                 "actual_censored": False, "own_pick_assumed": False, "actual_unresolved": False,
-                 "horizon_incomplete": False, "retention": False}
+                 "horizon_incomplete": False, "retention": False, "unvaluable": False}
         is_proxy = False
         label = r.asset
-        became_id, became_name = None, None      # the player a pick became (actual lens, for linking)
         retained_pct = None                       # % salary retained on a retention broker row
 
         if r.asset_type == "Player":
@@ -263,14 +255,13 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
             if bool(r.is_retention) and post is not None and acq_id is not None and post != acq_id:
                 flags["retention"] = True
                 retained_pct = int(r.retained_pct) if pd.notna(r.retained_pct) else None
-                slot_v = act_v = slot_hw = act_hw = 0.0
+                slot_v = slot_hw = 0.0
             else:
                 # tenure-capped: only the value the acquiring team realized while he was on it, prorated
                 # by games for that team, up to min(exit, trade_date + horizon). Not a flat 5 seasons.
                 v, hw, complete = _tenure_value(gamelog, pidx, pid, acq_id, td, _add_years(td, H), last_data)
-                slot_v = act_v = v
-                slot_hw = act_hw = hw
-                flags["unresolved"] = pid is None
+                slot_v, slot_hw = v, hw
+                flags["unresolved"] = pid is None     # unmatched player -> 0 value, widened band below
                 if not complete:
                     # realized window not fully observed yet (recent trade); a row-level recency caveat
                     flags["horizon_incomplete"] = True
@@ -278,32 +269,18 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
         elif r.asset_type == "Draft Pick":
             is_proxy = True
             overall = int(r.pick_overall_mid) if pd.notna(r.pick_overall_mid) else None
-            if overall is not None:
+            # bad input (not a lens state): no parseable round, or a draft earlier than the trade itself
+            bad = (overall is None
+                   or (pd.notna(r.pick_year) and int(r.pick_year) < int(str(r.season)[:4])))
+            if not bad:
                 sv, lo, hi = _pick_slot(cidx, factor, overall)
                 slot_v, slot_hw = sv, _hw(lo, hi)
-            # actual-player lens: the player the ACQUIRING team drafted in that round (the team that
-            # received the pick is the one most likely to have used it). Assumption flagged; when the
-            # acquirer flipped the pick or made multiple/zero picks in that round it stays unresolved.
-            key = (int(r.pick_year), int(r.pick_round), r.acquiring_team) if pd.notna(r.pick_year) else None
-            pids = didx.get(key, []) if key else []
-            if len(pids) == 1:
-                flags["own_pick_assumed"] = True       # resolved via the acquirer's selection that round
-                became_id, became_name = pids[0]
-                dy = int(r.pick_year)
-                # same tenure cap: credit the drafted player's value only while on the drafting team
-                # (assumed = the acquirer), from the draft to min(exit, draft + horizon).
-                anchor = date(dy, 7, 1)
-                av, ahw, complete = _tenure_value(gamelog, pidx, became_id, acq_id, anchor,
-                                                  _add_years(anchor, H), last_data)
-                act_v, act_hw = av, ahw
-                if not complete:
-                    flags["actual_censored"] = True   # 2019+ drafts: incomplete realized career
             else:
-                flags["actual_unresolved"] = True      # pick flipped / ambiguous / unmatched draft slot
+                flags["unvaluable"] = True            # unparseable / impossible pick — flag, value 0
 
         else:  # Other ("Future Considerations")
             is_proxy = True
-            label = r.asset  # value 0 both lenses, labeled
+            label = r.asset  # value 0, labeled
 
         # who sent this asset (for netting)
         from_team = r.giving_team
@@ -318,8 +295,6 @@ def value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, te
             "asset_type": r.asset_type, "label": label, "position": r.position,
             "resolved_player_id": (int(r.resolved_player_id) if pd.notna(r.resolved_player_id) else None),
             "slot_war": round(slot_v, 3), "slot_hw": round(slot_hw, 3),
-            "actual_war": round(act_v, 3), "actual_hw": round(act_hw, 3),
-            "became_player_id": became_id, "became_player_name": became_name,
             "retained_pct": retained_pct,
             "is_proxy": is_proxy, **flags,
         })
@@ -334,57 +309,58 @@ def _clean_id(v):
     return int(v)
 
 
-def _clean_str(v):
-    if v is None or (isinstance(v, float) and math.isnan(v)):
-        return None
-    return str(v)
-
-
 def _ledger_entry(a: dict, direction: str) -> dict:
     return {"asset": a["label"], "type": a["asset_type"], "direction": direction,
             "player_id": _clean_id(a["resolved_player_id"]),
-            "became_player_id": _clean_id(a["became_player_id"]),
-            "became_player_name": _clean_str(a["became_player_name"]),
-            "slot_war": a["slot_war"], "actual_war": a["actual_war"],
+            "slot_war": a["slot_war"],
             "conditional": a["conditional"], "unresolved": a["unresolved"],
-            "own_pick_assumed": a["own_pick_assumed"], "actual_unresolved": a["actual_unresolved"],
+            "unvaluable": a.get("unvaluable", False),
             "retention": a.get("retention", False), "retained_pct": _clean_id(a.get("retained_pct"))}
 
 
-def net_trades(av: pd.DataFrame) -> pd.DataFrame:
+def net_trades(av: pd.DataFrame, latest: int) -> pd.DataFrame:
     out = []
+    scale = float(T.get("MATURITY_BAND_SCALE", 1.0))
     for trade_id, g in av.groupby("trade_id"):
         teams = set(g["acquiring_team"]) | set(t for t in g["from_team"] if t)
         meta = g.iloc[0]
+        # seasons of the horizon observed in our data so far (clamped to [0, H]). A trade from the latest
+        # season is 1 in; older trades are further along; >= H means the window has fully elapsed.
+        season_start = int(str(meta["season"])[:4])
+        years_elapsed = max(0, min(H, latest - season_start + 1))
+        # remaining-window fraction (0 when settled, ->1 for a brand-new trade); widens the band only.
+        maturity = (H - years_elapsed) / H if H else 0.0
         for team in sorted(teams):
             recv = g[g.acquiring_team == team]
             sent = g[g.from_team == team]
-            acc = {"slot": 0.0, "slot_var": 0.0, "actual": 0.0, "actual_var": 0.0}
+            net = var = 0.0
             for sub, sign in ((recv, 1.0), (sent, -1.0)):
-                acc["slot"] += sign * sub["slot_war"].sum()
-                acc["actual"] += sign * sub["actual_war"].sum()
-                acc["slot_var"] += (sub["slot_hw"] ** 2).sum()
-                acc["actual_var"] += (sub["actual_hw"] ** 2).sum()
-            slot_hw, act_hw = math.sqrt(acc["slot_var"]), math.sqrt(acc["actual_var"])
+                net += sign * sub["slot_war"].sum()
+                var += (sub["slot_hw"] ** 2).sum()
+            hw = math.sqrt(var)
             side = pd.concat([recv, sent])
             has_pick = bool((side.asset_type == "Draft Pick").any())
             has_other = bool((side.asset_type == "Other").any())
+            # unmatched PLAYER on this side -> wider band / lower confidence (never a flipped verdict)
             has_unresolved = bool(side["unresolved"].any())
-            actual_censored = bool(side["actual_censored"].any()) or bool(side["actual_unresolved"].any())
             horizon_incomplete = bool(side["horizon_incomplete"].any())
-            confidence = "low" if (has_pick or has_other or has_unresolved) else "medium"
+            # Maturity band: an unfinished window keeps its realized-to-date net but the band is widened
+            # to reflect value still accruing (realized-only honesty, NOT a projection of future value).
+            # Added uncertainty scales with how much of the horizon remains, combined in quadrature.
+            if horizon_incomplete and maturity > 0:
+                extra = scale * maturity * abs(net)
+                hw = math.sqrt(hw ** 2 + extra ** 2)
+            confidence = "low" if (has_pick or has_other or has_unresolved or horizon_incomplete) else "medium"
             out.append({
                 "trade_id": trade_id, "season": meta["season"], "trade_date": meta["trade_date"],
                 "team": team, "team_count": int(meta["team_count"]),
-                "net_war_slot": round(acc["slot"], 3),
-                "net_war_slot_low": round(acc["slot"] - slot_hw, 3),
-                "net_war_slot_high": round(acc["slot"] + slot_hw, 3),
-                "net_war_actual": round(acc["actual"], 3),
-                "net_war_actual_low": round(acc["actual"] - act_hw, 3),
-                "net_war_actual_high": round(acc["actual"] + act_hw, 3),
+                "net_war_slot": round(net, 3),
+                "net_war_slot_low": round(net - hw, 3),
+                "net_war_slot_high": round(net + hw, 3),
                 "received_count": int(len(recv)), "sent_count": int(len(sent)),
                 "has_pick": has_pick, "has_unresolved": has_unresolved,
-                "actual_censored": actual_censored, "horizon_incomplete": horizon_incomplete,
+                "horizon_incomplete": horizon_incomplete,
+                "window_progress": years_elapsed,   # seasons of the horizon observed (k in "year k of H")
                 "confidence": confidence,
                 "received_ledger": json.dumps([_ledger_entry(a, "in") for a in recv.to_dict("records")]),
                 "sent_ledger": json.dumps([_ledger_entry(a, "out") for a in sent.to_dict("records")]),
@@ -396,20 +372,23 @@ def net_trades(av: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- report
 def _report(av: pd.DataFrame, outc: pd.DataFrame) -> None:
     print(f"\ntrade_outcomes: {len(outc)} (trade, team) rows over {outc.trade_id.nunique()} trades")
-    n_assets = len(av)
-    print(f"  assets: {n_assets} | players {int((av.asset_type=='Player').sum())} "
-          f"(unresolved {int(av.unresolved.sum())}) | picks {int((av.asset_type=='Draft Pick').sum())} "
-          f"(own-pick resolved {int(av.own_pick_assumed.sum())}, actual-unresolved {int(av.actual_unresolved.sum())}) "
-          f"| other {int((av.asset_type=='Other').sum())}")
+    # graded funnel: every trade is graded on realized-to-date value; settled = window fully elapsed,
+    # incomplete = still maturing (graded with a widened band, not dropped).
+    per_trade = outc.groupby("trade_id")["horizon_incomplete"].any()
+    graded = int(per_trade.size)
+    incomplete = int(per_trade.sum())
+    settled = graded - incomplete
+    print(f"  graded: {graded} (all trades) | settled (window elapsed): {settled} | "
+          f"incomplete (still maturing): {incomplete}")
+    print(f"  assets: {len(av)} | players {int((av.asset_type=='Player').sum())} "
+          f"(unmatched {int(av.unresolved.sum())}) | picks {int((av.asset_type=='Draft Pick').sum())} "
+          f"(unvaluable {int(av.unvaluable.sum())}) | other {int((av.asset_type=='Other').sum())}")
     print(f"  confidence: " + ", ".join(f"{k}={v}" for k, v in outc.confidence.value_counts().items()))
-    print("\n  Biggest one-sided wins by net realized WAR (SLOT lens):")
-    top = outc.sort_values("net_war_slot", ascending=False).head(8)
-    for _, r in top.iterrows():
+    print("\n  Biggest one-sided wins by net realized WAR (settled):")
+    settled_rows = outc[~outc.horizon_incomplete]
+    for _, r in settled_rows.sort_values("net_war_slot", ascending=False).head(8).iterrows():
         print(f"    {r.trade_date} {r.team:4s} +{r.net_war_slot:5.1f} WAR "
               f"[{r.net_war_slot_low:.1f},{r.net_war_slot_high:.1f}] ({r.trade_id})")
-    print("\n  Spot-check (actual lens, biggest wins):")
-    for _, r in outc.sort_values("net_war_actual", ascending=False).head(5).iterrows():
-        print(f"    {r.trade_date} {r.team:4s} +{r.net_war_actual:5.1f} WAR actual ({r.trade_id})")
 
 
 def main() -> None:
@@ -418,32 +397,25 @@ def main() -> None:
     ap.add_argument("--sample", type=int, default=0, help="only the first N trades (slice-verify)")
     args = ap.parse_args()
 
-    trades, pwar, curve, draft = _load()
+    trades, pwar, curve = _load()
     if args.sample:
         keep = trades["trade_id"].drop_duplicates().head(args.sample)
         trades = trades[trades.trade_id.isin(keep)]
     latest = int(pwar["start_year"].max())
     pidx = _pwar_index(pwar)
     cidx, factor = _curve_index(curve)
-    didx = _draft_index(draft)
     pretrade = _pretrade_teams(trades)
     team_ids = _team_id_map()
 
-    # the players whose tenure we need to value: traded players + the players picks became
-    need_ids: set = set()
-    for r in trades.itertuples(index=False):
-        if r.asset_type == "Player" and pd.notna(r.resolved_player_id):
-            need_ids.add(int(r.resolved_player_id))
-        elif r.asset_type == "Draft Pick" and pd.notna(r.pick_year) and pd.notna(r.pick_round):
-            pids = didx.get((int(r.pick_year), int(r.pick_round), r.acquiring_team), [])
-            if len(pids) == 1:
-                need_ids.add(pids[0][0])
+    # the players whose tenure we need to value: the traded PLAYER assets (picks are valued by slot)
+    need_ids = {int(r.resolved_player_id) for r in trades.itertuples(index=False)
+                if r.asset_type == "Player" and pd.notna(r.resolved_player_id)}
     gamelog = _load_gamelog(need_ids)
     print(f"loaded {trades.trade_id.nunique()} trades; latest pwar season start={latest}; "
           f"career-extrap x{factor:.2f}; horizon={H}y; gamelog players={len(gamelog)}")
 
-    av = value_assets(trades, pidx, cidx, factor, didx, pretrade, latest, gamelog, team_ids)
-    outc = net_trades(av)
+    av = value_assets(trades, pidx, cidx, factor, pretrade, latest, gamelog, team_ids)
+    outc = net_trades(av, latest)
     _report(av, outc)
 
     if args.dry_run or args.sample:

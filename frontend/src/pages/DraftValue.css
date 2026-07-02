@@ -1,6 +1,6 @@
 .dv { max-width: 1000px; margin: 0 auto; }
 
-.dv-section { margin-top: var(--space-12); }
+.dv-section { margin-top: 0; }
 .dv-section__title {
   font-size: var(--text-xl);
   font-weight: 600;
@@ -31,12 +31,9 @@
 .dv-charttip__row--muted { color: var(--color-text-muted); }
 .dv-charttip .mono { color: var(--color-text-primary); }
 
-/* card surface — same family as ChartPanel (radius + shadow); table content fills it edge-to-edge */
+/* in-card table wrapper — no chrome of its own; the controls border-bottom separates the toolbar */
 .dv-card {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
 .dv-card__controls {

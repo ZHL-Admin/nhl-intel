@@ -3,48 +3,60 @@
  * that won, with the band, the verdict sentence, and an expandable per-asset ledger. The unit you land
  * on from the value map, a dossier deal, an exemplar, or search.
  *
- * Slot is the headline lens on every bar; the actual lens only swaps in when both sides are resolved.
+ * One value-based verdict: players at realized tenure pWAR, picks at the slot's empirical expectation.
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { getTeamColor, getTeamLogoUrl, getTeamName } from '../../utils/teams'
-import { TradeBoardItem, TradeBoardSide, TradeBoardAsset } from '../../api/trades'
+import { TradeBoardItem, TradeBoardAsset } from '../../api/trades'
 import Tilt from './Tilt'
 import './trades.css'
 
 const fmt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
-
-function sideNet(s: TradeBoardSide, lens: 'slot' | 'actual'): number | null {
-  return lens === 'actual' ? s.net_war_actual : s.net_war_slot
-}
+// mirrors config.TRADE_OUTCOMES['REALIZED_HORIZON_YEARS'] — the trade retrospective's tenure horizon,
+// distinct from the Draft Value tool's separate 7-year curve window. Keep in sync if the config changes.
+const REALIZED_HORIZON_YEARS = 5
 
 function AssetLine({ a }: { a: TradeBoardAsset }) {
   const pick = a.asset_type === 'Draft Pick'
   const future = a.asset_type === 'Other'
+
+  // A salary-retention broker row: this team kept part of the player's cap hit, but his real new club
+  // is a DIFFERENT team in the deal (the backend flags it and zeros its WAR). Render it as the cap
+  // mechanism it is — never as the team "getting" the player, which reads as a second acquirer.
+  if (a.retention) {
+    return (
+      <div className="tbl-asset tbl-asset--retention">
+        <span className="tbl-asset__name tbl-muted">
+          retained {a.retained_pct ? `${a.retained_pct}% of ` : ''}
+          {a.player_id != null
+            ? <Link to={`/players/${a.player_id}`}>{a.label}</Link>
+            : a.label}
+          {'’s salary'}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="tbl-asset">
       <span className="tbl-asset__name">
         {a.player_id != null
           ? <Link to={`/players/${a.player_id}`}>{a.label}</Link>
           : future ? <span className="tbl-muted">future considerations</span> : a.label}
-        {pick && a.became_player_id != null && (
-          <span className="tbl-asset__became"> → <Link to={`/players/${a.became_player_id}`}>{a.became_player_name}</Link></span>
-        )}
-        {pick && a.became_player_id == null && <span className="tbl-tag tbl-tag--muted">unresolved</span>}
-        {a.retention && <span className="tbl-tag tbl-tag--muted">{a.retained_pct ? `${a.retained_pct}% retained` : 'retained salary'}</span>}
+        {pick && a.unvaluable && <span className="tbl-tag tbl-tag--muted" title="missing round or pre-trade draft year — cannot value this pick">unvaluable</span>}
         {a.conditional && <span className="tbl-tag">conditional</span>}
       </span>
       <span className="tbl-asset__vals">
-        <span className="mono">{a.war_slot.toFixed(1)}</span>
-        <span className="mono tbl-muted">{a.war_actual == null ? '—' : a.war_actual.toFixed(1)}</span>
+        <span className="mono">{a.unvaluable ? '—' : a.war_slot.toFixed(1)}</span>
       </span>
     </div>
   )
 }
 
-export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defaultOpen = false }: {
-  trade: TradeBoardItem; lens?: 'slot' | 'actual'; focusTeam?: string; defaultOpen?: boolean
+export default function TradeBalanceCard({ trade, focusTeam, defaultOpen = false, fullHref }: {
+  trade: TradeBoardItem; focusTeam?: string; defaultOpen?: boolean; fullHref?: string
 }) {
   const [open, setOpen] = useState(defaultOpen)
 
@@ -53,23 +65,29 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
   if (focusTeam) sides.sort((a, b) => (a.team_abbrev === focusTeam ? -1 : b.team_abbrev === focusTeam ? 1 : 0))
   const threeTeam = trade.team_count >= 3
 
-  const actualResolvable = trade.margin_actual != null
-  const useActual = lens === 'actual' && actualResolvable
-
   // 2-team: one bar, positive = right side won
   const left = sides[0], right = sides[1]
-  const signed = right ? ((useActual ? (right.net_war_actual ?? 0) : right.net_war_slot)) : 0
-  const bandHw = useActual ? (trade.band_hw_actual ?? 0) : trade.band_hw_slot
+  const signed = right ? right.net_war_slot : 0
+  const bandHw = trade.band_hw_slot
   const winnerColor = trade.winner_team_id != null
     ? getTeamColor(sides.find((s) => s.team_id === trade.winner_team_id)?.team_abbrev || left.team_abbrev)
     : 'var(--color-text-muted)'
 
   const winnerAbbrev = sides.find((s) => s.team_id === trade.winner_team_id)?.team_abbrev
+  const winnerName = winnerAbbrev ? getTeamName(winnerAbbrev) : ''
+  const m = fmt(Math.abs(trade.margin_slot))
+  // Incomplete trades ARE graded — on realized value to date — but show a maturity tag instead of a hard
+  // verdict: the realized-to-date margin "so far" with a deliberately wide band. No projection of the rest.
+  // Settled trades read one of three tiers: decisive (clears the band), edge (sign known, within the band),
+  // even (realized value came out level).
   const verdictText = trade.incomplete
-    ? `still maturing — through year ${trade.realized_year} of 5`
-    : trade.verdict === 'too_close'
-      ? `too close to call (within ±${bandHw.toFixed(1)} WAR)`
-      : `${trade.verdict === 'lean' ? 'leans' : ''} ${winnerAbbrev ? getTeamName(winnerAbbrev) : ''} ${trade.verdict === 'decisive' ? 'won this,' : ''} ${fmt(Math.abs(trade.margin_slot))} WAR`.trim()
+    ? `still maturing — year ${trade.window_progress} of ${REALIZED_HORIZON_YEARS}`
+      + (winnerAbbrev ? ` · ${winnerName} ${m} so far (±${bandHw.toFixed(1)})` : ` · even so far (±${bandHw.toFixed(1)})`)
+    : trade.verdict === 'even'
+      ? 'Even — realized value came out level.'
+      : trade.verdict === 'edge'
+        ? `Slight edge ${winnerName}, ${m} WAR (within the band)`
+        : `${winnerName} won this, ${m} WAR`
 
   return (
     <div className={`tbl-card ${trade.incomplete ? 'tbl-card--incomplete' : ''}`}>
@@ -99,15 +117,16 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
 
       {!threeTeam ? (
         <Tilt signed={signed} bandHw={bandHw} color={winnerColor}
-          tooClose={trade.verdict === 'too_close'} incomplete={trade.incomplete} size="full" />
+          even={trade.verdict === 'even'} edge={trade.verdict === 'edge' && !trade.incomplete}
+          incomplete={trade.incomplete} size="full" />
       ) : (
         <div className="tbl-multibar">
           {sides.map((s) => {
-            const net = sideNet(s, useActual ? 'actual' : 'slot') ?? 0
+            const net = s.net_war_slot ?? 0
             return (
               <div key={s.team_abbrev} className="tbl-multibar__row">
                 <span className="tbl-multibar__lbl mono">{s.team_abbrev}</span>
-                <Tilt signed={net} bandHw={0} color={getTeamColor(s.team_abbrev)} tooClose={false} incomplete={trade.incomplete} size="compact" />
+                <Tilt signed={net} bandHw={0} color={getTeamColor(s.team_abbrev)} even={false} incomplete={trade.incomplete} size="compact" />
                 <span className="mono tbl-multibar__v">{fmt(net)}</span>
               </div>
             )
@@ -117,9 +136,8 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
       )}
 
       <div className="tbl-verdict">
-        {lens === 'actual' && !actualResolvable
-          ? <span className="tbl-muted">actual not resolvable for this trade</span>
-          : <span>{verdictText}</span>}
+        <span>{verdictText}</span>
+        {fullHref && <span className="tbl-share"> · <Link to={fullHref}>open full page ↗</Link></span>}
       </div>
 
       <button className="tbl-expand" onClick={() => setOpen((o) => !o)}>
@@ -129,13 +147,13 @@ export default function TradeBalanceCard({ trade, lens = 'slot', focusTeam, defa
         <div className="tbl-ledger">
           {sides.map((s) => (
             <div key={s.team_abbrev} className="tbl-ledger__col">
-              <div className="tbl-ledger__head"><span>{s.team_abbrev} got</span><span className="tbl-muted">slot · actual</span></div>
+              <div className="tbl-ledger__head"><span>{s.team_abbrev} got</span><span className="tbl-muted">WAR</span></div>
               {s.assets.length ? s.assets.map((a, i) => <AssetLine key={i} a={a} />)
                 : <div className="tbl-muted">—</div>}
             </div>
           ))}
           <div className="tbl-ledger__foot tbl-muted">
-            {trade.archetype.replace(/_/g, ' ')} · {actualResolvable ? 'both resolved' : 'actual unresolved'} · confidence {trade.confidence}
+            {trade.archetype.replace(/_/g, ' ')} · confidence {trade.confidence}
           </div>
         </div>
       )}

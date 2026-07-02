@@ -5,7 +5,7 @@
  */
 import {
   ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid,
-  ReferenceLine, Tooltip as RTooltip, Cell, Label,
+  ReferenceLine, Tooltip as RTooltip, Cell, Label, LabelList,
 } from 'recharts'
 import { getTeamColor } from '../../utils/teams'
 import { ValueMapPoint } from '../../api/trades'
@@ -19,7 +19,7 @@ function MapTip({ active, payload }: any) {
       <div className="vm-tip__name">{p.label}</div>
       <div className="vm-tip__row"><span>net</span><span className="mono">{p.net_war >= 0 ? '+' : '−'}{Math.abs(p.net_war).toFixed(1)} ± {p.net_band_hw.toFixed(1)}</span></div>
       <div className="vm-tip__row"><span>gained / gave up</span><span className="mono">{p.gained_war.toFixed(1)} / {p.given_up_war.toFixed(1)}</span></div>
-      <div className="vm-tip__row"><span>record</span><span className="mono">{r.decisive_wins}-{r.leans}-{r.too_close}-{r.losses}</span></div>
+      <div className="vm-tip__row"><span>record</span><span className="mono">{r.decisive_wins}-{r.edge}-{r.even}-{r.losses}</span></div>
       <div className="vm-tip__row"><span>trades</span><span className="mono">{p.trade_count}</span></div>
     </div>
   )
@@ -30,7 +30,11 @@ export default function ValueMap({ points, onSelect }: {
 }) {
   if (!points.length) return <div className="vm-empty">No trades in this filter.</div>
   const max = Math.ceil(Math.max(1, ...points.map((p) => Math.max(p.given_up_war, p.gained_war))) * 1.08)
-  const data = points.map((p) => ({ ...p, x: p.given_up_war, y: p.gained_war }))
+  // raw coordinates unchanged; the σ cue is visual emphasis only — clear entities solid + labeled,
+  // leans normal, the indistinguishable cluster muted/low-opacity so it reads as a cluster.
+  const emph = (s: string) => (s === 'clear' ? 0.95 : s === 'leans' ? 0.6 : 0.22)
+  const data = points.map((p) => ({ ...p, x: p.given_up_war, y: p.gained_war,
+    _clabel: p.separation === 'clear' ? p.label : '' }))
 
   return (
     <ResponsiveContainer width="100%" height={460}>
@@ -50,9 +54,11 @@ export default function ValueMap({ points, onSelect }: {
         <RTooltip content={<MapTip />} cursor={{ strokeDasharray: '3 3' }} />
         <Scatter data={data} onClick={(d: any) => d?.id && onSelect(d.id)} cursor="pointer">
           {data.map((p) => (
-            <Cell key={p.id} fill={getTeamColor(p.team_abbrev_for_color)} fillOpacity={0.75}
-              stroke="var(--color-bg-surface)" strokeWidth={1} />
+            <Cell key={p.id} fill={getTeamColor(p.team_abbrev_for_color)} fillOpacity={emph(p.separation)}
+              stroke={p.separation === 'clear' ? 'var(--color-text-primary)' : 'var(--color-bg-surface)'}
+              strokeWidth={p.separation === 'clear' ? 1.5 : 1} />
           ))}
+          <LabelList dataKey="_clabel" position="top" style={{ fontSize: 10, fill: 'var(--color-text-secondary)' }} />
         </Scatter>
       </ScatterChart>
     </ResponsiveContainer>

@@ -1,4 +1,7 @@
-.trade-builder { display: flex; flex-direction: column; gap: var(--space-5); }
+/* wrapper around the single PageCard — no chrome of its own */
+.trade-builder { display: block; }
+/* the page body: a vertical stack of sections inside the one card */
+.trade-builder__body { display: flex; flex-direction: column; gap: var(--space-5); }
 
 .trade-builder__toolbar {
   display: flex; align-items: center; gap: var(--space-4);
@@ -34,21 +37,24 @@
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+/* empty team slot — a subtle dashed inset prompting the next team, with the same chip grid as setup.
+   Uses the base background so the elevated chips read against it (not the same fill). */
 .trade-team-slot {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-3); min-height: 160px;
-  background: var(--color-bg-surface); border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg); padding: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-3);
+  background: var(--color-bg-base); border: 1px dashed var(--color-border-subtle);
+  border-radius: var(--radius-md); padding: var(--space-4); align-content: flex-start;
 }
-.trade-team-slot__icon { color: var(--color-text-muted); }
 .trade-team-slot__label {
-  font-size: var(--text-sm); font-weight: 650; color: var(--color-text-secondary);
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--color-text-muted);
 }
 
+/* empty-state hint — a subtle inset, not a bordered card */
 .trade-builder__hint {
   font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.5;
-  background: var(--color-bg-surface); border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg); padding: var(--space-5); text-align: center;
+  background: var(--color-bg-elevated); border-radius: var(--radius-md);
+  padding: var(--space-5); text-align: center;
 }
 
 .trade-builder__error {
@@ -61,3 +67,67 @@
   font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
   border-top: 1px solid var(--color-border-subtle); padding-top: var(--space-3); margin: 0;
 }
+
+/* =========================================================================
+   TradeSetup — the entry state: Side A/B slots, team-chip quick-pick, search.
+   ========================================================================= */
+.ts-setup { display: flex; flex-direction: column; gap: var(--space-6); }
+
+/* Side A / Side B slots with a swap glyph between them */
+.ts-sides { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); }
+.ts-sides__swap { color: var(--color-text-muted); justify-self: center; }
+.ts-side {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-3);
+  min-height: 56px; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg);
+}
+.ts-side--empty { border: 1px dashed var(--color-border); }
+.ts-side--empty.ts-side--next { border-color: var(--color-border-strong); }
+.ts-side__label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-secondary); }
+.ts-side--empty:not(.ts-side--next) .ts-side__label { color: var(--color-text-muted); }
+.ts-side--filled {
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--ts-team, var(--color-accent)) 8%, var(--color-bg-surface));
+}
+.ts-side__dot { width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--ts-team, var(--color-accent)); flex-shrink: 0; }
+.ts-side__name { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
+
+/* Quick-pick grid (chips come from the shared TeamQuickJump component) */
+.ts-pick__label {
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--color-text-muted); margin-bottom: var(--space-3);
+}
+
+/* "or" divider */
+.ts-or { display: flex; align-items: center; }
+.ts-or::before, .ts-or::after { content: ''; flex: 1; height: 1px; background: var(--color-border-subtle); }
+.ts-or span { padding: 0 var(--space-3); font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Player search + load-an-example */
+.ts-search-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.ts-search { position: relative; flex: 1 1 320px; display: flex; align-items: center; }
+.ts-search__icon { position: absolute; left: var(--space-3); color: var(--color-text-muted); pointer-events: none; }
+.ts-search__input {
+  width: 100%; padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--space-6) + 4px);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-bg-base); font-size: var(--text-sm); color: var(--color-text-primary);
+  transition: border-color 120ms ease;
+}
+.ts-search__input::placeholder { color: var(--color-text-muted); }
+.ts-search__input:focus { outline: none; border-color: var(--color-accent); }
+.ts-search__menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.ts-search__item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
+  width: 100%; padding: var(--space-2) var(--space-3); border: none; background: none; cursor: pointer;
+  text-align: left; color: var(--color-text-primary); font-size: var(--text-sm);
+}
+.ts-search__item:hover { background: var(--color-bg-elevated); }
+.ts-search__sub { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+.ts-example {
+  background: none; border: none; cursor: pointer; white-space: nowrap;
+  font-size: var(--text-sm); font-weight: 600; color: var(--color-accent);
+}
+.ts-example:hover { text-decoration: underline; }

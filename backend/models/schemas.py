@@ -1396,6 +1396,138 @@ class LineSuggestionsResponse(BaseModel):
     slots: List[SlotSuggestions] = Field(default_factory=list)
 
 
+# ── Roster Builder (POST /tools/roster-evaluate) ─────────────────────────────────────────────
+class RosterSlot(BaseModel):
+    """One placed player on the depth-chart canvas. slot encodes the line/pair/position
+    (F1L/F1C/F1R..F4R, D1L/D1R..D3R, G1/G2); a slot outside that set (or omitted) is a scratch."""
+    player_id: int
+    slot: Optional[str] = None
+
+
+class RosterEvaluateRequest(BaseModel):
+    """Body for POST /tools/roster-evaluate. team_id seeds the current-roster baseline + delta. roster
+    is the user's placed players; omit (or optimize=true) to auto-build the optimal lineup."""
+    team_id: int
+    roster: Optional[List[RosterSlot]] = None
+    optimize: bool = False
+    season: Optional[str] = None
+
+
+class RosterPlayerOut(BaseModel):
+    """A placed player's projection. An empty iced slot is a replacement-level hole (player_id null,
+    replacement=true) — never dropped. on_new_team => projected on a club other than his own
+    (band widened, projection unchanged)."""
+    player_id: Optional[int] = None
+    name: Optional[str] = None
+    pos: Optional[str] = None
+    shoots: Optional[str] = None
+    slot: Optional[str] = None
+    age: Optional[int] = None
+    base_war: float = 0.0
+    projected_war: float = 0.0
+    war_sd: float = 0.0
+    no_track_record: bool = False
+    on_new_team: bool = False
+    replacement: bool = False
+
+
+class LineFit(BaseModel):
+    """A built line/pair's cold-start fit grade (Lineup Lab score_line)."""
+    grade: Optional[str] = None
+    xgf_pct: Optional[float] = None
+
+
+class RosterLine(BaseModel):
+    """A forward line or defense pair: its slotted players + the line's fit grade."""
+    slots: List[RosterPlayerOut] = Field(default_factory=list)
+    fit: Optional[LineFit] = None
+
+
+class RosterGoalies(BaseModel):
+    starter: RosterPlayerOut
+    backup: Optional[RosterPlayerOut] = None
+
+
+class RosterComponents(BaseModel):
+    """The iced roster's realized value partitioned (WAR units, shared scale): the four sum to the
+    roster's total realized WAR."""
+    play_5v5: float
+    finishing: float
+    special_teams: float
+    goaltending: float
+
+
+class PositionalValues(BaseModel):
+    """Projected WAR-above-replacement by group — where the roster is strong or thin."""
+    forward_war: float
+    defense_war: float
+    goaltending_war: float
+
+
+class RosterSuggestRequest(BaseModel):
+    """Body for POST /tools/roster-suggest: line-aware 'great fit' candidates for one slot."""
+    team_id: int
+    slot: str
+    roster: Optional[List[RosterSlot]] = None
+    season: Optional[str] = None
+
+
+class RosterSuggestion(BaseModel):
+    """A suggested player for a slot, caliber-tiered to its line and ranked by fit."""
+    player_id: int
+    name: Optional[str] = None
+    pos: Optional[str] = None
+    team_id: Optional[int] = None
+    team_abbrev: Optional[str] = None
+    headshot_url: Optional[str] = None
+    projected_war: float
+    war_sd: float
+    grade: Optional[str] = None
+    xgf_pct: Optional[float] = None
+
+
+class RosterSuggestResponse(BaseModel):
+    slot: str
+    suggestions: List[RosterSuggestion] = Field(default_factory=list)
+
+
+class RosterEvaluateResponse(BaseModel):
+    """The points-led projection for a built roster (POST /tools/roster-evaluate). DELTA-led: points_delta
+    vs the team's real roster is the headline; projected_points (with band) is the secondary absolute
+    read — a forward projection, NOT a measured rating. No cap/salary anywhere."""
+    team_id: int
+    base_season: str
+    # Headline: change vs the real roster (sign-aware, points scale) with its TIGHT band (only the
+    # changed players' calibrated projection sds — no luck floor; a talent comparison).
+    points_delta: float
+    delta_band: float = 0.0
+    delta_low: float = 0.0
+    delta_high: float = 0.0
+    baseline_points: int
+    baseline_rating: float
+    # Secondary absolute projection, with its WIDE, calibrated band (talent x kappa + season luck).
+    projected_points: int
+    points_low: int
+    points_high: int
+    abs_band: float = 0.0
+    band_goals: float
+    rating_abs: float
+    # Hybrid transparency (Handoff 13): the bottom-up parts-sum rating and the retained value share w.
+    r_bottomup: float = 0.0
+    retained_share: float = 1.0
+    total_lineup_war: float
+    chemistry_adj: float
+    components: RosterComponents
+    positional: PositionalValues
+    forward_lines: List[RosterLine] = Field(default_factory=list)
+    defense_pairs: List[RosterLine] = Field(default_factory=list)
+    goalies: RosterGoalies
+    scratches: List[RosterPlayerOut] = Field(default_factory=list)
+    arrivals: int = 0
+    departures: int = 0
+    negligible: bool = False
+
+
 class TeamLine(BaseModel):
     """A team's current line (trio/pair) with observed results + projected grade."""
     line_type: str
@@ -1518,6 +1650,14 @@ class RosterForecastRow(BaseModel):
     band_low: float            # band is on projected_rating
     band_high: float
     band_goals: float          # half-width (goals/game)
+    # Projected 82-game standings points — a validated linear transform of the rating, carried with its
+    # band; points_delta is the offseason move-impact in points. Optional so the route stays up if a
+    # serving table predates the points columns.
+    base_points: Optional[int] = None
+    projected_points: Optional[int] = None
+    points_low: Optional[int] = None
+    points_high: Optional[int] = None
+    points_delta: Optional[float] = None
     net_delta_war: float
     chemistry_adj: Optional[float] = None
     base_rank: Optional[int] = None
@@ -2124,70 +2264,11 @@ class DraftPlayerBlock(BaseModel):
     is_estimate: bool = True      # pWAR is a wide-band back-cast estimate; never a precise figure
 
 
-# --- Trade-outcome retrospective (Handoff 5, Phase D) ---
-class TradeLedgerEntry(BaseModel):
-    asset: str
-    type: str
-    direction: str                       # in / out
-    player_id: Optional[int] = None
-    became_player_id: Optional[int] = None      # the player a traded pick became (actual lens)
-    became_player_name: Optional[str] = None
-    slot_war: float
-    actual_war: float
-    conditional: bool = False
-    own_pick_assumed: bool = False
-    actual_unresolved: bool = False
-
-
-class TradeOutcomeRow(BaseModel):
-    trade_id: str
-    season: str
-    trade_date: str
-    team: str
-    team_count: int
-    net_war_slot: float
-    net_war_slot_low: float
-    net_war_slot_high: float
-    net_war_actual: float
-    net_war_actual_low: float
-    net_war_actual_high: float
-    received_count: int
-    sent_count: int
-    has_pick: bool
-    has_unresolved: bool
-    actual_censored: bool
-    horizon_incomplete: bool
-    confidence: str
-
-
-class TradeDetailTeam(TradeOutcomeRow):
-    received: List[TradeLedgerEntry] = []
-    sent: List[TradeLedgerEntry] = []
-
-
-class TradeDetail(BaseModel):
-    trade_id: str
-    season: str
-    trade_date: str
-    teams: List[TradeDetailTeam]
-    caveat: str
-
-
-class TeamTradeLedger(BaseModel):
-    team_id: int
-    team_abbrev: str
-    n_trades: int
-    total_net_slot: float
-    total_net_actual: float
-    trades: List[TradeOutcomeRow]
-    caveat: str
-
-
 # --- Trade board / GM layer (Handoff 6): entity-first surfaces -----------------------------------
 class TraderRecord(BaseModel):
     decisive_wins: int = 0
-    leans: int = 0
-    too_close: int = 0
+    edge: int = 0                      # directional-but-uncertain wins
+    even: int = 0                      # realized value came out level (the former third tier)
     losses: int = 0
 
 
@@ -2195,14 +2276,11 @@ class TradeBoardAsset(BaseModel):
     asset_type: str
     label: str
     war_slot: float
-    war_actual: Optional[float] = None
-    resolved: bool
     player_id: Optional[int] = None
-    became_player_id: Optional[int] = None
-    became_player_name: Optional[str] = None
     conditional: bool = False
     retention: bool = False
     retained_pct: Optional[int] = None
+    unvaluable: bool = False            # a pick we cannot value (missing round, or year < trade season)
 
 
 class TradeBoardSide(BaseModel):
@@ -2212,9 +2290,7 @@ class TradeBoardSide(BaseModel):
     gm_name: Optional[str] = None
     gm_transition: bool = False
     slot_war_received: float
-    actual_war_received: Optional[float] = None
     net_war_slot: float = 0.0
-    net_war_actual: Optional[float] = None
     assets: List[TradeBoardAsset] = []
 
 
@@ -2226,13 +2302,12 @@ class TradeBoardItem(BaseModel):
     sides: List[TradeBoardSide]
     margin_slot: float
     band_hw_slot: float
-    margin_actual: Optional[float] = None
-    band_hw_actual: Optional[float] = None
     winner_team_id: Optional[int] = None
     winner_gm_id: Optional[str] = None
-    verdict: str                       # decisive | lean | too_close
-    incomplete: bool
+    verdict: str                       # decisive | edge | even
+    incomplete: bool                   # window not fully elapsed -> graded on realized-to-date, band widened
     realized_year: int
+    window_progress: int = 0           # seasons of the horizon observed (k in "still maturing — year k of H")
     is_player_for_picks: bool
     archetype: str
     confidence: str
@@ -2247,8 +2322,16 @@ class ValueMapPoint(BaseModel):
     gained_war: float
     net_war: float
     net_band_hw: float
-    trade_count: int
+    trade_count: int                   # trades contributing to the net (settled-only)
+    settled_count: int = 0
+    maturing_count: int = 0            # still-maturing trades involving this entity (not in the net)
     record: TraderRecord
+    # confidence-aware ranking (settled-only): rank_value is the EB-shrunk record (default sort key),
+    # z = net/band_hw (standardized distance from even), separation = clear|leans|noise, low_n = few trades
+    rank_value: float = 0.0
+    z: float = 0.0
+    separation: str = "noise"
+    low_n: bool = False
 
 
 class DossierTenure(BaseModel):
@@ -2260,9 +2343,10 @@ class DossierTenure(BaseModel):
 
 class DossierTimelinePoint(BaseModel):
     date: str
-    cumulative_net_war: float
+    cumulative_net_war: float          # advances only on settled trades
     trade_id: str
     regime_key: str
+    incomplete: bool = False           # a still-maturing trade plotted at the carried-forward cumulative
 
 
 class TraderDossier(BaseModel):
@@ -2272,7 +2356,9 @@ class TraderDossier(BaseModel):
     tenures: List[DossierTenure]
     net_war: float
     net_band_hw: float
-    trade_count: int
+    trade_count: int                   # trades contributing to the net/record/timeline (settled-only)
+    settled_count: int = 0
+    maturing_count: int = 0            # still-maturing trades (shown in the deal list, not in the rollups)
     record: TraderRecord
     timeline: List[DossierTimelinePoint]
     best: List[str]
@@ -2292,9 +2378,18 @@ class DossierPartner(BaseModel):
 
 
 class ThesisSummary(BaseModel):
-    trades_graded: int
+    trades_graded: int                 # ALL trades (every trade is graded on realized-to-date value)
+    settled_count: int = 0             # window fully elapsed — the denominator behind the split percentages
+    maturing_count: int = 0            # still maturing — graded with a widened band, not in the splits
+    # three-tier split over settled (counts + percentages) and the directional total (decisive + edge)
+    decisive_count: int = 0
+    edge_count: int = 0
+    even_count: int = 0
+    directional_count: int = 0
     decisive_pct: int = 0
-    too_close_pct: int = 0
+    edge_pct: int = 0
+    even_pct: int = 0
+    directional_pct: int = 0
     biggest_fleece: dict = {}
     player_for_picks: dict = {}
     caveat: str = ""
@@ -2303,7 +2398,9 @@ class ThesisSummary(BaseModel):
 class ArchetypeAgg(BaseModel):
     archetype: str
     label: str
-    trade_count: int
+    trade_count: int                # settled trades in this archetype (the split denominator)
+    settled_count: int = 0
+    maturing_count: int = 0         # still-maturing trades in this archetype (excluded from the split)
     split: dict
     exemplars: List[dict] = []      # ordered, labeled, distinct: [{label, trade_id}]
     timing: List[dict] = []

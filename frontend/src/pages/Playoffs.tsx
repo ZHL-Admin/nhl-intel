@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { PageLayout, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader } from '../components/common'
 import { getPlayoffBracket } from '../api/playoffs'
 import { PlayoffBracket } from '../api/types'
 import { getTeamLogoUrl, getTeamName, getTeamColor } from '../utils/teams'
@@ -80,16 +80,24 @@ export default function Playoffs() {
     return { prob, seed }
   }, [bracket])
 
+  const PLAYOFFS_SUB = 'Build your own bracket — click any team to advance them — against the model’s Monte-Carlo odds.'
+
   if (error) {
-    return <PageLayout><div className="pl-page"><p className="pl-error">{error}</p></div></PageLayout>
+    return (
+      <PageLayout>
+        <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
+          <p className="pl-error">{error}</p>
+        </PageCard>
+      </PageLayout>
+    )
   }
   if (!bracket) {
     return (
       <PageLayout>
-        <div className="pl-page">
+        <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
           <SkeletonLoader height={80} />
           <div style={{ marginTop: 24 }}><SkeletonLoader height={420} /></div>
-        </div>
+        </PageCard>
       </PageLayout>
     )
   }
@@ -160,7 +168,7 @@ export default function Playoffs() {
 
   return (
     <PageLayout>
-      <div className="pl-page">
+      <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
         <div className="pl-hero" style={{ ['--pl-team' as any]: getTeamColor(champ) }}>
           <div className="pl-champion">
             <div className="pl-champion__head">
@@ -189,19 +197,19 @@ export default function Playoffs() {
           {/* Mirrored bracket: West flows to the center, East flows in from the right. */}
           <section className="pl-bracket-wrap">
             <div className="pl-bracket">
-              <Column label="First Round" scale={1}>
+              <Column label="First Round" scale={0.85}>
                 {[0, 1, 2, 3].map((i) => <span key={`wr1-${i}`}>{card(`r1-${i}`, r1[i])}</span>)}
               </Column>
-              <Column label="Second Round" scale={1.12}>
+              <Column label="Second Round" scale={0.95}>
                 {[0, 1].map((i) => <span key={`wr2-${i}`}>{card(`r2-${i}`, r2[i])}</span>)}
               </Column>
-              <Column label="Conf. Final" scale={1.24}>{card('cf-0', cf[0])}</Column>
-              <Column label="Final" scale={1.4}>{card('final', fin, 'lg')}</Column>
-              <Column label="Conf. Final" scale={1.24}>{card('cf-1', cf[1])}</Column>
-              <Column label="Second Round" scale={1.12}>
+              <Column label="Conf. Final" scale={1.06}>{card('cf-0', cf[0])}</Column>
+              <Column label="Final" scale={1.2}>{card('final', fin, 'lg')}</Column>
+              <Column label="Conf. Final" scale={1.06}>{card('cf-1', cf[1])}</Column>
+              <Column label="Second Round" scale={0.95}>
                 {[2, 3].map((i) => <span key={`er2-${i}`}>{card(`r2-${i}`, r2[i])}</span>)}
               </Column>
-              <Column label="First Round" scale={1}>
+              <Column label="First Round" scale={0.85}>
                 {[4, 5, 6, 7].map((i) => <span key={`er1-${i}`}>{card(`r1-${i}`, r1[i])}</span>)}
               </Column>
             </div>
@@ -210,6 +218,8 @@ export default function Playoffs() {
             </div>
           </section>
         </div>
+
+        <div className="page-divider" />
 
         {/* Championship odds from the Monte-Carlo simulation (the model's own, independent of picks) */}
         <section className="pl-odds-section">
@@ -243,7 +253,7 @@ export default function Playoffs() {
             </tbody>
           </table>
         </section>
-      </div>
+      </PageCard>
     </PageLayout>
   )
 }

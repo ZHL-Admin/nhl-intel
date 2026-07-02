@@ -1,20 +1,3 @@
-.lab__header { margin-bottom: var(--space-6); }
-.lab__back { font-size: var(--text-sm); color: var(--color-text-secondary); }
-.lab__back:hover { color: var(--color-text-primary); }
-.lab__title {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-text-primary);
-  margin: var(--space-2) 0 var(--space-2);
-}
-.lab__sub {
-  font-size: var(--text-base);
-  color: var(--color-text-secondary);
-  line-height: 1.55;
-  max-width: 640px;
-}
-
 /* two-column: build surface + explorer */
 .lab__grid {
   display: grid;
@@ -59,7 +42,6 @@
       var(--color-bg-elevated) 100%);
   padding: var(--space-6) var(--space-5) var(--space-5);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
 }
 
 /* decorative rink markings */
@@ -265,13 +247,12 @@
 /* ============================================================================
    Better fits — per-slot same-caliber swap suggestions
    ============================================================================ */
+/* "Better fits" is a section INSIDE the page card — no card chrome of its own;
+   a top divider separates it from the projection hero above. */
 .lab-fits {
-  margin-top: var(--space-5);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border-subtle);
 }
 .lab-fits__head { display: flex; align-items: flex-start; gap: var(--space-3); }
 .lab-fits__icon {
@@ -378,7 +359,6 @@
    Responsive
    ============================================================================ */
 @media (max-width: 900px) {
-  .lab { padding: var(--space-6) var(--space-4) var(--space-12); }
   .lab__grid { grid-template-columns: 1fr; }
   .lab-slot-wrap--center { transform: none; }
 }

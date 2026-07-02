@@ -76,3 +76,31 @@ each played game is replayed 10,000 times with each team's goals Poisson(its
 in-game xG); points are awarded by simulated outcomes. Luck delta = actual
 minus deserved points.
 
+## Rating → projected points
+
+The rating is expected goal differential per game (league mean ≈ 0), so 82-game
+standings points are a transparent linear transform of it:
+
+`projected_points = clamp(round(INTERCEPT + SLOPE × rating), 0, CEILING)`
+
+with the same map applied to the band endpoints (`points_low`/`points_high` from the
+rating band) and the move impact reported as `points_delta = round(SLOPE × Δrating, 1)`.
+`CEILING = 164` (82 games × 2). The one mapping lives in
+`models_ml/project_roster_forecast.py:rating_to_points` and its constants in
+`config.ROSTER_FORECAST["FORECAST_POINTS"]` — the forecast row, the serving backfill,
+and validation all call it (no duplicated fit).
+
+Constants are fit by ordinary least squares of each season's final
+`team_ratings.total_rating` against actual `nhl_models.deserved_standings.actual_points`:
+`INTERCEPT = 91.5` (≈ league-average points), `SLOPE = 35.8` (points per goal/game of
+differential). On the currently-served season (2025-26, 32 teams) the fit is **R² = 0.82**
+and predicted-vs-actual **MAE = 4.5 points**; `models_ml/validate_roster_forecast.py`
+recomputes these so the constants refresh as more seasons land.
+
+The slope runs **above** the naive first principle (1 goal/game ≈ 82/`GOALS_PER_WIN` ≈ 13.7
+marginal wins ≈ ~27 points) — an APPROXIMATION, stated loudly: OT/SO award a third point,
+and the opponent-adjusted rating is compressed relative to raw goal differential, both of
+which steepen the empirical slope. A future refinement is to sum expected points per game
+from the existing win-probability model across an average 82-game slate (a logistic-sum,
+not a single line); the linear map is the shipped version and is honest about its band.
+

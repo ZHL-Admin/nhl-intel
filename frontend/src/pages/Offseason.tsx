@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageLayout, PageHeader, Tabs, Select, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, Tabs, Select, SkeletonLoader } from '../components/common'
 import { getOffseasonBoard, getTeamOffseason } from '../api/offseason'
 import { RosterForecastRow, OffseasonTeamDetail } from '../api/types'
 import {
@@ -137,20 +137,20 @@ export default function Offseason() {
   return (
     <PageLayout>
       <div className="off">
-        <PageHeader
+        <PageCard
           title="Offseason Forecast"
           subtitle="How each team projects next season from the moves it has made."
+          controls={
+            <div className="off__toolbar">
+              <Tabs value={view} onChange={setView}
+                options={[{ value: 'league', label: 'League' }, { value: 'team', label: 'Team' }]} />
+              {view === 'team' && selected && (
+                <Select ariaLabel="Choose team" value={String(selected.team_id)} options={teamOptions}
+                  onChange={(v) => selectTeam(Number(v), true)} />
+              )}
+            </div>
+          }
         >
-          <div className="off__toolbar">
-            <Tabs value={view} onChange={setView}
-              options={[{ value: 'league', label: 'League' }, { value: 'team', label: 'Team' }]} />
-            {view === 'team' && selected && (
-              <Select ariaLabel="Choose team" value={String(selected.team_id)} options={teamOptions}
-                onChange={(v) => selectTeam(Number(v), true)} />
-            )}
-          </div>
-        </PageHeader>
-
         {boardErr && <p className="off-msg">The offseason forecast is unavailable right now.</p>}
         {!board && !boardErr && <SkeletonLoader height={360} />}
 
@@ -170,6 +170,8 @@ export default function Offseason() {
               <ForecastHeroStats f={selected} />
             </header>
 
+            <div className="page-divider" />
+
             <div className="off-grid">
               <aside className="off-grid__rail">
                 <LeagueRail rows={board} selectedId={selected.team_id}
@@ -187,11 +189,12 @@ export default function Offseason() {
           <section className="off-league">
             <div className="off-league__head">
               <h2 className="off-league__title">Projected standings, {nextSeasonOf(board[0]?.transition ?? '')}</h2>
-              <p className="off-league__sub">All 32 teams by projected rating. Select a team for its full forecast.</p>
+              <p className="off-league__sub">All 32 teams by projected points. Select a team for its full forecast.</p>
             </div>
             <OffseasonLeagueTable rows={board} onSelect={(id) => selectTeam(id, true)} />
           </section>
         )}
+        </PageCard>
       </div>
     </PageLayout>
   )

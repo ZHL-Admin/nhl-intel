@@ -21,6 +21,8 @@
 .fhero__value--xl { font-size: var(--text-2xl); }
 .fhero__cell--wide .uband { margin-top: var(--space-2); }
 .fhero__sub { font-size: var(--text-xs); color: var(--color-text-secondary); margin-top: var(--space-1); }
+/* the demoted underlying rating, shown beneath the projected-points headline */
+.fhero__sub--quiet { color: var(--color-text-muted); }
 .fhero__change.is-up { color: var(--color-success); }
 .fhero__change.is-down { color: var(--color-danger); }
 .fhero__change.is-flat { color: var(--color-text-muted); }
@@ -110,6 +112,11 @@
 .oltable__th-info { color: var(--color-text-muted); cursor: help; }
 .oltable__center { text-align: center; }
 .oltable__rating { font-weight: 600; color: var(--color-text-primary); }
+/* points = primary column (value over its band); rating demoted to a muted secondary column */
+.oltable__points { white-space: nowrap; }
+.oltable__points-val { font-weight: 700; color: var(--color-text-primary); font-size: var(--text-base); }
+.oltable__points-band { display: block; font-size: 10px; color: var(--color-text-muted); margin-top: 1px; }
+.oltable__rating-sec { color: var(--color-text-secondary); }
 .oltable__team { display: inline-flex; align-items: center; gap: var(--space-2); }
 .oltable__logo { width: 22px; height: 22px; object-fit: contain; }
 .oltable__abbr { font-weight: 600; color: var(--color-text-primary); }

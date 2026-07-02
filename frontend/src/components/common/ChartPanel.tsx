@@ -1,5 +1,6 @@
 import { useState, createContext, useContext } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { PageCardContext } from './PageCard';
 import './ChartPanel.css';
 
 interface ChartPanelProps {
@@ -34,9 +35,10 @@ export default function ChartPanel({
 }: ChartPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const height = isExpanded ? 560 : 280;
+  const insidePageCard = useContext(PageCardContext);
 
   return (
-    <div className="chart-panel">
+    <div className={`chart-panel${insidePageCard ? ' chart-panel--flat' : ''}`}>
       <div className="chart-panel-header">
         <div className="chart-panel-header-text">
           {sectionNumber && (

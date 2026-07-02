@@ -16,16 +16,11 @@
   color: var(--color-accent);
 }
 
-/* Player Header */
+/* Player Header skeleton — lives in the PageCard header slot, so no card chrome of its own. */
 .player-profile__header {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-5);
-  background-color: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-accent);
-  border-radius: var(--radius-md);
 }
 
 .player-profile__headshot {
@@ -99,17 +94,15 @@
    Player identity header (mirrors the Team page header: tinted IdentityHeader +
    side-by-side ranking ladder).
    ============================================================================ */
+/* The identity header is the PageCard's header now — the card supplies surface/border/shadow,
+   so this row only lays the tinted IdentityHeader beside the value ladder. */
 .player-hd-row {
   display: flex;
   align-items: stretch;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
 }
 .player-hd-row > .identity-header {
   flex: 1 1 auto;
   min-width: 0;
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 .player-hd-row > .value-ladder {
   flex: 0 0 auto;
@@ -120,8 +113,6 @@
 }
 @media (max-width: 960px) {
   .player-hd-row { flex-direction: column; }
-  .player-hd-row > .identity-header { border-radius: var(--radius-md) var(--radius-md) 0 0; }
-  .player-hd-row > .value-ladder { align-self: stretch; border-radius: 0 0 var(--radius-md) var(--radius-md); }
 }
 
 .player-hd { display: flex; align-items: center; gap: var(--space-5); }
@@ -183,12 +174,11 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
   margin: 0;
 }
 
-/* Trend Chart */
+/* Trend Chart — flat inside the page card (no surface/border of its own) */
 .player-profile__chart {
-  background-color: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
+  background-color: transparent;
+  border: none;
+  padding: 0;
 }
 
 /* vs Opponent */
@@ -228,11 +218,9 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
   gap: var(--space-4);
 }
 
-/* Game Log Table */
+/* Game Log Table — flat inside the page card; the table's own thead/row borders carry structure */
 .player-profile__table-container {
   overflow-x: auto;
-  background-color: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
@@ -299,7 +287,6 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 
 /* Situational breakdown table (Impact & Value tab) */
 .player-sit {
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -415,9 +402,6 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
   text-align: center;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-  background-color: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 /* Responsive */
@@ -451,7 +435,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 
 /* Archetype mix + composite stack (Phase 4.2) */
 .player-profile__archetype { margin-top: var(--space-2,8px); color: var(--color-text-secondary,#888); font-size: var(--font-size-sm,0.9rem); font-weight: 600; }
-.player-profile__composite { margin: var(--space-4,16px) 0; padding: var(--space-4,16px); border: 1px solid var(--color-border, rgba(127,127,127,0.2)); border-radius: var(--radius-lg,12px); }
+.player-profile__composite { margin: var(--space-4,16px) 0; padding: var(--space-4,16px); background: var(--color-bg-elevated); border-radius: var(--radius-lg,12px); }
 .player-profile__composite-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--space-2,8px); }
 .player-profile__composite-title { color: var(--color-text-secondary,#888); text-transform: uppercase; font-size: var(--font-size-xs,0.78rem); letter-spacing: .03em; }
 .player-profile__composite-total { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -462,7 +446,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 
 /* Reconciliation section (Phase 4.3) */
 .reconciliation { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: var(--space-4,16px); }
-.reconciliation__panel { border: 1px solid var(--color-border, rgba(127,127,127,0.2)); border-radius: var(--radius-lg,12px); padding: var(--space-4,16px); }
+.reconciliation__panel { background: var(--color-bg-elevated); border-radius: var(--radius-lg,12px); padding: var(--space-4,16px); }
 .reconciliation__panel-title { color: var(--color-text-secondary,#888); text-transform: uppercase; font-size: var(--font-size-xs,0.78rem); letter-spacing:.03em; margin-bottom: var(--space-2,8px); }
 .reconciliation__big { font-size: var(--font-size-2xl,1.75rem); font-weight: 700; font-variant-numeric: tabular-nums; }
 .reconciliation__note { margin: var(--space-2,8px) 0 0; line-height: 1.4; }
@@ -487,9 +471,8 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
   align-items: center;
   margin: var(--space-4, 16px) 0;
   padding: var(--space-4, 16px);
-  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: var(--color-bg-surface, var(--color-bg));
+  background: var(--color-bg-elevated);
   flex: 1;
 }
 .player-profile__radar-overall {
@@ -517,24 +500,14 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
    Tabbed content (mirrors the Team detail page: pill tabs in a card, content below).
    The nav is sticky so it pins below the header once the header scrolls away.
    ============================================================================ */
-.player-tabs-card {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-}
+/* Tabs nav now lives in the PageCard's controls slot (above the card divider), so it carries no
+   card chrome — just the tab row + season selector. */
 .player-tabs-card__nav {
-  position: sticky;
-  /* pin just below the fixed global navbar (top 10px + height 56px) so it never hides behind it */
-  top: 66px;
-  z-index: 5;
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-4) var(--space-6) 9px;
-  background: var(--color-bg-surface);
-  border-bottom: 0.5px solid var(--color-border-subtle);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  gap: var(--space-4);
 }
-.player-tabs-card__body { padding: var(--space-6); }
+/* Body sits inside the card's padding — no padding of its own. */
+.player-tabs-card__body { padding: 0; }
 
 /* Per-tab vertical stack (relocated existing sections) */
 .player-tab { display: flex; flex-direction: column; gap: var(--space-6); }
@@ -660,7 +633,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .player-ov__total-pill { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: var(--radius-md); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* [3] Hero card: verdict (left 40%) + shape (right) in one bordered card */
-.player-ov__hero { display: flex; border: 0.5px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
+.player-ov__hero { display: flex; background: var(--color-bg-elevated); border-radius: var(--radius-lg); overflow: hidden; }
 .player-ov__hero-left { flex: 0 0 45%; padding: 18px 20px; display: flex; flex-direction: column; border-right: 0.5px solid var(--color-border-subtle); }
 .player-ov__hero-right { flex: 1; min-width: 0; padding: 18px 20px; display: flex; flex-direction: column; }
 
@@ -705,7 +678,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 /* [4] Is it real? — signal cards */
 .player-ov__panel-head { display: flex; align-items: center; justify-content: space-between; }
 .player-ov__signals { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.player-ov__signal { display: flex; gap: 12px; align-items: flex-start; border: 0.5px solid var(--color-border-subtle); border-radius: var(--radius-lg); padding: 14px 16px; }
+.player-ov__signal { display: flex; gap: 12px; align-items: flex-start; background: var(--color-bg-elevated); border-radius: var(--radius-lg); padding: 14px 16px; }
 .player-ov__sig-badge { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-bg-elevated); color: var(--color-text-secondary); }
 .player-ov__sig-badge--good { background: var(--color-success-bg); color: var(--color-success); }
 .player-ov__sig-badge--caution { background: var(--color-warning-bg); color: var(--color-warning); }
@@ -717,7 +690,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .player-ov__details { display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch; }
 .player-ov__details-l { flex: 0 0 55%; }
 .player-ov__details-r { flex: 1; min-width: 240px; }
-.player-ov__role { display: flex; flex-direction: column; gap: 14px; border: 0.5px solid var(--color-border-subtle); border-radius: var(--radius-lg); padding: 16px 18px; }
+.player-ov__role { display: flex; flex-direction: column; gap: 14px; background: var(--color-bg-elevated); border-radius: var(--radius-lg); padding: 16px 18px; }
 .player-ov__zone-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-muted); margin-bottom: 6px; }
 .player-ov__zone-lean { color: var(--color-text-secondary); }
 .player-ov__zone-bar { display: flex; gap: 2px; height: 10px; }
@@ -767,8 +740,8 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 /* [5] verdict band — the hero */
 .player-ov__verdict {
   display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start;
-  padding: 18px 20px; border: 0.5px solid var(--color-border); border-radius: var(--radius-lg);
-  background: var(--color-bg-surface);
+  padding: 18px 20px; border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
 }
 .player-ov__verdict-num { width: 120px; flex-shrink: 0; display: block; }
 .player-ov__verdict-pct { font-size: 52px; font-weight: 500; line-height: 0.9; color: var(--color-text-primary); display: block; }
@@ -797,8 +770,8 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 /* [6] shape of game */
 .player-ov__shape {
   display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
-  padding: 14px 18px; border: 0.5px solid var(--color-border-subtle); border-radius: var(--radius-lg);
-  background: var(--color-bg-surface);
+  padding: 14px 18px; border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
 }
 .player-ov__shape-radar { flex: 1; min-width: 320px; display: flex; justify-content: center; }
 .player-ov__shape-lists { width: 240px; display: flex; flex-direction: column; }
@@ -826,7 +799,7 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 /* [8] role & deployment — divided cells */
 .player-ov__deploy {
   display: flex; flex-wrap: wrap; padding: 14px 4px;
-  border: 0.5px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: var(--color-bg-surface);
+  border-radius: var(--radius-lg); background: var(--color-bg-elevated);
 }
 .player-ov__cell { flex: 1; padding: 0 16px; border-right: 0.5px solid var(--color-border-subtle); }
 .player-ov__cell:last-child { border-right: none; }

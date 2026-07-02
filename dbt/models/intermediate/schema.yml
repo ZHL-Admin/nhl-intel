@@ -375,3 +375,45 @@ models:
       - name: made_nhl
         description: True when the pick resolved to a player in our production data
         tests: [not_null]
+
+  - name: int_segment_5v5_results
+    description: >
+      Per-5v5-segment shot results from the home and away perspective: for/against xG (from
+      nhl_models.shot_xg via int_on_ice_events, the same pull as models_ml/train_rapm.py),
+      Corsi attempt counts, and goals. The shared even-strength segment fact behind
+      int_player_onice_game, mart_player_toi_matrix, and mart_player_wowy. Regular season +
+      playoffs only; event_owner_team_id is the attacking team for all four attempt types so
+      the numbers reconcile with mart_team_game_stats.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: segment_index
+        tests: [not_null]
+      - name: segment_duration
+        description: 5v5 segment length in seconds (> 0)
+        tests: [not_null]
+      - name: xgf_home
+        description: Expected goals FOR the home team in the segment
+        tests: [not_null]
+      - name: xgf_away
+        description: Expected goals FOR the away team in the segment
+        tests: [not_null]
+
+  - name: int_player_onice_game
+    description: >
+      Per (game_id, player_id) even-strength (5v5) on-ice / off-ice results oriented to the
+      player's team. On-ice = segments the player is on; off-ice = the team's other 5v5
+      segments in the game. rel_* = on minus off. Raw sums are exposed so mart_player_onice
+      and mart_player_wowy re-aggregate without leakage. Skaters only.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: toi_5v5_sec
+        description: On-ice 5v5 seconds for the player in the game
+        tests: [not_null]
+      - name: on_ice_xgf_pct
+        description: On-ice 5v5 xGF / (xGF + xGA); null if no on-ice shot xG both ways
+      - name: rel_xgf_pct
+        description: on_ice_xgf_pct - off_ice_xgf_pct (the true relative)

@@ -31,6 +31,65 @@ def _rank_desc(values: dict) -> dict:
     return {tid: i + 1 for i, tid in enumerate(order)}
 
 
+def points_calibration() -> None:
+    """Validate the rating -> projected-points map (project_roster_forecast.rating_to_points, constants
+    in config.FORECAST_POINTS) against ACTUAL final standings points. Joins each (team, season)'s final
+    team_ratings.total_rating to deserved_standings.actual_points, then:
+      * recomputes the OLS fit (intercept/slope/R2) so FORECAST_POINTS can be refreshed from data, and
+      * reports MAE / correlation / residual spread of the SHIPPED mapping's predicted points vs actual.
+    Flags loudly if MAE is implausibly large (> 10 points) rather than trusting a bad fit.
+    This is how the conversion is proven, not asserted. Reads only.
+    """
+    import numpy as np
+    from models_ml import bq
+
+    sql = f"""
+        with fin as (
+            select team_id, season, total_rating,
+                   row_number() over (partition by team_id, season
+                                      order by game_date desc, games_played desc) as rn
+            from {bq.models('team_ratings')}
+        )
+        select f.season, f.team_id, f.total_rating as r, d.actual_points as p
+        from fin f
+        join {bq.models('deserved_standings')} d using (team_id, season)
+        where f.rn = 1 and d.actual_points is not null
+    """
+    df = bq.query_df(sql)
+    if df is None or len(df) < 5:
+        print("\npoints calibration: too few (team, season) pairs to validate — skipped.")
+        return
+
+    R = df["r"].to_numpy(dtype=float)
+    P = df["p"].to_numpy(dtype=float)
+    seasons = sorted(df["season"].unique().tolist())
+
+    # Refit OLS from the data (so the shipped constants can be refreshed when more seasons land).
+    slope, intercept = np.polyfit(R, P, 1)
+    fit_pred = intercept + slope * R
+    ss_res = float(np.sum((P - fit_pred) ** 2)); ss_tot = float(np.sum((P - P.mean()) ** 2))
+    r2 = 1 - ss_res / ss_tot if ss_tot else float("nan")
+
+    # Score the SHIPPED mapping (config constants) the serving layer actually uses.
+    pred = np.array([J.rating_to_points(float(r)) for r in R], dtype=float)
+    mae = float(np.mean(np.abs(P - pred)))
+    corr = float(np.corrcoef(pred, P)[0, 1]) if len(P) > 1 else float("nan")
+    resid_sd = float(np.std(P - pred))
+
+    fp = J.CFG["FORECAST_POINTS"]
+    span = f"{seasons[0]}..{seasons[-1]}" if len(seasons) > 1 else seasons[0]
+    print(f"\npoints calibration: {len(df)} team-seasons across {len(seasons)} season(s) ({span})")
+    print(f"  refit OLS:        intercept={intercept:.2f}  slope={slope:.2f}  R^2={r2:.3f}")
+    print(f"  shipped mapping:  intercept={fp['intercept']}  slope={fp['slope']}  ceiling={fp['ceiling']}")
+    print(f"  predicted vs actual points -> MAE={mae:.2f}  corr={corr:.3f}  residual_sd={resid_sd:.2f}")
+    if mae > 10:
+        print(f"  ** FLAG: MAE {mae:.1f} > 10 points — rating->points looks miscalibrated. Refresh "
+              f"config.ROSTER_FORECAST['FORECAST_POINTS'] from the refit OLS above before trusting "
+              f"projected points.")
+    else:
+        print("  OK: MAE within tolerance (<= 10 points).")
+
+
 def main() -> None:
     from models_ml import bq
 
@@ -72,6 +131,10 @@ def main() -> None:
     print(f"teams: {len(proj_delta)}")
     print(f"Spearman rank-delta correlation: {rho:.3f}")
     print(f"mean absolute rank-delta error:  {mae:.2f} positions")
+
+    # Points calibration: prove the rating -> projected-points map against actual standings.
+    points_calibration()
+
     print("\nCopy these into docs/methodology/offseason-forecast.md (Backtest calibration). They are a "
           "prior the verdict inherits, not a guarantee.")
 

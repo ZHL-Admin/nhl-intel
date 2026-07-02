@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, ArrowDown } from 'lucide-react'
-import { PageLayout, PageHeader, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
 import type { StackSegment } from '../components/common'
 import { getPowerRankings, getDeservedStandings } from '../api/rankings'
 import { PowerRatingRow, DeservedStandingRow } from '../api/types'
@@ -214,52 +214,53 @@ export default function Rankings() {
   return (
     <PageLayout>
       <div className="rankings">
-        <PageHeader
+        <PageCard
           title="Rankings"
           subtitle="Team strength by net goals per game, with the luck stripped out."
-        >
-          <div className="rankings__toolbar">
-          <div className="rankings__bar">
-            <Tabs
-              options={[
-                { value: 'power', label: 'Power Ratings' },
-                { value: 'deserved', label: 'Deserved Standings' },
-              ]}
-              value={tab}
-              onChange={(v) => setTab(v as 'power' | 'deserved')}
-            />
-            {!loading && count != null && <span className="rankings__count">{count} teams</span>}
-          </div>
+          controls={
+            <div className="rankings__toolbar">
+              <div className="rankings__bar">
+                <Tabs
+                  options={[
+                    { value: 'power', label: 'Power Ratings' },
+                    { value: 'deserved', label: 'Deserved Standings' },
+                  ]}
+                  value={tab}
+                  onChange={(v) => setTab(v as 'power' | 'deserved')}
+                />
+                {!loading && count != null && <span className="rankings__count">{count} teams</span>}
+              </div>
 
-          <div className="rankings__meta">
-            <p className="rankings__caption">{tab === 'power' ? POWER_CAPTION : DESERVED_CAPTION}</p>
-            <div className="rankings__meta-actions">
-              <Tooltip content={tab === 'power' ? POWER_HOW : DESERVED_HOW}>
-                <span className="rankings__how">
-                  {tab === 'power' ? 'How power ratings work' : 'How deserved points work'}
-                </span>
-              </Tooltip>
-              {tab === 'power' && (
-                <button
-                  type="button"
-                  className={`rankings__colors${showColors ? ' rankings__colors--on' : ''}`}
-                  onClick={() => setShowColors((s) => !s)}
-                  aria-expanded={showColors}
-                >
-                  Legend
-                </button>
-              )}
+              <div className="rankings__meta">
+                <p className="rankings__caption">{tab === 'power' ? POWER_CAPTION : DESERVED_CAPTION}</p>
+                <div className="rankings__meta-actions">
+                  <Tooltip content={tab === 'power' ? POWER_HOW : DESERVED_HOW}>
+                    <span className="rankings__how">
+                      {tab === 'power' ? 'How power ratings work' : 'How deserved points work'}
+                    </span>
+                  </Tooltip>
+                  {tab === 'power' && (
+                    <button
+                      type="button"
+                      className={`rankings__colors${showColors ? ' rankings__colors--on' : ''}`}
+                      onClick={() => setShowColors((s) => !s)}
+                      aria-expanded={showColors}
+                    >
+                      Legend
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {tab === 'power' && showColors && <PowerLegend />}
             </div>
-          </div>
-
-          {tab === 'power' && showColors && <PowerLegend />}
-          </div>
-        </PageHeader>
-
-        {error && <p className="rankings__msg">{error}</p>}
-        {loading && !error && <SkeletonLoader />}
-        {!loading && tab === 'power' && <PowerView rows={power!} />}
-        {!loading && tab === 'deserved' && <DeservedView rows={deserved!} />}
+          }
+        >
+          {error && <p className="rankings__msg">{error}</p>}
+          {loading && !error && <SkeletonLoader />}
+          {!loading && tab === 'power' && <PowerView rows={power!} />}
+          {!loading && tab === 'deserved' && <DeservedView rows={deserved!} />}
+        </PageCard>
       </div>
     </PageLayout>
   )

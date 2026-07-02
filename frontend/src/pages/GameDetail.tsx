@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle, MatchupPreviewCard } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle, MatchupPreviewCard } from '../components/common'
 import Badge from '../components/common/Badge'
 import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
@@ -94,6 +94,7 @@ function GameDetail() {
     return (
       <PageLayout>
         <div className="game-detail">
+          <PageCard title="Game Detail">
           <div className="game-detail__header-skeleton">
             <div style={{ width: '200px', marginBottom: '24px', margin: '0 auto' }}>
               <SkeletonLoader height={40} />
@@ -116,6 +117,7 @@ function GameDetail() {
           <div className="game-detail__roster-skeleton">
             <SkeletonLoader height={500} />
           </div>
+          </PageCard>
         </div>
       </PageLayout>
     )
@@ -124,16 +126,20 @@ function GameDetail() {
   if (error || !gameDetail) {
     return (
       <PageLayout>
-        <div className="game-detail__error">
-          <p className="game-detail__error-message">
-            {error || 'Game not found'}
-          </p>
-          <button className="game-detail__retry-button" onClick={handleRetry}>
-            Retry
-          </button>
-          <button className="game-detail__back-button" onClick={handleBack}>
-            Back to Games
-          </button>
+        <div className="game-detail">
+          <PageCard title="Game Detail" back={{ to: '/games', label: 'Back to Games' }}>
+            <div className="game-detail__error">
+              <p className="game-detail__error-message">
+                {error || 'Game not found'}
+              </p>
+              <button className="game-detail__retry-button" onClick={handleRetry}>
+                Retry
+              </button>
+              <button className="game-detail__back-button" onClick={handleBack}>
+                Back to Games
+              </button>
+            </div>
+          </PageCard>
         </div>
       </PageLayout>
     )
@@ -148,8 +154,9 @@ function GameDetail() {
     return (
       <PageLayout>
         <div className="game-detail">
-          {/* Preview Header */}
-          <IdentityHeader
+          <PageCard
+            header={
+              <IdentityHeader
             backLink={{
               label: `← Back to Games`,
               to: '/games'
@@ -207,18 +214,20 @@ function GameDetail() {
               away: awayTeamColor,
               home: homeTeamColor
             }}
-          />
+              />
+            }
+          >
+            <div style={{ marginBottom: 'var(--space-6)' }}>
+              <MatchupPreviewCard gameId={gameDetail.game_id} />
+            </div>
 
-          <div style={{ margin: 'var(--space-4) 0' }}>
-            <MatchupPreviewCard gameId={gameDetail.game_id} />
-          </div>
-
-          <PreviewModeContent
-            gameDetail={gameDetail}
-            playerStats={playerStats}
-            homeTeamColor={homeTeamColor}
-            awayTeamColor={awayTeamColor}
-          />
+            <PreviewModeContent
+              gameDetail={gameDetail}
+              playerStats={playerStats}
+              homeTeamColor={homeTeamColor}
+              awayTeamColor={awayTeamColor}
+            />
+          </PageCard>
         </div>
       </PageLayout>
     )
@@ -234,8 +243,9 @@ function GameDetail() {
   return (
     <PageLayout>
       <div className="game-detail">
-        {/* Identity Header - following DevComponents approved pattern */}
-        <IdentityHeader
+        <PageCard
+          header={
+            <IdentityHeader
           backLink={{
             label: `← Back to Games`,
             to: '/games'
@@ -301,23 +311,24 @@ function GameDetail() {
             away: awayTeamColor,
             home: homeTeamColor
           }}
-        />
-
-        {/* Tab Navigation (sticky at top 56px) */}
-        <TabNav
-          tabs={tabs}
-          activeTab={activeTab}
-          onChange={handleTabChange}
-        />
-
-        {/* Tab Content */}
-        <CompletedGameTabContent
-          activeTab={activeTab}
-          gameDetail={gameDetail}
-          playerStats={playerStats}
-          homeTeamColor={homeTeamColor}
-          awayTeamColor={awayTeamColor}
-        />
+            />
+          }
+          controls={
+            <TabNav
+              tabs={tabs}
+              activeTab={activeTab}
+              onChange={handleTabChange}
+            />
+          }
+        >
+          <CompletedGameTabContent
+            activeTab={activeTab}
+            gameDetail={gameDetail}
+            playerStats={playerStats}
+            homeTeamColor={homeTeamColor}
+            awayTeamColor={awayTeamColor}
+          />
+        </PageCard>
       </div>
     </PageLayout>
   )
@@ -407,7 +418,7 @@ function OverviewTab({ gameDetail, playerStats }: { gameDetail: GameDetailType; 
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-8)' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-2) 0' }}>
       <InsightBanner home={home_team} away={away_team} teamStats={teamStats} goaltending={goaltending} />
 
       <div className="overview-grid">
@@ -1030,7 +1041,7 @@ function AnalyticsTab({
   const { home_team, away_team, game_id } = gameDetail
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-8)' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-2) 0' }}>
       {/* 1. Timeline stack — what happened, three synced lanes */}
       <section style={{ marginBottom: 'var(--space-10)' }}>
         <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>Game timeline: three synced views of the same 60 minutes</h2>
@@ -1170,7 +1181,7 @@ function PlayersTab({
 
     return (
       <div style={{
-        background: 'var(--color-bg-surface)',
+        background: 'var(--color-bg-elevated)',
         borderRadius: 'var(--radius-lg)',
         borderTop: `3px solid ${teamColor}`,
         overflow: 'hidden'
@@ -1194,7 +1205,7 @@ function PlayersTab({
             <thead style={{
               position: sorted.length > 14 ? 'sticky' : 'static',
               top: 0,
-              background: 'var(--color-bg-surface)',
+              background: 'var(--color-bg-elevated)',
               zIndex: 1
             }}>
               <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -1326,7 +1337,7 @@ function PlayersTab({
             Goalies
           </h2>
           <div style={{
-            background: 'var(--color-bg-surface)',
+            background: 'var(--color-bg-elevated)',
             borderRadius: 'var(--radius-lg)',
             padding: 'var(--space-6)',
             fontSize: 'var(--text-sm)',
@@ -1543,7 +1554,7 @@ function PreviewModeContent({
           {showRosters && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
               <div style={{
-                background: 'var(--color-bg-surface)',
+                background: 'var(--color-bg-elevated)',
                 borderRadius: 'var(--radius-lg)',
                 padding: 'var(--space-6)',
                 borderTop: `3px solid ${awayTeamColor}`
@@ -1564,7 +1575,7 @@ function PreviewModeContent({
               </div>
 
               <div style={{
-                background: 'var(--color-bg-surface)',
+                background: 'var(--color-bg-elevated)',
                 borderRadius: 'var(--radius-lg)',
                 padding: 'var(--space-6)',
                 borderTop: `3px solid ${homeTeamColor}`

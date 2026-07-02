@@ -3,13 +3,14 @@
 
 .tools-index__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
 
+/* Navigational tiles — insets inside the page card (elevated fill, subtle
+   border, no shadow) so they never read as cards floating on a card. */
 .tools-index__card {
   display: flex; flex-direction: column; gap: 10px;
-  padding: 22px; border: 1px solid var(--color-border); border-radius: 14px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  padding: 22px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
   transition: border-color 0.15s, transform 0.15s;
 }
 .tools-index__card:hover { border-color: var(--color-accent, #3b82f6); transform: translateY(-2px); }

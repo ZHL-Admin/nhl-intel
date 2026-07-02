@@ -7,12 +7,10 @@
   margin: var(--space-2) 0 0; max-width: 78ch;
 }
 
-/* Hero card: champion banner + bracket together, accented with the champion's color */
+/* Hero group: champion banner + bracket together, accented with the champion's color.
+   No card chrome (it lives inside the page card) — a rounded, tinted inset, no border/shadow. */
 .pl-hero {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -44,14 +42,14 @@
 .pl-champion__name { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); line-height: 1.1; }
 .pl-champion__odds { font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: 2px; }
 
-/* Bracket — sits inside the hero card below the champion header */
-.pl-bracket-wrap { overflow-x: auto; padding: var(--space-5); }
+/* Bracket — sits inside the hero card below the champion header. Fits the page card width (no
+   horizontal scroll); cells shrink via the per-column --s scale and the fluid fr columns. */
+.pl-bracket-wrap { padding: var(--space-4) var(--space-3); }
 .pl-bracket {
   display: grid;
   /* columns widen toward the center so the Final reads as the most important game */
   grid-template-columns: 1fr 1.12fr 1.24fr 1.4fr 1.24fr 1.12fr 1fr;
-  gap: var(--space-3);
-  min-width: 1080px;
+  gap: var(--space-2);
   align-items: stretch;
 }
 .pl-col { display: flex; flex-direction: column; min-width: 0; }
@@ -67,20 +65,20 @@
   gap: var(--space-3);
 }
 
+/* Bracket matchup cells: flat inset boxes (outlined, no shadow) — not raised cards. */
 .pl-series {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-bg-elevated);
   overflow: hidden;
 }
-.pl-series--lg { box-shadow: var(--shadow-md); }
+.pl-series--lg { border-color: var(--color-border-strong); }
 .pl-series__team {
   display: grid;
-  grid-template-columns: calc(26px * var(--s, 1)) 1fr auto;
+  grid-template-columns: calc(20px * var(--s, 1)) minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: calc(var(--space-2) * var(--s, 1)) calc(var(--space-3) * var(--s, 1));
+  gap: calc(var(--space-1) * var(--s, 1));
+  padding: calc(var(--space-1) * var(--s, 1)) calc(var(--space-2) * var(--s, 1));
   /* interactive: each row is a clickable button */
   width: 100%;
   border: 0;
@@ -90,14 +88,14 @@
   cursor: pointer;
   transition: background-color 120ms ease;
 }
-.pl-series__team:hover:not(.is-winner) { background: var(--color-bg-elevated); }
+.pl-series__team:hover:not(.is-winner) { background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg-elevated)); }
 .pl-series__team:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .pl-series__team + .pl-series__team { border-top: 1px solid var(--color-border-subtle); }
 .pl-series__team.is-winner {
-  background: color-mix(in srgb, var(--pl-team, var(--color-accent)) 12%, var(--color-bg-surface));
+  background: color-mix(in srgb, var(--pl-team, var(--color-accent)) 12%, var(--color-bg-elevated));
   box-shadow: inset 3px 0 0 var(--pl-team, var(--color-accent));
 }
-.pl-series__logo { width: calc(26px * var(--s, 1)); height: calc(26px * var(--s, 1)); object-fit: contain; }
+.pl-series__logo { width: calc(20px * var(--s, 1)); height: calc(20px * var(--s, 1)); object-fit: contain; }
 .pl-series__name { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .pl-series__abbr { font-size: calc(var(--text-sm) * var(--s, 1)); font-weight: 600; color: var(--color-text-primary); }
 .pl-series__team.is-winner .pl-series__abbr { font-weight: 700; }
@@ -127,8 +125,8 @@
 }
 .pl-bracket__conf span:last-child { margin-left: auto; }
 
-/* Odds table */
-.pl-odds-section { padding: var(--space-4) var(--space-5); margin: var(--space-4) 0 var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
+/* Odds table — a plain section inside the page card (no card chrome; a divider sits above it) */
+.pl-odds-section { margin: 0; }
 .pl-odds-section__title { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); margin: 0; }
 .pl-odds-section__sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-1) 0 var(--space-5); }
 .pl-odds { width: 100%; border-collapse: collapse; }

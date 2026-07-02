@@ -1,104 +1,155 @@
 /**
- * Archetype explorer (Handoff 6, surface 5C / "Patterns" mode) — tests trade theses on the whole
- * dataset. Pick an archetype; see the aggregate split + exemplar trades. Only data-taggable archetypes
- * (no rental/salary-dump, which the trades CSV cannot support).
+ * ArchetypeExplorer (Handoff 8) — Tab 3 "Patterns", ONE card. Archetype sub-tabs in the card header;
+ * the body is three divider-separated regions (no nested cards): a split (honest headline + 3-segment
+ * bar + plain takeaway), exemplars (subtle insets, mini balance bars), and timing (labeled bars). Splits
+ * are settled-only; a denominator note states it. Only data-taggable archetypes (no rental/salary-dump).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Tabs, SkeletonLoader } from '../common'
+import { getTeamColor } from '../../utils/teams'
 import { getArchetypes, getBoardItem, ArchetypeAgg, TradeBoardItem } from '../../api/trades'
-import TradeBalanceCard from './TradeBalanceCard'
+import Tilt from './Tilt'
 import './trades.css'
 
-function insight(a: ArchetypeAgg): string {
+const fmt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
+
+function headline(a: ArchetypeAgg): string {
   const s = a.split
   if (a.archetype === 'player_for_picks') {
-    return `Across ${a.trade_count} player-for-picks deals, the side that got the player won ${s.player_side_won_pct}%, the picks paid off ${s.pick_side_won_pct}%, and ${s.even_pct}% were even within the margin.`
+    const close = Math.abs((s.player_side_won_pct || 0) - (s.pick_side_won_pct || 0)) <= 12
+    return close ? 'Trading a star for picks is close to a coin-flip.'
+      : (s.player_side_won_pct || 0) > (s.pick_side_won_pct || 0)
+        ? 'The side that got the player usually came out ahead.'
+        : 'The picks usually paid off.'
   }
-  if (a.archetype === 'player_for_player') {
-    return `Across ${a.trade_count} player-for-player deals, one side won clearly ${s.decisive_pct}% of the time; ${s.even_pct}% were too close to call.`
-  }
-  if (a.archetype === 'picks_for_picks') {
-    return `Across ${a.trade_count} picks-for-picks deals, ${s.even_pct}% were even within the margin — pick-only swaps rarely move realized value decisively.`
-  }
-  if (a.archetype === 'blockbuster') {
-    return `Across ${a.trade_count} blockbusters (8+ WAR moved), one side won clearly ${s.decisive_pct}% of the time; ${s.even_pct}% stayed within the band.`
-  }
-  return `Across ${a.trade_count} three-team deals, one side won clearly ${s.decisive_pct}% of the time.`
+  if (a.archetype === 'picks_for_picks') return 'Pick-only swaps rarely move realized value decisively.'
+  return `One side won clearly ${s.decisive_pct || 0}% of the time; the rest came out even.`
 }
 
-function Exemplars({ a, lens }: { a: ArchetypeAgg; lens: 'slot' | 'actual' }) {
-  const [items, setItems] = useState<Record<string, TradeBoardItem>>({})
-  const ids = useMemo(() => Array.from(new Set(a.exemplars.map((e) => e.trade_id))).filter(Boolean), [a])
-  useEffect(() => {
-    let live = true
-    Promise.all(ids.map((id) => getBoardItem(id).then((t) => [id, t] as const).catch(() => null)))
-      .then((res) => { if (live) setItems(Object.fromEntries(res.filter(Boolean) as any)) })
-    return () => { live = false }
-  }, [a.archetype])
+function takeaway(a: ArchetypeAgg): string {
+  const s = a.split
+  if (a.archetype === 'player_for_picks') {
+    return `Across ${a.trade_count} settled player-for-picks deals, the player side won ${s.player_side_won_pct}%, the picks paid off ${s.pick_side_won_pct}%, and ${s.even_pct}% were even within the margin.`
+  }
+  if (a.archetype === 'player_for_player') {
+    return `Across ${a.trade_count} settled player-for-player deals, one side won clearly ${s.decisive_pct}%; ${s.even_pct}% came out even.`
+  }
+  if (a.archetype === 'picks_for_picks') {
+    return `Across ${a.trade_count} settled picks-for-picks deals, ${s.even_pct}% were even within the margin.`
+  }
+  if (a.archetype === 'blockbuster') {
+    return `Across ${a.trade_count} settled blockbusters (8+ WAR moved), one side won clearly ${s.decisive_pct}%; ${s.even_pct}% stayed within the band.`
+  }
+  return `Across ${a.trade_count} settled three-team deals, one side won clearly ${s.decisive_pct}%.`
+}
+
+// the 3- (player-for-picks) or 2-segment split bar
+function SplitBar({ a }: { a: ArchetypeAgg }) {
+  const s = a.split
+  const segs = a.archetype === 'player_for_picks'
+    ? [
+        { label: 'player side won', pct: s.player_side_won_pct || 0, color: 'var(--color-success)' },
+        { label: 'even', pct: s.even_pct || 0, color: 'var(--color-border-strong)' },
+        { label: 'picks won', pct: s.pick_side_won_pct || 0, color: 'var(--color-warning)' },
+      ]
+    : [
+        { label: 'one side won', pct: s.decisive_pct || 0, color: 'var(--color-success)' },
+        { label: 'even', pct: s.even_pct || 0, color: 'var(--color-border-strong)' },
+      ]
   return (
-    <div className="arch-exemplars">
-      {a.exemplars.map((ex) => {
-        const t = items[ex.trade_id]
-        return (
-          <div key={ex.label}>
-            <div className="arch-stat__l" style={{ marginBottom: 'var(--space-2)' }}>{ex.label}</div>
-            {t ? <TradeBalanceCard trade={t} lens={lens} defaultOpen /> : <SkeletonLoader height={120} />}
-          </div>
-        )
-      })}
-    </div>
+    <>
+      <div className="split-bar">
+        {segs.map((g) => g.pct > 0 && <div key={g.label} className="split-bar__seg" style={{ width: `${g.pct}%`, background: g.color }} />)}
+      </div>
+      <div className="split-legend">
+        {segs.map((g) => (
+          <span key={g.label}><span className="split-legend__dot" style={{ background: g.color }} />{g.label} <b className="mono">{g.pct}%</b></span>
+        ))}
+      </div>
+    </>
   )
 }
 
-export default function ArchetypeExplorer({ lens }: { lens: 'slot' | 'actual' }) {
+function ExemplarInset({ label, tradeId, onOpenTrade }: { label: string; tradeId: string; onOpenTrade: (id: string) => void }) {
+  const [t, setT] = useState<TradeBoardItem | null>(null)
+  useEffect(() => { let live = true; getBoardItem(tradeId).then((x) => live && setT(x)).catch(() => {}); return () => { live = false } }, [tradeId])
+  const win = t?.sides.find((s) => s.team_id === t?.winner_team_id)
+  const color = win ? getTeamColor(win.team_abbrev) : 'var(--color-text-muted)'
+  return (
+    <button className="t-inset" style={{ textAlign: 'left', border: 'none', cursor: 'pointer', width: '100%' }}
+      onClick={() => onOpenTrade(tradeId)}>
+      <div className="arch-stat__l" style={{ marginBottom: 'var(--space-2)' }}>{label}</div>
+      {t ? (
+        <>
+          <div style={{ fontSize: 'var(--text-sm)', marginBottom: 4 }}>
+            {win ? win.team_abbrev : t.sides.map((s) => s.team_abbrev).join(' · ')}
+            <span className="tbl-muted"> · {t.date.slice(0, 4)}</span>
+            <span className="lb-net" style={{ float: 'right' }}>{fmt(t.margin_slot)}</span>
+          </div>
+          <Tilt signed={t.margin_slot} bandHw={t.band_hw_slot} color={color}
+            even={t.verdict === 'even'} edge={t.verdict === 'edge' && !t.incomplete}
+            incomplete={t.incomplete} size="compact" animate={false} />
+        </>
+      ) : <SkeletonLoader height={48} />}
+    </button>
+  )
+}
+
+export default function ArchetypeExplorer({ onOpenTrade }: { onOpenTrade: (id: string) => void }) {
   const [aggs, setAggs] = useState<ArchetypeAgg[] | null>(null)
   const [pick, setPick] = useState('player_for_picks')
-  useEffect(() => { getArchetypes(lens).then(setAggs).catch(() => setAggs([])) }, [lens])
+  useEffect(() => { getArchetypes().then(setAggs).catch(() => setAggs([])) }, [])
 
   if (!aggs) return <SkeletonLoader height={400} />
   if (!aggs.length) return <div className="vm-empty">No taggable archetypes in this filter.</div>
-  const current = aggs.find((a) => a.archetype === pick) || aggs[0]
+  const a = aggs.find((x) => x.archetype === pick) || aggs[0]
+  const exemplars = Array.from(new Map(a.exemplars.map((e) => [e.trade_id, e])).values())
 
   return (
-    <div className="arch">
-      <div className="t-panel">
-      <Tabs options={aggs.map((a) => ({ value: a.archetype, label: a.label }))}
-        value={current.archetype} onChange={setPick} />
-      <p className="arch-insight">{insight(current)}</p>
-      <div className="arch-strip">
-        {Object.entries(current.split).map(([k, v]) => (
-          <div key={k} className="arch-stat">
-            <span className="arch-stat__v">{v}%</span>
-            <span className="arch-stat__l">{k.replace(/_pct$/, '').replace(/_/g, ' ')}</span>
-          </div>
-        ))}
-        <div className="arch-stat"><span className="arch-stat__v">{current.trade_count}</span><span className="arch-stat__l">deals</span></div>
+    <div className="t-panel">
+      <div className="t-cardhead">
+        <div className="t-cardhead__titles">
+          <h2 className="t-panel__title">Do the classic trade theses hold?</h2>
+          <p className="t-panel__sub">Tested on every settled trade since 2015-16.</p>
+        </div>
+        <div className="t-cardhead__controls">
+          <Tabs options={aggs.map((x) => ({ value: x.archetype, label: x.label }))} value={a.archetype} onChange={setPick} />
+        </div>
       </div>
-      {current.timing.length > 0 && (
-        <div className="arch-timing">
-          <div className="dos-section-title">When these trades happen</div>
+
+      {/* Split */}
+      <p className="arch-insight" style={{ fontWeight: 600 }}>{headline(a)}</p>
+      <SplitBar a={a} />
+      <p className="t-note" style={{ marginTop: 'var(--space-2)' }}>{takeaway(a)}</p>
+
+      <div className="t-divider" />
+
+      {/* Exemplars */}
+      <h3 className="t-region-title">Notable deals</h3>
+      <div className="arch-exemplars">
+        {exemplars.map((ex) => <ExemplarInset key={ex.trade_id} label={ex.label} tradeId={ex.trade_id} onOpenTrade={onOpenTrade} />)}
+      </div>
+
+      {a.timing.length > 0 && (
+        <>
+          <div className="t-divider" />
+          <h3 className="t-region-title">When these trades happen</h3>
           <div className="arch-timing__row">
-            {current.timing.map((t) => (
-              <div key={t.bucket} className="arch-timing__cell">
+            {a.timing.map((t) => (
+              <div key={t.bucket} className="t-inset">
                 <span className="arch-stat__v">{t.decisive_pct}%</span>
                 <span className="arch-stat__l">{t.bucket.replace('_', '-')}</span>
-                <span className="tbl-muted" style={{ fontSize: 'var(--text-xs)' }}>{t.count} deals · decisive</span>
+                <span className="tbl-muted" style={{ fontSize: 'var(--text-xs)' }}>{t.count} deals · acquiring side ahead</span>
               </div>
             ))}
           </div>
-          <p className="tbl-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
-            By timing, not contract status — we have trade dates, not cap or expiry, so the deadline bucket is an honest proxy for rentals, not a salary-dump tag.
-          </p>
-        </div>
+        </>
       )}
-      </div>{/* /.t-panel */}
 
-      <div className="dos-section-title">Notable deals</div>
-      <Exemplars a={current} lens={lens} />
-      <p className="arch-note">
-        Archetypes are tagged from the trade data alone. Rental and salary-dump deals are not shown — they
-        need contract-expiry and cap context at trade time that this source lacks. A retrospective on
-        outcomes, not a grade of the decision at the time.
+      <p className="t-note" style={{ marginTop: 'var(--space-5)' }}>
+        Splits cover {a.settled_count} settled deals{a.maturing_count ? ` (${a.maturing_count} still maturing, not yet counted)` : ''}.
+        Archetypes are tagged from the trade data alone; rental and salary-dump deals aren't shown (they need
+        contract/cap context this source lacks). Timing is by date, an honest proxy for rentals, not a cap tag.
       </p>
     </div>
   )

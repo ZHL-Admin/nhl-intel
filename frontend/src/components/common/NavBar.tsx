@@ -14,6 +14,7 @@ const TOOLS = [
   { to: '/tools/contract-grader', label: 'Contract Grader' },
   { to: '/tools/draft-value', label: 'Draft Value' },
   { to: '/tools/trade-outcomes', label: 'Trade Outcomes' },
+  { to: '/tools/offseason', label: 'Offseason' },
   { to: '/learn/archetypes', label: 'Player Archetypes' },
 ]
 
@@ -152,11 +153,11 @@ function NavBar() {
             Players
           </NavLink>
           <NavLink
-            to="/playoffs"
+            to="/tools/offseason"
             className={({ isActive }) => `navbar__link ${isActive ? 'navbar__link--active' : ''}`}
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Playoffs
+            Offseason
           </NavLink>
           <div
             className={`navbar__dropdown ${toolsOpen ? 'navbar__dropdown--open' : ''}`}

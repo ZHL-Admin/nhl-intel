@@ -82,6 +82,15 @@ models:
         description: Estimated time on ice at 5v5 in minutes
       - name: ixg_per60
         description: Individual expected goals per 60 minutes (using high-danger attempts as proxy)
+      - name: on_ice_xgf_pct
+        description: >
+          Real 5v5 on-ice xGF share from shift-by-shift reconstruction
+          (int_player_onice_game). Replaces the former team-level proxy; null where the
+          player logged no 5v5 ice (e.g. goalies).
+      - name: off_ice_xgf_pct
+        description: 5v5 xGF share for the player's team while the player is off the ice
+      - name: rel_xgf_pct
+        description: on_ice_xgf_pct - off_ice_xgf_pct (the true relative)
       - name: primary_points_per60
         description: Goals plus primary assists per 60 minutes
       - name: hot_cold_flag
@@ -288,3 +297,70 @@ models:
         description: Headline tradeable surplus in dollars (value minus cost)
       - name: confidence
         description: high / medium / proxy
+
+  - name: mart_player_onice
+    description: >
+      Season 5v5 on-ice / off-ice profile per (season, player_id, team_id), rolled up from
+      int_player_onice_game. rel_xgf_pct / rel_cf_pct are the true on-ice-minus-off-ice
+      relatives (the corrected replacement for the player-minus-team-average proxy). Raw
+      season on-ice sums are kept so mart_player_wowy can subtract the together portion.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: toi_5v5_sec
+        description: Season on-ice 5v5 seconds
+        tests: [not_null]
+      - name: on_ice_xgf_pct
+        description: Season on-ice 5v5 xGF share
+      - name: rel_xgf_pct
+        description: on_ice_xgf_pct - off_ice_xgf_pct
+
+  - name: mart_player_toi_matrix
+    description: >
+      Pairwise shared 5v5 ice per (season, team_id, player_id_a < player_id_b): the raw
+      entanglement / pair-quality input for a team TOI-matrix view. Skaters only; each 5v5
+      segment contributes its duration to every unordered same-team pair on the ice. Stored
+      once per unordered pair (union the mirror for a symmetric view).
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: player_id_a
+        tests: [not_null]
+      - name: player_id_b
+        tests: [not_null]
+      - name: toi_together_sec
+        description: Shared 5v5 seconds for the pair across the season (>= 0)
+        tests: [not_null]
+
+  - name: mart_player_wowy
+    description: >
+      With-Or-Without-You per (season, team_id, focal player_id, partner_id): 5v5 on-ice
+      xGF% together vs each player apart from the other. Directional (one row per ordered
+      focal->partner). Together sums come from segment co-occurrence; each apart split is the
+      player's season on-ice total minus the together portion (leakage-free).
+      small_sample = toi_together_sec < 3000 (50 minutes, decision D17).
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: player_id
+        description: Focal player
+        tests: [not_null]
+      - name: partner_id
+        description: Partner the focal is measured with/without
+        tests: [not_null]
+      - name: toi_together_sec
+        description: Shared 5v5 seconds (focal + partner both on ice)
+        tests: [not_null]
+      - name: xgf_pct_together
+        description: On-ice xGF share with the pair together
+      - name: small_sample
+        description: True when shared time is under 3000 seconds (50 minutes)
+        tests: [not_null]

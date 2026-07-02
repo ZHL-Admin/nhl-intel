@@ -10,6 +10,13 @@
   padding: var(--space-4) var(--space-5);
 }
 
+/* Flat — an insight callout inside a PageCard: a subtle inset with no border/shadow. */
+.insight-card--flat {
+  background: var(--color-bg-elevated);
+  border: none;
+  box-shadow: none;
+}
+
 .insight-card__icon {
   display: inline-flex;
   align-items: center;

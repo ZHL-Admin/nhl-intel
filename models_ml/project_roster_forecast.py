@@ -246,6 +246,34 @@ def project_rating(base_rating: float, net_delta_war: float, chemistry_adj: floa
     return base_rating + (net_delta_war * cfg["GOALS_PER_WIN"] / cfg["GAMES_PER_SEASON"]) + chemistry_adj
 
 
+def rating_to_points(rating: float, cfg: dict = CFG) -> int:
+    """Map a team rating (expected goal differential per game, league mean ~0) to projected 82-game
+    standings points: P = intercept + slope*rating, clamped to [0, ceiling]. THE single rating->points
+    mapping — the forecast row, the serving backfill, and validation all call this (no duplicated fit).
+    Constants live in config.ROSTER_FORECAST["FORECAST_POINTS"]; documented in power-ratings.md.
+    """
+    fp = cfg["FORECAST_POINTS"]
+    return int(min(max(round(fp["intercept"] + fp["slope"] * rating), 0), fp["ceiling"]))
+
+
+def absolute_rating(total_lineup_war: float, chemistry_adj: float = 0.0, cfg: dict = CFG) -> float:
+    """ABSOLUTE team rating (goals/game) from a roster's OWN projected value — the Roster Builder's
+    one piece the offseason tool lacks. project_rating anchors on a team's MEASURED rating and only
+    adds the move-delta; an arbitrary user-built roster has no trustworthy base, so this derives the
+    rating from the total iced-lineup WAR directly:
+
+        rating_abs = (total_lineup_war - LEAGUE_AVG_LINEUP_WAR) * WAR_TO_RATING + chemistry_adj
+
+    LEAGUE_AVG_LINEUP_WAR centers an average roster at ~0 (league-average points); WAR_TO_RATING is the
+    empirically-calibrated, COMPRESSED WAR->rating slope (NOT the move-scale 6/82 — see config and
+    models_ml/calibrate_roster_builder.py). Same goals scale as the measured rating and project_rating,
+    so rating_to_points() maps it the same way. This is a forward PROJECTION (carry the band), not a
+    measured rating — the value system reconciles with measured ratings, but the season-ahead estimate
+    is uncertain (corr ~0.44); the tool is delta-led for that reason.
+    """
+    return ((total_lineup_war - cfg["LEAGUE_AVG_LINEUP_WAR"]) * cfg["WAR_TO_RATING"]) + chemistry_adj
+
+
 def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerProj],
                   base_rating: float, base_components: dict, n_moves: int | None = None,
                   xgf_share_delta: float | None = None, cfg: dict = CFG) -> dict:
@@ -292,6 +320,13 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
         "band_low": round(proj - band_g, 4),
         "band_high": round(proj + band_g, 4),
         "band_goals": round(band_g, 4),
+        # Projected standings points — a validated linear transform of the rating (rating_to_points),
+        # carried with its band; points_delta is the offseason move-impact in points (b * rating delta).
+        "base_points": rating_to_points(base_rating, cfg),
+        "projected_points": rating_to_points(proj, cfg),
+        "points_low": rating_to_points(proj - band_g, cfg),
+        "points_high": rating_to_points(proj + band_g, cfg),
+        "points_delta": round(cfg["FORECAST_POINTS"]["slope"] * (proj - base_rating), 1),
         "n_moves": n_moves,
         "negligible": negligible,
         "base_play_5v5": round(base_components.get("play_5v5", 0.0), 4),

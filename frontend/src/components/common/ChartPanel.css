@@ -15,6 +15,17 @@ html[data-theme="dark"] .chart-panel {
   border: 1px solid var(--color-border);
 }
 
+/* Flat — a chart SECTION inside a PageCard: no card chrome (the page card supplies the surface and
+   padding); sibling charts are separated by spacing/dividers in the page body. */
+.chart-panel--flat,
+html[data-theme="dark"] .chart-panel--flat {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.chart-panel--flat:hover { box-shadow: none; }
+
 .chart-panel-header {
   display: flex;
   align-items: flex-start;

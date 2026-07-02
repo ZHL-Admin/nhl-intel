@@ -6,6 +6,17 @@
   padding: var(--space-6) var(--space-8);
 }
 
+/* Flat — IdentityHeader as a PageCard header: the card supplies the surface, padding and the divider
+   below, so the header itself is transparent and unpadded. */
+.identity-header--flat {
+  background: none;
+  border-bottom: none;
+  padding: 0;
+}
+@media (max-width: 960px) {
+  .identity-header--flat { padding: 0; }
+}
+
 /* Floated back link: occupies no vertical space so the section stays condensed */
 .identity-header__back--absolute {
   position: absolute;

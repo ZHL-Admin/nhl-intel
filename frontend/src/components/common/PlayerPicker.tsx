@@ -18,8 +18,8 @@ interface PlayerPickerProps {
   onClear?: () => void
   season?: string
   placeholder?: string
-  /** Restrict results: 'F' = forwards (C/L/R), 'D' = defensemen. */
-  positionFilter?: 'F' | 'D'
+  /** Restrict results: 'F' = forwards (C/L/R), 'D' = defensemen, or an exact position 'C'|'L'|'R'. */
+  positionFilter?: 'F' | 'D' | 'C' | 'L' | 'R'
 }
 
 export default function PlayerPicker({
@@ -35,7 +35,9 @@ export default function PlayerPicker({
   const matchesFilter = useCallback((p: PlayerSearchResult) => {
     if (!positionFilter) return true
     const pos = p.position ?? ''
-    return positionFilter === 'D' ? pos === 'D' : ['C', 'L', 'R'].includes(pos)
+    if (positionFilter === 'F') return ['C', 'L', 'R'].includes(pos)
+    if (positionFilter === 'D') return pos === 'D'
+    return pos === positionFilter   // exact position: 'C' | 'L' | 'R'
   }, [positionFilter])
 
   useEffect(() => {

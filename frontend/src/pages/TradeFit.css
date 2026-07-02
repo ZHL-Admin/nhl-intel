@@ -5,18 +5,8 @@
   max-width: 1200px;
   margin: 0 auto;
 }
-
-.tf__header { margin-bottom: var(--space-6); }
-.tf__back { font-size: var(--text-sm); color: var(--color-text-secondary); }
-.tf__back:hover { color: var(--color-text-primary); }
-.tf__title {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-text-primary);
-  margin: var(--space-2) 0;
-}
-.tf__sub { font-size: var(--text-base); color: var(--color-text-secondary); line-height: 1.55; max-width: 640px; }
+/* page body inside the single PageCard — sections stack and use dividers, no inner cards */
+.tf__body { display: block; }
 
 /* ============================================================================
    Builder
@@ -45,9 +35,8 @@
   padding: var(--space-3) var(--space-4);
   text-align: left;
   border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -99,12 +88,10 @@
 /* ============================================================================
    Player picker panel (player-active): search + "recent & notable" rows
    ============================================================================ */
+/* picker section — flat inside the page card, full-bleed to the card's inner edges */
 .tf-pick {
+  margin: 0 calc(var(--space-5) * -1);
   padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
 }
 .tf-pick__search { position: relative; display: flex; align-items: center; }
 .tf-pick__search-icon { position: absolute; left: var(--space-3); color: var(--color-text-muted); pointer-events: none; }
@@ -151,12 +138,10 @@
 /* ============================================================================
    Team picker grid
    ============================================================================ */
+/* team-grid section — flat, full-bleed to the card's inner edges */
 .tf-picker {
+  margin: 0 calc(var(--space-5) * -1);
   padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
 }
 .tf-picker__head {
   font-size: var(--text-xs);
@@ -176,7 +161,7 @@
   padding: var(--space-4) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-bg-surface);
+  background: var(--color-bg-elevated);
   text-align: center;
   transition: transform 140ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
@@ -218,13 +203,11 @@
 /* ============================================================================
    Hero result
    ============================================================================ */
+/* hero result — THE section inside the page card: no card chrome, full-bleed so its
+   internal dividers span the card's inner width (internal padding re-aligns content). */
 .tf-hero {
   --tf-grade: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  margin: 0 calc(var(--space-5) * -1);
   animation: tf-rise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes tf-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -462,13 +445,10 @@
 /* ============================================================================
    Best team fits
    ============================================================================ */
+/* best-team-fits — a flat section (separated from the hero by a page divider) */
 .tf-best {
-  margin-top: var(--space-5);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
+  margin: 0 calc(var(--space-5) * -1);
+  padding: var(--space-2) var(--space-5) 0;
 }
 .tf-best__head { display: flex; align-items: flex-start; gap: var(--space-3); }
 .tf-best__icon {
@@ -514,7 +494,6 @@
    Responsive
    ============================================================================ */
 @media (max-width: 860px) {
-  .tf { padding: var(--space-6) var(--space-4) var(--space-12); }
   .tf-build__arrow { transform: rotate(90deg); }
   .tf-card { max-width: none; }
   .tf-build__slots { flex-direction: column; align-items: stretch; }

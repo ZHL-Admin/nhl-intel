@@ -12,7 +12,9 @@
  *
  * Reuses the actual-vs-expected motif from deserved standings (team) and GSAx-vs-Edge (goalie).
  */
+import { useContext } from 'react'
 import { PlayerValue } from '../../api/types'
+import { PageCardContext } from './PageCard'
 import './ImpactValuePanel.css'
 
 const pctText = (p?: number | null) => (p == null ? '—' : `${Math.round(p * 100)}`)
@@ -46,9 +48,10 @@ export default function ImpactValuePanel({ value, name }: { value: PlayerValue; 
   const gap = value.gap_percentile_points ?? null
   const warBand = value.war_sd ? value.war_sd * 4 : 0   // ±WAR -> ~percentile-point band (proxy)
   const last = name.split(' ').slice(-1)[0]
+  const insidePageCard = useContext(PageCardContext)
 
   return (
-    <div className="ivp">
+    <div className={`ivp${insidePageCard ? ' ivp--flat' : ''}`}>
       <div className="ivp__head">
         <h2 className="ivp__title">Impact vs Value</h2>
         <span className="ivp__tag">RAPM (repeats) vs GAR (happened)</span>

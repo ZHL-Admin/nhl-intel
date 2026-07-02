@@ -128,6 +128,19 @@ team_xg as (
     from {{ ref('mart_team_game_stats') }}
 ),
 
+-- Real per-game 5v5 on-ice / off-ice xGF% from the shift-by-shift reconstruction
+-- (int_player_onice_game). Replaces the former team-level proxy below. Null for players
+-- with no 5v5 ice in the game (e.g. goalies), which averages/relatives ignore.
+player_onice as (
+    select
+        game_id,
+        player_id,
+        on_ice_xgf_pct,
+        off_ice_xgf_pct,
+        rel_xgf_pct
+    from {{ ref('int_player_onice_game') }}
+),
+
 -- Real ALL-SITUATIONS time on ice per player-game, summed from the shift charts
 -- (stg_shifts: one row per shift, all strengths). This replaces the old 15.0-minute
 -- placeholder so TOI/GP and every per-60 rate below are computed off a real denominator.
@@ -273,9 +286,12 @@ with_flags as (
     select
         m.*,
         sa.season_avg_ixg_per60,
-        -- On-ice xGF% proxy: use team xGF% as approximation
-        -- Note: True on-ice xGF% requires shift-by-shift tracking not available in this model
-        m.team_xgf_pct as on_ice_xgf_pct,
+        -- Real 5v5 on-ice xGF% from shift-by-shift reconstruction (int_player_onice_game),
+        -- plus off-ice and true on-minus-off relative. Null where the player logged no 5v5
+        -- ice (e.g. goalies). This replaces the former team-level on-ice proxy.
+        po.on_ice_xgf_pct as on_ice_xgf_pct,
+        po.off_ice_xgf_pct as off_ice_xgf_pct,
+        po.rel_xgf_pct as rel_xgf_pct,
         case
             when sa.season_avg_ixg_per60 > 0.1 and m.ixg_per60 > sa.season_avg_ixg_per60 * 1.15 then 'hot'
             when sa.season_avg_ixg_per60 > 0.1 and m.ixg_per60 < sa.season_avg_ixg_per60 * 0.85 then 'cold'
@@ -285,6 +301,9 @@ with_flags as (
     left join season_averages sa
         on m.player_id = sa.player_id
         and m.season = sa.season
+    left join player_onice po
+        on m.game_id = po.game_id
+        and m.player_id = po.player_id
 ),
 
 final as (
@@ -321,6 +340,8 @@ final as (
         ixg,
         ixg_per60,
         on_ice_xgf_pct,
+        off_ice_xgf_pct,
+        rel_xgf_pct,
         primary_points_per60,
         season_avg_ixg_per60,
         hot_cold_flag

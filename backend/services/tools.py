@@ -15,6 +15,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import math
+from functools import lru_cache
+
 from google.cloud import bigquery
 
 from services.bigquery import bq_service
@@ -525,3 +528,685 @@ def _abbrev(team_id: Optional[int]) -> Optional[str]:
         for r in rows:
             _ABBREV_CACHE[r["team_id"]] = r["a"]
     return _ABBREV_CACHE.get(team_id)
+
+
+# ============================================================================================
+# Roster Builder (POST /tools/roster-evaluate). An interactive depth-chart sandbox: project an
+# arbitrary user-built roster forward and grade it, points-led (DELTA vs the team's real roster as
+# the headline, absolute points secondary with a band). Reuses the offseason forecast engine
+# (project_skater_war/goalie, build_lineup, lineup_value, forecast_band, inflate_arrival_bands,
+# chemistry_adjustment, rating_to_points) + the new absolute_rating helper, and the Lineup Lab
+# score_line for per-line fit grades. No cap/salary anywhere (explicitly out of scope).
+# ============================================================================================
+
+# Slot scheme: 4 forward lines (LW/C/RW), 3 defense pairs (LD/RD), starter + backup goalie. Only the
+# 12F/6D/1-starter are ICED for value (N_GOALIE=1 — the backup dresses but the model counts one
+# goalie's WAR, matching the calibration); anything else is a scratch with no on-ice value.
+FWD_LINES = [[f"F{ln}{w}" for w in ("L", "C", "R")] for ln in range(1, 5)]
+DEF_PAIRS = [[f"D{pr}{s}" for s in ("L", "R")] for pr in range(1, 4)]
+FWD_SLOTS = [s for line in FWD_LINES for s in line]
+DEF_SLOTS = [s for pair in DEF_PAIRS for s in pair]
+ICED_SLOTS = FWD_SLOTS + DEF_SLOTS + ["G1"]
+ALL_SLOTS = FWD_SLOTS + DEF_SLOTS + ["G1", "G2"]
+
+# Position columns for the auto-optimizer: a forward fills the column of his natural position
+# (C/L/R), a defenseman the column of his handedness side (left-shot -> LD, right-shot -> RD), best
+# at the top. Short positions / surplus flex-fill the remaining slots (off-position / off-side), as
+# real depth charts do — a hole is never left for a player who exists.
+_FWD_COLS = {"L": ["F1L", "F2L", "F3L", "F4L"], "C": ["F1C", "F2C", "F3C", "F4C"],
+             "R": ["F1R", "F2R", "F3R", "F4R"]}
+_DEF_COLS = {"L": ["D1L", "D2L", "D3L"], "R": ["D1R", "D2R", "D3R"]}
+
+
+def _pos_group_of_slot(slot: str) -> str:
+    return "G" if slot.startswith("G") else ("D" if slot.startswith("D") else "F")
+
+
+@lru_cache(maxsize=2)
+def _forecast_inputs(base_season: str) -> dict:
+    """The heavy, roster-independent projection inputs, loaded once per base season (the live tool
+    re-evaluates on every edit, so this MUST be cached). All route through models_ml.bq, which reads
+    the DuckDB serving file in the API process — the same path the offseason forecast uses."""
+    from models_ml import bq, project_roster_forecast as J
+    n_back = J.CFG["PROJ_WINDOWS"]
+    return {
+        "skater": J.load_skater_war_multi(bq, base_season, n_back),
+        "goalie": J.load_goalie_war_multi(bq, base_season, n_back),
+        "arch": J.load_archetypes(bq, base_season),
+        "aging": J.load_aging(bq),
+        "ages": J.load_ages(bq, base_season),
+        "names": J.load_player_names(bq),
+        "components": _load_components(base_season),
+        "index": _league_player_index(base_season),
+        "hand": _load_handedness(),
+        "proj": _load_projections(),
+    }
+
+
+@lru_cache(maxsize=8)
+def _team_predictive_base(team_id: int, base_season: str) -> Optional[float]:
+    """R_measured: the team's 2-year recency-weighted, league-mean-regressed MEASURED rating — the best
+    single predictor of next-season strength (Handoff 13). Anchors the hybrid. None if the team has no
+    rating history (then the tool degrades to pure bottom-up). Uses seasons <= base_season."""
+    from models_ml import project_roster_forecast as J
+    CFG = J.CFG
+    rows = bq_service.query(
+        "SELECT season, total_rating FROM ("
+        "  SELECT season, total_rating, ROW_NUMBER() OVER ("
+        "    PARTITION BY season ORDER BY game_date DESC, games_played DESC) rn "
+        "  FROM team_ratings WHERE team_id = @t AND season <= @s) WHERE rn = 1 "
+        "ORDER BY season DESC",
+        params=[bigquery.ScalarQueryParameter("t", "INT64", int(team_id)),
+                bigquery.ScalarQueryParameter("s", "STRING", base_season)])
+    ratings = [float(r["total_rating"]) for r in rows]
+    if not ratings:
+        return None
+    W = CFG["ROSTER_BUILDER_BASE_W"]; K = CFG["ROSTER_BUILDER_BASE_K"]
+    m = min(len(ratings), len(W))
+    num = sum(W[j] * ratings[j] for j in range(m)); wt = sum(W[j] for j in range(m))
+    base = num / wt
+    return (wt * base) / (wt + K)   # regress toward league mean (0)
+
+
+@lru_cache(maxsize=1)
+def _load_projections() -> dict:
+    """player_id -> {proj_war, proj_war_sd} from the Handoff-12 component model (roster_player_projection).
+    This is the Roster Builder's projection — a regularized component Marcel with backtest-calibrated,
+    heteroscedastic uncertainty — replacing make_player_proj's last-season-WAR + gar_sd/6. The offseason
+    /trade/contract tools are untouched (documented temporary divergence)."""
+    out: dict = {}
+    try:
+        for r in bq_service.query(
+                "SELECT player_id, proj_war, proj_war_sd, proj_toi FROM roster_player_projection"):
+            out[int(r["player_id"])] = {"war": float(r["proj_war"]), "sd": float(r["proj_war_sd"]),
+                                        "toi": float(r.get("proj_toi") or 600.0)}
+    except Exception:  # noqa: BLE001 — table absent (not yet precomputed) -> fall back to make_player_proj
+        return {}
+    return out
+
+
+@lru_cache(maxsize=1)
+def _load_handedness() -> dict:
+    """player_id -> shoots ('L'/'R') from stg_player_bio — used to seat a defenseman on his natural
+    side (left-shot = LD, right-shot = RD) when auto-optimizing the depth chart."""
+    out: dict = {}
+    for r in bq_service.query("SELECT player_id, shoots FROM stg_player_bio WHERE shoots IS NOT NULL"):
+        out[int(r["player_id"])] = str(r["shoots"])
+    return out
+
+
+@lru_cache(maxsize=2)
+def _load_components(base_season: str) -> dict:
+    """player_id -> realized latest-window GAR components (goals scale) for the component breakdown.
+    Skaters from player_gar; goalies' realized WAR from goalie_gar. Realized (not projected) — this is
+    the 'what this roster is made of' decomposition, like the offseason tool's base_* components."""
+    out: dict = {}
+    for r in bq_service.query(
+        "SELECT player_id, ev_offense, pp, ev_defense, pk, penalty, faceoff, goals, ixg "
+        "FROM player_gar WHERE season_window = @s",
+            params=[bigquery.ScalarQueryParameter("s", "STRING", base_season)]):
+        out[int(r["player_id"])] = {k: float(r.get(k) or 0.0) for k in
+                                    ("ev_offense", "pp", "ev_defense", "pk", "penalty", "faceoff",
+                                     "goals", "ixg")}
+    for r in bq_service.query(
+        "SELECT goalie_id, war FROM goalie_gar WHERE season_window = @s",
+            params=[bigquery.ScalarQueryParameter("s", "STRING", base_season)]):
+        out.setdefault(int(r["goalie_id"]), {})["goalie_war"] = float(r.get("war") or 0.0)
+    return out
+
+
+@lru_cache(maxsize=2)
+def _league_player_index(season: str) -> dict:
+    """player_id -> {name, position, team_id, headshot} for every current-roster player, so a placed
+    player carries his real identity (name/position/headshot) regardless of which slot he sits in."""
+    out: dict = {}
+    for r in bq_service.query(
+        "SELECT player_id, full_name, position_code, team_id, headshot_url "
+        "FROM dim_current_roster WHERE season = @s",
+            params=[bigquery.ScalarQueryParameter("s", "STRING", season)]):
+        out[int(r["player_id"])] = {
+            "name": r.get("full_name"), "position": r.get("position_code") or "F",
+            "team_id": r.get("team_id"), "headshot": r.get("headshot_url")}
+    return out
+
+
+def _team_current_members(team_id: int, season: str) -> list[dict]:
+    """The team's CURRENT roster (dim_current_roster) — the baseline the canvas pre-loads and the
+    delta is measured against. Matches GET /teams/{id}/roster's membership source."""
+    rows = bq_service.query(
+        "SELECT player_id, full_name, position_code FROM dim_current_roster "
+        "WHERE team_id = @t AND season = @s",
+        params=[bigquery.ScalarQueryParameter("t", "INT64", int(team_id)),
+                bigquery.ScalarQueryParameter("s", "STRING", season)])
+    return [{"player_id": int(r["player_id"]), "name": r.get("full_name"),
+             "position": r.get("position_code") or "F"} for r in rows]
+
+
+def _proj(pid, position, inp):
+    """Project one placed player. Identity/base_war/pos come from make_player_proj; the projected WAR
+    and its (calibrated, heteroscedastic) sd are OVERRIDDEN by the Handoff-12 component model when the
+    player has a projection row. A player absent from the table (no GAR history) keeps the make_player_proj
+    no-track replacement + wide fallback band."""
+    from models_ml import project_roster_forecast as J
+    name = (inp["index"].get(int(pid), {}) or {}).get("name") or inp["names"].get(int(pid))
+    p = J.make_player_proj(int(pid), name, position, inp["skater"], inp["goalie"],
+                           inp["aging"], inp["ages"], inp["arch"], project_value=True)
+    pr = inp["proj"].get(int(pid))
+    if pr is not None:
+        p.projected_war = pr["war"]
+        p.war_sd = pr["sd"]
+        p.no_track_record = False
+    return p
+
+
+def _place(p, slot, slot_map):
+    p.slot = slot
+    slot_map[slot] = p
+
+
+def _flex_fill(all_slots, leftovers, slot_map):
+    """Seat surplus / off-position players in any still-empty slot of their group, best first — so a
+    5th left-shot D plays his off side, a winger covers a thin center slot. A hole stays only if the
+    pool truly cannot fill it (then it is replacement level, never dropped)."""
+    empties = [s for s in all_slots if s not in slot_map]
+    for slot, p in zip(empties, sorted(leftovers, key=lambda x: x.projected_war, reverse=True)):
+        _place(p, slot, slot_map)
+
+
+def _ice_from_pool(players, inp):
+    """Auto-optimize the depth chart, POSITION-AWARE: forwards fill their natural C/L/R column and
+    defensemen their handedness side (best at the top), with surplus / short positions flex-filling
+    the rest. A hole is never dropped — an unfilled slot is replacement level. Returns slot->PlayerProj
+    and the scratch pool."""
+    war = lambda p: p.projected_war  # noqa: E731
+    hand = inp["hand"]
+    slot_map: dict = {}
+
+    # Forwards by natural position; F1 = best at each position, so line 1 is the best C+LW+RW.
+    fwd_by = {"L": [], "C": [], "R": []}
+    for p in sorted((p for p in players if p.pos_group == "F"), key=war, reverse=True):
+        fwd_by[p.position if p.position in ("L", "C", "R") else "C"].append(p)
+    leftovers = []
+    for pos, slots in _FWD_COLS.items():
+        ranked = fwd_by[pos]
+        for slot, p in zip(slots, ranked):
+            _place(p, slot, slot_map)
+        leftovers += ranked[len(slots):]
+    _flex_fill(FWD_SLOTS, leftovers, slot_map)
+
+    # Defensemen by handedness side (left-shot -> LD, right-shot -> RD); unknown balances the sides.
+    def_by = {"L": [], "R": []}
+    for p in sorted((p for p in players if p.pos_group == "D"), key=war, reverse=True):
+        s = hand.get(p.player_id)
+        if s in ("L", "R"):
+            def_by[s].append(p)
+        else:
+            def_by["L" if len(def_by["L"]) <= len(def_by["R"]) else "R"].append(p)
+    d_leftovers = []
+    for side, slots in _DEF_COLS.items():
+        ranked = def_by[side]
+        for slot, p in zip(slots, ranked):
+            _place(p, slot, slot_map)
+        d_leftovers += ranked[len(slots):]
+    _flex_fill(DEF_SLOTS, d_leftovers, slot_map)
+
+    for slot, p in zip(("G1", "G2"), sorted((p for p in players if p.pos_group == "G"),
+                                            key=war, reverse=True)):
+        _place(p, slot, slot_map)
+
+    used = {p.player_id for p in slot_map.values() if p.player_id}
+    scratch = [p for p in players if p.player_id and p.player_id not in used]
+    return slot_map, scratch
+
+
+def _ice_from_slots(roster, inp):
+    """Honor the user's explicit slot assignments (the canvas IS the lineup). Returns slot->PlayerProj
+    (empty iced slots become replacement holes) and the scratch pool (slots outside the iced set)."""
+    from models_ml import project_roster_forecast as J
+    CFG = J.CFG
+    slot_map: dict = {}
+    scratch = []
+    seen = set()
+    for entry in roster:
+        pid = entry.get("player_id")
+        slot = entry.get("slot")
+        if pid is None or pid in seen:
+            continue
+        seen.add(pid)
+        pos = (inp["index"].get(int(pid), {}) or {}).get("position")
+        if slot in ALL_SLOTS:
+            pos = pos or _slot_default_pos(slot)
+            p = _proj(pid, pos, inp)
+            p.slot = slot
+            slot_map[slot] = p
+        else:  # scratch / bench
+            scratch.append(_proj(pid, pos or "F", inp))
+    return slot_map, scratch
+
+
+def _slot_default_pos(slot: str) -> str:
+    if slot.startswith("G"):
+        return "G"
+    if slot.startswith("D"):
+        return "D"
+    return {"L": "L", "C": "C", "R": "R"}.get(slot[-1], "C")
+
+
+def _replacement(slot, CFG):
+    from models_ml.project_roster_forecast import PlayerProj
+    pg = _pos_group_of_slot(slot)
+    return PlayerProj(None, None, pg if pg != "F" else "C", pg, pg == "G",
+                      CFG["REPLACEMENT_WAR"], CFG["REPLACEMENT_WAR"], 0.0, False,
+                      replacement=True, slot=slot)
+
+
+def _iced_lineup(slot_map, CFG):
+    """The 19 iced PlayerProjs in slot order, holes filled with replacement (the slot always exists)."""
+    return [slot_map.get(s) or _replacement(s, CFG) for s in ICED_SLOTS]
+
+
+@lru_cache(maxsize=1)
+def _latest_line_features():
+    """Each player's MOST RECENT line-fit profile across seasons (line_member_features), indexed by
+    player_id. Using the latest available profile — rather than forcing one season — means a line still
+    grades when a member lacks the current-season profile (an injured/low-TOI veteran like an out-most-
+    of-the-year captain, or a rookie who only has the current season). Normal lines are unchanged: for a
+    player with a current profile, latest == current."""
+    from models_ml import bq as mlbq
+    df = mlbq.query_df(
+        f"SELECT * FROM `{mlbq.project()}.nhl_models.line_member_features` ORDER BY season")
+    df = df.groupby("player_id", as_index=False).tail(1)   # latest season row per player
+    return df.set_index("player_id", drop=False)
+
+
+def _fit_from_rows(mem_df, line_type):
+    """Grade + xGF% for a line from its members' feature rows (any seasons). One model predict, no
+    SHAP/explanation — the lightweight path used by both the display grades and the suggestions."""
+    import pandas as pd
+    from models_ml import score_line as SL, linefit_features as lf
+    art = SL._load()
+    feat = lf.aggregate_line(mem_df, line_type)
+    X = pd.DataFrame([[feat.get(c, 0.0) for c in art["feature_columns"]]],
+                     columns=art["feature_columns"]).astype("float64").fillna(0.0)
+    xgf = float(art["boosters"]["xgf_pct"].predict(X)[0])
+    return {"grade": SL._grade(xgf), "xgf_pct": round(xgf, 4)}
+
+
+def _line_grade(ids, season=None):
+    """Per-line cold-start fit grade (Lineup Lab), from each member's most-recent profile. Returns None
+    only if a member has NO line-fit profile in any season (never a fabricated grade)."""
+    keys = [int(i) for i in ids]
+    line_type = "F3" if len(keys) == 3 else ("D2" if len(keys) == 2 else None)
+    if line_type is None:
+        return None
+    idx = _latest_line_features()
+    if any(k not in idx.index for k in keys):
+        return None
+    try:
+        return _fit_from_rows(idx.loc[keys], line_type)
+    except Exception:  # noqa: BLE001 — degrade gracefully, never a fabricated grade
+        return None
+
+
+def _player_out(p, base_ids, ages, hand):
+    on_new_team = bool(p.player_id) and p.player_id not in base_ids
+    return {
+        "player_id": p.player_id, "name": p.name, "pos": p.position, "slot": p.slot,
+        "shoots": hand.get(p.player_id) if p.player_id else None,
+        "age": ages.get(p.player_id) if p.player_id else None,
+        "base_war": round(p.base_war, 3), "projected_war": round(p.projected_war, 3),
+        "war_sd": round(p.war_sd, 3), "no_track_record": p.no_track_record,
+        "on_new_team": on_new_team, "replacement": p.replacement,
+    }
+
+
+def _components(iced, comp):
+    """Additive 4-bucket partition of the iced roster's REALIZED value (WAR units), shared scale:
+      finishing      = goals above expected (finishing talent)
+      special_teams  = pp + pk + penalties + faceoffs
+      goaltending    = the starting goalie's realized WAR
+      play_5v5       = the 5v5 process residual (skater total minus finishing and special teams)
+    So play_5v5 + finishing + special_teams + goaltending == the roster's total realized WAR."""
+    from models_ml import project_roster_forecast as J
+    gpw = J.CFG["GOALS_PER_WIN"]
+    skaters = [p for p in iced if p.player_id and p.pos_group != "G"]
+    goalies = [p for p in iced if p.player_id and p.pos_group == "G"]
+    g = lambda p, k: (comp.get(p.player_id, {}) or {}).get(k, 0.0)  # noqa: E731
+    fin = sum(g(p, "goals") - g(p, "ixg") for p in skaters) / gpw
+    st = sum(g(p, "pp") + g(p, "pk") + g(p, "penalty") + g(p, "faceoff") for p in skaters) / gpw
+    skater_total = sum(g(p, "ev_offense") + g(p, "ev_defense") + g(p, "pp") + g(p, "pk")
+                       + g(p, "penalty") + g(p, "faceoff") for p in skaters) / gpw
+    goaltending = sum(g(p, "goalie_war") for p in goalies)
+    return {"play_5v5": round(skater_total - fin - st, 3), "finishing": round(fin, 3),
+            "special_teams": round(st, 3), "goaltending": round(goaltending, 3)}
+
+
+def _evaluate_roster(slot_map, base_iced, base_ids, inp, season):
+    """Core: from a slot->PlayerProj map, build the iced lineup, widen arrival bands, score the lines,
+    and return the projection payload (absolute rating + points + band, components, positional values,
+    chemistry, per-line grades). base_iced/base_ids are the team's real roster for arrival detection
+    and the chemistry reference."""
+    from models_ml import project_roster_forecast as J
+    CFG = J.CFG
+    SLOPE = CFG["FORECAST_POINTS"]["slope"]
+    W2R = CFG["WAR_TO_RATING"]
+    iced = _iced_lineup(slot_map, CFG)
+
+    total_war = J.lineup_value(iced, "projected_war")
+    chem_delta = J._chemistry_delta(base_iced, iced, season)
+    chem = J.chemistry_adjustment(chem_delta, CFG)
+    rating = J.absolute_rating(total_war, chem, CFG)
+
+    iced_ids = {p.player_id for p in iced if p.player_id}
+    arrivals = len(iced_ids - base_ids)
+    departures = len(base_ids - iced_ids)
+
+    # ABSOLUTE band (wide, honest — the noisy full-season figure): the iced players' calibrated
+    # projection sds quadratured to points, scaled by the fitted team multiplier kappa (the common
+    # season-ahead error does not shrink with sqrt(N)), plus the irreducible 82-game luck floor.
+    # Calibrated so a 1-sigma interval covers ~68% of real team-seasons (Handoff 12).
+    talent_quad_war = math.sqrt(sum(p.war_sd ** 2 for p in iced))
+    abs_band = math.sqrt((CFG["ROSTER_BUILDER_BAND_KAPPA"] * SLOPE * W2R * talent_quad_war) ** 2
+                         + CFG["SEASON_LUCK_FLOOR_PTS"] ** 2)
+    proj_points = J.rating_to_points(rating, CFG)
+
+    ages, hand = inp["ages"], inp["hand"]
+    # Per-line fit grades (display) — absolute line quality, separate from the chemistry nudge.
+    fwd_lines = []
+    for line in FWD_LINES:
+        members = [slot_map[s] for s in line if s in slot_map and slot_map[s].player_id]
+        fwd_lines.append({
+            "slots": [_player_out(slot_map.get(s) or _replacement(s, CFG), base_ids, ages, hand) for s in line],
+            "fit": _line_grade([p.player_id for p in members], season) if len(members) >= 2 else None,
+        })
+    def_pairs = []
+    for pair in DEF_PAIRS:
+        members = [slot_map[s] for s in pair if s in slot_map and slot_map[s].player_id]
+        def_pairs.append({
+            "slots": [_player_out(slot_map.get(s) or _replacement(s, CFG), base_ids, ages, hand) for s in pair],
+            "fit": _line_grade([p.player_id for p in members], season) if len(members) == 2 else None,
+        })
+
+    iced_f = [p for p in iced if p.pos_group == "F"]
+    iced_d = [p for p in iced if p.pos_group == "D"]
+    iced_g = [p for p in iced if p.pos_group == "G"]
+    return {
+        "rating_abs": round(rating, 4),
+        "projected_points": proj_points,
+        "points_low": max(0, round(proj_points - abs_band)),
+        "points_high": min(164, round(proj_points + abs_band)),
+        "abs_band": round(abs_band, 2),
+        "band_goals": round(abs_band / SLOPE, 4),
+        "total_lineup_war": round(total_war, 3),
+        "chemistry_adj": round(chem, 4),
+        "components": _components(iced, inp["components"]),
+        "positional": {
+            "forward_war": round(J.lineup_value(iced_f, "projected_war"), 3),
+            "defense_war": round(J.lineup_value(iced_d, "projected_war"), 3),
+            "goaltending_war": round(J.lineup_value(iced_g, "projected_war"), 3),
+        },
+        "forward_lines": fwd_lines,
+        "defense_pairs": def_pairs,
+        "goalies": {
+            "starter": _player_out(slot_map.get("G1") or _replacement("G1", CFG), base_ids, ages, hand),
+            "backup": _player_out(slot_map["G2"], base_ids, ages, hand) if "G2" in slot_map else None,
+        },
+        "arrivals": arrivals, "departures": departures,
+        "_rating": rating,  # internal, popped before serialization
+        "_iced": iced,      # internal, for the delta band (changed players)
+    }
+
+
+@lru_cache(maxsize=2)
+def _league_projections(base_season: str) -> dict:
+    """player_id -> PlayerProj for every current-roster player, projected forward — the candidate pool
+    for slot suggestions. Cached per base season (the live tool calls this on every picker open)."""
+    inp = _forecast_inputs(base_season)
+    out = {}
+    for pid, meta in inp["index"].items():
+        out[pid] = _proj(pid, meta.get("position", "F"), inp)
+    return out
+
+
+@lru_cache(maxsize=2)
+def _tier_bounds(base_season: str) -> dict:
+    """Projected-WAR boundaries between depth-chart tiers, from the league distribution: forwards split
+    into 4 lines (32 teams x 3 = 96 per line), defensemen into 3 pairs (64 per pair). Used to keep a
+    slot's suggestions caliber-appropriate — a top-line star is never offered for a 4th-line hole."""
+    proj = _league_projections(base_season)
+    f = sorted((p.projected_war for p in proj.values() if p.pos_group == "F"), reverse=True)
+    d = sorted((p.projected_war for p in proj.values() if p.pos_group == "D"), reverse=True)
+    at = lambda lst, r: lst[min(r, len(lst) - 1)] if lst else 0.0  # noqa: E731
+    return {"F": [at(f, 96), at(f, 192), at(f, 288)], "D": [at(d, 64), at(d, 128)]}
+
+
+def _slot_tier(slot: str) -> tuple[str, int]:
+    if slot.startswith("F"):
+        return "F", int(slot[1])
+    if slot.startswith("D"):
+        return "D", int(slot[1])
+    return "G", 1
+
+
+def _caliber_window(pos_group: str, line_idx: int, bounds: dict, slack: float = 0.35) -> tuple[float, float]:
+    """[floor, ceiling] projected WAR for a line/pair. The top line/pair is unbounded above (stars
+    welcome); every lower tier is capped just above the boundary with the tier above it, so a player is
+    only suggested where his caliber actually fits."""
+    b = bounds[pos_group]
+    ceil = float("inf") if line_idx == 1 else b[line_idx - 2] + slack
+    floor = (b[line_idx - 1] - slack) if (line_idx - 1) < len(b) else -1.0
+    return floor, ceil
+
+
+def _suggest_out(p, inp, fit) -> dict:
+    meta = inp["index"].get(p.player_id, {}) or {}
+    return {
+        "player_id": p.player_id, "name": p.name, "pos": p.position,
+        "team_id": meta.get("team_id"), "team_abbrev": _abbrev(meta.get("team_id")),
+        "headshot_url": meta.get("headshot"),
+        "projected_war": round(p.projected_war, 3), "war_sd": round(p.war_sd, 3),
+        "grade": (fit or {}).get("grade"), "xgf_pct": (fit or {}).get("xgf_pct"),
+    }
+
+
+SUGGEST_POOL = 40          # candidates (by caliber) scored for line fit per slot — bounds latency
+GRADE_RANK = {"A": 5, "B": 4, "C": 3, "D": 2, "F": 1}   # fit grade -> sort bucket (unscored = 0)
+
+
+def _batch_line_fit(candidate_ids, linemate_ids, season=None):
+    """Cold-start line-fit GRADE + xGF% for many candidates at once: one vectorized model predict over
+    the whole candidate pool (no per-candidate SHAP/explanation), so we can rank by FIT first. Uses each
+    player's most-recent profile (see _latest_line_features), so a linemate/candidate missing the current
+    season still scores. Returns {candidate_id: (grade, xgf_pct)}; players with no profile are omitted."""
+    import pandas as pd
+    from models_ml import score_line as SL, linefit_features as lf
+    n = len(linemate_ids) + 1
+    line_type = "F3" if n == 3 else ("D2" if n == 2 else None)
+    if line_type is None:
+        return {}
+    idx = _latest_line_features()
+    if any(int(i) not in idx.index for i in linemate_ids):
+        return {}
+    lm_rows = idx.loc[[int(i) for i in linemate_ids]]
+    art = SL._load(); fcols = art["feature_columns"]
+    rows, ids = [], []
+    for cid in candidate_ids:
+        if int(cid) not in idx.index:
+            continue
+        feat = lf.aggregate_line(pd.concat([idx.loc[[int(cid)]], lm_rows]), line_type)
+        rows.append([feat.get(c, 0.0) for c in fcols]); ids.append(int(cid))
+    if not rows:
+        return {}
+    X = pd.DataFrame(rows, columns=fcols).astype("float64").fillna(0.0)
+    preds = art["boosters"]["xgf_pct"].predict(X)
+    return {cid: (SL._grade(float(x)), float(x)) for cid, x in zip(ids, preds)}
+
+
+def roster_slot_suggestions(team_id: int, slot: str, roster: Optional[list[dict]] = None,
+                            season: Optional[str] = None, top_n: int = 9) -> dict:
+    """Line-aware 'great fit' suggestions for one slot. Caliber is tiered to the slot's line/pair (no
+    star on a bottom line); when the line already has members, candidates are ranked by the cold-start
+    line fit (score_line xGF) with those linemates, else by projected value within the tier. Reads only."""
+    base_season = season or J_latest_completed()
+    inp = _forecast_inputs(base_season)
+    proj = _league_projections(base_season)
+    pos_group, line_idx = _slot_tier(slot)
+
+    placed_ids = {int(e["player_id"]) for e in (roster or []) if e.get("player_id") is not None}
+    slot_to_pid = {e.get("slot"): int(e["player_id"]) for e in (roster or [])
+                   if e.get("slot") and e.get("player_id") is not None}
+    if pos_group == "F":
+        line_slots = [f"F{line_idx}{w}" for w in ("L", "C", "R")]
+    elif pos_group == "D":
+        line_slots = [f"D{line_idx}{s}" for s in ("L", "R")]
+    else:
+        line_slots = []
+    linemate_ids = [slot_to_pid[s] for s in line_slots if s != slot and s in slot_to_pid]
+
+    if pos_group == "G":
+        cands = sorted((p for pid, p in proj.items() if p.pos_group == "G" and pid not in placed_ids),
+                       key=lambda p: p.projected_war, reverse=True)[:top_n]
+        return {"slot": slot, "suggestions": [_suggest_out(p, inp, None) for p in cands]}
+
+    # Respect the slot's exact position: a center slot suggests only centers, a wing slot only that
+    # side's wings (position_code L/C/R), a D slot only that handedness side (LD = left-shot). Players
+    # mostly play one position, and wings have a preferred side, so cross-position suggestions are wrong.
+    target = slot[-1]   # 'L' / 'C' / 'R' for F, 'L' / 'R' for D
+    hand = inp["hand"]
+
+    def _pos_ok(p):
+        if pos_group == "F":
+            return p.position == target
+        if pos_group == "D":
+            return hand.get(p.player_id, target) == target   # unknown-hand D matches either side
+        return True
+
+    floor, ceil = _caliber_window(pos_group, line_idx, _tier_bounds(base_season))
+    pool = [p for pid, p in proj.items() if p.pos_group == pos_group and _pos_ok(p) and pid not in placed_ids
+            and p.player_id and floor <= p.projected_war <= ceil]
+    pool.sort(key=lambda p: p.projected_war, reverse=True)
+    pool = pool[:SUGGEST_POOL]   # caliber-bounded candidate pool to line-fit score
+
+    if linemate_ids:
+        # Rank by FIT GRADE first, then by skill (projected WAR) within a grade — so a strong-fit
+        # player outranks a higher-skill but worse-fit one, but among equal-fit players the more
+        # skilled shows first. (A,A,B,C with skills 4,5,3,1 -> the two A's and the B lead.)
+        fits = _batch_line_fit([p.player_id for p in pool], linemate_ids, base_season)
+        ranked = sorted(
+            pool,
+            key=lambda p: (GRADE_RANK.get((fits.get(p.player_id) or (None, None))[0], 0), p.projected_war),
+            reverse=True)
+        out = []
+        for p in ranked[:top_n]:
+            g, x = fits.get(p.player_id, (None, None))
+            out.append(_suggest_out(p, inp, {"grade": g, "xgf_pct": x} if g else None))
+        return {"slot": slot, "suggestions": out}
+    return {"slot": slot, "suggestions": [_suggest_out(p, inp, None) for p in pool[:top_n]]}
+
+
+def J_latest_completed() -> str:
+    from models_ml import bq, project_roster_forecast as J
+    return J.latest_completed_season(bq)
+
+
+def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize: bool = False,
+                    season: Optional[str] = None) -> dict:
+    """Evaluate a user-built roster for `team_id`. roster = [{player_id, slot}] (slot in the F/D/G
+    scheme); None or optimize=True auto-builds the optimal lineup from the placed pool (or the team's
+    current roster when nothing is placed). Returns the points-led projection with the DELTA vs the
+    team's real roster as the headline (absolute points secondary, banded). Reads only."""
+    from models_ml import bq, project_roster_forecast as J
+    CFG = J.CFG
+    base_season = season or J.latest_completed_season(bq)
+    inp = _forecast_inputs(base_season)
+
+    # Baseline: the team's CURRENT roster, auto-optimized — the reference the delta is measured against.
+    base_members = _team_current_members(team_id, base_season)
+    if not base_members:
+        raise ValueError(f"no current roster for team {team_id}")
+    base_players = [_proj(m["player_id"], m["position"], inp) for m in base_members]
+    base_slotmap, _ = _ice_from_pool(base_players, inp)
+    base_iced = _iced_lineup(base_slotmap, CFG)
+    base_ids = {m["player_id"] for m in base_members}
+    base_total = J.lineup_value(base_iced, "projected_war")
+    base_rating = J.absolute_rating(base_total, 0.0, CFG)  # baseline is its own reference (chem delta 0)
+    base_points = J.rating_to_points(base_rating, CFG)
+
+    # The built roster. roster is None -> the canvas mirrors the real roster (never a cold empty state);
+    # roster == [] is an explicitly emptied canvas (all replacement holes), NOT the baseline.
+    if optimize:
+        pool_src = roster if roster is not None else [{"player_id": m["player_id"]} for m in base_members]
+        pool = [_proj(e["player_id"], (inp["index"].get(int(e["player_id"]), {}) or {}).get("position", "F"), inp)
+                for e in pool_src if e.get("player_id") is not None]
+        built_slotmap, scratch = _ice_from_pool(pool, inp)
+    elif roster is not None:
+        built_slotmap, scratch = _ice_from_slots(roster, inp)
+    else:
+        built_slotmap, scratch = base_slotmap, []
+
+    payload = _evaluate_roster(built_slotmap, base_iced, base_ids, inp, base_season)
+    built_R_bu = payload.pop("_rating")   # R_bottomup(built) — the parts-sum rating
+    built_iced = payload.pop("_iced")
+    SLOPE = CFG["FORECAST_POINTS"]["slope"]; W2R = CFG["WAR_TO_RATING"]
+
+    # HYBRID (Handoff 13): anchor on the team's MEASURED predictive rating, use player projections only
+    # for the change vs the real roster, and fade to pure bottom-up as the roster turns over.
+    #   projected_rating = R_bottomup(built) + w * (R_measured - R_bottomup(actual))
+    # base_rating here is R_bottomup(actual). The offset is the coaching/system/integration the parts-sum
+    # can't see; w (retained value share) fades it as players are swapped out. No changes -> w=1 ->
+    # projected_rating == R_measured (the baseline IS the team's measured level). Fully hypothetical ->
+    # w=0 -> pure bottom-up. The math degrades automatically; no special-casing.
+    r_measured = _team_predictive_base(team_id, base_season)
+    if r_measured is None:
+        r_measured = base_rating   # no rating history -> pure bottom-up (offset 0)
+    offset = r_measured - base_rating
+
+    # w is MINUTES-weighted (projected ice time), so the team-system offset fades with how much of the
+    # roster's ICE TIME turns over, not its value — a single swap keeps ~95% of minutes (system intact),
+    # a full rebuild -> 0. Players absent from the projection table get a depth-minutes default.
+    toi_of = lambda pid: (inp["proj"].get(pid, {}) or {}).get("toi", 600.0)  # noqa: E731
+    base_min = {p.player_id: toi_of(p.player_id) for p in base_iced if p.player_id}
+    built_ids = {p.player_id for p in built_iced if p.player_id}
+    denom = sum(base_min.values()) or 1.0
+    w = max(0.0, min(1.0, sum(m for pid, m in base_min.items() if pid in built_ids) / denom))
+
+    projected_rating = built_R_bu + w * offset
+    projected_points = J.rating_to_points(projected_rating, CFG)
+    baseline_points = J.rating_to_points(r_measured, CFG)   # the w=1 baseline = team's measured level
+    points_delta = round(SLOPE * (projected_rating - r_measured), 1)
+
+    # ABSOLUTE band (context, wide): strength uncertainty interpolated anchor<->bottom-up by w, in
+    # quadrature with the irreducible luck floor. Calibrated to ~68% coverage on real team-seasons (w=1).
+    strength_sd = w * CFG["ROSTER_BUILDER_STRENGTH_ANCHOR"] + (1.0 - w) * CFG["ROSTER_BUILDER_STRENGTH_BU"]
+    abs_band = math.sqrt(strength_sd ** 2 + CFG["SEASON_LUCK_FLOOR_PTS"] ** 2)
+    payload["projected_points"] = projected_points
+    payload["points_low"] = max(0, round(projected_points - abs_band))
+    payload["points_high"] = min(164, round(projected_points + abs_band))
+    payload["abs_band"] = round(abs_band, 2)
+    payload["band_goals"] = round(abs_band / SLOPE, 4)
+    payload["rating_abs"] = round(projected_rating, 4)
+
+    # DELTA band (tight headline): only the CHANGED players' projection sds (stayers cancel exactly),
+    # plus a small term from the team-effect offset fading as the roster turns over. No luck floor — a
+    # talent comparison, not a realized-season bet. A single swap is ~+/-1 point.
+    base_by_id = {p.player_id: p for p in base_iced if p.player_id}
+    built_by_id = {p.player_id: p for p in built_iced if p.player_id}
+    changed = set(base_by_id) ^ set(built_by_id)
+    changed_var = sum((base_by_id.get(pid) or built_by_id.get(pid)).war_sd ** 2 for pid in changed)
+    changed_talent_pts = SLOPE * W2R * math.sqrt(changed_var)
+    offset_fade_pts = CFG["ROSTER_BUILDER_DELTA_OFFSET_W"] * (1.0 - w) * abs(offset) * SLOPE
+    delta_band = math.sqrt(changed_talent_pts ** 2 + offset_fade_pts ** 2)
+
+    payload["points_delta"] = points_delta
+    payload["delta_band"] = round(delta_band, 2)
+    payload["delta_low"] = round(points_delta - delta_band, 1)
+    payload["delta_high"] = round(points_delta + delta_band, 1)
+    payload["baseline_points"] = baseline_points
+    payload["baseline_rating"] = round(r_measured, 4)
+    payload["r_bottomup"] = round(built_R_bu, 4)
+    payload["retained_share"] = round(w, 3)
+    payload["base_season"] = base_season
+    payload["team_id"] = team_id
+    payload["scratches"] = [_player_out(p, base_ids, inp["ages"], inp["hand"]) for p in scratch]
+    payload["negligible"] = abs(projected_rating - r_measured) < 1e-6 and not (roster and not optimize)
+    return payload

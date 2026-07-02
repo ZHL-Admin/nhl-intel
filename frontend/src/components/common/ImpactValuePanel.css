@@ -6,6 +6,12 @@
   box-shadow: var(--shadow-sm);
   padding: var(--space-5) var(--space-6);
 }
+/* Flat — inside a PageCard: a subtle inset, no border/shadow (the page card supplies the surface). */
+.ivp--flat {
+  border: none;
+  background: var(--color-bg-elevated);
+  box-shadow: none;
+}
 .ivp__head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-5); }
 .ivp__title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text-primary); }
 .ivp__tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); }

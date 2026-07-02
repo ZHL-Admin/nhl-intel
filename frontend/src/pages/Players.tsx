@@ -18,7 +18,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
 import DeploymentBoard, { DEPLOYMENT_SITUATIONS } from '../components/players/DeploymentBoard'
 import {
-  PageLayout, PageHeader, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar,
+  PageLayout, PageCard, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar,
 } from '../components/common'
 import type { StackSegment } from '../components/common'
 import { getOverallLeaders } from '../api/players'
@@ -409,11 +409,11 @@ export default function Players() {
   return (
     <PageLayout>
       <div className="players">
-        <PageHeader
+        <PageCard
           title="Players"
           subtitle="League-wide value, ranked. Filter, switch the lens, or search anyone."
-        >
-          {/* page controls live inside the header card */}
+          controls={
+          /* page controls live inside the header region */
           <div className="players__toolbar">
           {/* mode + search */}
           <div className="players__mode">
@@ -493,13 +493,14 @@ export default function Players() {
             </div>
           )}
           </div>
-        </PageHeader>
-
+          }
+        >
         {view === 'leaderboard'
           ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort}
               jumpTarget={jumpTarget} onJumpHandled={() => setJumpTarget(null)}
               focusedId={focusedId} onClearFocus={clearFocus} />
           : <DeploymentBoard situation={situation} />}
+        </PageCard>
       </div>
     </PageLayout>
   )

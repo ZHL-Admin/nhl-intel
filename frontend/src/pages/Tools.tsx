@@ -2,8 +2,8 @@
  * Tools index (Phase 5.2, blueprint section 9 row "Tools"): cards linking to each signature tool.
  */
 import { Link } from 'react-router-dom'
-import { Users, ArrowLeftRight, Scale, FileText, CalendarClock, Trophy, History } from 'lucide-react'
-import { PageLayout, PageHeader } from '../components/common'
+import { Users, ArrowLeftRight, Scale, FileText, CalendarClock, Trophy, History, LayoutGrid } from 'lucide-react'
+import { PageLayout, PageCard } from '../components/common'
 import './Tools.css'
 
 const TOOLS = [
@@ -18,6 +18,12 @@ const TOOLS = [
     icon: Users,
     title: 'Lineup Lab',
     blurb: 'Project any forward trio or defense pair from its members’ measured roles and skills — even players who have never shared the ice.',
+  },
+  {
+    to: '/tools/roster-builder',
+    icon: LayoutGrid,
+    title: 'Roster Builder',
+    blurb: 'Start from a team’s depth chart, swap in any player in the league, and read a points-led projection live — the change vs the real roster, with graded lines and honest bands. No cap.',
   },
   {
     to: '/tools/trade-fit',
@@ -55,19 +61,20 @@ export default function Tools() {
   return (
     <PageLayout>
       <div className="tools-index">
-        <PageHeader
+        <PageCard
           title="Tools"
           subtitle="Interactive models built on the same engine as the rest of the site. Every output is explained from the numbers that produced it."
-        />
-        <div className="tools-index__grid">
-          {TOOLS.map(({ to, icon: Icon, title, blurb }) => (
-            <Link key={to} to={to} className="tools-index__card">
-              <div className="tools-index__icon"><Icon size={22} /></div>
-              <h2 className="tools-index__card-title">{title}</h2>
-              <p className="tools-index__card-blurb">{blurb}</p>
-            </Link>
-          ))}
-        </div>
+        >
+          <div className="tools-index__grid">
+            {TOOLS.map(({ to, icon: Icon, title, blurb }) => (
+              <Link key={to} to={to} className="tools-index__card">
+                <div className="tools-index__icon"><Icon size={22} /></div>
+                <h2 className="tools-index__card-title">{title}</h2>
+                <p className="tools-index__card-blurb">{blurb}</p>
+              </Link>
+            ))}
+          </div>
+        </PageCard>
       </div>
     </PageLayout>
   )

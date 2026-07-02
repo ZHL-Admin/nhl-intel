@@ -1,9 +1,11 @@
-/* ===== TradeBalanceCard (leaf) ===== */
+/* ===== TradeBalanceCard (leaf) =====
+   A single-trade item rendered INSIDE the page card (feed reveal, dossier list, leaf route), so it
+   carries no card chrome of its own — a subtle inset fill keeps stacked trades distinguishable. */
 .tbl-card {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-bg-elevated);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: none;
   padding: var(--space-4);
   margin-bottom: var(--space-3);
   container-type: inline-size;   /* lets the ledger restack based on the card's own width */
@@ -20,10 +22,9 @@
   font-size: var(--text-xs); color: var(--color-text-muted); }
 .tbl-gmline__item { display: inline-flex; align-items: center; gap: 4px; }
 
-/* shared panel card — same family as ChartPanel, for the page's non-chart sections. Holds row/grid
-   content only (never nests a TradeBalanceCard, which is itself a card). */
-.t-panel { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: var(--space-5); }
+/* a page SECTION inside the single PageCard — no card chrome of its own (the page card supplies the
+   surface, border, shadow and padding); sibling sections are separated with .t-divider. */
+.t-panel { padding: 0; }
 .t-panel__title { font-size: var(--text-lg); font-weight: 500; color: var(--color-text-primary); margin: 0 0 var(--space-1); }
 .t-panel__sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
 
@@ -62,6 +63,8 @@
 /* asset row: name area can shrink/wrap; the two value cells stay fixed-width and column-aligned */
 .tbl-asset { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;
   gap: var(--space-3); padding: 2px 0; font-size: var(--text-sm); }
+/* retention broker row: a cap mechanism, not an acquisition — single column, smaller, no WAR cols */
+.tbl-asset--retention { grid-template-columns: 1fr; font-size: var(--text-xs); }
 .tbl-asset__name { min-width: 0; line-height: 1.35; }
 .tbl-asset__name a { color: var(--color-text-primary); text-decoration: none; }
 .tbl-asset__name a:hover { text-decoration: underline; }
@@ -88,16 +91,29 @@
 .vm-tip__row { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--color-text-secondary); }
 
 /* ===== Dossier ===== */
+/* the dossier's sections live in the page card, divider-separated — the column carries no gap */
+.dos-sections { display: flex; flex-direction: column; }
 .dos-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3) var(--space-5); margin-bottom: var(--space-2); }
 .dos-title { font-size: var(--text-2xl); font-weight: 600; color: var(--color-text-primary); display: flex; align-items: center; gap: var(--space-2); }
 .dos-net { font-size: var(--text-2xl); font-weight: 700; }
 .dos-net__band { font-size: var(--text-xs); color: var(--color-text-muted); }
 .dos-record { display: inline-flex; gap: var(--space-3); font-size: var(--text-sm); }
 .dos-record b { font-family: var(--font-mono); }
+/* separation cue + accumulation record line (Handoff 9) */
+.dos-sep { font-size: var(--text-xs); padding: 2px 10px; border-radius: var(--radius-full); align-self: center; white-space: nowrap; }
+.dos-sep--clear { background: color-mix(in srgb, var(--color-success) 18%, transparent); color: var(--color-success); }
+.dos-sep--leans { background: var(--color-bg-elevated); color: var(--color-text-secondary); }
+.dos-sep--noise { background: var(--color-bg-elevated); color: var(--color-text-muted); }
+.dos-recordline { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-2) 0 0; }
+.dos-recordline b { font-family: var(--font-mono); color: var(--color-text-primary); }
 .dos-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
 .dos-chip { font-size: var(--text-xs); padding: 2px 8px; border-radius: var(--radius-full);
   background: var(--color-bg-elevated); color: var(--color-text-secondary); }
 .dos-sentence { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-2) 0 var(--space-5); }
+.dos-window { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--text-xs);
+  margin-top: var(--space-2); }
+.dos-window__toggle { background: none; border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  cursor: pointer; color: var(--color-text-secondary); font-size: var(--text-xs); padding: 1px 8px; }
 .dos-back { background: none; border: none; cursor: pointer; color: var(--color-text-secondary);
   font-size: var(--text-sm); padding: 0; margin-bottom: var(--space-4); display: inline-flex; align-items: center; gap: 4px; }
 .dos-section-title { font-size: var(--text-lg); font-weight: 600; color: var(--color-text-primary);
@@ -169,3 +185,77 @@
 .lb-name .tbl-logo { width: 18px; height: 18px; flex: none; }
 .lb-net { text-align: right; font-family: var(--font-mono); font-size: var(--text-sm); }
 .lb-controls { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); flex-wrap: wrap; }
+
+/* =========================================================================
+   Shared CARD SYSTEM (Handoff 8). One card = one cohesive unit; a card's own
+   controls live in its header; no card-on-card (sub-sections use dividers or
+   subtle insets, never another bordered card). .t-panel above is the card body.
+   ========================================================================= */
+.t-cardhead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  flex-wrap: wrap; margin-bottom: var(--space-4); }
+.t-cardhead__titles { min-width: 0; }
+.t-cardhead__controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.t-divider { height: 1px; background: var(--color-border-subtle); margin: var(--space-5) 0; }
+.t-inset { background: var(--color-bg-elevated); border-radius: var(--radius-md); padding: var(--space-4); }
+.t-note { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6; }
+.t-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.t-region-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary);
+  text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 var(--space-3); }
+
+/* page-level tab bar lives in PageHeader controls (chrome above the cards) */
+.to-tabbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; width: 100%; }
+.to-tabbar__spacer { flex: 1 1 auto; }
+
+/* ===== Tab 1: Trades landing ===== */
+/* sections inside the page card — separated by a .t-divider, so the column itself carries no gap */
+.tr-landing { display: flex; flex-direction: column; }
+.tr-search__sub { margin: var(--space-3) 0 0; }
+/* the shared TeamQuickJump renders the chips; this wrapper just supplies the spacing above them */
+.tr-quickjump-wrap { margin-top: var(--space-4); }
+
+/* notable-trades — two top-10 cards (recent | lopsided), kept equal height */
+.feed-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: stretch; }
+@media (max-width: 760px) { .feed-two { grid-template-columns: 1fr; } }
+.feed-frame { font-size: var(--text-sm); }
+.feed-row { display: grid; grid-template-columns: 1fr 70px 64px 16px; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--color-border-subtle);
+  cursor: pointer; background: none; border-left: none; border-right: none; border-top: none; width: 100%; text-align: left; color: inherit; }
+.feed-row:hover { background: var(--color-bg-elevated); }
+.feed-row__teams { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.feed-row__tm { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.feed-row__sep { margin: 0 2px; }
+.feed-row__meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.feed-row__net { text-align: right; font-family: var(--font-mono); }
+.feed-row__verdict { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; }
+.feed-row__chev { display: inline-flex; justify-content: center; color: var(--color-text-muted); }
+.feed-expand { padding: var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--color-border-subtle); }
+.feed-more { background: none; border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer;
+  color: var(--color-text-secondary); font-size: var(--text-sm); padding: var(--space-2) var(--space-4); margin-top: var(--space-3); }
+
+/* ===== Tab 2: Teams & GMs (one card, two regions) ===== */
+.tg-two { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-6); }
+@media (max-width: 860px) { .tg-two { grid-template-columns: 1fr; } }
+
+/* confidence-aware ranked rows: clear separated entities emphasized, leans lighter */
+.tg-row { display: grid; grid-template-columns: 1fr 60px 96px; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--color-border-subtle); cursor: pointer; }
+.tg-row:hover { background: var(--color-bg-elevated); }
+.tg-row--leans { opacity: 0.72; }
+.tg-row__adj { font-size: var(--text-xs); color: var(--color-text-muted); }
+.lb-sep { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; padding: 1px 6px;
+  border-radius: var(--radius-full); margin-left: var(--space-1); white-space: nowrap; }
+.lb-sep--clear { background: color-mix(in srgb, var(--color-success) 18%, transparent); color: var(--color-success); }
+.lb-sep--leans { background: var(--color-bg-elevated); color: var(--color-text-muted); }
+.lb-cluster { margin-top: var(--space-3); padding: var(--space-3); background: var(--color-bg-elevated);
+  border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--color-text-secondary); }
+.lb-cluster b { color: var(--color-text-primary); }
+
+/* three-segment split bar (Patterns) */
+.split-bar { display: flex; height: 14px; border-radius: var(--radius-full); overflow: hidden; margin: var(--space-3) 0; }
+.split-bar__seg { height: 100%; }
+.split-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-xs); color: var(--color-text-secondary); }
+.split-legend__dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* full-page leaf "open" / share link */
+.tbl-share { font-size: var(--text-xs); color: var(--color-text-muted); }
+.tbl-share a { color: var(--color-text-secondary); }

@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Zap, RotateCcw, Share2, Check, Sparkles } from 'lucide-react'
-import { PageLayout, PageHeader, Tabs, PlayerCard, PlayerExplorer, LineProjection, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, Tabs, PlayerCard, PlayerExplorer, LineProjection, SkeletonLoader } from '../components/common'
 import { PlayerCardData } from '../components/common/PlayerCard'
 import { lineFit, lineFitSuggestions } from '../api/tools'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
@@ -333,11 +333,10 @@ export default function LineupLab() {
   return (
     <PageLayout>
       <div className="lab">
-        <PageHeader
+        <PageCard
           title="Lineup Lab"
           subtitle="Build a line and project its 5v5 results from each member’s measured profile — no two players need to have ever shared the ice."
-        >
-          {!showResult && !loading && (
+          controls={!showResult && !loading ? (
             <div className="lab__build-bar">
               <Tabs
                 options={[
@@ -354,9 +353,8 @@ export default function LineupLab() {
                 </button>
               )}
             </div>
-          )}
-        </PageHeader>
-
+          ) : undefined}
+        >
         {showResult ? (
           /* ---- the champion: projection result ---- */
           <div className="lab__result">
@@ -408,6 +406,7 @@ export default function LineupLab() {
               <PlayerExplorer onPick={placeAuto} takenIds={takenIds} dragged={dragged} sticky />
             </div>
         )}
+        </PageCard>
       </div>
     </PageLayout>
   )

@@ -10,7 +10,7 @@ import {
   Tooltip as RTooltip, ReferenceDot, Label,
 } from 'recharts'
 import {
-  PageLayout, PageHeader, ChartPanel, PlayerAvatar, Tabs, Tooltip, SkeletonLoader,
+  PageLayout, PageCard, ChartPanel, PlayerAvatar, Tabs, Tooltip, SkeletonLoader,
 } from '../components/common'
 import { useChartPanelHeight } from '../components/common/ChartPanel'
 import {
@@ -37,6 +37,38 @@ function CurveChartTip({ active, payload }: any) {
       <div className="dv-charttip__row dv-charttip__row--muted"><span>Never play NHL</span><span className="mono">{pct0(d.share_never_nhl)}</span></div>
     </div>
   )
+}
+
+// Bounds-aware line label: recharts' position="right" anchors at the line's right end (overall pick
+// ~217, where the curves converge near 0) and clips past the chart's right edge. Instead anchor at the
+// line's high/left end, just inside the plot, where the two lines are well separated.
+function lineLabel(text: string, fill: string, fontSize: number, fontWeight: number) {
+  return ({ viewBox }: any) => {
+    if (!viewBox) return null
+    return (
+      <text x={viewBox.x + 6} y={viewBox.y + 12} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="start">
+        {text}
+      </text>
+    )
+  }
+}
+
+// Bounds-aware annotation label: sits above the dot (below when the dot is already high), and clamps its
+// text anchor to the side the dot is on so a name near an edge stays inside the plot.
+function annotationLabel(a: Annotation, yMax: number, fill: string) {
+  return ({ viewBox }: any) => {
+    if (!viewBox) return null
+    const cx = (viewBox.x ?? 0) + (viewBox.width ?? 0) / 2
+    const cy = (viewBox.y ?? 0) + (viewBox.height ?? 0) / 2
+    const dy = a.realized_value <= yMax * 0.85 ? -8 : 16
+    const anchor = a.overall_pick <= 4 ? 'start' : a.overall_pick >= 140 ? 'end' : 'middle'
+    const dx = anchor === 'start' ? 6 : anchor === 'end' ? -6 : 0
+    return (
+      <text x={cx + dx} y={cy + dy} fill={fill} fontSize={10} fontWeight={600} textAnchor={anchor}>
+        {a.label}
+      </text>
+    )
+  }
 }
 
 function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annotations: Annotation[] }) {
@@ -74,20 +106,23 @@ function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annota
         <Area dataKey="bandSpan" stackId="band" stroke="none" fill="var(--color-data-1)" fillOpacity={0.12} isAnimationActive={false} />
         <Line type="monotone" dataKey="ev_median" stroke="var(--color-text-muted)" strokeWidth={1.5}
           strokeDasharray="5 4" dot={false} isAnimationActive={false}>
-          <Label value="median" position="right" fill="var(--color-text-muted)" style={{ fontSize: 10 }} />
+          {/* anchor at the line's high (left) end, inside the plot — the right end converges to ~0 and
+              would clip past the chart's right edge */}
+          <Label content={lineLabel('median', 'var(--color-text-muted)', 10, 400)} />
         </Line>
         <Line type="monotone" dataKey="ev_mean_smooth" stroke="var(--color-data-1)" strokeWidth={2.25}
           dot={false} animationDuration={400}>
-          <Label value="expected" position="right" fill="var(--color-data-1)" style={{ fontSize: 11, fontWeight: 600 }} />
+          <Label content={lineLabel('expected', 'var(--color-data-1)', 11, 600)} />
         </Line>
-        {annotations.map((a) => (
-          <ReferenceDot key={a.label} x={a.overall_pick} y={a.realized_value} r={4}
-            fill={a.tone === 'steal' ? 'var(--color-success)' : 'var(--color-danger)'} stroke="var(--color-bg-surface)" strokeWidth={1.5}>
-            <Label value={a.label} position={a.realized_value > 4 ? 'top' : 'bottom'}
-              fill={a.tone === 'steal' ? 'var(--color-success)' : 'var(--color-danger)'}
-              style={{ fontSize: 10, fontWeight: 600 }} />
-          </ReferenceDot>
-        ))}
+        {annotations.map((a) => {
+          const color = a.tone === 'steal' ? 'var(--color-success)' : 'var(--color-danger)'
+          return (
+            <ReferenceDot key={a.label} x={a.overall_pick} y={a.realized_value} r={4}
+              fill={color} stroke="var(--color-bg-surface)" strokeWidth={1.5}>
+              <Label content={annotationLabel(a, yMax, color)} />
+            </ReferenceDot>
+          )
+        })}
       </ComposedChart>
     </ResponsiveContainer>
   )
@@ -207,11 +242,10 @@ export default function DraftValue() {
   return (
     <PageLayout>
       <div className="dv">
-        <PageHeader
+        <PageCard
           title="Draft Value"
           subtitle="What's a pick actually worth? Measuring what every slot returns. Value is realized production over a player's first 7 seasons."
-        />
-
+        >
         {/* curve */}
         <section className="dv-section">
           <h2 className="dv-section__title">
@@ -224,6 +258,8 @@ export default function DraftValue() {
             {curve ? <CurveChart curve={curve} annotations={annotations} /> : <SkeletonLoader height={280} />}
           </ChartPanel>
         </section>
+
+        <div className="page-divider" />
 
         {/* theory test */}
         <section className="dv-section">
@@ -239,6 +275,8 @@ export default function DraftValue() {
             {summary ? <TheoryTable rows={summary} /> : <SkeletonLoader height={220} />}
           </div>
         </section>
+
+        <div className="page-divider" />
 
         {/* board */}
         <section className="dv-section">
@@ -257,6 +295,7 @@ export default function DraftValue() {
         <p className="dv-footnote">
           This is a <strong>performance</strong> curve — what slots have <em>returned</em> — not a market curve of what teams <em>pay</em> in trades, and not a grade of any pick at the time it was made. Value before 2021-22 is estimated from box production and carries a wide band; goalie value is cruder still. Read the <Link to="/learn/archetypes">methodology</Link> for the full method and its limits.
         </p>
+        </PageCard>
       </div>
     </PageLayout>
   )

@@ -1,5 +1,7 @@
+import { useContext } from 'react'
 import { Info } from 'lucide-react'
 import Tooltip from './Tooltip'
+import { PageCardContext } from './PageCard'
 import './StatCard.css'
 
 interface StatCardProps {
@@ -85,8 +87,10 @@ function StatCard({ label, value, rank, rankText, rankTier, percentile, tooltip,
     return delta.toFixed(1)
   }
 
+  const insidePageCard = useContext(PageCardContext)
+
   return (
-    <div className="stat-card">
+    <div className={`stat-card${insidePageCard ? ' stat-card--flat' : ''}`}>
       <div className="stat-card__header">
         <span className="stat-card__label">{label}</span>
         {tooltip && (

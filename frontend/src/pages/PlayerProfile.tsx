@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
-import { PageLayout, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel, IdentityHeader, PlayerAvatar, PlayerValueLadder, Tabs, Select } from '../components/common'
+import { PageLayout, PageCard, StatCard, Badge, SkeletonLoader, ComponentStackBar, ImpactValuePanel, IdentityHeader, PlayerAvatar, PlayerValueLadder, Tabs, Select } from '../components/common'
 import type { StackSegment, PlayerValueLadderRow } from '../components/common'
 import { COMPOSITE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
@@ -508,23 +508,19 @@ function PlayerProfile() {
   // WAR chip tier from the within-position overall percentile.
   const warPct = overallPct != null ? Math.round(overallPct * 100) : null
 
-  return (
-    <PageLayout>
-      <div className="player-profile">
-        {/* Player Header */}
-        {loadingDetail ? (
-          <div className="player-profile__header">
-            <SkeletonLoader width={150} height={150} borderRadius="50%" />
-            <div style={{ flex: 1 }}>
-              <SkeletonLoader width={200} height={32} />
-              <div style={{ marginTop: 8 }}>
-                <SkeletonLoader width={150} height={20} />
-              </div>
-            </div>
-          </div>
-        ) : errorDetail ? (
-          <div className="player-profile__error">{errorDetail}</div>
-        ) : playerDetail ? (
+  // The rich identity header lives in the PageCard's `header` slot: a skeleton while the detail
+  // loads, then the tinted IdentityHeader + side ladder once it arrives.
+  const headerNode = loadingDetail ? (
+    <div className="player-profile__header">
+      <SkeletonLoader width={150} height={150} borderRadius="50%" />
+      <div style={{ flex: 1 }}>
+        <SkeletonLoader width={200} height={32} />
+        <div style={{ marginTop: 8 }}>
+          <SkeletonLoader width={150} height={20} />
+        </div>
+      </div>
+    </div>
+  ) : playerDetail ? (
           <div className="player-hd-row">
             <IdentityHeader
               teamColors={{ home: teamColor }}
@@ -574,25 +570,33 @@ function PlayerProfile() {
               <PlayerValueLadder label={neighbors.scope_label} rows={ladderRows} />
             )}
           </div>
-        ) : null}
+  ) : null
 
-        {/* Tabbed content (mirrors the Team detail page): pill tabs sticky below the header,
-            URL-addressable via ?tab=, Overview default. One tab renders at a time and data is
-            fetched once per player, so switching tabs never refetches already-loaded data. */}
-        {playerDetail && (
-          <div className="player-tabs-card">
-            <div className="player-tabs-card__nav">
-              <Tabs
-                options={PLAYER_TABS.map((t) => ({ value: t.value, label: t.label }))}
-                value={currentTab}
-                onChange={handleTabChange}
-              />
-              {/* Season selector lives here (far right of the tab row), not in the header. */}
-              <span className="player-tabs-card__season">
-                <Select value={season} ariaLabel="Season"
-                  options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
-              </span>
-            </div>
+  // Tabbed content (mirrors the Team detail page): pill tabs + season selector sit in the card's
+  // controls slot, URL-addressable via ?tab=, Overview default. One tab renders at a time and data
+  // is fetched once per player, so switching tabs never refetches already-loaded data.
+  const controlsNode = playerDetail ? (
+    <div className="player-tabs-card__nav">
+      <Tabs
+        options={PLAYER_TABS.map((t) => ({ value: t.value, label: t.label }))}
+        value={currentTab}
+        onChange={handleTabChange}
+      />
+      {/* Season selector lives here (far right of the tab row), not in the header. */}
+      <span className="player-tabs-card__season">
+        <Select value={season} ariaLabel="Season"
+          options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
+      </span>
+    </div>
+  ) : undefined
+
+  return (
+    <PageLayout>
+      <div className="player-profile">
+        <PageCard header={headerNode} controls={controlsNode}>
+          {errorDetail ? (
+            <div className="player-profile__error">{errorDetail}</div>
+          ) : playerDetail ? (
             <div className="player-tabs-card__body">
 
               {/* ============================ OVERVIEW ============================ */}
@@ -1371,8 +1375,8 @@ function PlayerProfile() {
               )}
 
             </div>
-          </div>
-        )}
+          ) : null}
+        </PageCard>
       </div>
     </PageLayout>
   )

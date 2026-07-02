@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { PageLayout, PageHeader, Tabs, SkeletonLoader, PlayerAvatar } from '../components/common'
+import { PageLayout, PageCard, Tabs, SkeletonLoader, PlayerAvatar } from '../components/common'
 import SkillRadar from '../components/visualizations/SkillRadar'
 import { getArchetypes } from '../api/archetypes'
 import { ArchetypeCard, ArchetypeTrait, RadarSpoke } from '../api/types'
@@ -157,19 +157,17 @@ export default function ArchetypeExplorer() {
   return (
     <PageLayout>
       <div className="arch">
-        <PageHeader
+        <PageCard
           title="Archetypes"
           subtitle="Archeypes are discovered by clustering. Browse the gallery to see each one's characteristic radar shape, what it always shows, and who exemplifies it."
-        >
-          {!selected && (
+          controls={!selected ? (
             <div className="arch__toolbar">
               <Tabs
                 options={[{ value: 'F', label: 'Forwards' }, { value: 'D', label: 'Defense' }]}
                 value={pos} onChange={(v) => setParam('pos', v)} />
             </div>
-          )}
-        </PageHeader>
-
+          ) : undefined}
+        >
         {error && <p className="arch__msg">{error}</p>}
         {!cards && !error && <SkeletonLoader />}
 
@@ -178,6 +176,7 @@ export default function ArchetypeExplorer() {
         {cards && !selected && (
           <Gallery cards={cards} pos={effPos} onOpen={(k) => setParam('type', k)} />
         )}
+        </PageCard>
       </div>
     </PageLayout>
   )

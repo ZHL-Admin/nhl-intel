@@ -6,7 +6,7 @@ import {
   Tooltip as RTooltip, ReferenceLine, Label,
 } from 'recharts'
 import {
-  PageLayout, PageHeader, PlayerPicker, PlayerAvatar, Tabs, ChartPanel, Tooltip,
+  PageLayout, PageCard, PlayerPicker, PlayerAvatar, Tabs, ChartPanel, Tooltip,
   SkeletonLoader, ComponentStackBar,
 } from '../components/common'
 import { useChartPanelHeight } from '../components/common/ChartPanel'
@@ -325,16 +325,16 @@ export default function ContractGrader() {
   return (
     <PageLayout>
       <div className="cg-page">
-        <PageHeader
+        <PageCard
           title="Contract Grader"
           subtitle="Grade any deal against a player’s projected production. Production is aged forward, priced by the league market, and compared to the cap hit."
+          controls={
+            <Tabs
+              options={[{ value: 'grade', label: 'Grade a contract' }, { value: 'leaderboards', label: 'Leaderboards' }]}
+              value={view} onChange={(v) => setView(v as 'grade' | 'leaderboards')}
+            />
+          }
         >
-          <Tabs
-            options={[{ value: 'grade', label: 'Grade a contract' }, { value: 'leaderboards', label: 'Leaderboards' }]}
-            value={view} onChange={(v) => setView(v as 'grade' | 'leaderboards')}
-          />
-        </PageHeader>
-
         {view === 'grade' && (!player && !loading ? (
           <div className="cg-empty">
             <FileSignature size={28} />
@@ -573,6 +573,7 @@ export default function ContractGrader() {
             </div>
           </section>
         )}
+        </PageCard>
       </div>
     </PageLayout>
   )

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PageLayout } from '../components/common';
+import { PageLayout, PageCard } from '../components/common';
 import DateStrip from '../components/common/DateStrip';
 import GameOfTheNight from '../components/games/GameOfTheNight';
 import GameCard from '../components/games/GameCard';
@@ -192,31 +192,35 @@ function GamesExplorer() {
   if (datesLoading) {
     return (
       <PageLayout>
-        <div style={{ padding: 'var(--space-8)', maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ height: '44px', background: 'var(--color-bg-elevated)', borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-6)' }} />
+        <PageCard
+          title="Games"
+          subtitle="Scores, live games, and the night's headline matchup."
+        >
           <div className="games-explorer__grid">
             {[1, 2, 3].map((i) => (
               <GameCardSkeleton key={i} />
             ))}
           </div>
-        </div>
+        </PageCard>
       </PageLayout>
     );
   }
 
   return (
     <PageLayout>
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <DateStrip
-          dates={gameDates}
-          selectedDate={selectedDate}
-          onDateChange={handleDateChange}
-          onPickDate={handlePickDate}
-          todayDate={todayDate}
-        />
-      </div>
-
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 var(--space-8)' }}>
+      <PageCard
+        title="Games"
+        subtitle="Scores, live games, and the night's headline matchup."
+        controls={
+          <DateStrip
+            dates={gameDates}
+            selectedDate={selectedDate}
+            onDateChange={handleDateChange}
+            onPickDate={handlePickDate}
+            todayDate={todayDate}
+          />
+        }
+      >
         {error && (
           <div className="games-explorer__error">
             <p className="games-explorer__error-message">{error}</p>
@@ -248,7 +252,7 @@ function GamesExplorer() {
             </div>
           </>
         )}
-      </div>
+      </PageCard>
     </PageLayout>
   );
 }

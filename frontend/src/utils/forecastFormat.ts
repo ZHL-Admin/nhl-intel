@@ -20,6 +20,15 @@ export const fmtWar = (v: number | null | undefined) => fmtSigned(v, 2)
 export const fmtBand = (lo: number, hi: number, d: number) => `${fmtSigned(lo, d)} to ${fmtSigned(hi, d)}`
 export const fmtRank = (n: number | null | undefined) => (n == null ? '—' : `#${n}`)
 
+/** Projected standings points: a whole number, unsigned (the headline metric). */
+export const fmtPoints = (v: number | null | undefined) =>
+  (v == null || Number.isNaN(v) ? '—' : String(Math.round(v)))
+/** Points band as a whole-number range "{lo}–{hi}" (en dash), e.g. "90–102". */
+export const fmtPointsBand = (lo: number | null | undefined, hi: number | null | undefined) =>
+  (lo == null || hi == null ? '—' : `${fmtPoints(lo)}–${fmtPoints(hi)}`)
+/** Move-impact in points: signed whole number, true minus glyph, e.g. "+3" / "−2". */
+export const fmtPointsDelta = (v: number | null | undefined) => fmtSigned(v == null ? v : Math.round(v), 0)
+
 export type Tier = 'Contender' | 'Middle' | 'Rebuild'
 /** League tier from projected rank. Cutoffs: 1–8 Contender, 9–22 Middle, 23–32 Rebuild. */
 export function tierForRank(rank: number | null | undefined): Tier {

@@ -23,8 +23,8 @@
 .cg-builder {
   grid-column: span 4; position: sticky; top: var(--space-6);
   display: flex; flex-direction: column; gap: var(--space-5);
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: var(--space-5);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg); padding: var(--space-5);
 }
 .cg-id { display: flex; flex-direction: column; gap: var(--space-3); }
 .cg-id__block { display: flex; align-items: center; gap: var(--space-3); }
@@ -66,9 +66,9 @@
 /* Layer 1 — verdict banner (card, grade-tinted left rule) */
 .cg-banner {
   display: flex; align-items: center; gap: var(--space-5);
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
   border-left: 5px solid var(--cg-accent); border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md); padding: var(--space-6);
+  padding: var(--space-6);
 }
 .cg-banner--positive { --cg-accent: var(--color-success); }
 .cg-banner--neutral { --cg-accent: var(--color-warning); }
@@ -96,8 +96,8 @@
 .cg-stats__primary { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 .cg-stats__secondary { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
 .cg-stat {
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-elevated); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5);
   display: flex; flex-direction: column; gap: 3px;
 }
 .cg-stat--primary { border-color: var(--color-border-strong); padding: var(--space-5) var(--space-5); }
@@ -157,7 +157,7 @@
 /* League lists */
 .cg-section-title { font-size: var(--text-xl); font-weight: 700; color: var(--color-text-primary); margin: var(--space-16) 0 var(--space-5); }
 .cg-lists { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
-.cg-list-card { background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: var(--space-5) var(--space-6); }
+.cg-list-card { background: var(--color-bg-elevated); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); }
 .cg-list-card__title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text-primary); margin: 0; }
 .cg-list-card__sub { font-size: var(--text-xs); color: var(--color-text-muted); margin: 2px 0 var(--space-4); }
 .cg-list { list-style: none; margin: 0; padding: 0; }
@@ -198,8 +198,8 @@ a.cg-list__row:hover { background: var(--color-bg-elevated); }
 
 /* value-derivation panel */
 .cg-derive {
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg);
   padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5);
 }
 .cg-derive__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
@@ -221,8 +221,8 @@ a.cg-list__row:hover { background: var(--color-bg-elevated); }
 /* comparable contracts */
 .cg-comps {
   list-style: none; margin: 0; padding: 0;
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-lg); overflow: hidden;
 }
 .cg-comps__row {
   display: grid; grid-template-columns: 1fr auto 22px; align-items: center; gap: var(--space-3);

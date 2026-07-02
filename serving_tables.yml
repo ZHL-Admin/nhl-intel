@@ -99,6 +99,7 @@ tables:
   # Offseason roster forecast (Phase 6 tool): league board + per-team move ledger.
   - {name: roster_forecast,    dataset: models, kind: source, cap: full, indexes: [team_id, transition]}
   - {name: roster_moves,       dataset: models, kind: source, cap: full, indexes: [team_id, transition]}
+  - {name: roster_player_projection, dataset: models, kind: source, cap: full, indexes: [player_id]}
   - {name: player_style_map,   dataset: models, kind: source, cap: full, indexes: [player_id, pos_group]}
   - {name: player_contract_value, dataset: models, kind: source, cap: full, indexes: [player_id]}
   - {name: futures_value,      dataset: models, kind: source, cap: full, indexes: [asset_kind, player_id]}

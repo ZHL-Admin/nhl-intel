@@ -1,7 +1,9 @@
 /* page header controls (inside the shared PageHeader card) */
 .off__toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 
-/* 4.0 identity header — team identity on the left, the four hero stats on the right */
+/* 4.0 identity header — team identity on the left, the four hero stats on the right.
+   A region inside the page card: keeps only its team-color wash (clipped to a subtle
+   inset), no card border/shadow/surface of its own. */
 .fid {
   position: relative;
   overflow: hidden;
@@ -9,12 +11,8 @@
   grid-template-columns: auto 1fr;
   gap: var(--space-8);
   align-items: center;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
 }
 .fid__wash {
   position: absolute;
@@ -35,13 +33,12 @@
 .off-grid__detail { min-width: 0; }
 .off-detail { display: flex; flex-direction: column; gap: var(--space-6); }
 
-/* each numbered section is its own card */
-.sec {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--space-6);
+/* each numbered section is a region inside the detail column — no card chrome;
+   siblings are separated by a hairline divider (the .off-detail gap adds the space). */
+.sec { padding: 0; }
+.sec + .sec {
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-6);
 }
 
 .sec__title { font-family: var(--font-mono); text-transform: capitalize; }
@@ -67,7 +64,6 @@
 
 /* responsive */
 @media (max-width: 960px) {
-  .off { padding: var(--space-8) var(--space-5) var(--space-16); }
   .fid { grid-template-columns: 1fr; gap: var(--space-5); }
   .fid__identity { border-right: none; border-bottom: 1px solid var(--color-border-subtle); padding-right: 0; padding-bottom: var(--space-4); }
   .off-grid { grid-template-columns: 1fr; gap: var(--space-8); }
