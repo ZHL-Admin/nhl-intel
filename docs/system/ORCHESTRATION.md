@@ -221,6 +221,20 @@ team_current_lines, serving_game_skater_box, player_situation_toi
 
 `best_team_fits` is explicitly NOT precomputed (live DuckDB + cache, `serving_tables.yml:125`).
 
+**5. WOWY / on-ice + impact-context marts (Phase 6.4)** — six `kind: source` marts added to
+`serving_tables.yml` and exported into the DuckDB serving file:
+
+```
+mart_player_onice, mart_player_wowy, mart_player_toi_matrix,
+mart_player_entanglement, mart_player_carry, mart_player_impact_context
+```
+
+Exported via `export_to_duckdb --only <these>` (in-place update; requires the backend to
+release the DuckDB lock). BigQuery↔DuckDB parity verified (identical row counts + value
+checksums for all six; 675,828 rows total). They reach the app through the Phase 6.5 endpoint
+(`/players/{id}/wowy`) and the impact-context block. From the next nightly `export_serving`
+they ride the normal full export like every other `source` table.
+
 **Internal-only (explicitly NOT a shipped surface):** the partner-odds snapshot
 (`raw_partner_odds`) is labeled "INTERNAL CALIBRATION ONLY — never exposed via API/UI"
 (`nhl_daily.py:210`).

@@ -68,6 +68,13 @@ tables:
   # --- Trade tool: contract layer + unified tradeable-asset layer ---------------
   - {name: mart_player_contracts,      dataset: mart, kind: source, cap: full, indexes: [player_id]}
   - {name: mart_tradeable_assets,      dataset: mart, kind: source, cap: full, indexes: [asset_id, asset_type, label_lower, player_id]}
+  # --- WOWY / on-ice + impact-context (Phase 6) --------------------------------
+  - {name: mart_player_onice,          dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_wowy,           dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_toi_matrix,     dataset: mart, kind: source, cap: full, indexes: [team_id, season]}
+  - {name: mart_player_entanglement,   dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_carry,          dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_impact_context, dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
 
   # --- model tables -----------------------------------------------------------
   - {name: shot_xg,            dataset: models, kind: source, cap: recent, indexes: [game_id]}
