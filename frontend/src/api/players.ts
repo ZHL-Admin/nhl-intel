@@ -150,9 +150,15 @@ export async function getPlayerVerdict(playerId: number | string, season?: strin
   }
 }
 
-/** Fast single-query season stat line for the Players-card expansion. */
+/** Fast single-query season stat line for the Players-card expansion (also the impact-context block). */
 export async function getPlayerSummary(playerId: number | string, season?: string): Promise<import('./types').PlayerSummary> {
   const r = await apiClient.get(`/players/${playerId}/summary`, { params: season ? { season } : undefined })
+  return r.data
+}
+
+/** WOWY partner splits (5v5) for a player-season, sorted by shared TOI. */
+export async function getPlayerWowy(playerId: number | string, season?: string): Promise<import('./types').PlayerWowy> {
+  const r = await apiClient.get(`/players/${playerId}/wowy`, { params: season ? { season } : undefined })
   return r.data
 }
 

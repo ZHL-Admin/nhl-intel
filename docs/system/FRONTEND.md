@@ -221,7 +221,8 @@ Transport: `api/client.ts` exports the single axios instance `apiClient`
 | `getPlayerRadar` | GET | `/players/${playerId}/radar` |
 | `getPlayerShotQuality` | GET | `/players/${playerId}/shot-quality` |
 | `getPlayerVerdict` | GET | `/players/${playerId}/verdict` |
-| `getPlayerSummary` | GET | `/players/${playerId}/summary` |
+| `getPlayerSummary` | GET | `/players/${playerId}/summary` (carries the `impact_context` block) |
+| `getPlayerWowy` | GET | `/players/${playerId}/wowy` |
 | `getPlayerPreview` | GET | `/players/${playerId}/preview` |
 | `getPlayerValueNeighbors` | GET | `/players/${playerId}/value-neighbors` |
 | `getDeploymentBoard` | GET | `/players/deployment-board` |
@@ -389,6 +390,8 @@ the barrel-export caveat in Section 7.
 | `DeploymentBoard.tsx` | Deployment leaderboard | `api/players` | Yes |
 | `PlayerDraftLine.tsx` | Draft-pedigree line | `api/draft` | Yes |
 | `PlayerRowExpansion.tsx` | Expandable player row (radar/labels) | `api/players`, `api/goalies`, `api/labels` | Yes |
+| `ImpactContextPanel.tsx` | Isolated-impact context beside ImpactValuePanel (entanglement badge, single-vs-3yr divergence with widened band, carry, r≈0.43 confidence) | `api/players` (`getPlayerSummary.impact_context`) | Yes (PlayerProfile, Impact & Value tab) |
+| `WowyPartnerPanel.tsx` | Sortable WOWY partner splits (together vs apart xGF%, lift, shared TOI, small-sample badge, click-to-navigate) | `api/players` (`getPlayerWowy`) | Yes (PlayerProfile, Impact & Value tab) |
 
 ### `teams/`
 

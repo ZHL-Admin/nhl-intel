@@ -1,0 +1,102 @@
+.wowy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.wowy__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.wowy__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.wowy__sort {
+  display: flex;
+  gap: 0.25rem;
+}
+.wowy__sortbtn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.wowy__sortbtn.is-active {
+  color: var(--color-team-primary);
+  border-color: color-mix(in srgb, var(--color-team-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--color-team-primary) 12%, transparent);
+}
+
+.wowy__table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.wowy__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) 0.7fr 0.9fr 0.9fr 0.8fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.wowy__row:first-child { border-top: none; }
+
+.wowy__row--head {
+  background: var(--color-bg-surface);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+}
+.wowy__row--head .wowy__c { cursor: help; }
+
+.wowy__row--link {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+.wowy__row--link:hover { background: var(--color-bg-elevated); }
+.wowy__row--link:focus-visible {
+  outline: 2px solid var(--color-team-primary);
+  outline-offset: -2px;
+}
+
+.wowy__c--num { text-align: right; justify-self: end; }
+
+.wowy__c--name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.wowy__pname {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wowy__ss { flex: none; }
+
+.wowy__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+.wowy__num small { color: var(--color-text-secondary); margin-left: 1px; }
+.wowy__num.is-pos { color: var(--color-success); }
+.wowy__num.is-neg { color: var(--color-danger); }

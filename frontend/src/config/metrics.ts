@@ -31,6 +31,11 @@ export const METRICS: Record<string, MetricMeta> = {
   hdca_per60: { key: 'hdca_per60', label: 'High-danger Chances Against /60', format: 'rate', glossaryKey: 'high_danger' },
   ixg: { key: 'ixg', label: 'Individual xG', format: 'decimal2', glossaryKey: 'xg' },
   gsax: { key: 'gsax', label: 'GSAx', format: 'plus_minus', glossaryKey: 'gsax' },
+  // Phase 6 isolated-impact context
+  isolated_impact: { key: 'isolated_impact', label: 'Isolated Impact', format: 'plus_minus', glossaryKey: 'rapm' },
+  single_vs_multi_delta: { key: 'single_vs_multi_delta', label: 'vs 3-year baseline', format: 'plus_minus', glossaryKey: 'rapm' },
+  max_partner_toi_share: { key: 'max_partner_toi_share', label: 'Top-partner TOI share', format: 'percent' },
+  carry_score: { key: 'carry_score', label: 'Carry', format: 'plus_minus', glossaryKey: 'rapm' },
   zone_entry_proxy_success_rate: {
     key: 'zone_entry_proxy_success_rate',
     label: 'Zone Entry Success',

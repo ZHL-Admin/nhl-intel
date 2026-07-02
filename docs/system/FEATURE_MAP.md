@@ -132,17 +132,18 @@ cleanup candidate.** This is an explicit exception to reverse reachability.
 Methodology: `docs/methodology/ppt-replay-tracking.md`. When a future tool surfaces this,
 `int_goal_release_frame` is the single tracked moment intended for the rink render.
 
-### WOWY / on-ice marts (materialized Phase 6.1; not yet served)
+### WOWY / on-ice + isolated-impact context (Phase 6, LIVE to the player profile)
 
-`int_segment_5v5_results`, `int_player_onice_game`, `mart_player_onice`,
-`mart_player_toi_matrix`, `mart_player_wowy` are the with-or-without-you / on-ice feature.
-As of Phase 6.1 they are **materialized in BigQuery and validated** (10-model build PASS,
-31 tests PASS, Seider/Edvinsson splits confirmed). `int_segment_5v5_results` and
-`int_player_onice_game` are wired upstream of the live `mart_player_game_stats` (real
-per-player `on_ice_xgf_pct`) and `mart_player_relative`. The three leaf marts
-(`_onice`, `_toi_matrix`, `_wowy`) are not yet read by any endpoint: they reach the app only
-after Phase 6.4 (serving_tables.yml + DuckDB export) and Phase 6.5 (the `/players/{id}/wowy`
-endpoint). Trace once served: PlayerProfile WOWY panel → `/players/{id}/wowy` →
-`mart_player_wowy` → `int_segment_5v5_results` (+ `int_shift_segments`) → `int_on_ice_events`
-/ `int_segment_context` / `nhl_models.shot_xg` → `stg_shifts` / `stg_play_by_play` →
-`raw_shift_charts` / `raw_play_by_play`.
+The with-or-without-you / on-ice / impact-context feature, now surfaced on the **PlayerProfile
+Impact & Value tab** (Phase 6.6). Two components:
+
+| component (Impact & Value tab) | api → route | tables | producers back to feed |
+|---|---|---|---|
+| `players/WowyPartnerPanel` | `getPlayerWowy` → `/players/{id}/wowy` | `mart_player_wowy` (+ `stg_rosters` for names) | `mart_player_wowy` ← `int_segment_5v5_results` (+ `int_shift_segments`) ← `int_on_ice_events` / `int_segment_context` / `nhl_models.shot_xg` ← `stg_shifts` / `stg_play_by_play` ← `raw_shift_charts` / `raw_play_by_play` |
+| `players/ImpactContextPanel` (beside `ImpactValuePanel`) | `getPlayerSummary` → `/players/{id}/summary`.`impact_context` | `mart_player_impact_context` | ← `nhl_models.player_impact` (RAPM, `train_rapm.py`) + `mart_player_entanglement` + `mart_player_carry` + `mart_player_onice`, all ← the segment stack above |
+
+Underpinnings: `int_segment_5v5_results` and `int_player_onice_game` are wired upstream of the
+live `mart_player_game_stats` (real per-player `on_ice_xgf_pct`) and `mart_player_relative`.
+Serving is the DuckDB copy (Phase 6.4, BQ↔DuckDB parity verified). The panels render only for
+skaters with data (goalies and low-minute players show nothing, per "hide sections that cannot
+be populated"); the impact band widens for entangled players.

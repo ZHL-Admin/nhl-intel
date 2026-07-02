@@ -8,6 +8,8 @@ import ShotMap from '../components/visualizations/ShotMap'
 import StripPlot from '../components/visualizations/StripPlot'
 import SkillRadar from '../components/visualizations/SkillRadar'
 import PlayerDraftLine from '../components/players/PlayerDraftLine'
+import ImpactContextPanel from '../components/players/ImpactContextPanel'
+import WowyPartnerPanel from '../components/players/WowyPartnerPanel'
 import { Target, Activity, ArrowRight } from 'lucide-react'
 import { familyRadar } from '../utils/radar'
 import { playerLabelsFromRadar } from '../api/labels'
@@ -24,7 +26,9 @@ import {
   getPlayerValueNeighbors,
   getPlayerVerdict,
   getPlayerSituational,
-  getPlayerShotQuality
+  getPlayerShotQuality,
+  getPlayerWowy,
+  getPlayerSummary
 } from '../api/players'
 import { getGoalieRadar, getGoalieSeason } from '../api/goalies'
 import {
@@ -42,6 +46,8 @@ import {
   ValueNeighborhood,
   RadarSpoke,
   PlayerVerdict,
+  PlayerWowy,
+  ImpactContext,
   PlayerSituational,
   PlayerShotQuality
 } from '../api/types'
@@ -214,6 +220,9 @@ function PlayerProfile() {
   const [verdict, setVerdict] = useState<PlayerVerdict | null>(null)   // composed scouting read (B)
   const [situational, setSituational] = useState<PlayerSituational[] | null>(null)  // Impact tab breakdown
   const [shotQuality, setShotQuality] = useState<PlayerShotQuality | null>(null)    // Shot Map zone quality
+  const [wowy, setWowy] = useState<PlayerWowy | null>(null)                          // WOWY partner splits (Impact tab)
+  const [impactContext, setImpactContext] = useState<ImpactContext | null>(null)     // isolated-impact context readout
+  const [loadingCtx, setLoadingCtx] = useState(false)                                // impact-context + WOWY in-flight
   const [goalieRadar, setGoalieRadar] = useState<GoalieRadar | null>(null)
   const [goalieSeason, setGoalieSeason] = useState<GoalieSeason | null>(null)
   const [preview, setPreview] = useState<PlayerPreview | null>(null)            // light bio (age, shoots)
@@ -292,6 +301,12 @@ function PlayerProfile() {
       // shot-zone quality (by danger vs positional avg) for the Shot Map tab
       setShotQuality(null)
       getPlayerShotQuality(pid, season).then(q => active && setShotQuality(q)).catch(() => {})
+      // isolated-impact context + WOWY partner splits for the Impact & Value tab
+      setWowy(null); setImpactContext(null); setLoadingCtx(true)
+      Promise.allSettled([
+        getPlayerWowy(pid, season).then(w => active && setWowy(w)),
+        getPlayerSummary(pid, season).then(s => active && setImpactContext(s.impact_context ?? null)),
+      ]).finally(() => { if (active) setLoadingCtx(false) })
     }
     return () => { active = false }
   }, [playerId, playerDetail, season])
@@ -859,6 +874,17 @@ function PlayerProfile() {
                   {/* Impact (RAPM) vs Value (GAR) — the two scalar verdicts (Phase 6 GAR) */}
                   {!isGoalie && playerDetail.value && (
                     <ImpactValuePanel value={playerDetail.value} name={playerDetail.player_name} />
+                  )}
+
+                  {/* Isolated-impact context + WOWY partner splits (Phase 6.6) */}
+                  {!isGoalie && loadingCtx && !impactContext && !wowy && (
+                    <SkeletonLoader height={140} borderRadius={10} />
+                  )}
+                  {!isGoalie && impactContext && (
+                    <ImpactContextPanel ctx={impactContext} name={playerDetail.player_name} />
+                  )}
+                  {!isGoalie && wowy && wowy.partners.length > 0 && (
+                    <WowyPartnerPanel partners={wowy.partners} name={playerDetail.player_name} />
                   )}
 
                   {/* Goalie value (GAR/WAR, cross-position scale) */}

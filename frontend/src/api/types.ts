@@ -1246,6 +1246,23 @@ export interface GoalieRadar {
   baseline?: string | null
 }
 
+/** Transparent context around a player's isolated-impact (RAPM) estimate; no blended score. */
+export interface ImpactContext {
+  off_impact?: number | null
+  def_impact?: number | null
+  total_impact?: number | null
+  off_sd?: number | null
+  def_sd?: number | null
+  multi_total_impact?: number | null
+  single_vs_multi_delta?: number | null
+  entangled?: boolean | null
+  max_partner_toi_share?: number | null
+  partner_entropy?: number | null
+  carry_score?: number | null
+  rel_xgf_pct?: number | null
+  impact_toi_min?: number | null
+}
+
 export interface PlayerSummary {
   player_id: number
   season: string
@@ -1255,6 +1272,29 @@ export interface PlayerSummary {
   assists_per60?: number | null
   points_per60?: number | null
   xgf_pct?: number | null
+  impact_context?: ImpactContext | null
+}
+
+/** One partner's with/without split for a focal player (5v5), from mart_player_wowy. */
+export interface WowyPartner {
+  partner_id: number
+  partner_name?: string | null
+  toi_together_sec: number
+  xgf_pct_together?: number | null
+  xgf_per60_together?: number | null
+  xga_per60_together?: number | null
+  xgf_pct_focal_without_partner?: number | null
+  xgf_pct_partner_without_focal?: number | null
+  together_minus_focal_alone?: number | null
+  partner_with_focal_minus_partner_without?: number | null
+  small_sample: boolean
+}
+
+/** With-or-without-you partner splits for a player-season, sorted by shared TOI descending. */
+export interface PlayerWowy {
+  player_id: number
+  season: string
+  partners: WowyPartner[]
 }
 
 /** One base stat with its within-position rank, for the inline row-expansion table. */
