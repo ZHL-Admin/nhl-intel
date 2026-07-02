@@ -364,3 +364,40 @@ models:
       - name: small_sample
         description: True when shared time is under 3000 seconds (50 minutes)
         tests: [not_null]
+
+  - name: mart_player_entanglement
+    description: >
+      Per (season, player_id, team_id) partner-concentration diagnostic for the impact-context
+      layer, from a symmetric view of mart_player_toi_matrix. max_partner_toi_share is the most
+      common partner's shared 5v5 TOI over the player's own 5v5 TOI; partner_entropy is the
+      normalized Shannon entropy of the partner-TOI distribution (0 = welded to one, 1 = spread).
+      entangled = share > 0.55 (D18). Qualified at the 200-5v5-minute floor (12000 s).
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: max_partner_toi_share
+        description: Most-common-partner shared 5v5 TOI / player's own 5v5 TOI (0..1)
+      - name: entangled
+        description: True when max_partner_toi_share > 0.55
+        tests: [not_null]
+
+  - name: mart_player_carry
+    description: >
+      Per (season, player_id) carry score: TOI-weighted mean over partners of the WOWY field
+      partner_with_focal_minus_partner_without (partner's on-ice xGF% with the focal minus
+      without), weighted by shared 5v5 TOI. Positive = the player elevates partners. Grain is
+      (season, player_id) so a traded player's partners across both teams roll into one score.
+      Qualified at the 200-5v5-minute floor (12000 s).
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: carry_score
+        description: TOI-weighted mean partner with-minus-without xGF% delta
+      - name: partner_count
+        description: Distinct partners contributing to the score

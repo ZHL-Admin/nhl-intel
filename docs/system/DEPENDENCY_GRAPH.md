@@ -94,18 +94,19 @@ Split by category. **None of the data objects here are deletion candidates.**
 | object | type | why not reaching | disposition |
 |---|---|---|---|
 | `stg_ppt_tracking_frames`, `int_goal_release_frame`, `raw_ppt_replay` | dbt / raw data | ppt subsystem not surfaced yet | **Tier 3 keep — puck tracking retained by owner (explicit exception)** |
-| `mart_player_onice`, `mart_player_toi_matrix`, `mart_player_wowy` | new marts (leaf) | new this branch, not yet in serving/backend, not yet materialized | **Tier 3 keep — new feature, materialization + wiring pending (data, never delete)** |
+| `mart_player_onice`, `mart_player_toi_matrix`, `mart_player_wowy` | new marts (leaf) | Phase 6 feature; materialized + validated (6.1), not yet in serving/backend | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
+| `mart_player_entanglement`, `mart_player_carry` | new marts (Phase 6.2) | read the WOWY marts; feed the Phase 6.3 impact-context spine; not yet served | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
 | `stg_partner_odds` / `raw_partner_odds` | dbt / raw data | internal calibration, intentionally never exposed | Tier 3 keep (intentional internal; data) |
 | `raw_glossary` | raw data | 0 consumers (reference data ingested for future concept cards) | Tier 4 data — investigate, never drop |
 | `nhl_staging.int_xg_rates`, `nhl_staging.int_zone_entries` | physical BQ views | no code producer (former dbt models, `.sql` removed; views left behind) | **Tier 4 — investigate, do not drop** |
 | `nhl_staging_staging.stg_boxscores`, `nhl_staging_staging.stg_games` | physical BQ views (stray dataset) | residue of a fixed schema-name concatenation bug; zero code references | **Tier 4 — investigate, do not drop** |
 
-Note the nuance on the new-branch marts: `int_segment_5v5_results` and
-`int_player_onice_game` (two of the five new models) DO reach, because I wired them upstream
-of the live `mart_player_game_stats` and `mart_player_relative` this session. Only the three
-leaf marts (`mart_player_onice/_toi_matrix/_wowy`) are terminal and unreached. All five are
-declared-but-not-materialized (`_inventory/60_bq_objects.md` §4): they need a `dbt run` to
-exist physically. New feature, not abandoned.
+Note the nuance on the Phase 6 marts: `int_segment_5v5_results` and `int_player_onice_game`
+DO reach, because they are wired upstream of the live `mart_player_game_stats` and
+`mart_player_relative`. The leaf marts (`mart_player_onice/_toi_matrix/_wowy`) and the 6.2
+diagnostics (`mart_player_entanglement`, `mart_player_carry`) are materialized and validated
+but terminal until Phase 6.4 (serving) + 6.5 (the `/players/{id}/wowy` endpoint and the
+impact-context block) wire them to a shipped surface. New feature, not abandoned.
 
 ### Source files (code/docs) that reach nothing shipped
 
