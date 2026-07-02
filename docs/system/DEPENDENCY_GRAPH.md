@@ -95,7 +95,8 @@ Split by category. **None of the data objects here are deletion candidates.**
 |---|---|---|---|
 | `stg_ppt_tracking_frames`, `int_goal_release_frame`, `raw_ppt_replay` | dbt / raw data | ppt subsystem not surfaced yet | **Tier 3 keep — puck tracking retained by owner (explicit exception)** |
 | `mart_player_onice`, `mart_player_toi_matrix`, `mart_player_wowy` | new marts (leaf) | Phase 6 feature; materialized + validated (6.1), not yet in serving/backend | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
-| `mart_player_entanglement`, `mart_player_carry` | new marts (Phase 6.2) | read the WOWY marts; feed the Phase 6.3 impact-context spine; not yet served | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
+| `mart_player_entanglement`, `mart_player_carry` | new marts (Phase 6.2) | read the WOWY marts; feed the impact-context spine; not yet served | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
+| `mart_player_impact_context` | new mart (Phase 6.3) | reads `nhl_models.player_impact` + entanglement/carry/onice; the impact-context spine; not yet served | **Tier 3 keep — new feature, serving/wiring pending (6.4/6.5); data, never delete** |
 | `stg_partner_odds` / `raw_partner_odds` | dbt / raw data | internal calibration, intentionally never exposed | Tier 3 keep (intentional internal; data) |
 | `raw_glossary` | raw data | 0 consumers (reference data ingested for future concept cards) | Tier 4 data — investigate, never drop |
 | `nhl_staging.int_xg_rates`, `nhl_staging.int_zone_entries` | physical BQ views | no code producer (former dbt models, `.sql` removed; views left behind) | **Tier 4 — investigate, do not drop** |

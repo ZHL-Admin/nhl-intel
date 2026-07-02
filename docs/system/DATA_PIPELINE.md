@@ -323,20 +323,27 @@ per `docs/PHASE6_FINDINGS.md`). Payoff spot-check recorded: the Seider/Edvinsson
 mirror) and show the pair's shared TOI rising 463 → 724 min with a rising together
 xGF% (52.4% → 58.2%). Serving is Phase 6.4.
 
-### 3b. Impact-context marts (Phase 6.2)
+### 3b. Impact-context marts (Phase 6.2 – 6.3)
 
-Single-season diagnostics that read the validated WOWY marts. No new blended score, no
-fourth ranking. Materialized and tested (7 tests PASS incl. the welded-pair sanity check).
+Diagnostics and the context spine that read the validated WOWY marts and
+`nhl_models.player_impact`. No new blended score, no fourth ranking. Materialized and tested.
 
 | model | grain | rows | reads | key columns |
 |---|---|---|---|---|
 | `mart_player_entanglement` | season × player × team | 15.7k | `mart_player_toi_matrix` (symmetric view), `mart_player_onice` | `max_partner_toi_share`, `partner_entropy` (normalized Shannon 0..1), `entangled` (share > 0.55), `qualified` (≥ 12000 s) |
 | `mart_player_carry` | season × player | 14.5k | `mart_player_wowy`, `mart_player_onice` | `carry_score` (TOI-weighted mean of `partner_with_focal_minus_partner_without`), `partner_count`, `qualified` |
+| `mart_player_impact_context` | season × player × position_group | 4.9k | `nhl_models.player_impact`, `mart_player_entanglement`, `mart_player_carry`, `mart_player_onice`, `stg_rosters` | off/def/total impact + SDs; window totals; `single_vs_multi_delta`; `entangled`, `max_partner_toi_share`, `partner_entropy`; `carry_score`; `rel_xgf_pct`. No composite. |
 
-Spot-check recorded (2025-26): Seider `max_partner_toi_share` 0.746 / `entangled` true /
-`carry_score` 0.145; Edvinsson 0.788 / true / 0.067. In 2024-25 Edvinsson is not yet welded
-(share 0.371, not entangled), consistent with the pair forming in 2025-26. These feed the
-Phase 6.3 impact-context spine; they reach the app only after Phase 6.4 (serving) + 6.5.
+`single_vs_multi_delta = single_total − multi_total` where single = `player_impact` row with
+`season_window` = the season and multi = the 3-year weighted window row (`season_window`
+containing `_`); null when a player has no window row. Goalies excluded (no F/D position);
+entanglement from the primary team; on-off relative aggregated across a traded player's teams.
+
+Gate confirmed (2025-26): Seider `single_vs_multi_delta` = +0.265 (single total 0.738 vs
+window 0.472) and `entangled` = true; Edvinsson `entangled` = true with a strong on-off
+`rel_xgf_pct` (+0.096) but a slightly negative isolated total (−0.074) — the entanglement the
+layer exists to surface. Full narrative in `docs/methodology/impact-context.md`. These reach
+the app after Phase 6.4 (serving) + 6.5.
 
 ---
 

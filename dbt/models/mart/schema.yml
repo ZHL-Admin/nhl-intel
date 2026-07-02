@@ -401,3 +401,29 @@ models:
         description: TOI-weighted mean partner with-minus-without xGF% delta
       - name: partner_count
         description: Distinct partners contributing to the score
+
+  - name: mart_player_impact_context
+    description: >
+      Per (season, player_id, position_group) transparent context around the isolated-impact
+      (RAPM) estimate. Reads nhl_models.player_impact plus entanglement, carry, and the true
+      on-off relative. Computes NO blended score and NO ranking; every field is kept separate.
+      single_vs_multi_delta = single-season total impact minus the 3-year weighted window total
+      (null when no window row). Goalies excluded. See docs/methodology/impact-context.md.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: position_group
+        description: F or D (goalies excluded)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['F', 'D']
+      - name: total_impact
+        description: Single-season off_impact + def_impact (xGF/60, higher better)
+      - name: single_vs_multi_delta
+        description: Single-season total minus 3-year window total (null if no window row)
+      - name: entangled
+        description: True when the player's max partner TOI share exceeds 0.55
+        tests: [not_null]
