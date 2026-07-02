@@ -281,15 +281,16 @@ reachability appendix in section 5).
 
 ---
 
-## 3. New this branch (materialization pending)
+## 3. WOWY / on-ice feature (materialized and validated, Phase 6.1)
 
-Five models form a coherent WOWY / on-ice / 5v5-segment feature added on this
-branch. They are **newly added, not abandoned.** Two of them
-(`int_segment_5v5_results` and `int_player_onice_game`) are already wired
-**upstream** of the live hub marts: `int_player_onice_game` feeds
-`mart_player_game_stats` and `mart_player_relative`, and both new int models feed
-the new marts. They are simply not yet materialized against BigQuery (validation
-deferred). None is dead, and none is a deletion candidate.
+Five models form a coherent WOWY / on-ice / 5v5-segment feature. As of Phase 6.1
+(branch `feature/phase6-impact-context`) they are **materialized in BigQuery and
+validated** (`dbt run --select int_segment_5v5_results+`, PASS=10; 31 dbt tests
+PASS). Two of them (`int_segment_5v5_results` and `int_player_onice_game`) are
+wired **upstream** of the live hub marts: `int_player_onice_game` feeds
+`mart_player_game_stats` (replacing the former team-proxy `on_ice_xgf_pct` with a
+real per-player value that now varies within a team-game) and `mart_player_relative`
+(additive columns only). Not yet served — Phase 6.4 adds them to `serving_tables.yml`.
 
 Lineage:
 
@@ -305,18 +306,22 @@ nhl_models.shot_xg ─┴─> int_segment_5v5_results ─┬─> int_player_onic
                                                  └─> mart_player_wowy <──────────────────────────────┘
 ```
 
-| model | layer / target | status |
-|---|---|---|
-| int_segment_5v5_results | intermediate / `nhl_staging` (table) | declared + enabled, upstream of live marts, **not yet materialized** |
-| int_player_onice_game | intermediate / `nhl_staging` (table) | declared + enabled, upstream of live marts, **not yet materialized** |
-| mart_player_onice | mart / `nhl_mart` (table) | declared + enabled, feeds `mart_player_wowy`, **not yet materialized** |
-| mart_player_toi_matrix | mart / `nhl_mart` (table) | declared + enabled, **not yet materialized** |
-| mart_player_wowy | mart / `nhl_mart` (table) | declared + enabled, **not yet materialized** |
+| model | layer / target | grain | rows (Phase 6.1) | status |
+|---|---|---|---|---|
+| int_segment_5v5_results | intermediate / `nhl_staging` (table) | game × 5v5 segment | 5.1M | materialized ✓ |
+| int_player_onice_game | intermediate / `nhl_staging` (table) | game × player (5v5) | 714.6k | materialized ✓ |
+| mart_player_onice | mart / `nhl_mart` (table) | season × player × team | 15.7k | materialized ✓ |
+| mart_player_toi_matrix | mart / `nhl_mart` (table) | season × team × pair (a<b) | 208.3k | materialized ✓ |
+| mart_player_wowy | mart / `nhl_mart` (table) | season × team × focal × partner | 416.6k | materialized ✓ |
 
-**Action:** these five need a `dbt run` (or inclusion in the nightly
-`dbt build` selection) to materialize their physical objects in BigQuery. Their
-low or zero external reference count is consistent with being freshly added, not
-with being dead. They produce data and are never deletion candidates.
+**Validation (Phase 6.1):** `assert_toi_matrix_symmetric` and
+`assert_onice_game_toi_reconciles` PASS (the latter checks `int_player_onice_game.
+toi_5v5_sec` against an independent shift-derived 5v5 recompute; NHL boxscores are
+team-grain with no per-player strength TOI, so shift-derived time is the truth-source,
+per `docs/PHASE6_FINDINGS.md`). Payoff spot-check recorded: the Seider/Edvinsson
+2024-25 → 2025-26 with/without splits are internally consistent (directional fields
+mirror) and show the pair's shared TOI rising 463 → 724 min with a rising together
+xGF% (52.4% → 58.2%). Serving is Phase 6.4.
 
 ---
 
@@ -362,23 +367,12 @@ live models are:
   `nhl_staging.int_zone_entries` VIEW is a non-producing orphan and **must not be
   referenced by new work.** See DOC_RECONCILIATION.md §0a.
 
-### 4b. Reverse drift (declared in code, no physical object yet)
+### 4b. Reverse drift — RESOLVED (Phase 6.1)
 
-The five new-branch models (section 3) are the reverse case: each is enabled,
-materialized `table`, and has a source `.sql` under `dbt/models/`, yet has no
-matching physical object in BigQuery. This is a build/coverage gap, not an
-orphan for removal.
-
-| declared model | source file | physical object? |
-|---|---|---|
-| `mart_player_onice` | `dbt/models/mart/mart_player_onice.sql` | absent from `nhl_mart` |
-| `mart_player_toi_matrix` | `dbt/models/mart/mart_player_toi_matrix.sql` | absent from `nhl_mart` |
-| `mart_player_wowy` | `dbt/models/mart/mart_player_wowy.sql` | absent from `nhl_mart` |
-| `int_player_onice_game` | `dbt/models/intermediate/int_player_onice_game.sql` | absent from `nhl_staging` |
-| `int_segment_5v5_results` | `dbt/models/intermediate/int_segment_5v5_results.sql` | absent from `nhl_staging` |
-
-Because two of these are already upstream of the live hub marts, the resolution
-is to run/select them in the nightly `dbt build`, not to remove them.
+The five new-branch models were previously declared-but-unmaterialized. As of
+Phase 6.1 they are **materialized in BigQuery and validated** (section 3), so the
+reverse-drift gap is closed. They still need to be added to the nightly
+`dbt build` selection and to `serving_tables.yml` (Phase 6.4) to reach the app.
 
 ### 4c. Retained (never flagged)
 

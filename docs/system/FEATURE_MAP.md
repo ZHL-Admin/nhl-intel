@@ -132,11 +132,17 @@ cleanup candidate.** This is an explicit exception to reverse reachability.
 Methodology: `docs/methodology/ppt-replay-tracking.md`. When a future tool surfaces this,
 `int_goal_release_frame` is the single tracked moment intended for the rink render.
 
-### New WOWY / on-ice marts (this branch, materialization pending)
+### WOWY / on-ice marts (materialized Phase 6.1; not yet served)
 
 `int_segment_5v5_results`, `int_player_onice_game`, `mart_player_onice`,
-`mart_player_toi_matrix`, `mart_player_wowy` are a newly added with-or-without-you / on-ice
-feature. `int_segment_5v5_results` and `int_player_onice_game` are already wired upstream of
-the live `mart_player_game_stats` and `mart_player_relative`; the three leaf marts are not
-yet consumed by any endpoint. All five are declared in dbt but not yet materialized in
-BigQuery (need a `dbt run`). New feature, not abandoned; data objects, never a delete target.
+`mart_player_toi_matrix`, `mart_player_wowy` are the with-or-without-you / on-ice feature.
+As of Phase 6.1 they are **materialized in BigQuery and validated** (10-model build PASS,
+31 tests PASS, Seider/Edvinsson splits confirmed). `int_segment_5v5_results` and
+`int_player_onice_game` are wired upstream of the live `mart_player_game_stats` (real
+per-player `on_ice_xgf_pct`) and `mart_player_relative`. The three leaf marts
+(`_onice`, `_toi_matrix`, `_wowy`) are not yet read by any endpoint: they reach the app only
+after Phase 6.4 (serving_tables.yml + DuckDB export) and Phase 6.5 (the `/players/{id}/wowy`
+endpoint). Trace once served: PlayerProfile WOWY panel → `/players/{id}/wowy` →
+`mart_player_wowy` → `int_segment_5v5_results` (+ `int_shift_segments`) → `int_on_ice_events`
+/ `int_segment_context` / `nhl_models.shot_xg` → `stg_shifts` / `stg_play_by_play` →
+`raw_shift_charts` / `raw_play_by_play`.
