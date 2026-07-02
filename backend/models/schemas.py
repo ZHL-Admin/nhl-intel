@@ -1832,6 +1832,46 @@ class PlayerStyleMap(BaseModel):
     regions: List[StyleMapRegion] = Field(default_factory=list)
 
 
+class ImpactContext(BaseModel):
+    """Transparent context around a player's isolated-impact (RAPM) estimate. Every field is
+    separate; no blended score. From mart_player_impact_context (Phase 6.3)."""
+    off_impact: Optional[float] = None
+    def_impact: Optional[float] = None
+    total_impact: Optional[float] = None
+    off_sd: Optional[float] = None
+    def_sd: Optional[float] = None
+    multi_total_impact: Optional[float] = None
+    single_vs_multi_delta: Optional[float] = None
+    entangled: Optional[bool] = None
+    max_partner_toi_share: Optional[float] = None
+    partner_entropy: Optional[float] = None
+    carry_score: Optional[float] = None
+    rel_xgf_pct: Optional[float] = None
+    impact_toi_min: Optional[float] = None
+
+
+class WowyPartner(BaseModel):
+    """One partner's with/without split for a focal player (5v5), from mart_player_wowy."""
+    partner_id: int
+    partner_name: Optional[str] = None
+    toi_together_sec: float
+    xgf_pct_together: Optional[float] = None
+    xgf_per60_together: Optional[float] = None
+    xga_per60_together: Optional[float] = None
+    xgf_pct_focal_without_partner: Optional[float] = None
+    xgf_pct_partner_without_focal: Optional[float] = None
+    together_minus_focal_alone: Optional[float] = None
+    partner_with_focal_minus_partner_without: Optional[float] = None
+    small_sample: bool
+
+
+class PlayerWowy(BaseModel):
+    """With-or-without-you partner splits for a player-season, sorted by shared TOI descending."""
+    player_id: int
+    season: str
+    partners: List[WowyPartner]
+
+
 class PlayerSummary(BaseModel):
     """Lightweight season stat line for the Players-card expansion (one query)."""
     player_id: int
@@ -1842,6 +1882,7 @@ class PlayerSummary(BaseModel):
     assists_per60: Optional[float] = None
     points_per60: Optional[float] = None
     xgf_pct: Optional[float] = None
+    impact_context: Optional[ImpactContext] = None
 
 
 class PreviewStat(BaseModel):

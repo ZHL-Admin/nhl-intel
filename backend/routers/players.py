@@ -19,6 +19,7 @@ from models.schemas import (
     GameScorePoint, DivergenceBoardRow,
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
+    ImpactContext, WowyPartner, PlayerWowy,
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
     PlayerContract, CapShareYear,
@@ -489,7 +490,80 @@ async def get_player_summary(
         games_played=int(r['games_played']),
         toi_per_gp=r.get('toi_per_gp'), goals_per60=r.get('goals_per60'),
         assists_per60=r.get('assists_per60'), points_per60=r.get('points_per60'),
-        xgf_pct=r.get('xgf_pct'))
+        xgf_pct=r.get('xgf_pct'),
+        impact_context=_impact_context_for(player_id, season))
+
+
+def _impact_context_for(player_id: int, season: str) -> Optional[ImpactContext]:
+    """Transparent impact context (isolated-impact + entanglement + carry + single-vs-multi-year
+    divergence) from mart_player_impact_context. None when the player has no row that season
+    (e.g. under the 200-5v5-minute floor, or a goalie). Additive; never breaks the summary."""
+    rows = bq_service.query(f"""
+        SELECT off_impact, def_impact, total_impact, off_sd, def_sd,
+               multi_total_impact, single_vs_multi_delta,
+               entangled, max_partner_toi_share, partner_entropy,
+               carry_score, rel_xgf_pct, impact_toi_min
+        FROM {bq_service.get_full_table_id('mart_player_impact_context')}
+        WHERE player_id = {int(player_id)} AND season = '{season}'
+    """)
+    if not rows:
+        return None
+    c = rows[0]
+    return ImpactContext(
+        off_impact=c.get('off_impact'), def_impact=c.get('def_impact'),
+        total_impact=c.get('total_impact'), off_sd=c.get('off_sd'), def_sd=c.get('def_sd'),
+        multi_total_impact=c.get('multi_total_impact'),
+        single_vs_multi_delta=c.get('single_vs_multi_delta'),
+        entangled=(None if c.get('entangled') is None else bool(c.get('entangled'))),
+        max_partner_toi_share=c.get('max_partner_toi_share'),
+        partner_entropy=c.get('partner_entropy'),
+        carry_score=c.get('carry_score'), rel_xgf_pct=c.get('rel_xgf_pct'),
+        impact_toi_min=c.get('impact_toi_min'))
+
+
+@router.get("/{player_id}/wowy", response_model=PlayerWowy)
+@cache(ttl=1800)
+async def get_player_wowy(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest with WOWY data)"),
+) -> PlayerWowy:
+    """With-or-without-you partner splits (5v5) for a player-season, sorted by shared TOI.
+    Reads mart_player_wowy; small_sample (< 50 shared minutes) is carried per partner."""
+    wowy_t = bq_service.get_full_table_id('mart_player_wowy')
+    if not season:
+        r = bq_service.query(f"SELECT MAX(season) AS s FROM {wowy_t} WHERE player_id = {int(player_id)}")
+        season = r[0]['s'] if r and r[0]['s'] else None
+    if not season:
+        raise HTTPException(status_code=404, detail="No WOWY data for this player")
+    rows = bq_service.query(f"""
+        WITH names AS (
+            SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name
+            FROM {bq_service.get_full_table_id('stg_rosters')}
+            GROUP BY player_id
+        )
+        SELECT w.partner_id, n.name AS partner_name,
+               w.toi_together_sec, w.xgf_pct_together, w.xgf_per60_together, w.xga_per60_together,
+               w.xgf_pct_focal_without_partner, w.xgf_pct_partner_without_focal,
+               w.together_minus_focal_alone, w.partner_with_focal_minus_partner_without,
+               w.small_sample
+        FROM {wowy_t} w
+        LEFT JOIN names n ON n.player_id = w.partner_id
+        WHERE w.player_id = {int(player_id)} AND w.season = '{season}'
+        ORDER BY w.toi_together_sec DESC
+    """)
+    partners = [WowyPartner(
+        partner_id=int(x['partner_id']), partner_name=x.get('partner_name'),
+        toi_together_sec=float(x['toi_together_sec']),
+        xgf_pct_together=x.get('xgf_pct_together'),
+        xgf_per60_together=x.get('xgf_per60_together'),
+        xga_per60_together=x.get('xga_per60_together'),
+        xgf_pct_focal_without_partner=x.get('xgf_pct_focal_without_partner'),
+        xgf_pct_partner_without_focal=x.get('xgf_pct_partner_without_focal'),
+        together_minus_focal_alone=x.get('together_minus_focal_alone'),
+        partner_with_focal_minus_partner_without=x.get('partner_with_focal_minus_partner_without'),
+        small_sample=bool(x['small_sample']),
+    ) for x in rows]
+    return PlayerWowy(player_id=player_id, season=season, partners=partners)
 
 
 def _age_at_season(birth_date, season: str) -> Optional[int]:

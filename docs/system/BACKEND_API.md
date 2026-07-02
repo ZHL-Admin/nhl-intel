@@ -171,7 +171,8 @@ many `nhl_models.*`: `aging_curves`, `deployment_efficiency`,
 | GET | `/players/{player_id}/deployment` | 389-391 | `player_id` | inline SQL | `List[PlayerDeploymentEntry]` | 1800 |
 | GET | `/players/divergence-board` | 397-399 | `season?` | inline SQL (`nhl_models.divergence_board`) | `List[DivergenceBoardRow]` | 1800 |
 | GET | `/players/search` | 446-448 | `q`(req), `limit=20`, `season?` | `services.tools.search_players` (`players.py:457`) | `List[PlayerSearchResult]` | 3600 |
-| GET | `/players/{player_id}/summary` | 462-464 | `player_id`, `season?` | inline + composite helpers (`nhl_models.player_composite`, `player_archetypes`) | `PlayerSummary` | 1800 |
+| GET | `/players/{player_id}/summary` | 462-464 | `player_id`, `season?` | inline + composite helpers (`nhl_models.player_composite`, `player_archetypes`); **+ impact-context block** from `mart_player_impact_context` (`_impact_context_for`) | `PlayerSummary` (+ optional `impact_context`) | 1800 |
+| GET | `/players/{player_id}/wowy` | (Phase 6.5) | `player_id`, `season?` | inline SQL over `mart_player_wowy` (+ `stg_rosters` for partner names) | `PlayerWowy` | 1800 |
 | GET | `/players/{player_id}/preview` | 583-585 | `player_id`, `season?` | inline SQL | `PlayerPreview` | 1800 |
 | GET | `/players/{player_id}/radar` | 593-595 | `player_id`, `season?` | `services.radar.player_radar` | `PlayerRadar` | 1800 |
 | GET | `/players/{player_id}/verdict` | 656-658 | `player_id`, `season?` | inline SQL (`nhl_models.player_verdict`) | `PlayerVerdict` | 1800 |
