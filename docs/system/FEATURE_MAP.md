@@ -139,8 +139,8 @@ Impact & Value tab** (Phase 6.6). Two components:
 
 | component (Impact & Value tab) | api → route | tables | producers back to feed |
 |---|---|---|---|
-| `players/WowyPartnerPanel` | `getPlayerWowy` → `/players/{id}/wowy` | `mart_player_wowy` (+ `stg_rosters` for names) | `mart_player_wowy` ← `int_segment_5v5_results` (+ `int_shift_segments`) ← `int_on_ice_events` / `int_segment_context` / `nhl_models.shot_xg` ← `stg_shifts` / `stg_play_by_play` ← `raw_shift_charts` / `raw_play_by_play` |
-| `players/ImpactContextPanel` (beside `ImpactValuePanel`) | `getPlayerSummary` → `/players/{id}/summary`.`impact_context` | `mart_player_impact_context` | ← `nhl_models.player_impact` (RAPM, `train_rapm.py`) + `mart_player_entanglement` + `mart_player_carry` + `mart_player_onice`, all ← the segment stack above |
+| `players/ImpactNarrative` (the consolidated Impact & Value panel; replaced the former `ImpactValuePanel` + `ImpactContextPanel`) | `getPlayerDetail` → `/players/{id}`.`value` (percentiles + gap + `read`), `getPlayerSummary` → `/players/{id}/summary`.`impact_context`, `getPlayerWowy` → `/players/{id}/wowy` | `mart_player_impact_context`, `nhl_models.player_gar` (Value percentile), `nhl_models.player_impact` (Impact percentile), `mart_player_wowy` | context ← `player_impact` (RAPM) + `mart_player_entanglement` + `mart_player_carry` + `mart_player_onice`; WOWY ← `int_segment_5v5_results` (+ `int_shift_segments`) ← `int_on_ice_events`/`int_segment_context`/`shot_xg` ← `stg_shifts`/`stg_play_by_play` ← `raw_shift_charts`/`raw_play_by_play` |
+| `players/WowyPartnerPanel` (embedded in `ImpactNarrative` as the evidence) | via `ImpactNarrative` (`getPlayerWowy`) | `mart_player_wowy` (+ `stg_rosters` for names) | as above |
 
 Underpinnings: `int_segment_5v5_results` and `int_player_onice_game` are wired upstream of the
 live `mart_player_game_stats` (real per-player `on_ice_xgf_pct`) and `mart_player_relative`.

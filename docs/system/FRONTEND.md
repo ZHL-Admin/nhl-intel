@@ -359,7 +359,7 @@ The presentational-primitives group covers: `Badge`, `UncertaintyBand`, `PlayerA
 `StandingsLadder`, `PlayerValueLadder`, `InsightCard`, `DateStrip`, `IdentityHeader`,
 `MiniWorm`, `PodiumCards`, `PossessionBar`, `StatCard`, `TabNav`, `Tabs`, `ThemeToggle`,
 `TimelineList`, `Tooltip`, `XGBreakdown`, `ToggleSwitch`, `FormStrip`, `PlayerCard`,
-`ImpactValuePanel`, `OverallSummary`, `Select`, `LineProjection`, `TeamQuickJump`. Each has at
+`OverallSummary`, `Select`, `LineProjection`, `TeamQuickJump`. Each has at
 least one importer and is re-exported by `common/index.ts` and consumed by mounted pages. See
 the barrel-export caveat in Section 7.
 
@@ -390,8 +390,8 @@ the barrel-export caveat in Section 7.
 | `DeploymentBoard.tsx` | Deployment leaderboard | `api/players` | Yes |
 | `PlayerDraftLine.tsx` | Draft-pedigree line | `api/draft` | Yes |
 | `PlayerRowExpansion.tsx` | Expandable player row (radar/labels) | `api/players`, `api/goalies`, `api/labels` | Yes |
-| `ImpactContextPanel.tsx` | Isolated-impact context beside ImpactValuePanel (entanglement badge, single-vs-3yr divergence with widened band, carry, r≈0.43 confidence) | `api/players` (`getPlayerSummary.impact_context`) | Yes (PlayerProfile, Impact & Value tab) |
-| `WowyPartnerPanel.tsx` | Sortable WOWY partner splits (together vs apart xGF%, lift, shared TOI, small-sample badge, click-to-navigate) | `api/players` (`getPlayerWowy`) | Yes (PlayerProfile, Impact & Value tab) |
+| `ImpactNarrative.tsx` | Consolidated Impact & Value read as one adaptive narrative: lead branches on the entangled flag (entangled → confidence caveat first; else → impact-vs-value gap), percentile bars with the Impact figure rendered as an **entanglement-widened low-confidence range** (not a point), GAR/WAR as a demoted sub-line under the Value bar, and the WOWY table embedded as the evidence. Percentile is the only headline unit; r-values live in the confidence tooltip. **Replaces the former `ImpactValuePanel` (common) + `ImpactContextPanel`, both removed.** | `api/players` (`getPlayerDetail.value`, `getPlayerSummary.impact_context`, `getPlayerWowy`) | Yes (PlayerProfile, Impact & Value tab) |
+| `WowyPartnerPanel.tsx` | The WOWY evidence table (together vs apart xGF%, lift = better alongside that partner, shared TOI, small-sample badge, click-through); embedded inside `ImpactNarrative` | `api/players` (via `ImpactNarrative`) | Yes |
 
 ### `teams/`
 

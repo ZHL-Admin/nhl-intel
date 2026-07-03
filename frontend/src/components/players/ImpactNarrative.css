@@ -1,0 +1,139 @@
+.imn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.15rem 1.25rem;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.imn--flat { padding: 0; background: transparent; border: none; border-radius: 0; }
+
+.imn__sec { display: block; }
+
+/* --- lead: the verdict sentence, editorial weight --- */
+.imn__lead-head {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+.imn__lead-body {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: 60ch;
+}
+
+/* --- confidence chip --- */
+.imn__conf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  cursor: help;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+}
+.imn__conf--low {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+
+/* --- percentile bars --- */
+.imn__bars { display: flex; flex-direction: column; gap: 0.85rem; }
+.imn__bar { display: flex; flex-direction: column; gap: 0.3rem; }
+.imn__bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.imn__bar-lbl {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.imn__bar-lbl small {
+  margin-left: 0.35rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.62rem;
+}
+.imn__bar-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 1.05rem;
+  color: var(--color-text-primary);
+}
+.imn__bar-val small {
+  margin-left: 0.3rem;
+  font-weight: 400;
+  font-size: 0.62rem;
+  color: var(--color-text-secondary);
+}
+
+.imn__band { position: relative; }
+
+/* "confidence as width": the low-confidence impact band reads visibly fuzzy + muted */
+.imn__band--low {
+  padding: 3px 0;
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--color-text-secondary) 9%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+.imn__band--low .uband__range { filter: blur(0.5px); opacity: 0.85; }
+
+.imn__gar {
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+}
+
+.imn__gap {
+  margin: 0.1rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+/* --- WOWY evidence --- */
+.imn__evidence { display: flex; flex-direction: column; gap: 0.5rem; }
+.imn__evidence-lead {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.imn__baseline {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+.imn__baseline strong { color: var(--color-text-primary); }
+
+.imn__muted {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+}

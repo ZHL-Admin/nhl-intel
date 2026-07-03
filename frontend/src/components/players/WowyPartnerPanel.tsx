@@ -39,12 +39,15 @@ export default function WowyPartnerPanel({ partners, name }: { partners: WowyPar
   return (
     <div className="wowy">
       <div className="wowy__head">
-        <h3 className="wowy__title">Who {last} lifts, and who lifts him</h3>
+        <h3 className="wowy__title">{last} with and without each linemate</h3>
         <div className="wowy__sort" role="tablist" aria-label="sort partners">
           <button type="button" className={`wowy__sortbtn${sort === 'toi' ? ' is-active' : ''}`} onClick={() => setSort('toi')}>Most minutes</button>
           <button type="button" className={`wowy__sortbtn${sort === 'lift' ? ' is-active' : ''}`} onClick={() => setSort('lift')}>Biggest lift</button>
         </div>
       </div>
+      <p className="wowy__caption">
+        {last}'s on-ice 5v5 xGF% together vs apart. <strong>Positive lift = {last} is better alongside that partner.</strong>
+      </p>
 
       <div className="wowy__table">
         <div className="wowy__row wowy__row--head">

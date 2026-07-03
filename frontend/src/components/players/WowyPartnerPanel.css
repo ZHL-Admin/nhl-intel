@@ -36,6 +36,14 @@
   background: color-mix(in srgb, var(--color-team-primary) 12%, transparent);
 }
 
+.wowy__caption {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+.wowy__caption strong { color: var(--color-text-primary); font-weight: 600; }
+
 .wowy__table {
   display: flex;
   flex-direction: column;
