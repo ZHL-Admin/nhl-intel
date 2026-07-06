@@ -18,8 +18,8 @@ interface RollingContextPanelProps {
   awayGameCF: number | null;
 }
 
-function renderSparkline(data: number[], color: string): JSX.Element {
-  if (data.length === 0) return <div className="sparkline-empty" title="No recent games available">—</div>;
+function renderSparkline(data: number[], color: string): JSX.Element | null {
+  if (data.length === 0) return null; // V9: no placeholder dashes — a no-data cell doesn't render
 
   const width = 60;
   const height = 24;
@@ -109,6 +109,9 @@ function TeamRollingContext({
     ? trends.cf_pct_5gp[trends.cf_pct_5gp.length - 1].value
     : null;
 
+  // V9: no claim without numbers — if a team has no rolling data, its row doesn't render (no dashes).
+  if (last10CF.length === 0 && rolling5CF === null) return null;
+
   // Determine if this game was above or below rolling average
   let trend: 'above' | 'below' | 'consistent' = 'consistent';
   if (gameCF !== null && rolling5CF !== null) {
@@ -144,12 +147,9 @@ function generateTitle(
   awayGameCF: number | null,
   homeTeamAbbrev: string
 ): string {
-  // This is a simplified title - in a real implementation, we'd compare against rolling averages
-  if (homeGameCF === null || awayGameCF === null) {
-    return 'Recent form comparison';
-  }
-
-  return `${homeTeamAbbrev}'s performance tonight was consistent with their recent form`;
+  // V9: state the subject, not an unverified claim. The rows carry the actual numbers.
+  void homeGameCF; void awayGameCF; void homeTeamAbbrev;
+  return 'Rolling form · last 10 games, 5v5 CF%';
 }
 
 export default function RollingContextPanel({

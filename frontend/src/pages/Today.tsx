@@ -20,6 +20,7 @@ import { getPlayoffBracket } from '../api/playoffs'
 import { getOffseasonBoard } from '../api/offseason'
 import { TRAJECTORY_MEANINGFUL_MOVE } from '../config/metrics'
 import { fmt } from '../utils/format'
+import { selectLead } from '../config/leadTemplates'
 import { WRITING } from '../config/writing'
 import type { Game, PowerRatingRow, DeservedStandingRow, PlayoffOdds, RosterForecastRow } from '../api/types'
 import './Today.css'
@@ -203,6 +204,32 @@ function Writing() {
   )
 }
 
+// The Lead (P7): one editorial headline stating the most interesting true thing right now, chosen by
+// the deterministic rule in config/leadTemplates, with a supporting link. The reason the page feels authored.
+function TheLead({ slate, lastNight }: { slate: Game[]; lastNight: Game[] }) {
+  const [power, setPower] = useState<PowerRatingRow[]>([])
+  const [deserved, setDeserved] = useState<DeservedStandingRow[]>([])
+  const [board, setBoard] = useState<RosterForecastRow[]>([])
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    let active = true
+    Promise.all([getPowerRankings().catch(() => []), getDeservedStandings().catch(() => []), getOffseasonBoard().catch(() => [])])
+      .then(([p, d, o]) => { if (active) { setPower(p); setDeserved(d); setBoard(o); setReady(true) } })
+    return () => { active = false }
+  }, [])
+  if (!ready) return <section className="today-lead"><SkeletonLoader height={110} /></section>
+  const lead = selectLead({ slate, lastNight, power, deserved, offseason: board })
+  if (!lead) return null
+  return (
+    <section className="today-lead">
+      <span className="today-lead__kicker">{lead.kicker}</span>
+      <h2 className="today-lead__headline">{lead.headline}</h2>
+      <p className="today-lead__dek">{lead.dek}</p>
+      <Link className="today-lead__link" to={lead.link.to}>{lead.link.label}</Link>
+    </section>
+  )
+}
+
 export default function Today() {
   usePageTitle('Today')
   const now = new Date()
@@ -226,14 +253,15 @@ export default function Today() {
     <PageLayout>
       <PageCard title="Today" subtitle={longDate} bodyClassName="today">
         <div className="today__main">
+          <TheLead slate={slate ?? []} lastNight={lastNight ?? []} />
           {promoteOffseason && <SeasonalStakes variant="offseason" />}
           <GameStrip mod="m1" title="Tonight" seeAll={{ to: '/games' }} games={slate ?? []} loading={slate === null} />
           <GameStrip mod="m2" title="Last night" seeAll={{ to: '/games' }} games={lastNight ?? []} loading={lastNight === null} scoreEmphasis />
           <Movers />
         </div>
         <div className="today__rail">
-          <LuckWatch />
           {seasonalVariant && !promoteOffseason && <SeasonalStakes variant={seasonalVariant} />}
+          <LuckWatch />
           <Writing />
           <FromTheStudio />
         </div>

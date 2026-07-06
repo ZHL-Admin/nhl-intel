@@ -1,4 +1,5 @@
 import ChartPanel from '../common/ChartPanel';
+import { composePeriodInsight } from '../../config/periodInsights';
 import './PeriodBreakdownTable.css';
 
 interface PeriodBreakdownTableProps {
@@ -63,16 +64,11 @@ function generateTitle(
 
   let maxGap = 0;
   let maxGapPeriod = 1;
-  let dominantTeam = homeTeamAbbrev;
 
   periods.forEach(p => {
     if (p.homeCF !== null && p.homeCF !== undefined && p.awayCF !== null && p.awayCF !== undefined) {
       const gap = Math.abs(p.homeCF - p.awayCF);
-      if (gap > maxGap) {
-        maxGap = gap;
-        maxGapPeriod = p.period;
-        dominantTeam = p.homeCF > p.awayCF ? homeTeamAbbrev : awayTeamAbbrev;
-      }
+      if (gap > maxGap) { maxGap = gap; maxGapPeriod = p.period; }
     }
   });
 
@@ -80,10 +76,23 @@ function generateTitle(
     return `${homeTeamAbbrev} and ${awayTeamAbbrev} maintained consistent possession across all periods`;
   }
 
-  const periodName = maxGapPeriod === 1 ? 'first' : maxGapPeriod === 2 ? 'second' : 'third';
-  const cfPct = Math.round(maxGap * 100);
-
-  return `${dominantTeam} took control in the ${periodName} period with ${cfPct}% CF advantage`;
+  // F6: score-aware headline via config/periodInsights. Score ENTERING the max-gap period, from the
+  // per-period goals-for/against (home perspective). The CF% shown is the period's own CF%, not the gap.
+  const n = (v?: number | null) => v ?? 0;
+  const gf = (s: typeof homeStats, p: number) => n(s[`gf_p${p}` as keyof typeof s] as number | null);
+  const ga = (s: typeof homeStats, p: number) => n(s[`ga_p${p}` as keyof typeof s] as number | null);
+  let homeGoalsBefore = 0, awayGoalsBefore = 0;
+  for (let p = 1; p < maxGapPeriod; p++) { homeGoalsBefore += gf(homeStats, p); awayGoalsBefore += ga(homeStats, p); }
+  const cf = (s: typeof homeStats) => n(s[`cf_pct_p${maxGapPeriod}` as keyof typeof s] as number | null);
+  return composePeriodInsight({
+    period: maxGapPeriod as 1 | 2 | 3,
+    homeAbbrev: homeTeamAbbrev,
+    awayAbbrev: awayTeamAbbrev,
+    homeCfPct: cf(homeStats),
+    awayCfPct: cf(awayStats),
+    homeGoalsBefore,
+    awayGoalsBefore,
+  });
 }
 
 export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
@@ -139,9 +148,17 @@ export default function PeriodBreakdownTable(props: PeriodBreakdownTableProps) {
       title={title}
       subtitle="Period-by-period statistical breakdown"
       expandable={false}
+      autoHeight
     >
       <div className="period-breakdown">
         <table className="period-table period-table--combined">
+          {/* Item 3: tint alternate stat groups so each pair (away+home) reads as one column group. */}
+          <colgroup>
+            <col />
+            <col span={2} className="period-col--grp" />
+            <col span={2} />
+            <col span={2} className="period-col--grp" />
+          </colgroup>
           <thead>
             <tr>
               <th rowSpan={2} className="period-table__period">Period</th>

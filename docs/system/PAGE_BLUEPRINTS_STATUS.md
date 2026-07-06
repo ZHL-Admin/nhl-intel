@@ -1,0 +1,33 @@
+# Page Blueprints — status & decisions
+
+## Decisions (D27+)
+D27 Player compare page — Build (pending B2).
+D28 Share card — client-side canvas, brand mark bottom-right (shipped in B0).
+D29 "Deserved" tab label — "Luck" (shipped, P2/DS).
+D30 Depth chart on offseason data — Yes, flagged "projected" (pending B3).
+D31 Trades/History GM leaderboard rail — Build (pending B4).
+D32 Studio hub inline pickers — Build (pending B4).
+**D33 Upset branch in the game verdict — DEFERRED.** The game-detail payload carries no pregame
+win probability, so `composeGameVerdict`'s `upset` input is always false and that template branch is
+inert. Accepted as a known gap (no backend change); revisit if a pregame win-prob field is added.
+
+## B1 data-fix status (game 2025030215, MTL @ BUF, MTL won 6-3 — the reviewed game)
+
+| Fix | Status | Notes |
+|---|---|---|
+| F1 GSAx single-source | ✅ | Verdict theft now reads GSAx from the danger-band table (getGameGoalieDanger), the per-game xG-derived number. The two prior sources (goaltending endpoint vs danger table) disagreed; the "stole-one" +8.72 was an inflated/leaked value in a since-removed insight panel. |
+| F2 xG lane basis | ✅ (labelled) | Comparison xG row is all-situations total xGF (same basis as team receipts); labelled "All situations". The timeline worm lane (cumulative_xg_diff) is a different basis and must carry its own label — pending in GameTimelineStack. |
+| F3 5v5 CF% percent | ✅ | Was rendering the fraction (0.42 → "0%"); now ×100 → "42%". |
+| F4 moments | ✅ | Recomputed from the raw win-prob SERIES joined to the goals feed (goal_swings had a bracketing bug — it read the post-goal spike as "before"). Signed from the scoring team's own perspective, floored at 5 points, top 3 (fewer if fewer qualify). |
+| F5 shot-map caption | ✅ (honest) | Feed labels every attempt as on-goal → "48/48". Now shows attempts (Corsi) only; SOG must be wired from the team-stats receipt, not this feed. |
+| F6 period insight | ⚙️ config shipped | `config/periodInsights.ts` provides the score-aware template set (trailing team winning possession = score effects, not control). Wiring into the period panel is pending with the K-dedupe. |
+
+## Remaining B1 (next increment)
+- **K1–K8 dedupe / final order** on "The game" (kill teaser/top-performers/insight-strip/standalone
+  team-stats/matchup-context cards; move scoring timeline to Box score; merge control-and-danger and
+  the two goaltending panels into one each; final order: verdict · timeline · moments · comparison ·
+  shot map · who drove · receipts). This deletes the old panels and removes GameNarrative's duplicate
+  fetches (F2 worm label + F6 wiring land here).
+- **P1** tab labels already sentence case ("The game", "Box score").
+- **P2** P4 bars: neutral fills + team-color end dots — implemented in CompareRows; verify in a
+  red-vs-blue matchup and both themes.

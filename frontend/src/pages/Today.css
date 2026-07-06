@@ -154,3 +154,33 @@
 
   .today-cols { gap: var(--space-4); }
 }
+
+/* The Lead (P7) — the editorial front-door headline */
+.today-lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.today-lead__kicker {
+  font-family: var(--font-mono);
+  font-size: var(--overline-size);
+  font-weight: var(--overline-weight);
+  letter-spacing: var(--overline-spacing);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.today-lead__headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--display-sm);
+  line-height: var(--display-sm-height);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+.today-lead__dek { margin: 0; font-size: var(--text-base); color: var(--color-text-secondary); }
+.today-lead__link { font-size: var(--text-sm); font-weight: 500; color: var(--color-accent); text-decoration: none; width: fit-content; }
+.today-lead__link:hover { text-decoration: underline; }

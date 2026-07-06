@@ -11,6 +11,7 @@ import Teams from './pages/Teams'
 import TeamProfile from './pages/TeamProfile'
 import Players from './pages/Players'
 import PlayerProfile from './pages/PlayerProfile'
+import PlayerCompare from './pages/PlayerCompare'
 import StudioShell from './components/studio/StudioShell'
 import LegacyToolsRedirect from './components/studio/LegacyToolsRedirect'
 
@@ -35,13 +36,13 @@ const DevComponents = lazy(() => import('./pages/DevComponents'))
 const Playoffs = lazy(() => import('./pages/Playoffs'))
 
 const TRADES_TABS = [
-  { label: 'Build', to: '/studio/trades/build' },
-  { label: 'Fit', to: '/studio/trades/fit' },
-  { label: 'History', to: '/studio/trades/history' },
+  { label: 'Build Trade', to: '/studio/trades/build' },
+  { label: 'Player Fit', to: '/studio/trades/fit' },
+  { label: 'Trade History', to: '/studio/trades/history' },
 ]
 const LINEUPS_TABS = [
-  { label: 'Lines', to: '/studio/lineups/lines' },
-  { label: 'Roster', to: '/studio/lineups/roster' },
+  { label: 'Line Builder', to: '/studio/lineups/lines' },
+  { label: 'Team Builder', to: '/studio/lineups/roster' },
 ]
 
 function App() {
@@ -62,6 +63,8 @@ function App() {
             <Route path="/teams" element={<Teams />} />
             <Route path="/teams/:teamId" element={<TeamProfile />} />
             <Route path="/players" element={<Players />} />
+            {/* B2: player compare (2.5.1) — static segment before :playerId. */}
+            <Route path="/players/compare" element={<PlayerCompare />} />
             <Route path="/players/:playerId" element={<PlayerProfile />} />
             {/* P3: Studio consolidation. Three areas are shells (mode tabs over existing pages);
                 contracts/draft/offseason are direct. Every old /tools/* URL redirects below. */}

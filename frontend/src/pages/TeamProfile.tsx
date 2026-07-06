@@ -10,6 +10,7 @@ import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
 import TeamRadar from '../components/teams/TeamRadar'
 import LineBoard from '../components/teams/LineBoard'
+import DepthChart from '../components/teams/DepthChart'
 import { LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak, getStandings, getTeamInsights } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
@@ -401,7 +402,7 @@ function TeamProfile() {
                 { value: 'identity', label: 'Identity' },
                 { value: 'performance', label: 'Performance / Trends' },
                 { value: 'lines', label: 'Lines' },
-                { value: 'roster', label: 'Roster' },
+                { value: 'roster', label: 'Depth chart' },
                 // Matchups hidden until its vs-opponent content is built (no empty tab).
               ]}
               value={currentTab}
@@ -482,17 +483,23 @@ function TeamProfile() {
             </div>
           )}
 
-          {currentTab === 'roster' && (
-            <RosterTab
-              teamRoster={teamRoster}
-              teamAbbrev={teamDetail?.team_abbrev}
-              rosterError={rosterError}
-              handleRetryRoster={handleRetryRoster}
-              sortConfig={sortConfig}
-              handleSort={handleSort}
-              sortPlayers={sortPlayers}
-              navigate={navigate}
-            />
+          {currentTab === 'roster' && teamId && (
+            <>
+              {/* Blueprint 2.7: the depth chart — roster arranged as lines/pairs — leads; the full
+                  sortable table stays below as the receipt. */}
+              <DepthChart teamId={parseInt(teamId)} teamAbbrev={teamDetail?.team_abbrev ?? ''} />
+              <div className="page-divider" />
+              <RosterTab
+                teamRoster={teamRoster}
+                teamAbbrev={teamDetail?.team_abbrev}
+                rosterError={rosterError}
+                handleRetryRoster={handleRetryRoster}
+                sortConfig={sortConfig}
+                handleSort={handleSort}
+                sortPlayers={sortPlayers}
+                navigate={navigate}
+              />
+            </>
           )}
         </PageCard>
       </div>

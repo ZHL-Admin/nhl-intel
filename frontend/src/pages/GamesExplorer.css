@@ -64,3 +64,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Blueprint 2.2: status-grouped row sections */
+.games-explorer__sections { display: flex; flex-direction: column; gap: var(--space-8); }
+.games-explorer__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.games-explorer__rows { display: flex; flex-direction: column; }
+
+.games-explorer__empty {
+  padding: var(--space-12) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+}
+.games-explorer__empty-link {
+  display: inline-block;
+  margin-top: var(--space-3);
+  color: var(--color-accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+.games-explorer__empty-link:hover { text-decoration: underline; }

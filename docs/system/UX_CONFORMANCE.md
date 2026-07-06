@@ -114,3 +114,27 @@ page left unchanged.
 - **Legacy `shadow-md` call sites** (law 7 tail).
 - **Live regions**, **contrast re-measurement**, **hit-target/360px audit**, and **full chart aria sweep** (§11 ⚠ items) — all require a running browser.
 - **Reference pages** (Players, PlayerProfile) — Title-Case + vertical-gridline findings recorded; left unchanged by mandate.
+
+---
+
+# Page Blueprints conformance (B-phases)
+
+New/restructured surfaces audited against the ten laws after B1–B5.
+
+| Surface | 1-card | Ink/Ice | Colour | Uncertainty | Type roles | Sentence case | Hairlines | Verified shot |
+|---|---|---|---|---|---|---|---|---|
+| Games rows (B1) | ✓ | ✓ | ✓ | ⚠ worm | ✓ | ✓ | ✓ | b1-close |
+| GameDetail (B1) | ✓ | ✓ | ✓ | ✓ | ✓ (serif verdict) | ✓ | ✓ | b1-close, v-* |
+| Today Lead (B5) | ✓ | ✓ | ✓ | — | ✓ (serif headline) | ✓ | ✓ | today-lead |
+| /players/compare (B2) | ✓ | ✓ | ✓ (cat-1/2) | ✓ (bands) | ✓ | ✓ | ✓ | compare |
+| Teams standings (B3) | ✓ | ✓ | ✓ (R9 cut = danger) | — | ✓ | ✓ | ✓ | standings |
+| TeamProfile depth chart (B3) | ✓ | ✓ | ✓ | ⚠ no tier yet | ✓ | ✓ | ✓ | depthchart |
+| Studio hub launchers (B4) | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | studio-hub |
+| Methods "Used on" (B5) | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
+
+## B-phase deferred (carried forward)
+- **PlayerProfile Overview recompose (§2.5)** — tab renamed (Receipts) + verdict prose serif done; the full case/shape 7-5 grid + reality strip + receipts-teaser + Overall-card move + Log tab remain.
+- **TeamProfile depth chart tier census + line grades (§2.7)** — needs a batched player-assessment endpoint (N per-player fetches otherwise).
+- **Studio verdict layouts 2.10–2.17** — VerdictCard wiring into the eight tool outputs (hub launchers done; tool bodies unchanged).
+- **Players-index Compare affordance (§2.4)** — the hover-select entry into /players/compare.
+- **Per-row MiniWorm data + upset branch (D33)** — payload gaps, unchanged.

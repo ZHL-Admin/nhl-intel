@@ -74,3 +74,6 @@
 .mono {
   font-family: var(--font-mono);
 }
+
+/* Item 3: tint alternate stat groups (col background) */
+.period-col--grp { background: var(--color-bg-elevated); }

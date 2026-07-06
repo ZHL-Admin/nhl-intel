@@ -1,11 +1,14 @@
 /**
- * StudioHub (P3) — the `/studio` landing. Five area cards as .page-inset blocks (not nested cards),
- * 3-2 grid on desktop, single column on mobile. Card body click goes to the area's default route;
- * the mode links are quiet inline shortcuts. Copy is the exact §5.4 table.
+ * StudioHub (P3 + Blueprint 2.9/D32) — the `/studio` landing. Five area cards as .page-inset blocks;
+ * the player-based areas carry an inline EntityPicker launcher ("Grade a contract for…") so the hub
+ * is a launcher, not a menu — picking routes into the tool prefilled.
  */
-import { Link } from 'react-router-dom'
-import { PageLayout, PageCard } from '../components/common'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search } from 'lucide-react'
+import { PageLayout, PageCard, EntityPicker } from '../components/common'
 import { usePageTitle } from '../hooks/usePageTitle'
+import type { PlayerSearchResult } from '../api/types'
 import './StudioHub.css'
 
 interface AreaCard {
@@ -13,31 +16,46 @@ interface AreaCard {
   blurb: string
   to: string
   modes?: { label: string; to: string }[]
+  /** Inline launcher: prompt + the route to open, prefilled with the picked player. */
+  pick?: { prompt: string; route: (id: number) => string }
 }
 
 const AREAS: AreaCard[] = [
   {
     name: 'Trades', blurb: 'Build a deal, find a fit, or study history’s verdicts.', to: '/studio/trades',
     modes: [
-      { label: 'Build', to: '/studio/trades/build' },
-      { label: 'Fit', to: '/studio/trades/fit' },
-      { label: 'History', to: '/studio/trades/history' },
+      { label: 'Build Trade', to: '/studio/trades/build' },
+      { label: 'Player Fit', to: '/studio/trades/fit' },
+      { label: 'Trade History', to: '/studio/trades/history' },
     ],
+    pick: { prompt: 'Find a fit for…', route: (id) => `/studio/trades/fit?player=${id}` },
   },
   {
     name: 'Lineups', blurb: 'Project lines before they take a shift.', to: '/studio/lineups',
     modes: [
-      { label: 'Lines', to: '/studio/lineups/lines' },
-      { label: 'Roster', to: '/studio/lineups/roster' },
+      { label: 'Line Builder', to: '/studio/lineups/lines' },
+      { label: 'Team Builder', to: '/studio/lineups/roster' },
     ],
+    pick: { prompt: 'Add a player to a line…', route: (id) => `/studio/lineups/lines?add=${id}` },
   },
-  { name: 'Contracts', blurb: 'Grade any deal against the aging curve and the market.', to: '/studio/contracts' },
+  {
+    name: 'Contracts', blurb: 'Grade any deal against the aging curve and the market.', to: '/studio/contracts',
+    pick: { prompt: 'Grade a contract for…', route: (id) => `/studio/contracts?player=${id}` },
+  },
   { name: 'Draft', blurb: 'What picks are worth, measured from draft history.', to: '/studio/draft' },
   { name: 'Offseason', blurb: 'Projected WAR change for every roster, updated daily.', to: '/studio/offseason' },
 ]
 
 export default function StudioHub() {
   usePageTitle('Studio')
+  const navigate = useNavigate()
+  const [picking, setPicking] = useState<AreaCard | null>(null)
+
+  const onSelect = (p: PlayerSearchResult) => {
+    if (picking?.pick) navigate(picking.pick.route(p.player_id))
+    setPicking(null)
+  }
+
   return (
     <PageLayout>
       <PageCard title="Studio" subtitle="The what-if suite. Every claim shows its work.">
@@ -48,6 +66,11 @@ export default function StudioHub() {
                 <span className="studio-hub__card-name">{a.name}</span>
                 <span className="studio-hub__card-blurb">{a.blurb}</span>
               </Link>
+              {a.pick && (
+                <button type="button" className="studio-hub__launcher" onClick={() => setPicking(a)}>
+                  <Search size={14} /> {a.pick.prompt}
+                </button>
+              )}
               {a.modes && (
                 <div className="studio-hub__modes">
                   {a.modes.map((m, i) => (
@@ -62,6 +85,7 @@ export default function StudioHub() {
           ))}
         </div>
       </PageCard>
+      <EntityPicker open={picking !== null} onClose={() => setPicking(null)} onSelect={onSelect} title={picking?.pick?.prompt ?? 'Search players'} />
     </PageLayout>
   )
 }

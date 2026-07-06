@@ -650,7 +650,8 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .player-ov__agree--ok { color: var(--color-success); background: var(--color-success-bg); }
 .player-ov__agree--warn { color: var(--color-warning); background: var(--color-warning-bg); }
 
-.player-ov__hero-prose { margin: 16px 0 0; font-size: 13.5px; font-weight: 400; line-height: 1.6; color: var(--color-text-primary); }
+/* §3.1/§2.5: the verdict prose reads in display serif, 17/28. */
+.player-ov__hero-prose { margin: 16px 0 0; font-family: var(--font-display); font-size: 17px; font-weight: 400; line-height: 28px; color: var(--color-text-primary); }
 .player-ov__hero-prose--muted { font-style: italic; color: var(--color-text-muted); }
 .player-ov__hero-link { margin-top: auto; padding-top: 14px; display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; font-size: 12px; color: var(--color-text-secondary); }
 .player-ov__hero-link:hover { text-decoration: underline; }

@@ -114,7 +114,7 @@ function scoutingIdentity(off?: string | null, def?: string | null): string | nu
 const PLAYER_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'context', label: 'Context' },
-  { value: 'impact', label: 'Impact & Value' },
+  { value: 'impact', label: 'Receipts' },   // §2.5: the full decomposition — renamed from "Impact & Value"
   { value: 'trends', label: 'Trends' },
   { value: 'gamelog', label: 'Game Log' },
   { value: 'shotmap', label: 'Shot Map' },

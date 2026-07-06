@@ -8,7 +8,7 @@ import { useParams, Link } from 'react-router-dom'
 import { PageLayout, PageCard } from '../components/common'
 import { usePageTitle } from '../hooks/usePageTitle'
 import DocMarkdown from '../components/learn/DocMarkdown'
-import { METHODS, GROUP_ORDER, MORE_GROUP } from '../config/methods'
+import { METHODS, GROUP_ORDER, MORE_GROUP, USED_ON } from '../config/methods'
 import { getMethodDoc, ALL_METHOD_SLUGS } from '../utils/docs'
 import './Learn.css'
 
@@ -65,6 +65,12 @@ function MethodDoc({ slug }: { slug: string }) {
         {doc
           ? <DocMarkdown content={doc} />
           : <p className="lib__notfound">No methodology doc found for “{slug}”.</p>}
+        {doc && USED_ON[slug]?.length > 0 && (
+          <div className="method-usedon">
+            <span className="method-usedon__label">Used on</span>
+            {USED_ON[slug].map((u) => <Link key={u.to + u.label} to={u.to} className="method-usedon__link">{u.label}</Link>)}
+          </div>
+        )}
       </PageCard>
     </PageLayout>
   )

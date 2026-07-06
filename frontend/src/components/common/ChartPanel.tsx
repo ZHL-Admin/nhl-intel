@@ -9,6 +9,8 @@ interface ChartPanelProps {
   subtitle?: string;
   expandable?: boolean;
   defaultExpanded?: boolean;
+  /** Size the content to its natural height (SVG maps, tables) instead of a fixed chart height. */
+  autoHeight?: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
@@ -30,6 +32,7 @@ export default function ChartPanel({
   subtitle,
   expandable = true,
   defaultExpanded = false,
+  autoHeight = false,
   children,
   footer
 }: ChartPanelProps) {
@@ -49,7 +52,8 @@ export default function ChartPanel({
             <div className="chart-panel-subtitle">{subtitle}</div>
           )}
         </div>
-        {expandable && (
+        {/* autoHeight panels (SVG maps, tables) size to content — no fixed height, no expand toggle. */}
+        {expandable && !autoHeight && (
           <button
             className="chart-panel-expand-button"
             onClick={() => setIsExpanded(!isExpanded)}
@@ -68,7 +72,7 @@ export default function ChartPanel({
 
       <div
         className="chart-panel-content"
-        style={{ height: `${height}px` }}
+        style={autoHeight ? undefined : { height: `${height}px` }}
       >
         <ChartPanelContext.Provider value={{ height }}>
           {children}

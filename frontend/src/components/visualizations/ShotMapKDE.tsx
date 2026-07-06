@@ -1,403 +1,167 @@
-import { useState, useEffect, useRef } from 'react';
-import * as d3 from 'd3';
-import ChartPanel from '../common/ChartPanel';
-import SkeletonLoader from '../common/SkeletonLoader';
-import { getGameShots } from '../../api/games';
-import { ShotAttempt } from '../../api/types';
-import { xgBreakdownText } from '../common/XGBreakdown';
-import './ShotMapKDE.css';
+/**
+ * ShotMapKDE (Blueprint V8) — one standard rink, both teams. Attempts are folded to their attacking
+ * end (away attacks LEFT x<0, home RIGHT x>0) by mirroring on |x|, since the shot feed has no period
+ * to normalize by. A heat-ramp KDE per side is clipped to the rink outline (zero density past the
+ * boards); goals (shot_type='goal') overlay as danger dots with a surface halo. Captions are
+ * attempts-only (the feed's SOG field is unreliable — F5); sides are labelled by attacking direction.
+ */
+import { useState, useEffect, useMemo } from 'react'
+import * as d3 from 'd3'
+import ChartPanel from '../common/ChartPanel'
+import SkeletonLoader from '../common/SkeletonLoader'
+import GoalPopup, { type GoalInfo, buildGoalInfoMap } from '../games/GoalPopup'
+import { getGameShots, getGameGoals } from '../../api/games'
+import { getChartColors } from '../../utils/chartTheme'
+import type { ShotAttempt, GoalDetail } from '../../api/types'
+import './ShotMapKDE.css'
 
 interface ShotMapKDEProps {
-  gameId: number;
-  homeTeamAbbrev: string;
-  awayTeamAbbrev: string;
-  homeTeamColor: string;
-  awayTeamColor: string;
-  situation: string;
-}
-
-// Rink dimensions (NHL standard, scaled for SVG)
-const RINK_LENGTH = 200;
-const RINK_WIDTH = 85;
-const HALF_RINK = RINK_LENGTH / 2;
-
-// High danger zone definition (slot area)
-const HIGH_DANGER_ZONE = {
-  xMin: -22,
-  xMax: 22,
-  yMin: 69,
-  yMax: 89
-};
-
-function isHighDanger(x: number, y: number): boolean {
-  return (
-    Math.abs(x) >= HIGH_DANGER_ZONE.xMin &&
-    Math.abs(x) <= HIGH_DANGER_ZONE.xMax &&
-    Math.abs(y) >= HIGH_DANGER_ZONE.yMin &&
-    Math.abs(y) <= HIGH_DANGER_ZONE.yMax
-  );
-}
-
-function analyzeShotConcentration(shots: ShotAttempt[]): number {
-  const hdShots = shots.filter(s => isHighDanger(s.x, s.y)).length;
-  const totalShots = shots.length || 1;
-  return hdShots / totalShots;
-}
-
-function generateTitle(
-  homeShots: ShotAttempt[],
-  awayShots: ShotAttempt[],
-  homeTeamAbbrev: string,
+  gameId: number
+  homeTeamAbbrev: string
   awayTeamAbbrev: string
-): string {
-  const homeHDPct = analyzeShotConcentration(homeShots);
-  const awayHDPct = analyzeShotConcentration(awayShots);
-
-  if (Math.abs(homeHDPct - awayHDPct) < 0.1) {
-    return 'Both teams generated chances from similar areas';
-  }
-
-  if (homeHDPct > awayHDPct + 0.1) {
-    return `${homeTeamAbbrev}'s attack concentrated in the slot while ${awayTeamAbbrev} relied on perimeter shots`;
-  }
-
-  return `${awayTeamAbbrev}'s attack concentrated in the slot while ${homeTeamAbbrev} relied on perimeter shots`;
+  homeTeamColor: string
+  awayTeamColor: string
+  situation: string
 }
 
-function getShotTypeShape(shotType?: string): string {
-  if (!shotType) return 'circle';
-  const type = shotType.toLowerCase();
-  if (type.includes('slap')) return 'square';
-  if (type.includes('tip') || type.includes('deflect')) return 'triangle';
-  if (type.includes('back')) return 'diamond';
-  if (type.includes('wrap')) return 'star';
-  return 'circle';
+// Rink in feet: x ∈ [-100, 100], y ∈ [-42.5, 42.5]. SVG works in a [0,200] × [0,85] pixel box.
+const RX = 28              // corner radius (§V8a)
+const toPx = (x: number, y: number): [number, number] => [x + 100, 42.5 - y]
+
+interface NShot { x: number; y: number; goal: boolean; src: ShotAttempt; team: string }
+
+/** Fold a shot to one attacking end: |x|, mirroring y when the x sign flips; away attacks left. */
+function normalize(s: ShotAttempt, attackRight: boolean, team: string): NShot {
+  let nx = Math.abs(s.x)
+  const ny = s.x < 0 ? -s.y : s.y
+  if (!attackRight) nx = -nx
+  return { x: nx, y: ny, goal: s.shot_type === 'goal', src: s, team }
 }
 
-function ShotMapKDEChart({
-  gameId,
-  homeTeamColor,
-  awayTeamColor,
-  situation
-}: {
-  gameId: number;
-  homeTeamColor: string;
-  awayTeamColor: string;
-  situation: string;
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [homeShots, setHomeShots] = useState<ShotAttempt[]>([]);
-  const [awayShots, setAwayShots] = useState<ShotAttempt[]>([]);
-  const [loading, setLoading] = useState(true);
+function densityPaths(shots: NShot[], color0: string[]): { d: string; fill: string; opacity: number }[] {
+  const pts = shots.map((s) => toPx(s.x, s.y))
+  if (pts.length < 3) return []
+  const density = d3.contourDensity<[number, number]>()
+    .x((d) => d[0]).y((d) => d[1])
+    .size([200, 85]).cellSize(2).bandwidth(6).thresholds(12)(pts)
+  const max = d3.max(density, (c) => c.value) || 1
+  const heat = d3.scaleLinear<string>().domain([0, 0.25, 0.5, 0.75, 1]).range(color0).clamp(true)
+  const geo = d3.geoPath()
+  return density.map((c) => {
+    const t = c.value / max
+    return { d: geo(c) ?? '', fill: heat(t), opacity: Math.min(0.85, t * 0.85) }
+  })
+}
+
+export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev }: ShotMapKDEProps) {
+  const [shots, setShots] = useState<{ home: ShotAttempt[]; away: ShotAttempt[] } | null>(null)
+  const [goals, setGoals] = useState<GoalDetail[]>([])
 
   useEffect(() => {
-    const fetchShots = async () => {
-      setLoading(true);
-      try {
-        const data = await getGameShots(gameId, situation);
-        setHomeShots(data.home_shots || []);
-        setAwayShots(data.away_shots || []);
-      } catch (err) {
-        console.error('Error fetching shot data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    let active = true
+    getGameShots(gameId).then((d) => {
+      if (active) setShots({ home: (d as unknown as { home_shots: ShotAttempt[] }).home_shots ?? [], away: (d as unknown as { away_shots: ShotAttempt[] }).away_shots ?? [] })
+    }).catch(() => active && setShots({ home: [], away: [] }))
+    getGameGoals(gameId).then((d) => active && setGoals(d)).catch(() => {})
+    return () => { active = false }
+  }, [gameId])
 
-    fetchShots();
-  }, [gameId, situation]);
+  // Same goal data as the timeline (running score + assists), keyed by scorer + clock (item 1).
+  const goalMap = useMemo(() => buildGoalInfoMap(goals, homeTeamAbbrev), [goals, homeTeamAbbrev])
 
-  useEffect(() => {
-    if (!svgRef.current || loading || (homeShots.length === 0 && awayShots.length === 0)) {
-      return;
+  const [popup, setPopup] = useState<{ goal: GoalInfo; anchor: { x: number; y: number } } | null>(null)
+
+  const model = useMemo(() => {
+    if (!shots) return null
+    const homeN = shots.home.map((s) => normalize(s, true, homeTeamAbbrev))
+    const awayN = shots.away.map((s) => normalize(s, false, awayTeamAbbrev))
+    const heat = getChartColors().seqHeat
+    const outside = [...homeN, ...awayN].filter((p) => Math.abs(p.x) > 100 || Math.abs(p.y) > 42.5).length
+    // Sanity smoke test (§V8f): attempts outside the rink after normalization should be ~0.
+    // eslint-disable-next-line no-console
+    console.log(`[shot-map] outside-rink after normalize: ${outside} / ${homeN.length + awayN.length}`)
+    return {
+      homePaths: densityPaths(homeN, heat),
+      awayPaths: densityPaths(awayN, heat),
+      goals: [...homeN, ...awayN].filter((s) => s.goal),
+      awayN, homeN, outside,
     }
+  }, [shots, homeTeamAbbrev, awayTeamAbbrev])
 
-    const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
+  if (!shots) return <div className="shot-map-kde"><SkeletonLoader height={340} /></div>
+  if (!model || (model.awayN.length + model.homeN.length) === 0) return null
 
-    const width = 800;
-    const height = 400;
-
-    // Create main group
-    const g = svg
-      .attr('viewBox', `0 0 ${width} ${height}`)
-      .attr('width', '100%')
-      .attr('height', '100%')
-      .append('g');
-
-    // Draw rink outline and markings
-    drawRink(g, width, height);
-
-    // Scale functions
-    const xScale = d3.scaleLinear()
-      .domain([-RINK_WIDTH / 2, RINK_WIDTH / 2])
-      .range([50, width / 2 - 50]);
-
-    const yScale = d3.scaleLinear()
-      .domain([0, HALF_RINK])
-      .range([height - 50, 50]);
-
-    // Draw KDE contours for away team (left half)
-    if (awayShots.length > 0) {
-      drawKDEContours(g, awayShots, xScale, yScale, awayTeamColor);
-    }
-
-    // Draw KDE contours for home team (right half, mirrored)
-    if (homeShots.length > 0) {
-      const xScaleHome = d3.scaleLinear()
-        .domain([-RINK_WIDTH / 2, RINK_WIDTH / 2])
-        .range([width / 2 + 50, width - 50]);
-      drawKDEContours(g, homeShots, xScaleHome, yScale, homeTeamColor);
-    }
-
-    // Draw rink markings on top of the density layer so they stay visible
-    drawRinkMarkings(g, 50, width / 2 - 50, height);
-    drawRinkMarkings(g, width / 2 + 50, width - 50, height);
-
-    // Draw goal markers on top
-    drawGoalMarkers(g, awayShots.filter(s => s.outcome === 'goal'), xScale, yScale, awayTeamColor);
-    const xScaleHome = d3.scaleLinear()
-      .domain([-RINK_WIDTH / 2, RINK_WIDTH / 2])
-      .range([width / 2 + 50, width - 50]);
-    drawGoalMarkers(g, homeShots.filter(s => s.outcome === 'goal'), xScaleHome, yScale, homeTeamColor);
-
-  }, [homeShots, awayShots, loading, homeTeamColor, awayTeamColor]);
-
-  if (loading) {
-    return <div className="shot-map-loading"><SkeletonLoader height={320} borderRadius={12} /></div>;
+  const crease = (goalX: number, dir: 1 | -1) => {
+    // 6ft crease semicircle at the goal line, opening toward centre ice
+    const [cx, cy] = toPx(goalX, 0)
+    const r = 6
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 0 ${dir === 1 ? 0 : 1} ${cx} ${cy + r}`
   }
-
-  const awayOnGoal = awayShots.filter(s => s.outcome === 'shot_on_goal' || s.outcome === 'goal').length;
-  const homeOnGoal = homeShots.filter(s => s.outcome === 'shot_on_goal' || s.outcome === 'goal').length;
 
   return (
-    <div className="shot-map-kde">
-      <svg ref={svgRef} />
-      <div className="shot-map-kde__summary">
-        <div className="shot-map-kde__summary-item">
-          <span className="shot-map-kde__summary-team">Away:</span>
-          <span className="shot-map-kde__summary-stats">
-            {awayShots.length} attempts, {awayOnGoal} on goal
-          </span>
-        </div>
-        <div className="shot-map-kde__summary-item">
-          <span className="shot-map-kde__summary-team">Home:</span>
-          <span className="shot-map-kde__summary-stats">
-            {homeShots.length} attempts, {homeOnGoal} on goal
-          </span>
+    <>
+    <ChartPanel title="Where the chances came from" subtitle="Shot-attempt density, folded to each team's attacking end · goals marked" expandable={false} autoHeight>
+      <div className="shot-map-kde">
+        <svg viewBox="0 0 200 85" className="shot-map-kde__svg" role="img"
+          aria-label="Shot-attempt density map, away team attacking left, home team attacking right, with goals marked">
+          <defs>
+            <clipPath id={`rink-clip-${gameId}`}>
+              <rect x="0" y="0" width="200" height="85" rx={RX} ry={RX} />
+            </clipPath>
+          </defs>
+
+          {/* boards */}
+          <rect x="0.5" y="0.5" width="199" height="84" rx={RX} ry={RX} className="rink__boards" />
+
+          {/* density, clipped to the rink (§V8c) */}
+          <g clipPath={`url(#rink-clip-${gameId})`}>
+            {model.awayPaths.map((p, i) => <path key={`a${i}`} d={p.d} fill={p.fill} fillOpacity={p.opacity} />)}
+            {model.homePaths.map((p, i) => <path key={`h${i}`} d={p.d} fill={p.fill} fillOpacity={p.opacity} />)}
+          </g>
+
+          {/* markings */}
+          <line x1="100" y1="0" x2="100" y2="85" className="rink__center" />
+          <line x1="75" y1="0" x2="75" y2="85" className="rink__blue" />
+          <line x1="125" y1="0" x2="125" y2="85" className="rink__blue" />
+          <line x1="11" y1="4" x2="11" y2="81" className="rink__goal" />
+          <line x1="189" y1="4" x2="189" y2="81" className="rink__goal" />
+          <path d={crease(-89, 1)} className="rink__crease" />
+          <path d={crease(89, -1)} className="rink__crease" />
+          {[[69, 22], [69, -22], [-69, 22], [-69, -22], [20, 22], [20, -22], [-20, 22], [-20, -22]].map(([x, y], i) => {
+            const [cx, cy] = toPx(x, y)
+            return <circle key={i} cx={cx} cy={cy} r={1.1} className="rink__faceoff" />
+          })}
+          <circle cx="100" cy="42.5" r="1.3" className="rink__faceoff" />
+
+          {/* goals — click for detail (item 5) */}
+          {model.goals.map((g, i) => {
+            const [cx, cy] = toPx(g.x, g.y)
+            return (
+              <circle
+                key={`g${i}`} cx={cx} cy={cy} r={2.2} className="rink__goal-dot" style={{ cursor: 'pointer' }}
+                onClick={(e) => setPopup({
+                  anchor: { x: e.clientX, y: e.clientY },
+                  goal: goalMap.get(`${g.src.scorer_id}:${g.src.time_in_period}`) ?? {
+                    scorerId: g.src.scorer_id, scorerName: g.src.scorer_name, teamAbbrev: g.team,
+                    periodLabel: g.src.period != null ? `P${g.src.period}` : '',
+                    timeInPeriod: g.src.time_in_period,
+                    assists: [g.src.assist1_name, g.src.assist2_name].filter(Boolean) as string[],
+                  },
+                })}
+              >
+                <title>{g.src.scorer_name ?? 'Goal'}</title>
+              </circle>
+            )
+          })}
+        </svg>
+
+        <div className="shot-map-kde__labels">
+          <span className="shot-map-kde__label">{awayTeamAbbrev} · {model.awayN.length} attempts <em>(attacking left)</em></span>
+          <span className="shot-map-kde__label shot-map-kde__label--home">{homeTeamAbbrev} · {model.homeN.length} attempts <em>(attacking right)</em></span>
         </div>
       </div>
-    </div>
-  );
-}
-
-function drawRink(g: d3.Selection<SVGGElement, unknown, null, undefined>, width: number, height: number) {
-  const rinkGroup = g.append('g').attr('class', 'rink');
-
-  // Ice surface background
-  rinkGroup
-    .append('rect')
-    .attr('x', 0)
-    .attr('y', 0)
-    .attr('width', width)
-    .attr('height', height)
-    .attr('fill', 'var(--color-bg-base)');
-
-  // Center line
-  rinkGroup
-    .append('line')
-    .attr('x1', width / 2)
-    .attr('y1', 50)
-    .attr('x2', width / 2)
-    .attr('y2', height - 50)
-    .attr('stroke', 'var(--color-border)')
-    .attr('stroke-width', 2);
-
-  // Rink outline
-  rinkGroup
-    .append('rect')
-    .attr('x', 50)
-    .attr('y', 50)
-    .attr('width', width - 100)
-    .attr('height', height - 100)
-    .attr('fill', 'none')
-    .attr('stroke', 'var(--color-border-strong)')
-    .attr('stroke-width', 2)
-    .attr('rx', 28);
-}
-
-// Draw zone markings (goal line, crease, faceoff circles) for one team's half.
-// The net sits near the top of each half (center-ice line is at the bottom).
-function drawRinkMarkings(
-  g: d3.Selection<SVGGElement, unknown, null, undefined>,
-  xLeft: number,
-  xRight: number,
-  height: number
-) {
-  const marks = g.append('g').attr('class', 'rink-marks');
-  const center = (xLeft + xRight) / 2;
-  const line = 'var(--color-border-strong)';
-  const goalLineY = 78;
-
-  // Goal line
-  marks.append('line')
-    .attr('x1', xLeft + 10).attr('y1', goalLineY)
-    .attr('x2', xRight - 10).attr('y2', goalLineY)
-    .attr('stroke', line).attr('stroke-width', 1);
-
-  // Goal crease (semicircle opening toward center ice)
-  marks.append('path')
-    .attr('d', `M ${center - 18} ${goalLineY} A 18 18 0 0 0 ${center + 18} ${goalLineY}`)
-    .attr('fill', 'color-mix(in srgb, var(--color-data-1) 12%, transparent)')
-    .attr('stroke', line).attr('stroke-width', 1);
-
-  // Two faceoff circles in the offensive zone
-  const faceoffY = height * 0.55;
-  const offsetX = (xRight - xLeft) * 0.22;
-  [center - offsetX, center + offsetX].forEach(fx => {
-    marks.append('circle')
-      .attr('cx', fx).attr('cy', faceoffY).attr('r', 26)
-      .attr('fill', 'none').attr('stroke', line).attr('stroke-width', 1);
-    marks.append('circle')
-      .attr('cx', fx).attr('cy', faceoffY).attr('r', 2)
-      .attr('fill', line);
-  });
-}
-
-function drawKDEContours(
-  g: d3.Selection<SVGGElement, unknown, null, undefined>,
-  shots: ShotAttempt[],
-  xScale: d3.ScaleLinear<number, number>,
-  yScale: d3.ScaleLinear<number, number>,
-  _teamColor: string   // R4: density encodes with the heat ramp, never the team colour (law 3)
-) {
-  // Prepare data points
-  const points: [number, number][] = shots.map(s => [xScale(s.x), yScale(Math.abs(s.y))]);
-
-  if (points.length === 0) return;
-
-  // Create contour density
-  const density = d3.contourDensity()
-    .x(d => d[0])
-    .y(d => d[1])
-    .size([800, 400])
-    .bandwidth(20)
-    .thresholds(15);
-
-  const contours = density(points);
-
-  // R4 (§6): density in the HEAT sequential ramp. Colour runs cool→hot with density and opacity
-  // ramps transparent→0.85, so low-density areas fade to the surface in either theme.
-  const heatStops = [1, 2, 3, 4, 5].map((i) =>
-    getComputedStyle(document.documentElement).getPropertyValue(`--oi-seq-heat-${i}`).trim());
-  const heat = d3.scaleLinear<string>()
-    .domain([0, 0.25, 0.5, 0.75, 1])
-    .range(heatStops)
-    .clamp(true);
-
-  const maxValue = d3.max(contours, c => c.value) || 1;
-
-  g.append('g')
-    .attr('class', 'kde-contours')
-    .selectAll('path')
-    .data(contours)
-    .join('path')
-    .attr('d', d3.geoPath())
-    .attr('fill', d => heat(d.value / maxValue))
-    .attr('fill-opacity', d => Math.min(0.85, (d.value / maxValue) * 0.85))
-    .attr('stroke', 'none');
-}
-
-function drawGoalMarkers(
-  g: d3.Selection<SVGGElement, unknown, null, undefined>,
-  goals: ShotAttempt[],
-  xScale: d3.ScaleLinear<number, number>,
-  yScale: d3.ScaleLinear<number, number>,
-  _teamColor: string   // R4: goals read as danger, not the team colour
-) {
-  const goalsGroup = g.append('g').attr('class', 'goals');
-
-  // R4 (§6): goals are danger-filled with a 2px surface halo. Shot-type shapes are kept (a richer
-  // encoding than a plain circle) — the law-relevant change is the danger fill + halo.
-  const fill = 'var(--color-danger)';
-  const halo = 'var(--color-bg-surface)';
-
-  goals.forEach(goal => {
-    const cx = xScale(goal.x);
-    const cy = yScale(Math.abs(goal.y));
-    const shape = getShotTypeShape(goal.shot_type);
-    const r = 6;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let node: d3.Selection<any, unknown, null, undefined>;
-
-    if (shape === 'square') {
-      node = goalsGroup.append('rect')
-        .attr('x', cx - 5).attr('y', cy - 5)
-        .attr('width', 10).attr('height', 10);
-    } else if (shape === 'triangle') {
-      node = goalsGroup.append('polygon')
-        .attr('points', `${cx},${cy - r} ${cx - r},${cy + r} ${cx + r},${cy + r}`);
-    } else if (shape === 'diamond') {
-      node = goalsGroup.append('polygon')
-        .attr('points', `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`);
-    } else if (shape === 'star') {
-      const pts: string[] = [];
-      for (let i = 0; i < 10; i++) {
-        const radius = i % 2 === 0 ? r : r / 2;
-        const angle = (Math.PI / 5) * i - Math.PI / 2;
-        pts.push(`${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`);
-      }
-      node = goalsGroup.append('polygon').attr('points', pts.join(' '));
-    } else {
-      node = goalsGroup.append('circle')
-        .attr('cx', cx).attr('cy', cy).attr('r', r);
-    }
-
-    node
-      .attr('fill', fill)
-      .attr('stroke', halo)
-      .attr('stroke-width', 2)
-      .append('title')
-      .text(() => {
-        const base = `${goal.scorer_name || 'Goal'} - ${goal.shot_type || 'shot'} - P${goal.period} ${goal.time_in_period || ''}`;
-        const xg = xgBreakdownText(goal);
-        return xg ? `${base}\n${xg}` : base;
-      });
-  });
-}
-
-export default function ShotMapKDE(props: ShotMapKDEProps) {
-  const [homeShots, setHomeShots] = useState<ShotAttempt[]>([]);
-  const [awayShots, setAwayShots] = useState<ShotAttempt[]>([]);
-
-  useEffect(() => {
-    const fetchTitleData = async () => {
-      try {
-        const data = await getGameShots(props.gameId, props.situation);
-        setHomeShots(data.home_shots || []);
-        setAwayShots(data.away_shots || []);
-      } catch (err) {
-        console.error('Error fetching shot data for title:', err);
-      }
-    };
-
-    fetchTitleData();
-  }, [props.gameId, props.situation]);
-
-  const title = generateTitle(homeShots, awayShots, props.homeTeamAbbrev, props.awayTeamAbbrev);
-
-  return (
-    <ChartPanel
-      title={title}
-      subtitle="Shot density and goal locations for each team"
-    >
-      <ShotMapKDEChart
-        gameId={props.gameId}
-        homeTeamColor={props.homeTeamColor}
-        awayTeamColor={props.awayTeamColor}
-        situation={props.situation}
-      />
     </ChartPanel>
-  );
+    {popup && <GoalPopup goal={popup.goal} anchor={popup.anchor} onClose={() => setPopup(null)} />}
+    </>
+  )
 }

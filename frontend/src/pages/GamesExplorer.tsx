@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PageLayout, PageCard } from '../components/common';
 import DateStrip from '../components/common/DateStrip';
-import GameOfTheNight from '../components/games/GameOfTheNight';
-import GameCard from '../components/games/GameCard';
+import GameRow from '../components/games/GameRow';
 import GameCardSkeleton from '../components/games/GameCardSkeleton';
 import { getGameDates, getGamesByDate } from '../api/games';
 import { GameDate as GameDateType, Game } from '../api/types';
@@ -152,51 +152,19 @@ function GamesExplorer() {
     }
   };
 
-  // Sort games: Live → Final → Upcoming
-  const sortedGames = [...games].sort((a, b) => {
-    if (a.is_live && !b.is_live) return -1;
-    if (!a.is_live && b.is_live) return 1;
-    if (!a.is_preview && b.is_preview) return -1;
-    if (a.is_preview && !b.is_preview) return 1;
-    return 0;
-  });
-
-  // Select Game of the Night (for completed games)
-  const selectGameOfTheNight = (): Game | null => {
-    const completedGames = games.filter(g => !g.is_preview && !g.is_live);
-
-    // No completed games - no featured game
-    if (completedGames.length === 0) return null;
-
-    // Single game on the date - always feature it
-    if (completedGames.length === 1) return completedGames[0];
-
-    // Multiple games - select based on heuristic
-    // Priority: OT/SO games, then highest combined score
-    const hasOT = completedGames.find(g => g.period && g.period.includes('OT'));
-    if (hasOT) return hasOT;
-
-    // Return the game with the highest combined score
-    return completedGames.reduce((best, current) => {
-      const bestTotal = (best.home_score || 0) + (best.away_score || 0);
-      const currentTotal = (current.home_score || 0) + (current.away_score || 0);
-      return currentTotal > bestTotal ? current : best;
-    }, completedGames[0]);
-  };
-
-  const gameOfTheNight = selectGameOfTheNight();
-
-  // Filter out Game of the Night from the regular grid
-  const gridGames = gameOfTheNight
-    ? sortedGames.filter(g => g.game_id !== gameOfTheNight.game_id)
-    : sortedGames;
+  // Blueprint 2.2: status-grouped sections (LIVE / UPCOMING / FINAL) of scannable rows.
+  const sections: { key: string; label: string; games: Game[] }[] = [
+    { key: 'live', label: 'Live', games: games.filter(g => g.is_live) },
+    { key: 'upcoming', label: 'Upcoming', games: games.filter(g => g.is_preview && !g.is_live) },
+    { key: 'final', label: 'Final', games: games.filter(g => !g.is_preview && !g.is_live) },
+  ].filter(s => s.games.length > 0);
 
   if (datesLoading) {
     return (
       <PageLayout>
         <PageCard
           title="Games"
-          subtitle="Scores, live games, and the night's headline matchup."
+          subtitle="What's on, what happened, and which game deserves your click."
         >
           <div className="games-explorer__grid">
             {[1, 2, 3].map((i) => (
@@ -212,7 +180,7 @@ function GamesExplorer() {
     <PageLayout>
       <PageCard
         title="Games"
-        subtitle="Scores, live games, and the night's headline matchup."
+        subtitle="What's on, what happened, and which game deserves your click."
         controls={
           <DateStrip
             dates={gameDates}
@@ -243,16 +211,24 @@ function GamesExplorer() {
           </div>
         )}
 
-        {!loading && !error && games.length > 0 && (
-          <>
-            {gameOfTheNight && <GameOfTheNight game={gameOfTheNight} />}
+        {!loading && !error && games.length === 0 && (
+          <div className="games-explorer__empty">
+            <p>No games. The board wakes up at puck drop.</p>
+            <Link to="/" className="games-explorer__empty-link">Back to Today →</Link>
+          </div>
+        )}
 
-            <div className="games-explorer__grid">
-              {gridGames.map((game) => (
-                <GameCard key={game.game_id} game={game} />
-              ))}
-            </div>
-          </>
+        {!loading && !error && games.length > 0 && (
+          <div className="games-explorer__sections">
+            {sections.map((s) => (
+              <section key={s.key} className="games-explorer__section">
+                <h2 className="page-region-title">{s.label}</h2>
+                <div className="games-explorer__rows">
+                  {s.games.map((game) => <GameRow key={game.game_id} game={game} />)}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
       </PageCard>
     </PageLayout>
