@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { Link } from 'react-router-dom'
 import { Info, ChevronDown, FileSignature, ArrowRight } from 'lucide-react'
 import {
@@ -255,6 +256,7 @@ function Comparables({ g }: { g: ContractGrade }) {
 }
 
 export default function ContractGrader() {
+  usePageTitle('Contracts')
   const [player, setPlayer] = useState<PlayerSearchResult | null>(null)
   const [contract, setContract] = useState<PlayerContract | null>(null)
   const [actualGrade, setActualGrade] = useState<ContractGrade | null>(null)
@@ -326,8 +328,8 @@ export default function ContractGrader() {
     <PageLayout>
       <div className="cg-page">
         <PageCard
-          title="Contract Grader"
-          subtitle="Grade any deal against a player’s projected production. Production is aged forward, priced by the league market, and compared to the cap hit."
+          title="Contracts"
+          subtitle="Grade any deal against the aging curve and the market."
           controls={
             <Tabs
               options={[{ value: 'grade', label: 'Grade a contract' }, { value: 'leaderboards', label: 'Leaderboards' }]}

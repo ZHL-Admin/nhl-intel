@@ -29,13 +29,14 @@
   align-items: end;
   gap: var(--space-4);
 }
+/* §3.1: page H1 masthead — display serif (display-md 34/40, weight 600). */
 .page-card__title {
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  font-family: var(--font-display);
+  font-size: var(--display-md);
+  line-height: var(--display-md-height);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-text-primary);
-  font-family: var(--font-mono);
   flex-shrink: 0;            /* keep the title intact; the subtitle takes the remaining width */
   margin: 0;
 }

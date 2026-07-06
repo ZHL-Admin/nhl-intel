@@ -1,0 +1,82 @@
+.more-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.more-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  animation: more-sheet-fade 160ms ease;
+}
+
+.more-sheet__panel {
+  position: relative;
+  background: var(--color-bg-surface);
+  border-top-left-radius: var(--radius-xl);   /* §4: sheets radius 16 */
+  border-top-right-radius: var(--radius-xl);
+  border-top: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);               /* §4: overlays use shadow-lg (md/xl retired) */
+  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom, 0));
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: more-sheet-rise 200ms ease;
+}
+
+.more-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.more-sheet__title {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.more-sheet__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.more-sheet__close:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+
+.more-sheet__group { padding: var(--space-2) 0; }
+.more-sheet__group + .more-sheet__group { border-top: 1px solid var(--color-border-subtle); }
+.more-sheet__grouphead {
+  display: block;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.more-sheet__item {
+  display: block;
+  padding: 12px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+.more-sheet__item:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.more-sheet__item--active { color: var(--color-text-primary); font-weight: 600; }
+
+@keyframes more-sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes more-sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }

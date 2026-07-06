@@ -27,10 +27,10 @@ function buildAxes(t: TeamDetail): Axis[] {
   const gd = (t.total_goals_for - t.total_goals_against) / Math.max(1, t.games_played)
   return [
     { key: 'poss', label: 'Possession', pctile: rankPctile(t.cf_pct_rank), value: `${(t.cf_pct * 100).toFixed(1)}% CF` },
-    { key: 'qual', label: 'Chance Quality', pctile: rankPctile(t.xgf_pct_rank), value: xgfShare != null ? `${(xgfShare * 100).toFixed(1)}% xGF` : '—' },
-    { key: 'gen', label: 'Danger Generation', pctile: rankPctile(t.hdcf_per60_rank), value: `${t.hdcf_per60.toFixed(1)} HDCF/60` },
-    { key: 'supp', label: 'Danger Suppression', pctile: rankPctile(t.hdca_per60_rank), value: `${t.hdca_per60.toFixed(1)} HDCA/60` },
-    { key: 'zone', label: 'Zone Control', pctile: rankPctile(t.zone_entry_proxy_success_rate_rank), value: t.zone_entry_proxy_success_rate != null ? `${(t.zone_entry_proxy_success_rate * 100).toFixed(1)}% entries` : '—' },
+    { key: 'qual', label: 'Chance quality', pctile: rankPctile(t.xgf_pct_rank), value: xgfShare != null ? `${(xgfShare * 100).toFixed(1)}% xGF` : '—' },
+    { key: 'gen', label: 'Danger generation', pctile: rankPctile(t.hdcf_per60_rank), value: `${t.hdcf_per60.toFixed(1)} HDCF/60` },
+    { key: 'supp', label: 'Danger suppression', pctile: rankPctile(t.hdca_per60_rank), value: `${t.hdca_per60.toFixed(1)} HDCA/60` },
+    { key: 'zone', label: 'Zone control', pctile: rankPctile(t.zone_entry_proxy_success_rate_rank), value: t.zone_entry_proxy_success_rate != null ? `${(t.zone_entry_proxy_success_rate * 100).toFixed(1)}% entries` : '—' },
     { key: 'fin', label: 'Finishing', pctile: finishing, value: `${gd >= 0 ? '+' : ''}${gd.toFixed(2)} GD/GP` },
   ]
 }

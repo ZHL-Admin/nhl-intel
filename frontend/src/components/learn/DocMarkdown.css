@@ -1,0 +1,80 @@
+/* §8/§3.1: articles read in display serif, 17/28, 680px measure. */
+.doc-md {
+  font-family: var(--font-display);
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  line-height: 28px;
+  max-width: 680px;
+}
+
+.doc-md h1, .doc-md h2, .doc-md h3, .doc-md h4 {
+  color: var(--color-text-primary);
+  line-height: 1.3;
+  margin: var(--space-6) 0 var(--space-3);
+}
+.doc-md h1 { font-size: var(--text-2xl, 28px); margin-top: 0; }
+.doc-md h2 {
+  font-size: var(--text-xl, 22px);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.doc-md h3 { font-size: var(--text-lg); }
+.doc-md h4 { font-size: var(--text-base); }
+
+.doc-md p { margin: 0 0 var(--space-4); }
+.doc-md ul, .doc-md ol { margin: 0 0 var(--space-4); padding-left: var(--space-6); }
+.doc-md li { margin-bottom: var(--space-2); }
+.doc-md li > ul, .doc-md li > ol { margin-top: var(--space-2); }
+
+.doc-md a { color: var(--color-accent); text-decoration: none; }
+.doc-md a:hover { text-decoration: underline; }
+
+.doc-md strong { color: var(--color-text-primary); font-weight: 600; }
+.doc-md em { font-style: italic; }
+
+.doc-md code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--color-bg-elevated);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.doc-md pre {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow-x: auto;
+  margin: 0 0 var(--space-4);
+}
+.doc-md pre code { background: none; padding: 0; font-size: var(--text-sm); }
+
+.doc-md blockquote {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-1) var(--space-4);
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.doc-md hr { border: none; border-top: 1px solid var(--color-border-subtle); margin: var(--space-6) 0; }
+
+/* GFM tables — used heavily in the methodology docs */
+.doc-md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.doc-md thead th {
+  text-align: left;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-border);
+  padding: var(--space-2) var(--space-3);
+}
+.doc-md tbody td {
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--space-2) var(--space-3);
+}
+.doc-md tbody tr:hover { background: var(--color-bg-elevated); }

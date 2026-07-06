@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useSearchParams } from 'react-router-dom'
 import { PageLayout, PageCard, Tabs, Select, SkeletonLoader } from '../components/common'
 import { getOffseasonBoard, getTeamOffseason } from '../api/offseason'
@@ -73,6 +74,7 @@ function TeamDetail({ detail, loading, error, onRetry }: {
 }
 
 export default function Offseason() {
+  usePageTitle('Offseason forecast')
   const [params, setParams] = useSearchParams()
   const [board, setBoard] = useState<RosterForecastRow[] | null>(null)
   const [boardErr, setBoardErr] = useState(false)
@@ -138,8 +140,8 @@ export default function Offseason() {
     <PageLayout>
       <div className="off">
         <PageCard
-          title="Offseason Forecast"
-          subtitle="How each team projects next season from the moves it has made."
+          title="Offseason forecast"
+          subtitle="Projected WAR change for every roster, updated daily."
           controls={
             <div className="off__toolbar">
               <Tabs value={view} onChange={setView}

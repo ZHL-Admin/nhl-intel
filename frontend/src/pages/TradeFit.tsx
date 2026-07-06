@@ -254,15 +254,15 @@ export default function TradeFit() {
 
   const showResult = !!result && !loading
   const shareUrl = player && team
-    ? `${window.location.origin}/tools/trade-fit?player=${player.player_id}.${player.team_abbrev ?? ''}&team=${team.team_id}`
+    ? `${window.location.origin}/studio/trades/fit?player=${player.player_id}.${player.team_abbrev ?? ''}&team=${team.team_id}`
     : ''
 
   return (
     <PageLayout>
       <div className="tf">
         <PageCard
-          title="Player Fit"
-          subtitle="How well does a player fit into a specific team?"
+          title="Find a fit"
+          subtitle="Where would a player help most? Score him against all 32 rosters."
           bodyClassName="tf__body"
         >
         {showResult ? (

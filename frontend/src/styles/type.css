@@ -1,0 +1,49 @@
+/* =============================================================================
+   The Sheet Design System — typography (DS0)
+   Three roles, three families (loaded via Fontsource in main.tsx). Role + scale tokens
+   here; the global tabular-nums rule here. Applying the display serif to specific
+   surfaces is DS2 — this file only defines the vocabulary.
+   ============================================================================= */
+
+:root {
+  /* --- Families: one per role --- */
+  --font-display: 'Source Serif 4 Variable', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Type scale (px sizes kept; 3xl/4xl reduced per §3.2) --- */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 34px;   /* was 40 */
+  --text-4xl: 44px;   /* was 52 */
+
+  /* Line-height companions (previously referenced but undefined → normal) */
+  --text-xs-height: 16px;
+  --text-sm-height: 20px;
+  --text-base-height: 22px;
+  --text-lg-height: 24px;
+  --text-xl-height: 28px;
+  --text-2xl-height: 32px;
+  --text-3xl-height: 40px;
+  --text-4xl-height: 48px;
+
+  /* --- Display roles (serif) --- */
+  --display-lg: 44px;   --display-lg-height: 48px;   /* brand moments, article heroes; ls -0.01em */
+  --display-md: 34px;   --display-md-height: 40px;   /* page H1 */
+  --display-sm: 26px;   --display-sm-height: 32px;   /* band headline, section heroes */
+
+  /* --- Hero numerals (sans, tabular) --- */
+  --stat-lg: 28px;      --stat-lg-height: 32px;
+
+  /* --- The overline: the ONE uppercase element (§3.3) --- */
+  --overline-size: 11px;
+  --overline-weight: 500;
+  --overline-spacing: 0.08em;
+}
+
+/* Every numeral, everywhere, is tabular (§3.2). */
+td, .num, [data-num] { font-variant-numeric: tabular-nums; }

@@ -1,0 +1,169 @@
+/* =============================================================================
+   The Sheet Design System — semantic tokens (DS0)
+   The EXISTING token names, reassigned to the new values. Component CSS keeps working;
+   only values change. Surfaces / text / accent / status are exact literals (§2.2, §2.4);
+   dataviz families reference the --oi-* primitives (theme-aware). New names live here too.
+   ============================================================================= */
+
+:root {
+  /* --- Page surfaces (light) --- */
+  --color-bg-base: #FDFCFA;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #F2F0EA;
+  --color-bg-overlay: #FFFFFF;
+
+  /* --- Borders (light) --- */
+  --color-border: #E4E1D9;
+  --color-border-subtle: #ECE9E2;
+  --color-border-strong: #C9C5BA;
+
+  /* --- Text (light) — muted/secondary darkened to pass 4.5:1 --- */
+  --color-text-primary: #1A1917;
+  --color-text-secondary: #5C5850;
+  --color-text-muted: #79756C;
+  --color-text-inverse: #FFFFFF;
+  --color-text-on-accent: #FFFFFF;
+
+  /* --- Accent: ink (interactive) --- */
+  --color-accent: #1A1917;
+  --color-accent-hover: #403D37;
+  --color-accent-subtle: #F2F0EA;
+
+  /* --- Status + valence (light) --- */
+  --color-success: #1E7F4F;
+  --color-success-bg: #EAF5EF;
+  --color-danger: #C2402F;
+  --color-danger-bg: #FBEEEC;
+  --color-warning: #A9761B;
+  --color-warning-bg: #FBF3E3;
+  --color-live: #DC2626;
+  --color-live-text: #FFFFFF;
+
+  /* --- Dataviz (family primitives; theme-aware via --oi-*) --- */
+  --color-ice-100: var(--oi-ice-100);
+  --color-ice-200: var(--oi-ice-200);
+  --color-ice-300: var(--oi-ice-300);
+  --color-ice-400: var(--oi-ice-400);
+  --color-ice-500: var(--oi-ice-500);
+  --color-ice-600: var(--oi-ice-600);
+  --color-ice-700: var(--oi-ice-700);
+
+  --color-data-1: var(--oi-cat-1);
+  --color-data-2: var(--oi-cat-2);
+  --color-data-3: var(--oi-cat-3);
+  --color-data-4: var(--oi-cat-4);
+  --color-data-5: var(--oi-cat-5);
+  --color-data-6: var(--oi-cat-6);
+  --color-data-neutral: var(--oi-cat-6);
+  --color-data-positive: var(--color-success);
+  --color-data-negative: var(--color-danger);
+
+  --color-div-1: var(--oi-div-1);
+  --color-div-2: var(--oi-div-2);
+  --color-div-3: var(--oi-div-3);
+  --color-div-4: var(--oi-div-4);
+  --color-div-5: var(--oi-div-5);
+  --color-div-6: var(--oi-div-6);
+  --color-div-7: var(--oi-div-7);
+
+  --color-seq-cool-1: var(--oi-seq-cool-1);
+  --color-seq-cool-2: var(--oi-seq-cool-2);
+  --color-seq-cool-3: var(--oi-seq-cool-3);
+  --color-seq-cool-4: var(--oi-seq-cool-4);
+  --color-seq-cool-5: var(--oi-seq-cool-5);
+
+  --color-seq-heat-1: var(--oi-seq-heat-1);
+  --color-seq-heat-2: var(--oi-seq-heat-2);
+  --color-seq-heat-3: var(--oi-seq-heat-3);
+  --color-seq-heat-4: var(--oi-seq-heat-4);
+  --color-seq-heat-5: var(--oi-seq-heat-5);
+
+  /* Data-ink style hooks (§2.3) */
+  --fill-accent: var(--oi-ice-600);
+  --bg-accent: var(--oi-ice-200);
+
+  /* Team primary — set dynamically on team/player pages (identity chrome only). */
+  --color-team-primary: #1A1917;
+
+  /* Focus treatment (universal) */
+  --focus-ring: #4A78E0;
+
+  /* --- Spacing (4-based, unchanged) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* --- Radius: controls/insets 8, cards 12, sheets 16, chips full --- */
+  --radius-sm: 4px;    /* legacy only; new work never uses this */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* --- Elevation: hairlines carry structure; shadows for overlays/PageCard only.
+         shadow-md / shadow-xl are retired from new work (kept for legacy). --- */
+  --shadow-sm: 0 1px 2px 0 rgba(20, 20, 18, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(20, 20, 18, 0.07), 0 2px 4px -1px rgba(20, 20, 18, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(20, 20, 18, 0.10), 0 4px 6px -2px rgba(20, 20, 18, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(20, 20, 18, 0.10), 0 10px 10px -5px rgba(20, 20, 18, 0.04);
+}
+
+html[data-theme="dark"] {
+  /* --- Page surfaces (dark, rebuilt warm) --- */
+  --color-bg-base: #151412;
+  --color-bg-surface: #1C1B18;
+  --color-bg-elevated: #24231F;
+  --color-bg-overlay: #2B2A25;
+
+  /* --- Borders (dark) --- */
+  --color-border: #34322C;
+  --color-border-subtle: #262420;
+  --color-border-strong: #4A473F;
+
+  /* --- Text (dark) --- */
+  --color-text-primary: #F0EEE7;
+  --color-text-secondary: #ABA79C;
+  --color-text-muted: #837F74;
+  --color-text-inverse: #151412;
+  --color-text-on-accent: #151412;
+
+  /* --- Accent (dark) --- */
+  --color-accent: #F0EEE7;
+  --color-accent-hover: #D6D3C9;
+  --color-accent-subtle: #2B2A25;
+
+  /* --- Status + valence (dark) --- */
+  --color-success: #46C286;
+  --color-success-bg: #12291D;
+  --color-danger: #EE7A66;
+  --color-danger-bg: #2E1512;
+  --color-warning: #DFB052;
+  --color-warning-bg: #2B2210;
+  --color-live: #EF4444;
+
+  /* Valence data ink follows the dark status hues */
+  --color-data-positive: var(--color-success);
+  --color-data-negative: var(--color-danger);
+
+  /* Data-ink hooks (dark: fill = ice-400, bg = ice-200-dark) */
+  --fill-accent: var(--oi-ice-400);
+  --bg-accent: var(--oi-ice-200);
+
+  /* Team primary (dark default) */
+  --color-team-primary: #F0EEE7;
+
+  /* Focus ring (dark) */
+  --focus-ring: #6E96EA;
+
+  /* Shadows drop to ~60% since hairlines carry structure (§10) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -2px rgba(0, 0, 0, 0.30);
+}

@@ -23,7 +23,7 @@ type Mode = 'trades' | 'teams-gms' | 'patterns'
 type Kind = 'team' | 'gm'
 const LS_KIND = 'nhlintel.trades.kind'
 const LS_SEL = 'nhlintel.trades.selected'
-const BASE = '/tools/trade-outcomes'
+const BASE = '/studio/trades/history'
 
 function Breadcrumb({ trail }: { trail: { label: string; to?: string }[] }) {
   return (
@@ -86,8 +86,8 @@ export default function TradeOutcomes() {
     <PageLayout>
       <div className="to">
         <PageCard
-          title="Trade outcomes"
-          subtitle="How every NHL trade since 2015-16 actually turned out, in realized WAR. Most ended roughly even — a retrospective on outcomes, not a grade of the decision at the time."
+          title="Trade history"
+          subtitle="Every trade since 2015-16, scored by what actually happened next."
           controls={controls}
         >
           {isLeaf ? (

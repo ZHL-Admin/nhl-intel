@@ -68,3 +68,53 @@ export function deltaClass(v: number | null | undefined): 'pos' | 'neg' | 'zero'
   if (v == null || Math.abs(v) < 1e-9) return 'zero'
   return v > 0 ? 'pos' : 'neg'
 }
+
+/* =============================================================================
+   The Sheet Design System — canonical number/date formats (§5.4). New and touched
+   surfaces call fmt.* instead of inline toFixed (adopted through DS3). A dash ("—")
+   is the single empty marker. Signed formats lead with + or a TRUE minus (−).
+   ============================================================================= */
+const DASH = '—'
+const signed1 = (v: number) => (v < 0 ? MINUS : '+') + Math.abs(v).toFixed(1)
+
+export const fmt = {
+  /** WAR / GAR — signed, 1dp. +2.4 */
+  war: (v?: number | null) => (v == null ? DASH : signed1(v)),
+  /** Ratings — signed, 2dp (per game). +0.68 */
+  rating: (v?: number | null) => (v == null ? DASH : (v < 0 ? MINUS : '+') + Math.abs(v).toFixed(2)),
+  /** Percentages / shares — 1dp + %. Input is a fraction (0.523 → "52.3%"). */
+  pct: (v?: number | null) => (v == null ? DASH : `${(v * 100).toFixed(1)}%`),
+  /** Probabilities — whole %, capped so it never reads 0% or 100%. Input is a fraction. */
+  prob: (v?: number | null) => {
+    if (v == null) return DASH
+    const p = Math.round(v * 100)
+    if (p >= 100) return '>99%'
+    if (p <= 0) return '<1%'
+    return `${p}%`
+  },
+  /** Percentiles — ordinal. 91st */
+  ordinal: (v?: number | null) => (v == null ? DASH : ordinal(v)),
+  /** xG (single shot / game) — 2dp. 0.34 */
+  xg: (v?: number | null) => (v == null ? DASH : v.toFixed(2)),
+  /** Time on ice — m:ss from seconds. 18:42 */
+  toi: (seconds?: number | null) => {
+    if (seconds == null) return DASH
+    const s = Math.max(0, Math.round(seconds))
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  },
+  /** Luck / deserved deltas — signed, 1dp. +4.2 */
+  delta: (v?: number | null) => (v == null ? DASH : signed1(v)),
+  /** Dates — "Mon D" (no year, in-season). Accepts an ISO string or a Date. */
+  date: (d?: string | Date | null) => {
+    if (!d) return DASH
+    const dt = typeof d === 'string' ? new Date(`${d.slice(0, 10)}T00:00:00`) : d
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  },
+  /** Seasons — YYYY-YY. Accepts a start year (2025) or a season-ish string. */
+  season: (startYear?: number | string | null) => {
+    if (startYear == null) return DASH
+    const y = typeof startYear === 'string' ? parseInt(startYear.slice(0, 4), 10) : startYear
+    if (!Number.isFinite(y)) return DASH
+    return `${y}-${String((y + 1) % 100).padStart(2, '0')}`
+  },
+}

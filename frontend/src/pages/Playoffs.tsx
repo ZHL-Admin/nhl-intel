@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { RotateCcw } from 'lucide-react'
 import { PageLayout, PageCard, SkeletonLoader } from '../components/common'
 import { getPlayoffBracket } from '../api/playoffs'
@@ -55,6 +56,7 @@ function Column({ label, scale = 1, children }: { label: string; scale?: number;
 }
 
 export default function Playoffs() {
+  usePageTitle('Playoffs')
   const [bracket, setBracket] = useState<PlayoffBracket | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [picks, setPicks] = useState<Record<string, string>>({})

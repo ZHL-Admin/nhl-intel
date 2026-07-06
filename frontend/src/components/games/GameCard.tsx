@@ -7,9 +7,11 @@ import './GameCard.css'
 
 interface GameCardProps {
   game: Game
+  /** 'compact' renders a small chip for the Today slate/last-night strips (P1 M1/M2). */
+  size?: 'default' | 'compact'
 }
 
-function GameCard({ game }: GameCardProps) {
+function GameCard({ game, size = 'default' }: GameCardProps) {
   const navigate = useNavigate()
   const [homeLogoError, setHomeLogoError] = useState(false)
   const [awayLogoError, setAwayLogoError] = useState(false)
@@ -65,6 +67,41 @@ function GameCard({ game }: GameCardProps) {
     }
 
     return 'Competitive matchup'
+  }
+
+  // Compact chip (P1). Away @ home + start time (upcoming) or score (live/final); the whole chip
+  // links to the game. Win probability is intentionally not shown — the Game payload carries none.
+  if (size === 'compact') {
+    const chipLogo = (abbrev: string, hasError: boolean, onError: () => void) =>
+      hasError
+        ? <span className="game-chip__logo-fallback">{abbrev}</span>
+        : <img className="game-chip__logo" src={getTeamLogoUrl(abbrev)} alt="" onError={onError} />
+    const status = game.is_live
+      ? `${game.period ?? ''}${game.time_remaining ? ` · ${game.time_remaining}` : ''}`.trim()
+      : game.is_preview ? (game.game_time || 'TBD') : 'Final'
+    return (
+      <button type="button" className={`game-chip ${game.is_live ? 'game-chip--live' : ''}`} onClick={handleClick}>
+        <span className="game-chip__row">
+          <span className="game-chip__side">
+            {chipLogo(game.away_team_abbrev, awayLogoError, () => setAwayLogoError(true))}
+            <span className="game-chip__abbrev">{game.away_team_abbrev}</span>
+          </span>
+          <span className="game-chip__mid">
+            {game.is_preview
+              ? <span className="game-chip__at">@</span>
+              : <span className="game-chip__score mono">{game.away_score ?? 0}<i className="game-chip__dash">–</i>{game.home_score ?? 0}</span>}
+          </span>
+          <span className="game-chip__side game-chip__side--home">
+            <span className="game-chip__abbrev">{game.home_team_abbrev}</span>
+            {chipLogo(game.home_team_abbrev, homeLogoError, () => setHomeLogoError(true))}
+          </span>
+        </span>
+        <span className="game-chip__status">
+          {game.is_live && <span className="game-chip__live-dot" />}
+          {status}
+        </span>
+      </button>
+    )
   }
 
   if (game.is_preview) {

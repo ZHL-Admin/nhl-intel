@@ -1,20 +1,23 @@
 /**
- * Rankings (Phase 3.1) — team Power Ratings + Deserved Standings, sharing the Players-page
- * grammar: a consolidated top (short descriptor · mode tabs · one caption · on-demand legend),
- * then a single uniform list of teams. Each row carries a simple single-tone magnitude bar of
- * the TOTAL; the four-component breakdown lives on hover and on the team page (no podium, no
- * always-on legend, no four-way segmentation on the list). Frontend only — existing endpoints.
+ * RatingsViews (P2) — the Power Ratings and Deserved Standings views, moved verbatim out of the old
+ * pages/Rankings.tsx so the Teams index can host them under its view switcher. The row lists, bars,
+ * captions, glossary tooltips, and the power-view colour legend are byte-for-byte the originals
+ * (same class names + RatingsViews.css copied from Rankings.css) — zero visual change. Each view is
+ * self-contained: it fetches its own data and renders its own caption/how/legend + list.
+ *
+ * Frontend only — existing endpoints. No model or pipeline changes.
  */
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, ArrowDown } from 'lucide-react'
-import { PageLayout, PageCard, Tabs, Tooltip, ComponentStackBar, SkeletonLoader } from '../components/common'
-import type { StackSegment } from '../components/common'
-import { getPowerRankings, getDeservedStandings } from '../api/rankings'
-import { PowerRatingRow, DeservedStandingRow } from '../api/types'
-import { RATINGS_GLOSSARY, RATINGS_COMPONENTS } from '../config/metrics'
-import { getTeamLogoUrl } from '../utils/teams'
-import './Rankings.css'
+import { Tooltip, ComponentStackBar, SkeletonLoader } from '../common'
+import type { StackSegment } from '../common'
+import { getPowerRankings, getDeservedStandings } from '../../api/rankings'
+import { PowerRatingRow, DeservedStandingRow } from '../../api/types'
+import { RATINGS_GLOSSARY, RATINGS_COMPONENTS, TRAJECTORY_MEANINGFUL_MOVE } from '../../config/metrics'
+import { METHOD_LINKS } from '../../config/methods'
+import { getTeamLogoUrl } from '../../utils/teams'
+import './RatingsViews.css'
 
 const COMPONENT_META = RATINGS_COMPONENTS
 
@@ -57,7 +60,7 @@ function TeamLogo({ abbrev, size = 26 }: { abbrev?: string | null; size?: number
 
 /** Trajectory arrow shown ONLY for a meaningful 15-day move; blank otherwise (no filler dashes). */
 function TrajInline({ value }: { value?: number | null }) {
-  if (value == null || Math.abs(value) <= 0.03) return null
+  if (value == null || Math.abs(value) <= TRAJECTORY_MEANINGFUL_MOVE) return null
   const up = value > 0
   return (
     <Tooltip content={`${RATINGS_GLOSSARY.trajectory.term}: ${RATINGS_GLOSSARY.trajectory.shortDef}`}>
@@ -85,7 +88,7 @@ function usePowerDomain(rows: PowerRatingRow[]): [number, number] {
   }, [rows])
 }
 
-/** On-demand colour key (component swatches + the bar marks). Lives inside the top card. */
+/** On-demand colour key (component swatches + the bar marks). */
 function PowerLegend() {
   return (
     <div className="rankings__key">
@@ -129,11 +132,47 @@ function PowerRow({ r, rank, domain }: { r: PowerRatingRow; rank: number; domain
   )
 }
 
-function PowerView({ rows }: { rows: PowerRatingRow[] }) {
+function PowerList({ rows }: { rows: PowerRatingRow[] }) {
   const domain = usePowerDomain(rows)
   return (
     <div className="rankings__rows rankings__rows--power">
       {rows.map((r, i) => <PowerRow key={r.team_id} r={r} rank={i + 1} domain={domain} />)}
+    </div>
+  )
+}
+
+/** Full Power Ratings view: caption + how + on-demand legend + list. Self-fetching. */
+export function PowerRatingsView() {
+  const [rows, setRows] = useState<PowerRatingRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [showColors, setShowColors] = useState(false)
+  useEffect(() => {
+    let active = true
+    getPowerRankings().then((r) => active && setRows(r)).catch(() => active && setError('Could not load power ratings.'))
+    return () => { active = false }
+  }, [])
+
+  return (
+    <div className="rankings__view">
+      <div className="rankings__meta">
+        <p className="rankings__caption">{POWER_CAPTION}</p>
+        <div className="rankings__meta-actions">
+          {rows && <span className="rankings__count">{rows.length} teams</span>}
+          <Tooltip content={POWER_HOW}><span className="rankings__how">How power ratings work</span></Tooltip>
+          <Link to={METHOD_LINKS.power} className="rankings__how-link">Full method →</Link>
+          <button
+            type="button"
+            className={`rankings__colors${showColors ? ' rankings__colors--on' : ''}`}
+            onClick={() => setShowColors((s) => !s)}
+            aria-expanded={showColors}
+          >
+            Legend
+          </button>
+        </div>
+      </div>
+      {showColors && <PowerLegend />}
+      {error && <p className="rankings__msg">{error}</p>}
+      {!error && (rows ? <PowerList rows={rows} /> : <SkeletonLoader />)}
     </div>
   )
 }
@@ -181,7 +220,7 @@ function DeservedRow({ r, rank, domain }: { r: DeservedStandingRow; rank: number
   )
 }
 
-function DeservedView({ rows }: { rows: DeservedStandingRow[] }) {
+function DeservedList({ rows }: { rows: DeservedStandingRow[] }) {
   const domain = useLuckDomain(rows)
   return (
     <div className="rankings__rows rankings__rows--deserved">
@@ -190,78 +229,28 @@ function DeservedView({ rows }: { rows: DeservedStandingRow[] }) {
   )
 }
 
-/* ============================================================================
-   Page
-   ============================================================================ */
-export default function Rankings() {
-  const [tab, setTab] = useState<'power' | 'deserved'>('power')
-  const [power, setPower] = useState<PowerRatingRow[] | null>(null)
-  const [deserved, setDeserved] = useState<DeservedStandingRow[] | null>(null)
+/** Full Deserved Standings view: caption + how + list. Self-fetching. */
+export function DeservedStandingsView() {
+  const [rows, setRows] = useState<DeservedStandingRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showColors, setShowColors] = useState(false)
-
   useEffect(() => {
     let active = true
-    Promise.all([getPowerRankings(), getDeservedStandings()])
-      .then(([p, d]) => { if (active) { setPower(p); setDeserved(d) } })
-      .catch(() => { if (active) setError('Could not load rankings.') })
+    getDeservedStandings().then((r) => active && setRows(r)).catch(() => active && setError('Could not load deserved standings.'))
     return () => { active = false }
   }, [])
 
-  const loading = !power || !deserved
-  const count = tab === 'power' ? power?.length : deserved?.length
-
   return (
-    <PageLayout>
-      <div className="rankings">
-        <PageCard
-          title="Rankings"
-          subtitle="Team strength by net goals per game, with the luck stripped out."
-          controls={
-            <div className="rankings__toolbar">
-              <div className="rankings__bar">
-                <Tabs
-                  options={[
-                    { value: 'power', label: 'Power Ratings' },
-                    { value: 'deserved', label: 'Deserved Standings' },
-                  ]}
-                  value={tab}
-                  onChange={(v) => setTab(v as 'power' | 'deserved')}
-                />
-                {!loading && count != null && <span className="rankings__count">{count} teams</span>}
-              </div>
-
-              <div className="rankings__meta">
-                <p className="rankings__caption">{tab === 'power' ? POWER_CAPTION : DESERVED_CAPTION}</p>
-                <div className="rankings__meta-actions">
-                  <Tooltip content={tab === 'power' ? POWER_HOW : DESERVED_HOW}>
-                    <span className="rankings__how">
-                      {tab === 'power' ? 'How power ratings work' : 'How deserved points work'}
-                    </span>
-                  </Tooltip>
-                  {tab === 'power' && (
-                    <button
-                      type="button"
-                      className={`rankings__colors${showColors ? ' rankings__colors--on' : ''}`}
-                      onClick={() => setShowColors((s) => !s)}
-                      aria-expanded={showColors}
-                    >
-                      Legend
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {tab === 'power' && showColors && <PowerLegend />}
-            </div>
-          }
-        >
-          {error && <p className="rankings__msg">{error}</p>}
-          {loading && !error && <SkeletonLoader />}
-          {!loading && tab === 'power' && <PowerView rows={power!} />}
-          {!loading && tab === 'deserved' && <DeservedView rows={deserved!} />}
-        </PageCard>
+    <div className="rankings__view">
+      <div className="rankings__meta">
+        <p className="rankings__caption">{DESERVED_CAPTION}</p>
+        <div className="rankings__meta-actions">
+          {rows && <span className="rankings__count">{rows.length} teams</span>}
+          <Tooltip content={DESERVED_HOW}><span className="rankings__how">How deserved points work</span></Tooltip>
+          <Link to={METHOD_LINKS.deserved} className="rankings__how-link">Full method →</Link>
+        </div>
       </div>
-    </PageLayout>
+      {error && <p className="rankings__msg">{error}</p>}
+      {!error && (rows ? <DeservedList rows={rows} /> : <SkeletonLoader />)}
+    </div>
   )
 }

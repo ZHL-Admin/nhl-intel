@@ -661,6 +661,28 @@ with DAG(
         env=_dbt_env,
     )
 
+    # Player Assessment (Layer 1): tier + confidence + role, one row per (player, window). Reads the
+    # value lenses + archetypes; skater point estimate from config.ASSESSMENT["POINT_ESTIMATOR"]
+    # (bakeoff winner c2_roster_player), goalies carry goalie_gar through. Weekly.
+    compute_assessment = BashOperator(
+        task_id="compute_assessment",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_assessment"),
+        env=_dbt_env,
+    )
+
+    # Context layer (Layer 2). prior-quality = each skater's prior-season Marcel WAR rate (feeds
+    # QoC/QoT), then the QoC/QoT mart is built by dbt. Weekly.
+    compute_prior_quality = BashOperator(
+        task_id="compute_prior_quality",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.compute_prior_quality"),
+        env=_dbt_env,
+    )
+    build_quality_context = BashOperator(
+        task_id="build_quality_context",
+        bash_command=_mon.format(f"{_dbt} --select mart_player_quality_context"),
+        env=_dbt_env,
+    )
+
     # Player Verdict (Workstream B): Gemini narrates the deterministic two-horizon payload, the
     # consistency checker verifies every cited number, and passing reads land in player_verdict.
     # The written paragraph regenerates WEEKLY scoped to players who played in the last 7 days
@@ -806,6 +828,16 @@ with DAG(
     # Goalie GAR off the marts; per-player Overall needs both value lenses for skaters and goalies.
     run_dbt_marts >> compute_goalie_gar >> generate_report
     [compute_gar, compute_composite, compute_goalie_gar, compute_goalie_radar] >> compute_overall >> generate_report
+    # Player Assessment: downstream of both value lenses + archetypes; upstream of the verdict
+    # payload (which cites tier/confidence) and, via generate_report, the precompute/export gate that
+    # serves the player_assessment table (spec Section 11).
+    [compute_gar, compute_goalie_gar, write_archetypes] >> compute_assessment >> generate_report
+    compute_assessment >> generate_verdicts
+    # Context layer (Layer 2): prior-quality (needs player_gar) -> QoC/QoT mart. The mart build is
+    # ALSO downstream of the nightly marts pass so its segment sources are fresh, and it gates the
+    # precompute/export so /context serves current data (spec Section 11, D13 placement).
+    compute_gar >> compute_prior_quality >> build_quality_context >> precompute_serving
+    run_dbt_marts >> build_quality_context
     # Player Verdict: needs the overall block, the current radar, and consistency (identity inputs
     # come from the 3yr impact/archetype tables those depend on). Weekly, scoped to active players.
     [compute_overall, compute_player_radar, compute_consistency] >> generate_verdicts >> generate_report

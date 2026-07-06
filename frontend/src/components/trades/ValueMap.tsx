@@ -40,7 +40,7 @@ export default function ValueMap({ points, onSelect }: {
     <ResponsiveContainer width="100%" height={460}>
       <ScatterChart margin={{ top: 16, right: 24, bottom: 28, left: 8 }}
         role="img" aria-label="Trader value map: value given up versus value gained, in WAR. Points above the diagonal gained more than they gave up.">
-        <CartesianGrid stroke="var(--color-border-subtle)" />
+        <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
         <XAxis type="number" dataKey="x" domain={[0, max]} stroke="var(--color-border)"
           tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}>
           <Label value="Value given up (WAR)" position="insideBottom" dy={16} style={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />

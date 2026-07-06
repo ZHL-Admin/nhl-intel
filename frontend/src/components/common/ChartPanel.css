@@ -37,21 +37,30 @@ html[data-theme="dark"] .chart-panel--flat {
   flex: 1;
 }
 
+/* §3.3 mono overline (the one uppercase element) */
 .chart-panel-section-number {
-  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  font-size: var(--overline-size);
+  font-weight: var(--overline-weight);
+  letter-spacing: var(--overline-spacing);
+  text-transform: uppercase;
   color: var(--color-text-muted);
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
 }
 
+/* §5.1 chart title: sans 15/600 */
 .chart-panel-title {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
+  line-height: var(--text-base-height);
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
 }
 
+/* §5.1 dek: one plain sentence, 13/20 text-secondary */
 .chart-panel-subtitle {
   font-size: var(--text-sm);
+  line-height: var(--text-sm-height);
   color: var(--color-text-secondary);
   margin-top: var(--space-1);
 }

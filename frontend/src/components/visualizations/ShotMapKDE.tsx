@@ -269,7 +269,7 @@ function drawKDEContours(
   shots: ShotAttempt[],
   xScale: d3.ScaleLinear<number, number>,
   yScale: d3.ScaleLinear<number, number>,
-  teamColor: string
+  _teamColor: string   // R4: density encodes with the heat ramp, never the team colour (law 3)
 ) {
   // Prepare data points
   const points: [number, number][] = shots.map(s => [xScale(s.x), yScale(Math.abs(s.y))]);
@@ -286,10 +286,15 @@ function drawKDEContours(
 
   const contours = density(points);
 
-  // Get computed background color from CSS variable
-  const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-base').trim();
+  // R4 (§6): density in the HEAT sequential ramp. Colour runs cool→hot with density and opacity
+  // ramps transparent→0.85, so low-density areas fade to the surface in either theme.
+  const heatStops = [1, 2, 3, 4, 5].map((i) =>
+    getComputedStyle(document.documentElement).getPropertyValue(`--oi-seq-heat-${i}`).trim());
+  const heat = d3.scaleLinear<string>()
+    .domain([0, 0.25, 0.5, 0.75, 1])
+    .range(heatStops)
+    .clamp(true);
 
-  // Draw contours using color-mix blending instead of opacity
   const maxValue = d3.max(contours, c => c.value) || 1;
 
   g.append('g')
@@ -298,14 +303,8 @@ function drawKDEContours(
     .data(contours)
     .join('path')
     .attr('d', d3.geoPath())
-    .attr('fill', d => {
-      const normalized = d.value / maxValue;
-      // At peak density (normalized=1), use full team color
-      // At zero density, use background color
-      // Use color-mix to blend between them
-      const teamColorPercent = Math.round(normalized * 100);
-      return `color-mix(in srgb, ${teamColor} ${teamColorPercent}%, ${bgColor})`;
-    })
+    .attr('fill', d => heat(d.value / maxValue))
+    .attr('fill-opacity', d => Math.min(0.85, (d.value / maxValue) * 0.85))
     .attr('stroke', 'none');
 }
 
@@ -314,11 +313,14 @@ function drawGoalMarkers(
   goals: ShotAttempt[],
   xScale: d3.ScaleLinear<number, number>,
   yScale: d3.ScaleLinear<number, number>,
-  teamColor: string
+  _teamColor: string   // R4: goals read as danger, not the team colour
 ) {
   const goalsGroup = g.append('g').attr('class', 'goals');
 
-  const fill = 'var(--color-bg-surface)';
+  // R4 (§6): goals are danger-filled with a 2px surface halo. Shot-type shapes are kept (a richer
+  // encoding than a plain circle) — the law-relevant change is the danger fill + halo.
+  const fill = 'var(--color-danger)';
+  const halo = 'var(--color-bg-surface)';
 
   goals.forEach(goal => {
     const cx = xScale(goal.x);
@@ -354,7 +356,7 @@ function drawGoalMarkers(
 
     node
       .attr('fill', fill)
-      .attr('stroke', teamColor)
+      .attr('stroke', halo)
       .attr('stroke-width', 2)
       .append('title')
       .text(() => {

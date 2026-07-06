@@ -82,6 +82,13 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
   const wormY = (v: number) => lane2Center - (v / wormMaxAbs) * (LANE_H / 2) * 0.88
   const wormPath = worm.map((d, i) => `${i ? 'L' : 'M'} ${xS(d.game_time_seconds)} ${wormY(d.cumulative_xg_diff)}`).join(' ')
   const finalWorm = worm.length ? worm[worm.length - 1].cumulative_xg_diff : 0
+  // R3 (§6): area between the worm and the zero line, clipped into above/below halves so it fills
+  // success above zero and danger below (12% each).
+  const wormArea = worm.length
+    ? `M ${xS(worm[0].game_time_seconds)} ${lane2Center} ` +
+      worm.map(d => `L ${xS(d.game_time_seconds)} ${wormY(d.cumulative_xg_diff)}`).join(' ') +
+      ` L ${xS(worm[worm.length - 1].game_time_seconds)} ${lane2Center} Z`
+    : ''
 
   // Lane 3 — shot pressure per 60 (home up, away down, mirrored areas)
   const lane3Center = LANE3_TOP + LANE_H / 2
@@ -174,8 +181,18 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
           <text x={W - PAD_R - 2} y={wpY(finalWp) - 6} textAnchor="end" fontSize={11} fontWeight={700} fill={wpLineColor}>{wpLabelTeam} {wpLabelPct}%</text>
         )}
 
-        {/* Lane 2: cumulative xG differential */}
-        <line x1={PAD_L} y1={lane2Center} x2={W - PAD_R} y2={lane2Center} stroke="var(--color-border)" strokeWidth={1} />
+        {/* Lane 2: cumulative xG differential (R3: success above zero, danger below, 12% fills) */}
+        {wormArea && (
+          <>
+            <defs>
+              <clipPath id="tl-worm-above"><rect x={PAD_L} y={LANE2_TOP} width={W - PAD_R - PAD_L} height={lane2Center - LANE2_TOP} /></clipPath>
+              <clipPath id="tl-worm-below"><rect x={PAD_L} y={lane2Center} width={W - PAD_R - PAD_L} height={LANE2_TOP + LANE_H - lane2Center} /></clipPath>
+            </defs>
+            <path d={wormArea} fill="var(--color-success)" fillOpacity={0.12} clipPath="url(#tl-worm-above)" />
+            <path d={wormArea} fill="var(--color-danger)" fillOpacity={0.12} clipPath="url(#tl-worm-below)" />
+          </>
+        )}
+        <line x1={PAD_L} y1={lane2Center} x2={W - PAD_R} y2={lane2Center} stroke="var(--color-border-strong)" strokeWidth={1} />
         <text x={PAD_L + 4} y={lane2Center - 4} fontSize={10} fill="var(--color-text-muted)">Even</text>
         <path d={wormPath} fill="none" stroke="var(--color-text-secondary)" strokeWidth={2} strokeLinejoin="round" />
         {laneLabel(LANE2_TOP, 'Cumulative xG differential')}

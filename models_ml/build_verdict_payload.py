@@ -65,12 +65,37 @@ def _round(v: Any, n: int = 1) -> Optional[float]:
     return None if v is None or (isinstance(v, float) and np.isnan(v)) else round(float(v), n)
 
 
-def _value_tier(pctile: Optional[float]) -> Optional[str]:
-    """Plain value tier (within pool) from the overall percentile — the identity NOUN anchors here."""
-    if pctile is None:
+def _assessment_row(player_id: int, season: str) -> Optional[dict]:
+    """The player's ASSESSMENT for the current season — the identity noun anchors on tier_label (D15).
+    Replaces the retired percentile-to-noun value tier. dependence_* are carried when the columns exist
+    (spec 7.3; currently absent -> None). Returns None if the player has no assessment row this season."""
+    p = bq.project()
+    df = bq.query_df(f"""
+        select tier, tier_label, tier_confidence, tier_prob_within_one, confidence_label,
+               stability_grade, qualified, disqualify_reason, last_played_season,
+               dependence_index, dependence_n_partners
+        from `{p}.nhl_models.player_assessment`
+        where player_id = {player_id} and season_window = '{season}' limit 1
+    """)
+    if df.empty:
         return None
-    return ("elite" if pctile >= 90 else "high-end" if pctile >= 75 else "middle-tier"
-            if pctile >= 50 else "depth" if pctile >= 25 else "fringe")
+    r = df.iloc[0]
+
+    def v(k):
+        val = r.get(k)
+        return None if val is None or (isinstance(val, float) and np.isnan(val)) else val
+
+    return {
+        "tier": v("tier"), "tier_label": v("tier_label"),
+        "tier_confidence": _round(float(v("tier_confidence")), 3) if v("tier_confidence") is not None else None,
+        "tier_prob_within_one": _round(float(v("tier_prob_within_one")), 3) if v("tier_prob_within_one") is not None else None,
+        "confidence_label": v("confidence_label"), "stability_grade": v("stability_grade"),
+        "qualified": (bool(v("qualified")) if v("qualified") is not None else None),
+        "disqualify_reason": v("disqualify_reason"), "last_played_season": v("last_played_season"),
+        "dependence_index": _round(float(v("dependence_index")), 4) if v("dependence_index") is not None else None,
+        "dependence_n_partners": int(v("dependence_n_partners")) if v("dependence_n_partners") is not None else None,
+        "within_one_range_copy": config.ASSESSMENT["WITHIN_ONE_RANGE_COPY"],
+    }
 
 
 # --- league frame for durable-trait percentiles (3yr impact within position), pulled once ----------
@@ -249,9 +274,12 @@ def _current(player_id: int, season: str) -> dict:
         cur["overall"] = {
             "percentile": ov_pctile, "pool": pos_word,
             "production_pctile": prod, "play_driving_pctile": play, "agreement": agree,
-            # value tier (within pool) — the prompt leads the identity noun from THIS, not the cluster.
-            "value_tier": _value_tier(ov_pctile),
         }
+
+    # ASSESSMENT (D15): the identity noun anchors on the assessment tier for THIS season — the
+    # legacy percentile-to-noun value tier is retired. Carries confidence/range/inactive fields the
+    # consistency checker verifies against prose.
+    cur["assessment"] = _assessment_row(player_id, season)
 
     # top traits / watch-outs / style from the current radar
     spokes = _radar_spokes(player_id, season)

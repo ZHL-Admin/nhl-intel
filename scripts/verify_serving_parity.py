@@ -87,6 +87,14 @@ def main() -> int:
         ("get_team_faceoffs", lambda: bq_service.get_team_faceoffs(tid, season)),
         ("get_player_edge", lambda: [bq_service.get_player_edge(pid) or {}]),
         ("get_team_edge", lambda: [bq_service.get_team_edge(tid) or {}]),
+        # Player Assessment (Layer 1) + Context (Layer 2) reads. These pass once the nightly export
+        # populates player_assessment / mart_player_quality_context in the DuckDB serving file.
+        ("player_assessment", lambda: bq_service.query(
+            f"SELECT * FROM {bq_service.get_models_table_id('player_assessment')} "
+            f"WHERE player_id = {pid} ORDER BY season_window")),
+        ("mart_player_quality_context", lambda: bq_service.query(
+            f"SELECT * FROM {bq_service.get_full_table_id('mart_player_quality_context')} "
+            f"WHERE player_id = {pid} ORDER BY season, team_id")),
     ]
 
     n_ok = n_err = 0

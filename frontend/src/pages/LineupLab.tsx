@@ -235,7 +235,7 @@ export default function LineupLab() {
 
   const linePlayers = slots.map((s) => s.player).filter(Boolean) as PlayerSearchResult[]
   const showResult = !!result && !loading
-  const shareUrl = `${window.location.origin}/tools/lineup-lab?${new URLSearchParams(lineParam(linePlayers, lineType)).toString()}`
+  const shareUrl = `${window.location.origin}/studio/lineups/lines?${new URLSearchParams(lineParam(linePlayers, lineType)).toString()}`
 
   const projectPlayers = async (players: PlayerSearchResult[]) => {
     setLoading(true); setError(null); setResult(null)
@@ -334,8 +334,8 @@ export default function LineupLab() {
     <PageLayout>
       <div className="lab">
         <PageCard
-          title="Lineup Lab"
-          subtitle="Build a line and project its 5v5 results from each member’s measured profile — no two players need to have ever shared the ice."
+          title="Line chemistry"
+          subtitle="Project any combination’s expected results before it plays a shift."
           controls={!showResult && !loading ? (
             <div className="lab__build-bar">
               <Tabs

@@ -52,7 +52,7 @@ export default function PlayerDraftLine({ playerId }: { playerId: number }) {
         )}
       </span>
       <span className="pdl__note">
-        Realized value is an estimate for older seasons. <Link to="/tools/draft-value">Draft Value →</Link>
+        Realized value is an estimate for older seasons. <Link to="/studio/draft">Draft Value →</Link>
       </span>
     </div>
   )

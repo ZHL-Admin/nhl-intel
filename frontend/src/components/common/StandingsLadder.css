@@ -41,13 +41,29 @@
   padding-bottom: var(--space-1);
   margin-bottom: var(--space-1);
 }
+/* §6 R9: playoff cut line — 1px danger dashed with a mono "cut" microlabel. */
 .standings-ladder__item.is-cut::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  border-top: 1px dashed var(--color-border-strong);
+  border-top: 1px dashed var(--color-danger);
+}
+.standings-ladder__item.is-cut::before {
+  content: 'cut';
+  position: absolute;
+  right: var(--space-2);
+  bottom: -7px;
+  z-index: 1;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-danger);
+  background: var(--color-bg-surface);
 }
 
 .standings-ladder__row {

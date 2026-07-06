@@ -18,18 +18,20 @@ import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import PlayerRowExpansion from '../components/players/PlayerRowExpansion'
 import DeploymentBoard, { DEPLOYMENT_SITUATIONS } from '../components/players/DeploymentBoard'
 import {
-  PageLayout, PageCard, ComponentStackBar, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar,
+  PageLayout, PageCard, SkeletonLoader, Tabs, Select, PlayerPicker, PlayerAvatar, TierBadge,
 } from '../components/common'
-import type { StackSegment } from '../components/common'
-import { getOverallLeaders } from '../api/players'
-import { getValueRankings, type ValueSort } from '../api/rankings'
-import { ArchetypeRankRow, ValueRankingRow, PlayerSearchResult } from '../api/types'
-import { COMPOSITE_COMPONENTS, VALUE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
+import { getValueRankings } from '../api/rankings'
+import { ValueRankingRow, PlayerSearchResult } from '../api/types'
 import './Players.css'
 
 type Show = 'all' | 'F' | 'D' | 'G'
-type RankBy = 'war' | 'rapm' | 'gar'
-type Palette = { key: string; label: string; color: string }[]
+
+// Separator label = tier label pluralized to the position group (e.g. "Elite defensemen").
+const POS_PLURAL: Record<string, string> = { F: 'forwards', D: 'defensemen', G: 'goalies' }
+function sepLabel(tierLabel: string, pos?: string | null): string {
+  if (tierLabel === 'Elite') return `Elite ${POS_PLURAL[pos ?? ''] ?? 'players'}`
+  return tierLabel.replace(/defenseman$/, 'defensemen').replace(/forward$/, 'forwards').replace(/goalie$/, 'goalies')
+}
 // seasons with value + composite data (newest first)
 const SEASONS = ['2025-26', '2024-25', '2023-24', '2022-23', '2021-22']
 const PAGE_SIZE = 50          // ranked rows per page
@@ -47,46 +49,38 @@ const fmt = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
 interface Row {
   id: number; name?: string | null; team?: string | null; position?: string | null
   entityKind: 'skater' | 'goalie'
-  value: number          // the headline number on the right (WAR / GAR / composite value)
-  unit: string           // 'WAR' | 'GAR' | 'value'
-  band?: number | null   // sd of the headline value (the uncertainty whisker)
-  components: { key: string; value: number }[]
-  war?: number | null    // magnitude for the mixed simple bar
+  value: number          // assessed WAR — the reliability-shrunk estimate we rank + display by (M3.5)
+  unit: string           // 'WAR'
+  band?: number | null   // war_sd (from the assessment) — the ±1 sd interval
+  tier?: string | null
+  tierLabel?: string | null
 }
 
-function segmentsFor(row: Row, palette: Palette): StackSegment[] {
-  const m = new Map(row.components.map((c) => [c.key, c.value]))
-  return palette.map((c) => ({ key: c.key, label: c.label, value: m.get(c.key) ?? 0, color: c.color }))
-}
-
-const mapValueRow = (r: ValueRankingRow, unit: string, value: number, band?: number | null): Row => ({
+const mapValueRow = (r: ValueRankingRow): Row => ({
   id: r.player_id, name: r.player_name, team: r.team_abbrev, position: r.position,
   entityKind: r.entity_kind === 'goalie' ? 'goalie' : 'skater',
-  value, unit, band, components: r.components, war: r.war,
+  value: r.assessed_war ?? r.war, unit: 'WAR', band: r.war_sd,
+  tier: r.tier, tierLabel: r.tier_label,
 })
 
 /* ============================================================================
-   The simple magnitude bar for the mixed list — single tone, entity-kind tinted, with a PROMINENT
-   uncertainty band rendered as an error bar (translucent range + end caps + point tick). The wide
-   goalie bands visibly overlap the rows around them, so the order reads as soft / tier-level.
+   Shared-axis interval bar (M3.5): a thin track over the pool's WAR domain, a ±1 sd band, and a
+   point dot at assessed WAR. Goalie bands are visibly wider (root-shrunk, low-signal), so the order
+   reads as soft / tier-level. No filled magnitude bar; the number and the boundary share one axis.
    ============================================================================ */
-function MagnitudeBar({ row, max }: { row: Row; max: number }) {
-  const x = (v: number) => (max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0)
-  const v = x(row.value)
+function IntervalBar({ row, domain }: { row: Row; domain: [number, number] }) {
+  const [lo, hi] = domain
+  const x = (v: number) => (hi > lo ? Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100)) : 0)
   const sd = row.band ?? 0
-  const lo = x(row.value - sd)
-  const hi = x(row.value + sd)
   return (
-    <span className={`magbar magbar--${row.entityKind}`}>
-      <span className="magbar__fill" style={{ width: `${v}%` }} />
+    <span className={`ixbar ixbar--${row.entityKind}`}>
+      <span className="ixbar__track" />
+      {lo < 0 && <span className="ixbar__zero" style={{ left: `${x(0)}%` }} />}
       {sd > 0 && (
-        <>
-          <span className="magbar__range" style={{ left: `${lo}%`, width: `${Math.max(0, hi - lo)}%` }} />
-          <span className="magbar__cap" style={{ left: `${lo}%` }} />
-          <span className="magbar__cap" style={{ left: `${hi}%` }} />
-        </>
+        <span className={`ixbar__band${row.entityKind === 'goalie' ? ' is-wide' : ''}`}
+          style={{ left: `${x(row.value - sd)}%`, width: `${Math.max(0, x(row.value + sd) - x(row.value - sd))}%` }} />
       )}
-      <span className="magbar__mark" style={{ left: `${v}%` }} />
+      <span className="ixbar__dot" style={{ left: `${x(row.value)}%` }} />
     </span>
   )
 }
@@ -94,8 +88,8 @@ function MagnitudeBar({ row, max }: { row: Row; max: number }) {
 /* ============================================================================
    Leaderboard
    ============================================================================ */
-function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHandled, focusedId, onClearFocus }: {
-  show: Show; rankBy: RankBy; season: string; sort: ValueSort; setSort: (s: ValueSort) => void
+function Leaderboard({ show, season, jumpTarget, onJumpHandled, focusedId, onClearFocus }: {
+  show: Show; season: string
   jumpTarget: PlayerSearchResult | null; onJumpHandled: () => void
   focusedId: number | null; onClearFocus: () => void
 }) {
@@ -115,42 +109,21 @@ function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHa
     return () => window.removeEventListener('keydown', onKey)
   }, [expandedId])
 
-  // resolve the lens that actually applies to the current scope
-  const effRankBy: RankBy = show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)
   const mixed = show === 'all'
-  const palette: Palette = mixed ? [] : show === 'G' ? GOALIE_VALUE_COMPONENTS
-    : effRankBy === 'rapm' ? COMPOSITE_COMPONENTS : VALUE_COMPONENTS
-  // the confidence/point order applies to the value lenses (GAR/WAR), not the RAPM composite lens
-  const sortable = effRankBy !== 'rapm'
-  // identifies which (scope, lens, season, sort) the currently loaded rows came from — used to make
-  // the search-jump wait for the right list before locating a player.
-  const fetchKey = `${show}|${effRankBy}|${season}|${sort}`
+  // identifies which (scope, season) the currently loaded rows came from — used to make the
+  // search-jump wait for the right list before locating a player.
+  const fetchKey = `${show}|${season}`
 
   useEffect(() => {
     let active = true
     setRows(null); setError(null); setExpandedId(null); setPage(0)
-    let req: Promise<Row[]>
-    if (mixed) {
-      req = getValueRankings('all', 'ALL', season, FETCH_ALL, sort).then((rs) => rs.map((r) => mapValueRow(r, 'WAR', r.war, r.war_sd)))
-    } else if (show === 'G') {
-      const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('goalies', 'ALL', season, FETCH_ALL, sort).then((rs) =>
-        rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
-    } else if (effRankBy === 'rapm') {
-      req = getOverallLeaders(show, season, FETCH_ALL).then((rs: ArchetypeRankRow[]) => rs.map((r) => ({
-        id: r.player_id, name: r.player_name, team: r.team_abbrev, position: r.position,
-        entityKind: 'skater' as const, value: r.composite_total, unit: 'value',
-        band: r.composite_total_sd ?? null, components: r.components, war: null,
-      })))
-    } else {
-      const unit = effRankBy === 'gar' ? 'GAR' : 'WAR'
-      req = getValueRankings('skaters', show, season, FETCH_ALL, sort).then((rs) =>
-        rs.map((r) => mapValueRow(r, unit, effRankBy === 'gar' ? r.gar : r.war, effRankBy === 'gar' ? r.gar_sd : r.war_sd)))
-    }
-    req.then((d) => { if (active) { setRows(d); setRowsKey(fetchKey) } })
+    const scope = mixed ? 'all' : show === 'G' ? 'goalies' : 'skaters'
+    const position = (!mixed && show !== 'G') ? show : 'ALL'
+    getValueRankings(scope, position, season, FETCH_ALL).then((rs) => rs.map(mapValueRow))
+      .then((d) => { if (active) { setRows(d); setRowsKey(fetchKey) } })
       .catch(() => active && setError('Could not load rankings.'))
     return () => { active = false }
-  }, [show, effRankBy, season, mixed, sort, fetchKey])
+  }, [show, season, mixed, fetchKey])
 
   // SEARCH: once the rows for the right context have loaded, find the searched player. If they're
   // here, expand them (the focus filter below shows them as the only row); if they're in no ranked
@@ -172,31 +145,23 @@ function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHa
     if (focusedId != null && rows?.some((r) => r.id === focusedId)) setExpandedId(focusedId)
   }, [focusedId, rows])
 
-  // shared scales: a symmetric component-bar domain (filtered) and a max for the magnitude bar (mixed)
-  const { domain, maxMag } = useMemo(() => {
-    let lo = 0, hi = 1, max = 1
-    for (const r of rows ?? []) {
-      let posSum = 0, negSum = 0
-      for (const c of r.components) (c.value >= 0 ? (posSum += c.value) : (negSum += c.value))
-      const sd = r.band ?? 0
-      hi = Math.max(hi, posSum, r.value + sd); lo = Math.min(lo, negSum, r.value - sd)
-      max = Math.max(max, (r.value ?? 0) + sd)
-    }
-    return { domain: [lo, hi * 1.03] as [number, number], maxMag: max }
+  // shared WAR axis for the interval bars (symmetric enough to place the ±sd band + dot)
+  const domain = useMemo(() => {
+    let lo = 0, hi = 1
+    for (const r of rows ?? []) { const sd = r.band ?? 0; hi = Math.max(hi, r.value + sd); lo = Math.min(lo, r.value - sd) }
+    return [lo, hi * 1.03] as [number, number]
+  }, [rows])
+  // tier group sizes (the filtered-view separators' counts)
+  const tierCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const r of rows ?? []) if (r.tier) m[r.tier] = (m[r.tier] ?? 0) + 1
+    return m
   }, [rows])
 
-  // confidence note appended to the value-lens captions so the order is honest about accounting
-  // for uncertainty (goalie bands are wide; a confident skater outranks a noisy goalie of equal WAR)
-  const confNote = sortable && sort === 'confidence'
-    ? ' Ordered by confidence-adjusted value (point − ½ sd), so wide-band goalies rank by what we’re confident they provided.'
-    : ''
-  const caption = (mixed
-    ? 'Wins Above Replacement (WAR) — skaters and goalies on one scale; goalie estimates are reliability-shrunk and bands are wide, so the order is soft.'
-    : show === 'G'
-      ? `Goalie ${effRankBy === 'gar' ? 'GAR — reliability-shrunk goals saved above a replacement backup' : 'WAR — goals saved above replacement, on the shared win scale'}. Goaltending is low-signal: bands are wide, read tiers not exact ranks.`
-      : effRankBy === 'rapm'
-        ? 'Play-Driving — RAPM-based value above replacement (“what tends to repeat”). The bar breaks value into components.'
-        : `${effRankBy === 'gar' ? 'Production — GAR, goals above replacement (“what happened”)' : 'Total value — WAR, on the shared win scale'}. The bar breaks value into components.`) + confNote
+  // one-line caption (M3.5 item e): ranking key + band meaning + qualified count.
+  const caption = mixed
+    ? `Ranked by assessed WAR, the reliability-shrunk estimate — skaters and goalies on one scale. Bands show ±1 sd; goalie bands are wide, so the order is soft. ${rows?.length ?? 0} qualified.`
+    : `Ranked by assessed WAR, the reliability-shrunk estimate${show === 'G' ? ' — goaltending is low-signal, read tiers not exact ranks' : ''}. Bands show ±1 sd. ${rows?.length ?? 0} qualified.`
 
   const nPages = rows ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1
   const safePage = Math.min(page, nPages - 1)
@@ -230,19 +195,6 @@ function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHa
           )}
           {!isFocused && <div className="players__caption-row">
             <p className="players__caption">{caption}</p>
-            {sortable && (
-              <span className="players__order">
-                <Tabs
-                  options={[
-                    { value: 'confidence', label: 'Confidence-adjusted' },
-                    { value: 'point', label: 'Point estimate' },
-                  ]}
-                  value={sort}
-                  onChange={(v) => setSort(v as ValueSort)}
-                />
-              </span>
-            )}
-            {!mixed && <ColorsLegend palette={palette} />}
             <span className="players__count">{rows.length}</span>
           </div>}
 
@@ -250,8 +202,17 @@ function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHa
             {displayRows.map((r, i) => {
               const rank = rankBase + i   // global rank across all pages (0-based)
               const open = expandedId === r.id
+              // Filtered view only: tier separator when the tier changes from the previous ranked row.
+              const prevTier = rank > 0 ? rows![rank - 1].tier : null
+              const sep = !mixed && r.tier && r.tier !== prevTier
               return (
                 <Fragment key={r.id}>
+                  {sep && (
+                    <div className="players__tiersep">
+                      {sepLabel(r.tierLabel ?? r.tier!, r.position)}
+                      <span className="players__tiersep-n"> · {tierCounts[r.tier!] ?? 0}</span>
+                    </div>
+                  )}
                   <button id={`prow-${r.id}`}
                     className={`prow${rank === 0 ? ' prow--lead' : ''}${open ? ' prow--active' : ''}`}
                     onClick={() => toggle(r.id)} aria-expanded={open}>
@@ -262,14 +223,10 @@ function Leaderboard({ show, rankBy, season, sort, setSort, jumpTarget, onJumpHa
                       <span className="prow__meta--header">
                         <span className={`prow__gtag--${r.entityKind} prow__gtag`}>{r.position}</span>
                         <span className="prow__meta">{r.team ? `${r.team}` : ''}</span>
+                        {mixed && r.tierLabel && <TierBadge label={r.tierLabel} size="sm" />}
                       </span>
                     </span>
-                    <span className="prow__bar">
-                      {mixed
-                        ? <MagnitudeBar row={r} max={maxMag} />
-                        : <ComponentStackBar segments={segmentsFor(r, palette)} total={r.value}
-                            domain={domain} se={r.band ?? undefined} />}
-                    </span>
+                    <span className="prow__bar"><IntervalBar row={r} domain={domain} /></span>
                     <span className="prow__total">
                       <span className="prow__total-v">{fmt(r.value)}</span>
                       <span className="prow__total-u">{r.unit}</span>
@@ -337,27 +294,6 @@ function Pagination({ page, nPages, pageStart, shown, total, onPage }: {
   )
 }
 
-/** Inline, click-to-expand colour legend (only meaningful in a filtered, component-bar view). */
-function ColorsLegend({ palette }: { palette: Palette }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <span className="players__colors">
-      <button className="players__colors-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        Legend <ChevronDown size={13} className={open ? 'players__colors-chev--open' : ''} />
-      </button>
-      {open && (
-        <span className="players__legend">
-          {palette.map((c) => (
-            <span key={c.key} className="players__legend-item">
-              <span className="players__swatch" style={{ background: c.color }} />{c.label}
-            </span>
-          ))}
-        </span>
-      )}
-    </span>
-  )
-}
-
 /* The "Divergence board" tab is now a deployment-efficiency tool (actual vs justified usage with a
    situation lens) — its own component. */
 
@@ -367,29 +303,14 @@ function ColorsLegend({ palette }: { palette: Palette }) {
 export default function Players() {
   const [view, setView] = useState<'leaderboard' | 'divergence'>('leaderboard')
   const [show, setShow] = useState<Show>('all')
-  const [rankBy, setRankBy] = useState<RankBy>('war')
   const [season, setSeason] = useState<string>(SEASONS[0])
-  const [sort, setSort] = useState<ValueSort>('confidence')   // confidence-adjusted order by default
   const [situation, setSituation] = useState('all')           // Usage & Value tab's situation filter
   const [methodOpen, setMethodOpen] = useState(false)
   const [jumpTarget, setJumpTarget] = useState<PlayerSearchResult | null>(null)  // search -> locate in list
   const [focusedId, setFocusedId] = useState<number | null>(null)  // search -> show only that player
 
-  // Show and Rank-by are interdependent (only WAR is cross-position-comparable; RAPM is skater-only;
-  // GAR isn't comparable across positions). Rather than disable buttons, keep every button clickable
-  // and gently coerce the OTHER control to a valid combination, so the two always stay consistent.
-  const changeShow = (s: Show) => {
-    setShow(s)
-    if (s === 'all') setRankBy('war')              // mixed list -> WAR is the only valid unit
-    else if (s === 'G' && rankBy === 'rapm') setRankBy('war')  // goalies have no play-driving lens
-  }
-  const changeRankBy = (v: RankBy) => {
-    setRankBy(v)
-    // a position-specific lens can't apply to the mixed (or, for RAPM, goalie) scope — narrow to
-    // a scope where it's meaningful instead of being inert.
-    if (v === 'rapm' && !(show === 'F' || show === 'D')) setShow('F')
-    else if (v === 'gar' && show === 'all') setShow('F')
-  }
+  // M3.5: the index ranks by assessed_war for every scope, so Show just re-scopes the same list.
+  const changeShow = (s: Show) => setShow(s)
 
   // Search a player -> show that player as the only result. Auto-adjust the filters so they're in the
   // loaded list: jump to the leaderboard, the season the search ran against (current), and a Show scope
@@ -445,19 +366,6 @@ export default function Players() {
                     onChange={(v) => changeShow(v as Show)}
                   />
                 </span>
-                <span className="players__divider" />
-                <span className="players__control">
-                  <span className="players__control-lbl">Rank by</span>
-                  <Tabs
-                    options={[
-                      { value: 'war', label: 'Total value', tag: 'WAR' },
-                      { value: 'rapm', label: 'Play-driving', tag: 'RAPM' },
-                      { value: 'gar', label: 'Production', tag: 'GAR' },
-                    ]}
-                    value={show === 'all' ? 'war' : (show === 'G' && rankBy === 'rapm' ? 'war' : rankBy)}
-                    onChange={(v) => changeRankBy(v as RankBy)}
-                  />
-                </span>
                 <span className="players__controls-spacer" />
                 <Select value={season} ariaLabel="Season"
                   options={SEASONS.map((s) => ({ value: s, label: s }))} onChange={setSeason} />
@@ -496,7 +404,7 @@ export default function Players() {
           }
         >
         {view === 'leaderboard'
-          ? <Leaderboard show={show} rankBy={rankBy} season={season} sort={sort} setSort={setSort}
+          ? <Leaderboard show={show} season={season}
               jumpTarget={jumpTarget} onJumpHandled={() => setJumpTarget(null)}
               focusedId={focusedId} onClearFocus={clearFocus} />
           : <DeploymentBoard situation={situation} />}

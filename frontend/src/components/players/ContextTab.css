@@ -1,0 +1,19 @@
+.ctx { display: grid; gap: var(--space-4); }
+.ctx__msg, .ctx__none { color: var(--color-text-secondary); font-size: var(--text-sm); padding: var(--space-3); }
+.ctx__card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-surface); padding: var(--space-4); }
+.ctx__h { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
+.ctx__qoc { display: flex; gap: var(--space-5); }
+.ctx__dial { text-align: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); min-width: 150px; }
+.ctx__dial--muted { opacity: 0.5; }
+.ctx__dial-pct { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ctx__dial-lbl { font-size: var(--text-xs); color: var(--color-text-secondary); margin-top: 2px; }
+.ctx__dial-rate { font-size: 10px; color: var(--color-text-tertiary); margin-top: 4px; }
+.ctx__zones { display: flex; gap: var(--space-4); font-variant-numeric: tabular-nums; }
+.ctx__table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.ctx__table th { text-align: left; font-weight: 600; color: var(--color-text-tertiary); font-size: var(--text-xs); padding: 4px 8px; }
+.ctx__table td { padding: 4px 8px; border-top: 1px solid var(--color-border); font-variant-numeric: tabular-nums; }
+.ctx__muted-row { opacity: 0.55; }
+.ctx__flag { font-size: 10px; color: var(--color-text-tertiary); }
+.ctx__fit { display: flex; align-items: center; gap: var(--space-4); }
+.ctx__fit .ctx__h { margin: 0; }
+.ctx__fit-link { color: var(--color-accent); text-decoration: none; font-size: var(--text-sm); }

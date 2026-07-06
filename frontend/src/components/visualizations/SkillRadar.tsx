@@ -15,8 +15,10 @@ import { RadarSpoke } from '../../api/types'
 import { ordinal } from '../../utils/format'
 import './SkillRadar.css'
 
+// Trait groups recolor to the restrained categorical palette (§6 R5): skill→cat-1, usage→cat-4,
+// style→cat-2, proxy→cat-6 (stone). Tokens, so they follow the theme.
 const TAG_COLOR: Record<string, string> = {
-  skill: '#3b82f6', usage: '#a855f7', style: '#f59e0b', proxy: '#64748b',
+  skill: 'var(--color-data-1)', usage: 'var(--color-data-4)', style: 'var(--color-data-2)', proxy: 'var(--color-data-6)',
 }
 const TAG_LABEL: Record<string, string> = {
   skill: 'Skill', usage: 'Usage', style: 'Style', proxy: 'Proxy',
@@ -72,9 +74,9 @@ export default function SkillRadar({ spokes, baseline, size = 420, compact = fal
     return (
       <div className="skill-radar skill-radar--shape">
         <svg viewBox="0 0 400 258" width="100%" className="skill-radar__svg" role="img">
-          {[27.5, 55, 82.5, 110].map(r => (
-            <circle key={r} cx={CX} cy={CY} r={r}
-              className={r === 55 ? 'skill-radar__ring--med' : 'skill-radar__ring--guide'} />
+          {/* §6 R5: two guide rings only (50th, 90th of R=110); no dashed median ring */}
+          {[55, 99].map(r => (
+            <circle key={r} cx={CX} cy={CY} r={r} className="skill-radar__ring--guide" />
           ))}
           <polygon points={poly} className="skill-radar__poly--shape" />
           {arcs.map(a => (
@@ -114,7 +116,7 @@ export default function SkillRadar({ spokes, baseline, size = 420, compact = fal
   const R = size / 2 - labelMargin
   const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2
   const pt = (i: number, r: number) => [cx + Math.cos(angle(i)) * r, cy + Math.sin(angle(i)) * r]
-  const ringPcts = [25, 50, 75, 100]
+  const ringPcts = [50, 90]   // §6 R5: two rings only (50th, 90th), no inner guide rings
   // pad the viewBox so labels (and compact arc-group labels) live inside it and the SVG scales clean
   const PAD_X = Math.round(size * (compact ? 0.18 : 0.24))
   // full-mode arc-group labels sit outside the ring, so reserve more vertical room when present
@@ -178,10 +180,10 @@ export default function SkillRadar({ spokes, baseline, size = 420, compact = fal
                style={dimNonSkill && s.tag !== 'skill' && hover !== i ? { opacity: 0.42 } : undefined}>
               {/* hover hit area (invisible in compact, where there is no visible dot) */}
               <circle cx={px} cy={py} r={compact ? 9 : (hover === i ? 5 : 3.5)}
-                      style={{ fill: compact ? 'transparent' : (TAG_COLOR[s.tag] ?? '#3b82f6') }}
+                      style={{ fill: compact ? 'transparent' : (TAG_COLOR[s.tag] ?? TAG_COLOR.skill) }}
                       className={compact ? 'skill-radar__hit' : 'skill-radar__dot'} />
               {compact && hover === i && (
-                <circle cx={px} cy={py} r={3.5} style={{ fill: TAG_COLOR[s.tag] ?? '#3b82f6' }} className="skill-radar__dot" />
+                <circle cx={px} cy={py} r={3.5} style={{ fill: TAG_COLOR[s.tag] ?? TAG_COLOR.skill }} className="skill-radar__dot" />
               )}
               <text x={lx} y={ly} textAnchor={anchor as any}
                     className={`skill-radar__spoke-label${compact ? ' skill-radar__spoke-label--compact' : ''}`}

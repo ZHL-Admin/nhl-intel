@@ -656,6 +656,14 @@ class ValueRankingRow(BaseModel):
     gar_sd: Optional[float] = None
     war_sd: Optional[float] = None       # goalies render a VISIBLY wider band (principle 6)
     components: List[CompositeComponent] = []
+    # Player Assessment fields (M3.5 / D14) — ADDITIVE. `war`/`gar` above keep their realized-value
+    # meaning; `assessed_war` is the reliability-shrunk estimate the index RANKS and DISPLAYS by, so
+    # the tier separators and the shown number are the same currency. `war_sd` on these rows is
+    # sourced from player_assessment. Ranked pool = qualified AND active (D13).
+    assessed_war: Optional[float] = None
+    tier: Optional[str] = None
+    tier_label: Optional[str] = None
+    qualified: Optional[bool] = None
 
 
 class ValueNeighbor(BaseModel):
@@ -1870,6 +1878,86 @@ class PlayerWowy(BaseModel):
     player_id: int
     season: str
     partners: List[WowyPartner]
+
+
+class TierProb(BaseModel):
+    """One tier's probability mass in a player's assessed-WAR distribution."""
+    tier: str
+    label: str
+    prob: float
+
+
+class AssessmentProvenance(BaseModel):
+    """Layer-3 receipts for an assessment: pool, sample, measured stability, estimator."""
+    model_config = {"protected_namespaces": ()}   # allow the field name `model_version`
+    pool_size: int
+    pool_floor_desc: str
+    toi_basis_min: float
+    seasons_present: int
+    production_r: float
+    rapm_r: float
+    finishing_r: float
+    point_estimator: str
+    model_version: str
+    within_one_range_copy: float
+    generated_at: Optional[datetime] = None
+    methodology_slug: str = "player-assessment"
+
+
+class PlayerAssessment(BaseModel):
+    """Layer-1 verdict: role-based tier + probability-mass confidence + role, with provenance.
+    Never 404s; unqualified players return qualified=false with null tier fields."""
+    player_id: int
+    season_window: str
+    position: str
+    qualified: bool
+    disqualify_reason: Optional[str] = None      # 'inactive' | 'insufficient_sample' | None (D13)
+    last_played_season: Optional[str] = None
+    tier: Optional[str] = None
+    tier_label: Optional[str] = None
+    tier_confidence: Optional[float] = None
+    confidence_label: Optional[str] = None
+    tier_prob_within_one: Optional[float] = None
+    tier_mode: Optional[str] = None
+    tier_probs: List[TierProb] = []
+    assessed_war: Optional[float] = None
+    war_sd: Optional[float] = None
+    war_p10: Optional[float] = None
+    war_p90: Optional[float] = None
+    stability_grade: Optional[str] = None
+    role_primary: Optional[str] = None
+    role_deployment: Optional[str] = None
+    provenance: AssessmentProvenance
+
+
+class QualityContext(BaseModel):
+    """QoC/QoT: TOI-weighted mean prior-season WAR rate of skaters faced / played with (5v5)."""
+    season: str
+    team_id: Optional[int] = None
+    pos_group: Optional[str] = None
+    qoc_war_rate: Optional[float] = None
+    qot_war_rate: Optional[float] = None
+    qoc_pctile: Optional[float] = None
+    qot_pctile: Optional[float] = None
+    toi_5v5_sec: Optional[float] = None
+
+
+class FitLinks(BaseModel):
+    """Deep-link slugs prefilled with this player for the Player Fit / Lineup Lab tools."""
+    player_fit: str
+    lineup_lab: str
+
+
+class PlayerContext(BaseModel):
+    """Layer-2 context, composed in one fetch: strength splits, zone deployment, QoC/QoT,
+    top-5 WOWY partners, and fit deep-links. Never 404s; absent pieces come back null/empty."""
+    player_id: int
+    season: str
+    strength_splits: List[PlayerSituational] = []
+    zone_deployment: Optional[PlayerZoneDeployment] = None
+    quality: Optional[QualityContext] = None
+    wowy_top: List[WowyPartner] = []
+    fit: FitLinks
 
 
 class PlayerSummary(BaseModel):

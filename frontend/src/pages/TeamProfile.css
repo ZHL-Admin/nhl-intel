@@ -442,7 +442,8 @@
 .team-hd { display: flex; align-items: center; }
 .team-hd__logo { width: auto; height: 150px; object-fit: contain; flex-shrink: 0; }
 .team-hd__id { min-width: 0; }
-.team-hd__name { font-size: var(--text-3xl); font-weight: 700; margin: 0; color: var(--color-text-primary); line-height: 1.05; letter-spacing: -0.01em; }
+/* §3.1: team name in the profile header — display serif. */
+.team-hd__name { font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 600; margin: 0; color: var(--color-text-primary); line-height: 1.05; letter-spacing: -0.01em; }
 .team-hd__context { font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: var(--space-2); }
 .team-hd__divider { border: none; border-top: 1px solid var(--color-border); margin: var(--space-4) 0; }
 .team-hd__hero { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
@@ -454,7 +455,8 @@
 .team-hd__power--r3 { background: var(--color-text-secondary); }
 .team-hd__power--r4 { background: var(--color-danger); }
 /* Generated identity verdict, just under the record line (moved out of the Overview body). */
-.team-hd__verdict { font-size: var(--text-sm); line-height: 1.45; color: var(--color-text-secondary); margin: var(--space-3) 0 0; max-width: 70ch; }
+/* §3.1: verdict reads in display serif. */
+.team-hd__verdict { font-family: var(--font-display); font-size: var(--text-base); line-height: 1.5; color: var(--color-text-secondary); margin: var(--space-3) 0 0; max-width: 70ch; }
 
 .tov { display: flex; flex-direction: column; gap: var(--space-5); }
 .tov-lead { font-size: var(--text-xl); font-weight: 600; line-height: 1.4; color: var(--color-text-primary); margin: 0; max-width: 70ch; }

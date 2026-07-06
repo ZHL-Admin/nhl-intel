@@ -1,0 +1,156 @@
+/* Today (P1) — 12-col grid inside the single PageCard: main (1-8) + rail (9-12). Modules are plain
+   sections (no nested cards), separated by a hairline in the .page-divider idiom. */
+.today {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+.today__main { grid-column: 1 / 9; }
+.today__rail { grid-column: 9 / 13; }
+.today__main,
+.today__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* hairline between stacked modules within a column (the .page-divider look, no element needed) */
+.today__main .today-mod:not(:first-child),
+.today__rail .today-mod:not(:first-child) {
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-6);
+}
+
+.today-mod { min-width: 0; }
+.today-mod__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.today-mod__title { margin: 0; }   /* .page-region-title supplies the type */
+.today-mod__seeall {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.today-mod__seeall:hover { text-decoration: underline; }
+
+/* M1/M2 game strips — horizontal, scroll on overflow */
+.today-strip {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  scrollbar-width: thin;
+}
+.today-strip--scores .game-chip__score { font-size: var(--text-lg); }
+
+/* Movers — two columns of rows */
+.today-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+.today-col__head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.today-list { display: flex; flex-direction: column; }
+
+/* a team row shared by M3/M4/M5 */
+.today-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-1);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text-primary);
+  transition: background 120ms ease;
+}
+.today-row:hover { background: var(--color-bg-elevated); }
+.today-row__logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.today-row__abbrev {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  width: 34px;
+  flex-shrink: 0;
+}
+.today-row__body {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.today-row__val { font-size: var(--text-sm); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.today-row__muted { font-size: var(--text-xs); color: var(--color-text-muted); }
+.today-row__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.today-row__delta.is-up { color: var(--color-success); }
+.today-row__delta.is-down { color: var(--color-danger); }
+
+/* M6 shortcuts */
+.today-shortcuts { display: flex; flex-direction: column; gap: var(--space-2); }
+.today-shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+.today-shortcut:hover { background: var(--color-bg-surface); }
+.today-shortcut__label { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
+.today-shortcut__blurb { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
+
+/* M7 posts */
+.today-post { display: flex; flex-direction: column; gap: 2px; padding: 7px var(--space-1); }
+.today-post__title { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
+
+/* 768–1023: narrow the main, widen the rail */
+@media (max-width: 1023px) and (min-width: 768px) {
+  .today__main { grid-column: 1 / 8; }
+  .today__rail { grid-column: 8 / 13; }
+}
+
+/* < 768: single column in the exact order M1..M7. display:contents flattens the two columns into
+   the .today flex context so `order` can interleave main + rail modules. */
+@media (max-width: 767px) {
+  .today { display: flex; flex-direction: column; gap: var(--space-5); }
+  .today__main, .today__rail { display: contents; }
+
+  /* every module separated the same way once flattened */
+  .today-mod {
+    border-top: 1px solid var(--color-border-subtle);
+    padding-top: var(--space-5);
+  }
+  .today-mod--m1 { order: 1; border-top: none; padding-top: 0; }
+  .today-mod--m2 { order: 2; }
+  .today-mod--m3 { order: 3; }
+  .today-mod--m4 { order: 4; }
+  .today-mod--m5 { order: 5; }
+  .today-mod--m6 { order: 6; }
+  .today-mod--m7 { order: 7; }
+
+  .today-cols { gap: var(--space-4); }
+}

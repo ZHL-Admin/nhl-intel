@@ -16,6 +16,7 @@ import { getPowerRankings } from '../api/rankings'
 import { getTeamGames } from '../api/games'
 import { TeamDetail, TeamTrends, TeamRoster, RosterPlayer, Game, StreakCard, PowerRatingRow, StandingsRow, TeamInsight } from '../api/types'
 import { RATINGS_COMPONENTS } from '../config/metrics'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { getTeamLogoUrl, getTeamName, getTeamColor, formatDateForAPI, formatTOI, setTeamPrimaryColor, clearTeamPrimaryColor } from '../utils/teams'
 import { ordinal } from '../utils/format'
 import { TEAM_SNAPSHOT_GROUPS, snapshotStatView } from '../config/metrics'
@@ -80,6 +81,8 @@ function TeamProfile() {
   // League standings (sliced to the division for the header StandingsLadder) + generated quick insights.
   const [standings, setStandings] = useState<StandingsRow[]>([])
   const [insights, setInsights] = useState<TeamInsight[]>([])
+
+  usePageTitle(teamDetail ? getTeamName(teamDetail.team_abbrev) : undefined)
 
   const [loading, setLoading] = useState(true)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -292,7 +295,7 @@ function TeamProfile() {
 
             {/* Stat cards skeleton */}
             <div className="team-profile__section">
-              <h2 className="team-profile__section-title">Season Snapshot</h2>
+              <h2 className="team-profile__section-title">Season snapshot</h2>
               <div className="team-profile__stat-grid">
                 {[...Array(8)].map((_, i) => (
                   <SkeletonLoader key={i} height={100} />
@@ -366,9 +369,12 @@ function TeamProfile() {
                         <span className="team-hd__record mono">{teamDetail.wins}-{teamDetail.losses}-{teamDetail.otl}</span>
                         <span className="team-hd__pts">{teamDetail.points} PTS</span>
                         {power && (
-                          <span className={`team-hd__power team-hd__power--r${power.rank <= 5 ? '1' : power.rank <= 11 ? '2' : power.rank <= 21 ? '3' : '4'}`}>
+                          <Link
+                            to="/teams?view=power"
+                            className={`team-hd__power team-hd__power--r${power.rank <= 5 ? '1' : power.rank <= 11 ? '2' : power.rank <= 21 ? '3' : '4'}`}
+                          >
                             Power Ranking: #{power.rank} of {power.n}
-                          </span>
+                          </Link>
                         )}
                       </div>
                       <p className="team-hd__verdict">{teamVerdict(teamDetail, streakCard, netRating)}</p>
@@ -543,7 +549,7 @@ function PowerRatingCard({ power }: { power: { row: PowerRatingRow; rank: number
       <div className="tov-power__rows">
         {contribs.map((c) => <ContribRow key={c.label} label={c.label} value={c.value} max={max} />)}
       </div>
-      <Link to="/rankings" className="tov-card__link">Full rankings →</Link>
+      <Link to="/teams?view=power" className="tov-card__link">Full rankings →</Link>
     </div>
   )
 }
@@ -692,7 +698,7 @@ function PerformanceTrendsTab({ teamTrends, trendsError, handleRetryTrends, team
   return (
     <div className="team-profile__content">
       <div className="team-profile__section">
-        <h2 className="team-profile__section-title">Season Trends</h2>
+        <h2 className="team-profile__section-title">Season trends</h2>
         <p className="team-profile__section-sub">Five-game rolling averages over the full season (not controlled by the form toggle above).</p>
         {trendsError ? (
           <div className="team-profile__section-error"><p>{trendsError}</p><button onClick={handleRetryTrends} className="team-profile__retry-button">Retry</button></div>
@@ -738,7 +744,7 @@ function PerformanceTrendsTab({ teamTrends, trendsError, handleRetryTrends, team
 
       {recentGames.length > 0 && (
         <div className="team-profile__section">
-          <h2 className="team-profile__section-title">Last 10 Results</h2>
+          <h2 className="team-profile__section-title">Last 10 results</h2>
           <div className="team-profile__results">
             {recentGames.map((g) => {
               const isHome = g.home_team_id === teamId

@@ -188,3 +188,19 @@ export async function getPlayerDeployment(playerId: number | string): Promise<im
   const r = await apiClient.get(`/players/${playerId}/deployment`)
   return r.data
 }
+
+/** Layer-1 verdict: tier + confidence + role + provenance. Never 404s (unqualified => qualified=false). */
+export async function getPlayerAssessment(playerId: number | string, seasonWindow?: string): Promise<import('./types').PlayerAssessment | null> {
+  try {
+    const r = await apiClient.get(`/players/${playerId}/assessment`, { params: seasonWindow ? { season_window: seasonWindow } : undefined })
+    return r.data
+  } catch { return null }
+}
+
+/** Layer-2 context in one fetch: strength splits, zone, QoC/QoT, top-5 WOWY, fit links. */
+export async function getPlayerContext(playerId: number | string, season?: string): Promise<import('./types').PlayerContext | null> {
+  try {
+    const r = await apiClient.get(`/players/${playerId}/context`, { params: season ? { season } : undefined })
+    return r.data
+  } catch { return null }
+}

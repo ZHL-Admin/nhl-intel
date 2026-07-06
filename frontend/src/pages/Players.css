@@ -212,3 +212,16 @@
   .players__controls { gap: var(--space-2); }
   .players__divider { display: none; }
 }
+
+/* M3.5 shared-axis interval bar (replaces the filled magnitude/component bars) */
+.ixbar { position: relative; display: block; height: 20px; }
+.ixbar__track { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: var(--color-border); transform: translateY(-50%); }
+.ixbar__zero { position: absolute; top: 3px; bottom: 3px; width: 1px; background: var(--color-border); }
+.ixbar__band { position: absolute; top: 50%; height: 8px; transform: translateY(-50%); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.ixbar__band.is-wide { background: color-mix(in srgb, var(--color-accent) 13%, transparent); }
+.ixbar__dot { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; background: var(--color-accent); transform: translate(-50%, -50%); }
+.ixbar--goalie .ixbar__dot { background: var(--color-accent); }
+
+/* M3.5 tier-group separator (filtered view only) */
+.players__tiersep { padding: 6px var(--space-3); font-size: var(--text-xs); font-weight: 700; color: var(--color-text-secondary); background: var(--color-bg-elevated); border-top: 1px solid var(--color-border); }
+.players__tiersep-n { color: var(--color-text-tertiary); font-weight: 500; font-variant-numeric: tabular-nums; }

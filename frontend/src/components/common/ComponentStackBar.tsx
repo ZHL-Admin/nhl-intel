@@ -38,6 +38,9 @@ interface ComponentStackBarProps {
   variant?: 'stacked' | 'total'
   /** Fill colour for the 'total' variant. */
   totalColor?: string
+  /** Per-component year-over-year stability r (from the API, never hardcoded prose) — rendered as a
+   *  receipts tag in the breakdown so the reader sees how repeatable each component is (M4 receipts). */
+  stabilityByKey?: Record<string, number>
 }
 
 const fmtDefault = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2)
@@ -53,6 +56,7 @@ export default function ComponentStackBar({
   variant = 'stacked',
   // Neutral by default so a single-tone total bar is never mistaken for a coloured component.
   totalColor = 'var(--color-data-neutral)',
+  stabilityByKey,
 }: ComponentStackBarProps) {
   const [min, max] = domain
   const span = max - min || 1
@@ -133,6 +137,9 @@ export default function ComponentStackBar({
               <div key={s.key} className="csb-tip__row">
                 <span className="csb-tip__swatch" style={{ background: s.color }} />
                 <span className="csb-tip__label">{s.label}</span>
+                {stabilityByKey && stabilityByKey[s.key] != null && (
+                  <span className="csb-tip__r" title="year-over-year stability">r≈{stabilityByKey[s.key].toFixed(2)}</span>
+                )}
                 <span className="csb-tip__val">{formatValue(s.value)}</span>
               </div>
             ))}

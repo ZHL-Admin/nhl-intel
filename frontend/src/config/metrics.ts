@@ -183,6 +183,13 @@ export const RATINGS_GLOSSARY = {
 } as const
 
 /**
+ * Minimum absolute 15-day rating move worth surfacing as a trajectory arrow. Below this the move
+ * is noise and the arrow is blank (no filler dashes). Shared so the Rankings list and the P2
+ * team-ratings views apply the identical cutoff.
+ */
+export const TRAJECTORY_MEANINGFUL_MOVE = 0.03
+
+/**
  * Power-rating component palette (Phase 3.1) — key -> glossary key, response field, label,
  * colour. Single source shared by the Rankings power stack bars and their legend, mirroring
  * how COMPOSITE_COMPONENTS / VALUE_COMPONENTS drive the player stacks.

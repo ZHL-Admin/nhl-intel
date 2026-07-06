@@ -209,8 +209,8 @@ export default function RosterBuilder() {
     <PageLayout>
       <div className="rb">
         <PageCard
-          title="Roster Builder"
-          subtitle="Build any roster from a depth chart and project it forward. The headline is the change vs the real roster — reliable, because shared players cancel; projected points is a banded forward projection, not a measured rating."
+          title="Roster moves"
+          subtitle="Evaluate or suggest roster changes against team needs."
         >
           <TeamBar teamId={teamId} onSelect={onSelectTeam} evaluating={evaluating}
                    onOptimize={autoOptimize} onReset={resetToCurrent} />

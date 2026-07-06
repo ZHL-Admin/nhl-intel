@@ -18,12 +18,10 @@ interface PercentileBarListProps {
   items: PercentileBarItem[]
 }
 
-function tone(pctile: number, inverse?: boolean): string {
-  // for normal metrics high percentile = good; inverse flips it
-  const good = inverse ? 1 - pctile : pctile
-  if (good >= 0.66) return 'pct-bar--good'
-  if (good <= 0.33) return 'pct-bar--bad'
-  return 'pct-bar--mid'
+// §6 R7: colour by the 7-stop diverging ramp keyed by "goodness" (good→div-1 blue, bad→div-7 red).
+function divColor(good: number): string {
+  const idx = Math.min(6, Math.max(0, Math.round((1 - good) * 6)))
+  return `var(--color-div-${idx + 1})`
 }
 
 export default function PercentileBarList({ items }: PercentileBarListProps) {
@@ -31,18 +29,21 @@ export default function PercentileBarList({ items }: PercentileBarListProps) {
     <div className="pct-bar-list">
       {items.map((it) => {
         const p = it.percentile ?? null
-        const fill = p == null ? 0 : Math.round(p * 100)
         const valStr =
           it.value == null ? '—' : it.formatValue ? it.formatValue(it.value) : it.value.toFixed(3)
+        // Bars grow center-out from the 50th percentile: right/blue = above average, left/red = below.
+        const good = p == null ? null : (it.inverse ? 1 - p : p)
+        const half = good == null ? 0 : Math.abs(good - 0.5) * 100
+        const left = good == null ? 50 : good >= 0.5 ? 50 : 50 - half
         return (
           <div className="pct-bar-row" key={it.key}>
             <span className="pct-bar-label" title={it.label}>{it.label}</span>
             <span className="pct-bar-track">
-              {p != null && (
-                <span className={`pct-bar-fill ${tone(p, it.inverse)}`} style={{ width: `${fill}%` }} />
+              {good != null && (
+                <span className="pct-bar-fill" style={{ left: `${left}%`, width: `${half}%`, background: divColor(good) }} />
               )}
             </span>
-            <span className="pct-bar-pctile">{p == null ? '—' : `${fill}%`}</span>
+            <span className="pct-bar-pctile">{p == null ? '—' : `${Math.round(p * 100)}%`}</span>
             <span className="pct-bar-value">{valStr}</span>
           </div>
         )

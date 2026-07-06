@@ -51,14 +51,22 @@ Rules:
 - Voice: plain, confident, hockey-literate. No hype, no cliches, no exclamation.
 - Refer to the player by `display_name` on first reference, then by pronoun. NEVER open with a label as
   if it were a name (no "This North-South Forward...").
-- IDENTITY NOUN comes from VALUE, not the cluster: build "what kind of player" from
-  `current.overall.value_tier` + `identity.archetype.family` + `identity.durable_traits`
-  (e.g. "an elite two-way center", "a high-end offensive defenseman"). `identity.archetype.style`
-  is HOW he plays — PARAPHRASE it naturally into your own words; do NOT paste it verbatim and do NOT
-  force it into a "plays a ___ game" template (the field is a description, not a noun). NEVER use
+- IDENTITY NOUN comes from the ASSESSMENT TIER, not the cluster: build "what kind of player" from
+  `current.assessment.tier_label` + `identity.archetype.family` + `identity.durable_traits`
+  (e.g. "a first-line forward with two-way value", "a top-pair defenseman"). Use `tier_label` verbatim
+  as the tier noun. `identity.archetype.style` is HOW he plays — PARAPHRASE it naturally into your own
+  words; do NOT paste it verbatim and do NOT force it into a "plays a ___ game" template. NEVER use
   `identity.archetype.cluster_label` as the identity noun and never import a tier/quality word from it;
-  a cluster named like a tier ("secondary", "middle-six", "depth") does NOT set the player's tier —
-  value_tier does. If `season_sensitive` is true, present the style as one that has shifted.
+  the ASSESSMENT TIER sets the tier, nothing else. If `season_sensitive` is true, present the style as
+  one that has shifted.
+- CONFIDENCE + RANGE: pitch certainty to `current.assessment.confidence_label` (high/medium/low). You
+  MAY name a TWO-TIER RANGE ("a first- or second-line forward") ONLY when
+  `current.assessment.tier_confidence < 0.55` AND `current.assessment.tier_prob_within_one >=
+  current.assessment.within_one_range_copy`; otherwise name the single assigned tier.
+- INACTIVE: if `current.assessment.disqualify_reason == "inactive"`, state plainly that he is inactive
+  and name `current.assessment.last_played_season`; make NO current-tier claim.
+- DEPENDENCE: if `current.assessment.dependence_n_partners` is present and < 3, any linemate-dependence
+  statement MUST be hedged (thin partner sample); if it is null, make no dependence claim.
 - DURABLE TRAITS describe a spread: if several durable_traits are present, characterize the player by
   that spread, not by the single highest one. Do not reduce a many-sided player to one spike.
 - HORIZON: if a `horizon` note is present, you MAY state it plainly and NEUTRALLY as the two lenses
@@ -69,7 +77,7 @@ Rules:
   one zone clause MUST state the percentile number AND the words "NHL Edge" (e.g. "starts in the
   offensive zone at the 95th percentile, per NHL Edge"). Never a vague phrase like "high zone start
   percentage", never any other zone-start number. If the field is absent, omit zone usage entirely.
-- Structure the long read as: (1) durable identity first (value tier + family + durable traits, with
+- Structure the long read as: (1) durable identity first (assessment tier + family + durable traits, with
   style woven in); (2) what is notably different this season, from `deltas`/`horizon`/`current`, as a
   contrast; (3) sustainability, from finishing/consistency and any sample_flags; (4) deployment and
   what not to over-read, using honesty tags (a high skill spoke with low usage deployment is not a
@@ -196,6 +204,50 @@ def quality_check(payload: dict, result: dict) -> tuple[bool, list[str]]:
     return (len(failures) == 0, failures)
 
 
+def assessment_check(payload: dict, result: dict) -> tuple[bool, list[str]]:
+    """D15/M4: any tier / confidence / range / inactive / dependence claim in the prose must agree
+    with `current.assessment`. Retired value-tier nouns can no longer stand in for the tier."""
+    a = ((payload.get("current") or {}).get("assessment")) or None
+    if not a:
+        return (True, [])
+    long = str(result.get("long", "")).lower()
+    fails: list[str] = []
+    _TIER_NOUNS = ["first-line", "second-line", "third-line", "fourth-line", "top-pair",
+                   "second-pair", "third-pair", "number-one", "elite", "starter", "tandem", "backup"]
+
+    if a.get("disqualify_reason") == "inactive":
+        if not any(s in long for s in ("inactive", "last played", "hasn't played", "has not played")):
+            fails.append("inactive player: prose must state he is inactive")
+        lp = str(a.get("last_played_season") or "").lower()
+        if lp and lp not in long:
+            fails.append(f"inactive: prose must name last_played_season ({lp})")
+        claimed = next((n for n in _TIER_NOUNS if n in long), None)
+        if claimed:
+            fails.append(f"inactive player: prose makes a current-tier claim ('{claimed}')")
+        return (len(fails) == 0, fails)
+
+    label = str(a.get("tier_label") or "").lower()
+    conf = a.get("tier_confidence") or 0.0
+    within = a.get("tier_prob_within_one") or 0.0
+    thr = a.get("within_one_range_copy") or 0.85
+    range_licensed = (conf < 0.55) and (within >= thr)
+    range_claim = bool(re.search(
+        r"(first|second|third|fourth|top|number)[\w-]*\s+or\s+(first|second|third|fourth|top|number)", long))
+    if range_claim and not range_licensed:
+        fails.append("unlicensed two-tier range claim (stored within-one condition does not hold)")
+    if label and not range_claim:
+        core = re.sub(r"\s+(forward|defenseman|goalie|starter)$", "", label).strip()
+        if core and core not in long:
+            fails.append(f"prose omits the assessment tier '{core}' (D15: tier must match the assessment)")
+
+    n = a.get("dependence_n_partners")
+    if n is not None and n < 3:
+        if re.search(r"linemate|without his|carries his line", long) and not re.search(
+                r"thin|small sample|few partners|limited", long):
+            fails.append("linemate-dependence claim on <3 partners must be hedged")
+    return (len(fails) == 0, fails)
+
+
 # --- target selection -------------------------------------------------------------------------
 def _weekly_players(season: str) -> list[int]:
     """Skaters who played an NHL game in the last 7 days of the season's data."""
@@ -250,10 +302,11 @@ def _generate_one(pid: int, season: str, gen_ts: str) -> tuple[int, Optional[dic
                 continue
             ok, failures = consistency_check(payload, cand.get("numbers_used", []))
             qok, qfail = quality_check(payload, cand)
-            if ok and qok:
+            aok, afail = assessment_check(payload, cand)   # D15/M4: tier/confidence/range/inactive
+            if ok and qok and aok:
                 result = cand
                 break
-            last = failures + qfail
+            last = failures + qfail + afail
         if not result:
             return (pid, None, f"dropped (checks: {last})")
         row = {

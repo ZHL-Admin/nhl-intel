@@ -125,3 +125,6 @@
   .rankings__rows--deserved { --rrow-cols: 28px 24px 1fr 84px 56px; }
   .rrow__bar { display: none; }
 }
+
+.rankings__how-link { font-size: var(--text-xs); color: var(--color-accent); text-decoration: none; white-space: nowrap; }
+.rankings__how-link:hover { text-decoration: underline; }

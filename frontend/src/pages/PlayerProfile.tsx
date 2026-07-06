@@ -9,6 +9,8 @@ import StripPlot from '../components/visualizations/StripPlot'
 import SkillRadar from '../components/visualizations/SkillRadar'
 import PlayerDraftLine from '../components/players/PlayerDraftLine'
 import ImpactNarrative from '../components/players/ImpactNarrative'
+import AssessmentBand from '../components/players/AssessmentBand'
+import ContextTab from '../components/players/ContextTab'
 import { Target, Activity, ArrowRight } from 'lucide-react'
 import { familyRadar } from '../utils/radar'
 import { playerLabelsFromRadar } from '../api/labels'
@@ -23,6 +25,8 @@ import {
   getPlayerRadar,
   getPlayerPreview,
   getPlayerValueNeighbors,
+  getPlayerAssessment,
+  getPlayerContext,
   getPlayerVerdict,
   getPlayerSituational,
   getPlayerShotQuality,
@@ -42,6 +46,9 @@ import {
   GoalieRadar,
   GoalieSeason,
   PlayerPreview,
+  PlayerAssessment,
+  PlayerContext,
+  PlayerValue,
   ValueNeighborhood,
   RadarSpoke,
   PlayerVerdict,
@@ -106,6 +113,7 @@ function scoutingIdentity(off?: string | null, def?: string | null): string | nu
 // The five tabs (Overview default). Each is its own URL param (?tab=), mirroring the Team page.
 const PLAYER_TABS = [
   { value: 'overview', label: 'Overview' },
+  { value: 'context', label: 'Context' },
   { value: 'impact', label: 'Impact & Value' },
   { value: 'trends', label: 'Trends' },
   { value: 'gamelog', label: 'Game Log' },
@@ -225,6 +233,8 @@ function PlayerProfile() {
   const [goalieSeason, setGoalieSeason] = useState<GoalieSeason | null>(null)
   const [preview, setPreview] = useState<PlayerPreview | null>(null)            // light bio (age, shoots)
   const [neighbors, setNeighbors] = useState<ValueNeighborhood | null>(null)     // header value-ranking slice
+  const [assessment, setAssessment] = useState<PlayerAssessment | null>(null)    // Layer-1 verdict (M3, 3yr window)
+  const [context, setContext] = useState<PlayerContext | null>(null)             // Layer-2 context (M2, /context)
   const [reconciliation, setReconciliation] = useState<PlayerReconciliation | null>(null)
   const [trajectory, setTrajectory] = useState<PlayerTrajectory | null>(null)
   const [playerTrends, setPlayerTrends] = useState<PlayerTrends | null>(null)
@@ -312,10 +322,12 @@ function PlayerProfile() {
   useEffect(() => {
     if (!playerId) return
     let active = true
-    setPreview(null); setNeighbors(null)
+    setPreview(null); setNeighbors(null); setAssessment(null); setContext(null)
     const pid = parseInt(playerId)
     getPlayerPreview(pid, season).then((d) => active && setPreview(d)).catch(() => {})
     getPlayerValueNeighbors(pid, season).then((d) => active && setNeighbors(d)).catch(() => {})
+    getPlayerAssessment(pid).then((d) => active && setAssessment(d)).catch(() => {})   // 3yr window headline
+    getPlayerContext(pid, season).then((d) => active && setContext(d)).catch(() => {})
     return () => { active = false }
   }, [playerId, season])
 
@@ -644,6 +656,9 @@ function PlayerProfile() {
                 return (
                 <div className="player-ov player-ov--stack">
 
+                  {/* [1] Assessment band (Layer 1): tier + confidence + role, the page-level verdict */}
+                  <AssessmentBand assessment={assessment} />
+
                   {/* [2] Season totals: a labeled stat bar on a surface, each cell ranked league-wide */}
                   {(playerDetail.season_totals?.length ?? 0) > 0 && (() => {
                     const gp = playerDetail.games_played ?? goalieSeason?.games_played ?? (stat('gp') as number | undefined)
@@ -864,6 +879,13 @@ function PlayerProfile() {
                 )
               })()}
 
+              {/* ======================= CONTEXT (Layer 2) ======================= */}
+              {currentTab === 'context' && (
+                <div className="player-tab">
+                  <ContextTab context={context} />
+                </div>
+              )}
+
               {/* ======================= IMPACT & VALUE ======================= */}
               {currentTab === 'impact' && (
                 <div className="player-tab">
@@ -897,7 +919,11 @@ function PlayerProfile() {
                             <span className="player-profile__composite-sd"> ± {gv.war_sd.toFixed(1)}</span> WAR
                           </span>
                         </div>
-                        <ComponentStackBar segments={segs} total={gv.gar} domain={[-d, d]} se={gv.gar_sd ?? undefined} height={26} />
+                        <ComponentStackBar segments={segs} total={gv.gar} domain={[-d, d]} se={gv.gar_sd ?? undefined} height={26}
+                          stabilityByKey={'production_r' in gv
+                            ? (() => { const s = gv as PlayerValue
+                                return { ev_offense: s.production_r, pp: s.production_r, ev_defense: s.rapm_r, pk: s.rapm_r, finishing: s.finishing_r } })()
+                            : undefined} />
                         <div className="player-profile__composite-legend">
                           {GOALIE_VALUE_COMPONENTS.map((c) => (
                             <span key={c.key} className="player-profile__composite-legitem">

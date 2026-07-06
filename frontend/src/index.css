@@ -1,150 +1,14 @@
-/* NHL Analytics Dashboard - Dual Theme Design System */
+/* =============================================================================
+   The Sheet Design System — entry. Token layers first (primitives → semantic → type),
+   then global styles. All design tokens now live in styles/*; this file holds only
+   globals, the reset, texture, focus, and a few layout utilities.
+   ============================================================================= */
+@import './styles/primitives.css';
+@import './styles/semantic.css';
+@import './styles/type.css';
 
-/* Theme transition for smooth switching */
 :root {
   transition: background-color 200ms ease, color 200ms ease;
-}
-
-/* ============================================================================
-   Light Theme (Default)
-   ============================================================================ */
-:root {
-  /* Page surfaces */
-  --color-bg-base: #FFFCFC;
-  --color-bg-surface: #ffffff;
-  --color-bg-elevated: #f2f1ee;
-  --color-bg-overlay: #ffffff;
-
-  /* Borders */
-  --color-border: #e4e2dc;
-  --color-border-subtle: #eeede9;
-  --color-border-strong: #cccac2;
-
-  /* Text */
-  --color-text-primary: #1a1917;
-  --color-text-secondary: #6b6860;
-  --color-text-muted: #a09d96;
-  --color-text-inverse: #ffffff;
-
-  /* Accent */
-  --color-accent: #1a1917;
-  --color-accent-hover: #333129;
-  --color-accent-subtle: #f0ede8;
-
-  /* Status */
-  --color-success: #1a7a4a;
-  --color-success-bg: #edf7f1;
-  --color-danger: #c0392b;
-  --color-danger-bg: #fdf0ee;
-  --color-warning: #b7770d;
-  --color-warning-bg: #fdf6e8;
-
-  /* Live indicator (constant across themes) */
-  --color-live: #dc2626;
-  --color-live-text: #ffffff;
-
-  /* Text that sits on top of a saturated team/accent color fill */
-  --color-text-on-accent: #ffffff;
-
-  /* Data visualization palette */
-  --color-data-1: #2563eb;
-  --color-data-2: #ea580c;
-  --color-data-3: #16a34a;
-  --color-data-4: #9333ea;
-  --color-data-5: #ca8a04;
-  --color-data-neutral: #94a3b8;
-  --color-data-positive: #1a7a4a;
-  --color-data-negative: #c0392b;
-
-  /* Team primary color - set dynamically on team/player pages */
-  --color-team-primary: #1a1917;
-
-  /* Spacing */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-20: 80px;
-
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  --text-xs: 11px;
-  --text-sm: 13px;
-  --text-base: 15px;
-  --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
-  --text-3xl: 40px;
-  --text-4xl: 52px;
-
-  /* Border Radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
-
-  /* Elevation and Shadow */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
-}
-
-/* ============================================================================
-   Dark Theme
-   ============================================================================ */
-html[data-theme="dark"] {
-  /* Page surfaces */
-  --color-bg-base: #14141C;
-  --color-bg-surface: #1C1C24;
-  --color-bg-elevated: #26262E;
-  --color-bg-overlay: #2D2D38;
-
-  /* Borders */
-  --color-border: #333340;
-  --color-border-subtle: #26262E;
-  --color-border-strong: #4D4D5C;
-
-  /* Text */
-  --color-text-primary: #F2F1EE;
-  --color-text-secondary: #B0AFAF;
-  --color-text-muted: #7A7873;
-  --color-text-inverse: #14141C;
-
-  /* Accent */
-  --color-accent: #e8e6f0;
-  --color-accent-hover: #ffffff;
-  --color-accent-subtle: #1a1a35;
-
-  /* Status */
-  --color-success: #34d478;
-  --color-success-bg: #0a2018;
-  --color-danger: #f0614f;
-  --color-danger-bg: #220e0a;
-  --color-warning: #f0b940;
-  --color-warning-bg: #201508;
-
-  /* Data visualization palette - same as light */
-  --color-data-1: #2563eb;
-  --color-data-2: #ea580c;
-  --color-data-3: #16a34a;
-  --color-data-4: #9333ea;
-  --color-data-5: #ca8a04;
-  --color-data-neutral: #94a3b8;
-  --color-data-positive: #34d478;
-  --color-data-negative: #f0614f;
-
-  /* Team primary color - set dynamically */
-  --color-team-primary: #e8e6f0;
 }
 
 /* ============================================================================
@@ -160,7 +24,7 @@ body {
   position: relative;
 }
 
-/* Subtle noise texture overlay */
+/* Subtle grid overlay (accent ink at 0.02) */
 main::before {
   content: "";
   position: fixed;
@@ -168,19 +32,16 @@ main::before {
   left: 0;
   width: 100vw;
   height: 100vh;
-
   background-image:
     linear-gradient(to right, var(--color-accent) 1px, transparent 1px),
     linear-gradient(to bottom, var(--color-accent) 1px, transparent 1px);
-
   background-size: 32px 32px;
-
   opacity: .02;
-
   z-index: -1;
   pointer-events: none;
 }
 
+/* Paper noise (self-hosted; §2.6) */
 body::before {
   content: "";
   position: absolute;
@@ -188,20 +49,35 @@ body::before {
   bottom: 0;
   left: 0;
   right: 0;
-  background-image: url(https://hex.tech/images/light-bkg-noise.webp);
+  background-image: url('./assets/noise.webp');
   background-repeat: repeat;
   background-size: 256px 256px;
   opacity: 0.04;
   z-index: -1;
+  pointer-events: none;
 }
-
-/* Higher opacity for dark theme */
 html[data-theme="dark"] body::before {
   opacity: 0.06;
 }
 
 *, *::before, *::after {
   box-sizing: inherit;
+}
+
+/* Universal focus treatment (§7.1): 2px ring, offset 2, never removed. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Motion honors reduced-motion (§4). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ============================================================================

@@ -3,6 +3,14 @@
   min-height: 100vh;
 }
 
+/* Below 768px the fixed BottomTabBar owns the bottom edge — reserve room so it never covers
+   content or the FooterMeta. 56px bar + safe-area inset. */
+@media (max-width: 768px) {
+  .page-layout {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+  }
+}
+
 .page-layout__container {
   max-width: 1024px;
   margin: 0 auto;

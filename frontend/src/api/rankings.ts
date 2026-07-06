@@ -30,10 +30,10 @@ export async function getValueRankings(
   position: 'ALL' | 'F' | 'D' = 'ALL',
   season?: string,
   limit = 50,
-  sort: ValueSort = 'confidence',
 ): Promise<ValueRankingRow[]> {
+  // M3.5/D14: the endpoint ranks by assessed_war; the deprecated `sort` param is no longer sent.
   const response = await apiClient.get<ValueRankingRow[]>('/rankings/value', {
-    params: { scope, position, limit, sort, ...(season ? { season } : {}) },
+    params: { scope, position, limit, ...(season ? { season } : {}) },
   })
   return response.data
 }

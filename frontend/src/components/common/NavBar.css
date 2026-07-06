@@ -27,12 +27,16 @@
 
 
 .navbar__logo a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-lg);
   line-height: var(--text-lg-height);
   color: var(--color-text-primary);
   font-weight: 600;
   text-decoration: none;
 }
+.navbar__logo svg { color: var(--color-accent); flex-shrink: 0; }
 
 .navbar__links {
   display: flex;
@@ -283,88 +287,15 @@
   font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; flex-shrink: 0;
 }
 
-.navbar__mobile-toggle {
-  display: none;
-  color: var(--color-text-primary);
+/* Below 768px the BottomTabBar owns navigation: the center links collapse away and the bar
+   keeps only logo + search + theme (handoff §2.4). No hamburger — the tab bar replaces it. */
+@media (max-width: 768px) {
+  .navbar__links { display: none; }
+  .navbar__container { gap: var(--space-4); }
+  .navbar__search { width: 160px; }
+  .navbar__search--focused { width: min(260px, 46vw); }
 }
 
-@media (max-width: 640px) {
-  .navbar__links {
-    position: fixed;
-    top: 56px;
-    left: 0;
-    right: 0;
-    flex-direction: column;
-    background-color: var(--color-bg-surface);
-    border-bottom: 1px solid var(--color-border);
-    padding: var(--space-4);
-    gap: var(--space-4);
-    display: none;
-  }
-
-  .navbar__links--open {
-    display: flex;
-  }
-
-  .navbar__link--active::after {
-    display: none;
-  }
-
-  .navbar__actions {
-    display: none;
-  }
-
-  .navbar__mobile-toggle {
-    display: block;
-  }
-
-  .navbar__dropdown { width: 100%; }
-  .navbar__dropdown-trigger { width: 100%; justify-content: flex-start; }
-  .navbar__dropdown-menu {
-    position: static;
-    transform: none;
-    min-width: 0;
-    margin-top: var(--space-3);
-    padding: 0 0 0 var(--space-4);
-    border: none;
-    box-shadow: none;
-    background: none;
-    opacity: 1;
-    visibility: hidden;
-    height: 0;
-    overflow: hidden;
-    gap: var(--space-3);
-  }
-  .navbar__dropdown-menu::before { display: none; }
-  .navbar__dropdown--open .navbar__dropdown-menu {
-    visibility: visible;
-    height: auto;
-    transform: none;
-  }
-
-  /* mega-menu collapses inline on mobile */
-  .navbar__dropdown--mega::after { display: none; }
-  .navbar__mega {
-    position: static;
-    transform: none;
-    width: auto;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-4);
-    margin-top: var(--space-2);
-    padding: var(--space-3) 0 0;
-    border: none;
-    box-shadow: none;
-    background: none;
-    opacity: 1;
-    visibility: hidden;
-    height: 0;
-    overflow: hidden;
-  }
-  .navbar__dropdown--mega.navbar__dropdown--open .navbar__mega {
-    visibility: visible;
-    height: auto;
-    max-height: 60vh;
-    overflow-y: auto;
-    transform: none;
-  }
+@media (max-width: 420px) {
+  .navbar__logo a span { display: none; }
 }

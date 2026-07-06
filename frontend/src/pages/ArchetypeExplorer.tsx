@@ -8,6 +8,7 @@
  * Deep-linkable: ?view=map and ?type=F0 (so archetype tags link straight to a type).
  */
 import { useEffect, useMemo, useState } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageLayout, PageCard, Tabs, SkeletonLoader, PlayerAvatar } from '../components/common'
@@ -130,6 +131,7 @@ function Gallery({ cards, pos, onOpen }: { cards: ArchetypeCard[]; pos: 'F' | 'D
 }
 
 export default function ArchetypeExplorer() {
+  usePageTitle('Archetypes')
   const [cards, setCards] = useState<ArchetypeCard[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [params, setParams] = useSearchParams()

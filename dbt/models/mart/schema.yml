@@ -365,6 +365,37 @@ models:
         description: True when shared time is under 3000 seconds (50 minutes)
         tests: [not_null]
 
+  - name: mart_player_quality_context
+    description: >
+      Quality of Competition / Teammates per (season, player_id, team_id): TOI-weighted mean
+      PRIOR-season WAR rate of skaters faced (QoC) and played with (QoT) at 5v5, plus within-
+      position percentiles. Leak-free (quality from player_prior_quality, each skater's rate as of
+      the previous season). QoC/QoT LEVELS only (spec v1); tercile splits are v1.1.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: pos_group
+        tests:
+          - not_null
+          - accepted_values: {values: ['F', 'D']}
+      - name: toi_5v5_sec
+        description: Focal player's 5v5 seconds (the weight basis)
+        tests: [not_null]
+      - name: qoc_war_rate
+        description: TOI-weighted mean prior-season WAR rate of opposing skaters
+        tests: [not_null]
+      - name: qot_war_rate
+        description: TOI-weighted mean prior-season WAR rate of same-team on-ice skaters
+        tests: [not_null]
+      - name: qoc_pctile
+        description: QoC percentile within (season, pos_group)
+      - name: qot_pctile
+        description: QoT percentile within (season, pos_group)
+
   - name: mart_player_entanglement
     description: >
       Per (season, player_id, team_id) partner-concentration diagnostic for the impact-context

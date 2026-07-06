@@ -31,7 +31,7 @@ class ErrorBoundary extends Component<Props, State> {
           <div className="error-boundary__content">
             <h2 className="error-boundary__title">Something went wrong</h2>
             <p className="error-boundary__message">
-              We encountered an unexpected error. Please refresh the page to try again.
+              Something broke on our end. Refresh to try again.
             </p>
             {import.meta.env.DEV && this.state.error && (
               <details className="error-boundary__details">

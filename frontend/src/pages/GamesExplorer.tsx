@@ -7,6 +7,7 @@ import GameCardSkeleton from '../components/games/GameCardSkeleton';
 import { getGameDates, getGamesByDate } from '../api/games';
 import { GameDate as GameDateType, Game } from '../api/types';
 import { formatDateForAPI } from '../utils/teams';
+import { usePageTitle } from '../hooks/usePageTitle';
 import './GamesExplorer.css';
 
 function GamesExplorer() {
@@ -18,8 +19,9 @@ function GamesExplorer() {
   const [datesLoading, setDatesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  usePageTitle('Games');
+
   useEffect(() => {
-    document.title = 'NHL Intel - Games';
     initializeDates();
   }, []);
 

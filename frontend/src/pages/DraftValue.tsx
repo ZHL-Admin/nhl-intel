@@ -4,6 +4,7 @@
  * an explicit wide-band estimate before 2021. Reuses ChartPanel, PlayerAvatar, Tabs, Tooltip.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
@@ -209,6 +210,7 @@ const POS_TABS = [
 ]
 
 export default function DraftValue() {
+  usePageTitle('Draft value')
   const [curve, setCurve] = useState<PickValueCurveRow[] | null>(null)
   const [summary, setSummary] = useState<DraftTheorySummaryRow[] | null>(null)
   const [boardType, setBoardType] = useState<'steals' | 'busts'>('steals')
@@ -243,8 +245,8 @@ export default function DraftValue() {
     <PageLayout>
       <div className="dv">
         <PageCard
-          title="Draft Value"
-          subtitle="What's a pick actually worth? Measuring what every slot returns. Value is realized production over a player's first 7 seasons."
+          title="Draft value"
+          subtitle="What picks are worth, measured from draft history."
         >
         {/* curve */}
         <section className="dv-section">

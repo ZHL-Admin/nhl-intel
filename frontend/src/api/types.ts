@@ -474,6 +474,10 @@ export interface ValueRankingRow {
   gar_sd?: number | null
   war_sd?: number | null
   components: CompositeComponent[]
+  assessed_war?: number | null
+  tier?: string | null
+  tier_label?: string | null
+  qualified?: boolean | null
 }
 
 export interface CompositeComponent {
@@ -1734,4 +1738,70 @@ export interface RosterSuggestion {
 export interface RosterSuggestResponse {
   slot: string
   suggestions: RosterSuggestion[]
+}
+
+// === Player Assessment (M3) — mirrors backend/models/schemas.py ===
+
+export interface TierProb { tier: string; label: string; prob: number }        // prob 0..1
+
+export interface AssessmentProvenance {
+  pool_size: number
+  pool_floor_desc: string
+  toi_basis_min: number
+  seasons_present: number
+  production_r: number
+  rapm_r: number
+  finishing_r: number
+  point_estimator: string
+  model_version: string
+  within_one_range_copy: number       // range-copy within-one threshold (0.85)
+  generated_at?: string | null
+  methodology_slug: string
+}
+
+export interface PlayerAssessment {
+  player_id: number
+  season_window: string
+  position: string                    // F | D | G | ?
+  qualified: boolean
+  disqualify_reason?: string | null   // 'inactive' | 'insufficient_sample' | null
+  last_played_season?: string | null
+  tier?: string | null
+  tier_label?: string | null
+  tier_confidence?: number | null     // 0..1, raw mass in the assigned tier
+  confidence_label?: string | null    // high | medium | low (low forced for single-season)
+  tier_prob_within_one?: number | null
+  tier_mode?: string | null
+  tier_probs: TierProb[]
+  assessed_war?: number | null
+  war_sd?: number | null
+  war_p10?: number | null
+  war_p90?: number | null
+  stability_grade?: string | null     // A | B | C | D
+  role_primary?: string | null
+  role_deployment?: string | null
+  provenance: AssessmentProvenance
+}
+
+export interface QualityContext {
+  season: string
+  team_id?: number | null
+  pos_group?: string | null
+  qoc_war_rate?: number | null
+  qot_war_rate?: number | null
+  qoc_pctile?: number | null          // null when below the ranking floor (muted in UI)
+  qot_pctile?: number | null
+  toi_5v5_sec?: number | null
+}
+
+export interface FitLinks { player_fit: string; lineup_lab: string }
+
+export interface PlayerContext {
+  player_id: number
+  season: string
+  strength_splits: PlayerSituational[]
+  zone_deployment?: PlayerZoneDeployment | null
+  quality?: QualityContext | null
+  wowy_top: WowyPartner[]
+  fit: FitLinks
 }

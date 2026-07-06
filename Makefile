@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate roster-builder-calibrate roster-player-projection contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
+.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate assessment assessment-validate prior-quality quality-context goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate roster-builder-calibrate roster-player-projection contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -74,6 +74,27 @@ gar:
 	python -m models_ml.compute_gar
 gar-validate:
 	python -m models_ml.validate_gar
+
+# Player Assessment validation harness (Workstream 0, ship gate G1). Read-only: scores the Marcel
+# baseline and the three assessed-WAR candidates (c1_r_shrink / c2_roster_player / c3_blended) on
+# next-season WAR (T1), reports T2/T4, applies the preregistered selection rule, and appends the T1
+# table to docs/methodology/player-assessment.md. Runs against the DuckDB serving file by default.
+# (`assessment` — compute_assessment — lands in M1.)
+assessment-validate:
+	python -m models_ml.validate_assessment
+
+# Player Assessment model (Layer 1): tier + confidence + role, one row per (player, window).
+# Swappable point estimator via config.ASSESSMENT["POINT_ESTIMATOR"] (bakeoff winner c2_roster_player).
+assessment:
+	python -m models_ml.compute_assessment
+
+# Context layer (Layer 2): prior-season quality (feeds QoC/QoT), then the QoC/QoT mart. Weekly.
+# prior-quality reads EXISTING player_gar (prior seasons), so it can run before the marts pass that
+# builds mart_player_quality_context.
+prior-quality:
+	python -m models_ml.compute_prior_quality
+quality-context:
+	cd dbt && dbt run --select mart_player_quality_context --target dev
 
 # Goalie Value GAR/WAR: goals SAVED above a replacement (backup) goalie, on the SAME goals-per-win
 # scale as skaters so goalie + skater WAR share one cross-position list. Read-only over the GSAx

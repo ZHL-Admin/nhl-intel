@@ -14,12 +14,13 @@ import { familyRadar } from '../../utils/radar'
 import OverallSummary from '../common/OverallSummary'
 import PlayerAvatar from '../common/PlayerAvatar'
 import SkeletonLoader from '../common/SkeletonLoader'
-import { getPlayerRadar, getPlayerDetail, getPlayerPreview } from '../../api/players'
+import { getPlayerRadar, getPlayerDetail, getPlayerPreview, getPlayerAssessment } from '../../api/players'
 import { getGoalieRadar, getGoalieSeason, getGoaliePreview } from '../../api/goalies'
 import { playerLabelsFromRadar } from '../../api/labels'
+import TierBadge from '../common/TierBadge'
 import {
   PlayerRadar, GoalieRadar, PlayerDetail, GoalieSeason, PlayerPreview, GoaliePreview, PreviewStat,
-  OverallSummary as OverallData,
+  OverallSummary as OverallData, PlayerAssessment,
 } from '../../api/types'
 import './PlayerRowExpansion.css'
 
@@ -32,8 +33,8 @@ export interface ExpansionTarget {
 }
 
 type Payload =
-  | { kind: 'skater'; radar: PlayerRadar | null; detail: PlayerDetail | null; preview: PlayerPreview | null }
-  | { kind: 'goalie'; radar: GoalieRadar | null; season: GoalieSeason | null; preview: GoaliePreview | null }
+  | { kind: 'skater'; radar: PlayerRadar | null; detail: PlayerDetail | null; preview: PlayerPreview | null; assessment: PlayerAssessment | null }
+  | { kind: 'goalie'; radar: GoalieRadar | null; season: GoalieSeason | null; preview: GoaliePreview | null; assessment: PlayerAssessment | null }
 
 const _cache = new Map<string, Payload>()
 
@@ -90,19 +91,21 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
     if (cached) { setPayload(cached); setLoading(false); return }
     setLoading(true); setPayload(null)
     const run = target.entityKind === 'goalie'
-      ? Promise.allSettled([getGoalieRadar(target.id, season), getGoalieSeason(target.id, season), getGoaliePreview(target.id, season)])
-          .then(([r, s, p]): Payload => ({
+      ? Promise.allSettled([getGoalieRadar(target.id, season), getGoalieSeason(target.id, season), getGoaliePreview(target.id, season), getPlayerAssessment(target.id, season)])
+          .then(([r, s, p, a]): Payload => ({
             kind: 'goalie',
             radar: r.status === 'fulfilled' ? r.value : null,
             season: s.status === 'fulfilled' ? s.value : null,
             preview: p.status === 'fulfilled' ? p.value : null,
+            assessment: a.status === 'fulfilled' ? a.value : null,
           }))
-      : Promise.allSettled([getPlayerRadar(target.id, season), getPlayerDetail(target.id, season), getPlayerPreview(target.id, season)])
-          .then(([r, d, p]): Payload => ({
+      : Promise.allSettled([getPlayerRadar(target.id, season), getPlayerDetail(target.id, season), getPlayerPreview(target.id, season), getPlayerAssessment(target.id, season)])
+          .then(([r, d, p, a]): Payload => ({
             kind: 'skater',
             radar: r.status === 'fulfilled' ? r.value : null,
             detail: d.status === 'fulfilled' ? d.value : null,
             preview: p.status === 'fulfilled' ? p.value : null,
+            assessment: a.status === 'fulfilled' ? a.value : null,
           }))
     run.then((res) => {
       _cache.set(cacheKey, res)
@@ -180,11 +183,14 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
           <div className="pxe__idtext">
             <div className="pxe__name">{target.name ?? target.id}</div>
             <div className="pxe__meta">{meta}</div>
-            {labels && (labels.offensive || labels.defensive || labels.overall) && (
+            {((labels && (labels.offensive || labels.defensive || labels.overall)) || payload.assessment?.tier_label) && (
               <div className="pxe__chips">
-                {labels.offensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.offensive)}`} className="pxe__chip" title={`What is a ${labels.offensive}?`}>{labels.offensive}</Link>}
-                {labels.defensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.defensive)}`} className="pxe__chip pxe__chip--quiet" title={`What is a ${labels.defensive}?`}>{labels.defensive}</Link>}
-                {!labels.offensive && !labels.defensive && labels.overall && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.overall)}`} className="pxe__chip">{labels.overall}</Link>}
+                {payload.assessment?.tier_label && (
+                  <TierBadge label={payload.assessment.tier_label} confidence={payload.assessment.confidence_label} size="sm" />
+                )}
+                {labels?.offensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.offensive)}`} className="pxe__chip" title={`What is a ${labels.offensive}?`}>{labels.offensive}</Link>}
+                {labels?.defensive && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.defensive)}`} className="pxe__chip pxe__chip--quiet" title={`What is a ${labels.defensive}?`}>{labels.defensive}</Link>}
+                {labels && !labels.offensive && !labels.defensive && labels.overall && <Link to={`/learn/archetypes?type=${encodeURIComponent(labels.overall)}`} className="pxe__chip">{labels.overall}</Link>}
               </div>
             )}
           </div>

@@ -75,6 +75,7 @@ tables:
   - {name: mart_player_entanglement,   dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
   - {name: mart_player_carry,          dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
   - {name: mart_player_impact_context, dataset: mart, kind: source, cap: full, indexes: [player_id, season]}
+  - {name: mart_player_quality_context, dataset: mart, kind: source, cap: full, indexes: [player_id, season, team_id]}
 
   # --- model tables -----------------------------------------------------------
   - {name: shot_xg,            dataset: models, kind: source, cap: recent, indexes: [game_id]}
@@ -88,6 +89,8 @@ tables:
   - {name: player_overall,     dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
   - {name: goalie_overall,     dataset: models, kind: source, cap: full, indexes: [goalie_id, season_window]}
   - {name: player_impact,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_assessment,  dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_prior_quality, dataset: models, kind: source, cap: full, indexes: [player_id, season]}
   - {name: player_clutch,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
   - {name: player_consistency, dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
   - {name: player_verdict,     dataset: models, kind: source, cap: full, indexes: [player_id, season]}

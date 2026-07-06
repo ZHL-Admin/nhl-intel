@@ -132,6 +132,20 @@ cleanup candidate.** This is an explicit exception to reverse reachability.
 Methodology: `docs/methodology/ppt-replay-tracking.md`. When a future tool surfaces this,
 `int_goal_release_frame` is the single tracked moment intended for the rink render.
 
+### Player Assessment (Layer 1) + Context (Layer 2) — LIVE (M1–M4, 2026-07-03)
+
+Tier + confidence + role verdict and the situation-context layer, now surfaced across the product:
+
+| Surface | Reads | Source |
+| --- | --- | --- |
+| `players/AssessmentBand` (Overview headline) + `PlayerRowExpansion` tier chip | `getPlayerAssessment` → `/players/{id}/assessment` | `nhl_models.player_assessment` (compute_assessment, point estimator `c2_roster_player`) |
+| `players/ContextTab` (Context tab) | `getPlayerContext` → `/players/{id}/context` | `mart_player_quality_context` (QoC/QoT), `mart_player_wowy`, situational/zone marts |
+| Players index (rank + tier separators/chips) | `getValueRankings` → `/rankings/value` (now carries `assessed_war`/`tier`/`qualified`) | `player_assessment` ⋈ `player_gar`/`goalie_gar` |
+| Verdict identity noun (D15) | `player_verdict` prose anchored on `current.assessment.tier_label` | `build_verdict_payload` reads `player_assessment` |
+
+D15: the assessment tier ladder is the only player-value vocabulary; the legacy percentile→noun
+value tier is retired from display + the verdict anchor.
+
 ### WOWY / on-ice + isolated-impact context (Phase 6, LIVE to the player profile)
 
 The with-or-without-you / on-ice / impact-context feature, now surfaced on the **PlayerProfile

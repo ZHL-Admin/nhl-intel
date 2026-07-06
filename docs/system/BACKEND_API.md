@@ -219,7 +219,17 @@ Table union: `mart_team_game_stats`, `mart_tradeable_assets`, `stg_rosters`,
 |---|---|---|---|---|---|---|
 | GET | `/rankings/power` | 47-49 | `season?` | inline (`nhl_models.team_ratings`, `mart_team_game_stats`) | `List[PowerRatingRow]` | 1800 |
 | GET | `/rankings/deserved` | 78-80 | `season?` | inline (`nhl_models.deserved_standings`) | `List[DeservedStandingRow]` | 1800 |
-| GET | `/rankings/value` | 186-188 | `scope="skaters"`, `position="ALL"`, `season?`, `sort="confidence"`, `limit=50` | inline (`nhl_models.player_gar`, `goalie_gar`) | `List[ValueRankingRow]` | 1800 |
+| GET | `/rankings/value` | 186-188 | `scope="skaters"`, `position="ALL"`, `season?`, `sort="confidence"` _(DEPRECATED — M3.5/D14)_, `limit=50` | inline (`nhl_models.player_gar`, `goalie_gar`) | `List[ValueRankingRow]` | 1800 |
+
+> **M3.5 / D14 (2026-07-03) — additive `ValueRankingRow` fields + deprecated `sort`.** `/rankings/value`
+> now sources the ranked pool + order from `player_assessment`: rows are the assessment pool
+> (`qualified` AND active per D13), ordered by `assessed_war`. **New additive fields:** `assessed_war`,
+> `tier`, `tier_label`, `qualified` (and `war_sd` on these rows is sourced from the assessment). The
+> existing `war`/`gar` keep their realized-value meaning (untouched for other consumers). The FE ranks
+> and displays by `assessed_war`, so separators and shown values share one currency. The **`sort` param
+> is DEPRECATED** (ordering is always `assessed_war`; the confidence-bound sort is retired since
+> shrinkage is now at the root) — still ACCEPTED for compatibility, no longer sent by the FE. There is
+> no `/rankings/tier` and no tier sort/rank param.
 | GET | `/rankings/surplus` | 268-270 | `order="surplus"`, `limit=25` | inline `_assets_board` (`mart_tradeable_assets`) + `services.contract_grade.grade_from_surplus` | `List[TradeableAsset]` | 1800 |
 | GET | `/rankings/talent` | 286-288 | `type?`, `limit=25` | inline `_assets_board` (`mart_tradeable_assets`) | `List[TradeableAsset]` | 1800 |
 

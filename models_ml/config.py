@@ -451,6 +451,53 @@ assert GOALIE_GAR_CONFIG["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
     "Goalie and skater GOALS_PER_WIN must match for cross-position WAR to be comparable.")
 
 
+# --- Player Assessment (three-layer verdict: tier + confidence + role) ------------------------
+# The page-level "how good is he" verdict. Point estimator is chosen by the validation bakeoff
+# (models_ml/validate_assessment.py, ship gate G1 + prereg selection rule); POINT_ESTIMATOR names
+# the winner and is the ONLY thing to change to swap estimators — the table schema and the tier
+# machinery are estimator-agnostic. Tier boundaries are league job-count RANK ceilings within a
+# position group + window (spec 6.2, RESOLVED D2). See docs/player-assessment-spec.md.
+ASSESSMENT = {
+    "MODEL_VERSION": "assessment_v1",
+    # Winner of the M0/M0.5 bakeoff. Swappable via value_lens without any schema change; goalies
+    # always carry goalie_gar through regardless of the skater estimator.
+    "POINT_ESTIMATOR": "c2_roster_player",
+    # (tier, cumulative_rank_ceiling): rank <= ceiling gets the tier; None = the remainder.
+    # Ceilings are league job counts (F lines 96 = 3x32, D pairs 64 = 2x32, G starters 32).
+    # Elite: 18 F / 12 D (All-Star slots x 3yr window), 8 G (goalie WAR shrunk hard).
+    "TIER_RANKS": {
+        "F": [("elite", 18), ("first_line", 96), ("second_line", 192),
+              ("third_line", 288), ("fourth_line", 384), ("fringe", None)],
+        "D": [("elite", 12), ("number_one", 32), ("top_pair", 64),
+              ("second_pair", 128), ("third_pair", 192), ("fringe", None)],
+        "G": [("elite_starter", 8), ("starter", 32), ("tandem", 48),
+              ("backup", 64), ("fringe", None)],
+    },
+    # Small-pool fallback: if the qualified pool is smaller than the deepest ceiling, convert each
+    # ceiling to its percentile equivalent against the reference pool and cut on percentiles.
+    "TIER_REFERENCE_POOL": {"F": 384, "D": 192, "G": 64},
+    "TIER_LABELS": {
+        "elite": "Elite", "first_line": "First-line forward",
+        "second_line": "Second-line forward", "third_line": "Third-line forward",
+        "fourth_line": "Fourth-line forward",
+        "number_one": "Number-one defenseman", "top_pair": "Top-pair defenseman",
+        "second_pair": "Second-pair defenseman", "third_pair": "Third-pair defenseman",
+        "elite_starter": "Elite starter", "starter": "Starter",
+        "tandem": "Tandem goalie", "backup": "Backup",
+        "fringe": "Fringe / replacement",
+    },
+    "CONFIDENCE_CUTS": {"high": 0.55, "medium": 0.35},        # RESOLVED D3
+    # Range-copy trigger (spec 10.1, Amendment B): fire the two-tier range sentence when
+    # tier_confidence < CONFIDENCE_CUTS["high"] AND tier_prob_within_one >= this value. Keys on the
+    # RAW tier_confidence, NOT the forced-low confidence_label, so a concentrated-mass single-season
+    # player is not mislabeled a straddle. Single-season windows use their own sentence template.
+    "WITHIN_ONE_RANGE_COPY": 0.85,
+    # (min_toi_5v5_min, min_seasons_present) per grade, skaters. D = unqualified.
+    "STABILITY_GRADES": {"A": (3000, 3), "B": (2000, 2), "C": (None, 1)},
+    "GOALIE_MAX_GRADE": "B",                                  # goalie rate reliability ~0.19
+}
+
+
 # =====================================================================================
 # Offseason roster forecast (models_ml/project_roster_forecast.py). Projects how good a team
 # will be NEXT season from the moves it made this offseason, with an honest band, a decomposed

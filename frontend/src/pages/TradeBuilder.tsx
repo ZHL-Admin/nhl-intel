@@ -172,8 +172,8 @@ export default function TradeBuilder() {
     <PageLayout>
       <div className="trade-builder">
         <PageCard
-          title="Trade Builder"
-          subtitle="Construct a trade across two or more teams, elect salary retention, and read each side as a decomposition — talent, cost-efficiency, and fit — never a single grade."
+          title="Build a trade"
+          subtitle="Assemble a deal and get the verdict: talent, surplus, fit, and cap."
           controls={
             <div className="trade-builder__toolbar">
               <span className="trade-builder__teamcount">{teams.length} teams · {items.length} assets</span>

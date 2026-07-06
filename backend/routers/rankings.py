@@ -118,23 +118,27 @@ def _conf_key(r: ValueRankingRow) -> float:
 
 
 def _skater_value_rows(position: str, season: str, limit: int, sort: str = "confidence") -> List[ValueRankingRow]:
-    """Skater GAR rows (component_kind=skater), qualified by the 5v5-TOI ranking floor."""
-    from models_ml import config as mlcfg
-    floor = mlcfg.GAR_CONFIG["MIN_TOI_5V5_FOR_RANKING"]
+    """Skater rows for the Players index. RANKED and banded by player_assessment (M3.5/D14): the pool
+    is the assessment pool (qualified AND active per D13), ordered by assessed_war; war_sd comes from
+    the assessment. `war`/`gar` stay the realized values (additive). `sort` is accepted but deprecated
+    (ordering is always assessed_war)."""
     gar = bq_service.get_models_table_id('player_gar')
+    asmt = bq_service.get_models_table_id('player_assessment')
     rosters = bq_service.get_full_table_id('stg_rosters')
     mart = bq_service.get_full_table_id('mart_team_game_stats')
     groups = {"F": "('C','L','R')", "D": "('D')"}.get(position.upper(), "('C','L','R','D')")
     rows = bq_service.query(f"""
         WITH {_NM_TM_CTE.format(rosters=rosters, mart=mart)}
         SELECT g.player_id, nm.name, tm.abbrev AS team_abbrev, g.position,
-               g.gar, g.war, g.gar_sd, g.war_sd,
+               g.gar, g.war, g.gar_sd,
+               a.war_sd AS war_sd, a.assessed_war, a.tier, a.tier_label, a.qualified,
                g.ev_offense, g.pp, g.ev_defense, g.pk, g.penalty, g.faceoff
-        FROM {gar} g
+        FROM {asmt} a
+        JOIN {gar} g ON g.player_id = a.player_id AND g.season_window = a.season_window
         LEFT JOIN nm ON g.player_id = nm.player_id
         LEFT JOIN tm ON nm.team_id = tm.team_id
-        WHERE g.season_window = '{season}' AND g.position IN {groups} AND g.toi_5v5 >= {floor}
-        ORDER BY {_order_expr(sort)}
+        WHERE a.season_window = '{season}' AND g.position IN {groups} AND a.qualified = TRUE
+        ORDER BY a.assessed_war DESC
         LIMIT {int(limit)}
     """)
     out = []
@@ -146,7 +150,10 @@ def _skater_value_rows(position: str, season: str, limit: int, sort: str = "conf
             position=r.get("position"), entity_kind="skater", component_kind="skater",
             gar=float(r["gar"]), war=float(r["war"]),
             gar_sd=float(r["gar_sd"]) if r.get("gar_sd") is not None else None,
-            war_sd=float(r["war_sd"]) if r.get("war_sd") is not None else None, components=comps))
+            war_sd=float(r["war_sd"]) if r.get("war_sd") is not None else None,
+            assessed_war=float(r["assessed_war"]) if r.get("assessed_war") is not None else None,
+            tier=r.get("tier"), tier_label=r.get("tier_label"),
+            qualified=bool(r.get("qualified")), components=comps))
     return out
 
 
@@ -156,18 +163,21 @@ def _goalie_value_rows(season: str, limit: int, sort: str = "confidence") -> Lis
     from models_ml import config as mlcfg
     min_games = mlcfg.GOALIE_GAR_CONFIG["MIN_GAMES_FOR_RANKING"]
     gg = bq_service.get_models_table_id('goalie_gar')
+    asmt = bq_service.get_models_table_id('player_assessment')
     rosters = bq_service.get_full_table_id('stg_rosters')
     mart = bq_service.get_full_table_id('mart_team_game_stats')
     keys = ", ".join(f"g.{k}" for k, _ in GOALIE_GAR_LABELS)
     rows = bq_service.query(f"""
         WITH {_NM_TM_CTE.format(rosters=rosters, mart=mart)}
         SELECT g.goalie_id AS player_id, nm.name, tm.abbrev AS team_abbrev,
-               g.gar, g.war, g.gar_sd, g.war_sd, {keys}
-        FROM {gg} g
+               g.gar, g.war, g.gar_sd,
+               a.war_sd AS war_sd, a.assessed_war, a.tier, a.tier_label, a.qualified, {keys}
+        FROM {asmt} a
+        JOIN {gg} g ON g.goalie_id = a.player_id AND g.season_window = a.season_window
         LEFT JOIN nm ON g.goalie_id = nm.player_id
         LEFT JOIN tm ON nm.team_id = tm.team_id
-        WHERE g.season_window = '{season}' AND g.games_played >= {min_games}
-        ORDER BY {_order_expr(sort)}
+        WHERE a.season_window = '{season}' AND a.position = 'G' AND a.qualified = TRUE
+        ORDER BY a.assessed_war DESC
         LIMIT {int(limit)}
     """)
     out = []
@@ -179,7 +189,10 @@ def _goalie_value_rows(season: str, limit: int, sort: str = "confidence") -> Lis
             position="G", entity_kind="goalie", component_kind="goalie",
             gar=float(r["gar"]), war=float(r["war"]),
             gar_sd=float(r["gar_sd"]) if r.get("gar_sd") is not None else None,
-            war_sd=float(r["war_sd"]) if r.get("war_sd") is not None else None, components=comps))
+            war_sd=float(r["war_sd"]) if r.get("war_sd") is not None else None,
+            assessed_war=float(r["assessed_war"]) if r.get("assessed_war") is not None else None,
+            tier=r.get("tier"), tier_label=r.get("tier_label"),
+            qualified=bool(r.get("qualified")), components=comps))
     return out
 
 
@@ -227,12 +240,11 @@ def merge_value_rows(
 ) -> List[ValueRankingRow]:
     """Merge skater + goalie value rows and return the global top `limit`.
 
-    The sort key is always WAR-DERIVED — never GAR — because skater GAR and goalie GAR are different
-    units and are not comparable; only WAR (= GAR/GOALS_PER_WIN, a shared divisor) is. The DEFAULT
-    is the confidence-aware lower bound war − k·war_sd (so a ±0.8 skater outranks a ±2.2 goalie of
-    equal WAR point estimate); 'point' falls back to raw WAR. Pure + hermetic so both the
-    WAR-not-GAR invariant and the confidence-default are unit-tested (tests/test_value_overall.py)."""
-    key = (lambda r: r.war) if sort == "point" else _conf_key
+    Ordered by assessed_war (M3.5/D14): both sides are reliability-shrunk at the ROOT (C2 skaters,
+    shrunk goalie GAR), so the presentation-layer confidence-bound sort is retired — no half-sd
+    adjustment returns. assessed_war is WAR-scale, so the WAR-not-GAR invariant still holds (skater
+    GAR and goalie GAR are never sorted together). Pure + hermetic (tests/test_value_overall.py)."""
+    key = lambda r: (r.assessed_war if r.assessed_war is not None else r.war)
     merged = list(skaters) + list(goalies)
     merged.sort(key=key, reverse=True)
     return merged[:limit]

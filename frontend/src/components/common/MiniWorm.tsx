@@ -2,108 +2,47 @@ import './MiniWorm.css';
 
 interface MiniWormProps {
   data: { time: number; diff: number }[];
+  /** Kept for call-site compatibility; R8 sparklines are single-ink (ice), no team fills/markers. */
   goals?: { time: number; label: string }[];
-  homeColor: string;
-  awayColor: string;
+  homeColor?: string;
+  awayColor?: string;
   width?: number;
   height?: number;
 }
 
-export default function MiniWorm({
-  data,
-  goals = [],
-  homeColor,
-  awayColor,
-  width = 300,
-  height = 60
-}: MiniWormProps) {
+/**
+ * MiniWorm — the R8 sparkline (§6). A single 1.5px ice stroke of the score/xG differential over
+ * time with a last-point dot; no fills, no axes. Fixed 96x28 box; lives only inside rows and
+ * identity headers. (The full worm with fills, baseline, and goal markers is R3, in GameDetail.)
+ */
+export default function MiniWorm({ data, width = 96, height = 28 }: MiniWormProps) {
   if (data.length === 0) {
     return <div className="mini-worm mini-worm--empty" style={{ width, height }} />;
   }
 
-  const maxTime = Math.max(...data.map(d => d.time));
-  const maxDiff = Math.max(...data.map(d => Math.abs(d.diff)));
-  const range = maxDiff * 1.1; // 10% padding
+  const maxTime = Math.max(...data.map((d) => d.time)) || 1;
+  const maxDiff = Math.max(...data.map((d) => Math.abs(d.diff)), 1e-6);
+  const range = maxDiff * 1.1; // 10% headroom
 
   const xScale = (time: number) => (time / maxTime) * width;
   const yScale = (diff: number) => height / 2 - (diff / range) * (height / 2);
 
-  // Generate path
-  const pathData = data.map((point, i) => {
-    const x = xScale(point.time);
-    const y = yScale(point.diff);
-    return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
-  }).join(' ');
-
-  // Generate positive and negative area fills
-  const positiveAreaData = data.map((point, i) => {
-    const x = xScale(point.time);
-    const y = Math.min(yScale(point.diff), height / 2);
-    if (i === 0) return `M ${x} ${height / 2} L ${x} ${y}`;
-    return `L ${x} ${y}`;
-  }).join(' ') + ` L ${xScale(data[data.length - 1].time)} ${height / 2} Z`;
-
-  const negativeAreaData = data.map((point, i) => {
-    const x = xScale(point.time);
-    const y = Math.max(yScale(point.diff), height / 2);
-    if (i === 0) return `M ${x} ${height / 2} L ${x} ${y}`;
-    return `L ${x} ${y}`;
-  }).join(' ') + ` L ${xScale(data[data.length - 1].time)} ${height / 2} Z`;
+  const pathData = data
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.time)} ${yScale(p.diff)}`)
+    .join(' ');
+  const last = data[data.length - 1];
 
   return (
-    <svg
-      className="mini-worm"
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-    >
-      {/* Positive area (home leading) */}
-      <path
-        d={positiveAreaData}
-        fill={homeColor}
-        fillOpacity={0.15}
-      />
-
-      {/* Negative area (away leading) */}
-      <path
-        d={negativeAreaData}
-        fill={awayColor}
-        fillOpacity={0.15}
-      />
-
-      {/* Zero reference line */}
-      <line
-        x1={0}
-        y1={height / 2}
-        x2={width}
-        y2={height / 2}
-        stroke="var(--color-border-subtle)"
-        strokeWidth={1}
-      />
-
-      {/* Line */}
+    <svg className="mini-worm" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <path
         d={pathData}
         fill="none"
-        stroke="var(--color-text-muted)"
+        stroke="var(--color-ice-600)"
         strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
-
-      {/* Goal dots */}
-      {goals.map((goal, i) => {
-        const dataPoint = data.find(d => d.time >= goal.time) || data[data.length - 1];
-        const teamColor = dataPoint.diff > 0 ? homeColor : awayColor;
-
-        return (
-          <circle
-            key={i}
-            cx={xScale(goal.time)}
-            cy={yScale(dataPoint.diff)}
-            r={4}
-            fill={teamColor}
-          />
-        );
-      })}
+      <circle cx={xScale(last.time)} cy={yScale(last.diff)} r={2.5} fill="var(--color-ice-600)" />
     </svg>
   );
 }

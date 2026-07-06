@@ -4,6 +4,7 @@ import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { PageLayout, PageCard, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle, MatchupPreviewCard } from '../components/common'
 import Badge from '../components/common/Badge'
+import { usePageTitle } from '../hooks/usePageTitle'
 import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
@@ -46,9 +47,11 @@ function GameDetail() {
   // Tab state from URL query params (default to 'overview')
   const activeTab = searchParams.get('tab') || 'overview'
 
-  useEffect(() => {
-    document.title = 'NHL Intel - Game Detail'
-  }, [])
+  usePageTitle(
+    gameDetail?.away_team && gameDetail?.home_team
+      ? `${gameDetail.away_team.team_abbrev} @ ${gameDetail.home_team.team_abbrev}`
+      : 'Game'
+  )
 
   useEffect(() => {
     if (!gameId) return
@@ -67,7 +70,7 @@ function GameDetail() {
         setPlayerStats(players)
       } catch (err) {
         console.error('Error fetching game data:', err)
-        setError('Failed to load game data. Please try again.')
+        setError('Couldn’t load this game. Retry.')
       } finally {
         setLoading(false)
       }
@@ -127,7 +130,7 @@ function GameDetail() {
     return (
       <PageLayout>
         <div className="game-detail">
-          <PageCard title="Game Detail" back={{ to: '/games', label: 'Back to Games' }}>
+          <PageCard title="Game detail" back={{ to: '/games', label: 'Games' }}>
             <div className="game-detail__error">
               <p className="game-detail__error-message">
                 {error || 'Game not found'}
@@ -158,7 +161,7 @@ function GameDetail() {
             header={
               <IdentityHeader
             backLink={{
-              label: `← Back to Games`,
+              label: `← Games`,
               to: '/games'
             }}
             leftContent={
@@ -247,7 +250,7 @@ function GameDetail() {
           header={
             <IdentityHeader
           backLink={{
-            label: `← Back to Games`,
+            label: `← Games`,
             to: '/games'
           }}
           absoluteBack

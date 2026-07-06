@@ -296,13 +296,45 @@ def report(df: pd.DataFrame, label: str) -> None:
               f"EVd {r['ev_defense']:+.1f} PK {r['pk']:+.1f}) ±{r['gar_sd']:.1f}")
 
 
+def _append_gar(out: pd.DataFrame, seasons: list[str]) -> None:
+    """Append-only backfill: delete ONLY the listed season_windows (never existing rows), then
+    WRITE_APPEND. Idempotent; never touches the 3yr window or other seasons."""
+    if set(out["season_window"]) - set(seasons):
+        raise ValueError("_append_gar refuses: rows contain a season_window outside --seasons.")
+    cli = bq.client()
+    tid = f"{bq.project()}.{config.MODELS_DATASET}.player_gar"
+    inlist = ", ".join(f"'{s}'" for s in seasons)
+    cli.query(f"DELETE FROM `{tid}` WHERE season_window IN ({inlist})").result()
+    bq.write_df(out, "player_gar", write_disposition="WRITE_APPEND",
+                clustering_fields=["season_window", "player_id"])
+    print(f"\nAppended {len(out):,} rows for {seasons} to nhl_models.player_gar (existing untouched).")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--seasons", default=None,
+                    help="comma-separated single seasons to BACKFILL (append-only). Does NOT touch "
+                         "the 3yr window or existing rows. Run the RAPM backfill first.")
     args = ap.parse_args()
 
     ps, depth = pull()
     impact = bq.query_df(f"select * from `{bq.project()}.nhl_models.player_impact`")
+
+    if args.seasons:
+        seasons = [s.strip() for s in args.seasons.split(",") if s.strip()]
+        frames = [compute(aggregate_window(ps, depth, [s]),
+                          impact[impact["season_window"] == s], s) for s in seasons]
+        out = pd.concat(frames, ignore_index=True)[OUT_COLS]
+        out["player_id"] = out["player_id"].astype("int64")
+        out["model_version"] = "gar_v1"
+        report(frames[-1], seasons[-1])
+        if args.dry_run:
+            print(f"\n[dry-run] {len(out):,} rows for {seasons} not written")
+            return
+        _append_gar(out, seasons)
+        return
+
     frames = []
     for s in SINGLE_SEASONS:
         agg = aggregate_window(ps, depth, [s])

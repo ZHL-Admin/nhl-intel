@@ -341,8 +341,22 @@ def main() -> None:
     ap.add_argument("--no-bootstrap", action="store_true")
     ap.add_argument("--bootstrap", type=int, default=DEFAULT_BOOTSTRAP)
     ap.add_argument("--dry-run", action="store_true", help="don't write to BigQuery")
+    ap.add_argument("--seasons", default=None,
+                    help="comma-separated single seasons to BACKFILL (append-only, reduced "
+                         "bootstrap). Does NOT touch the 3yr window or any existing season_window row.")
     args = ap.parse_args()
     B = 0 if args.no_bootstrap else args.bootstrap
+
+    if args.seasons:
+        seasons = [s.strip() for s in args.seasons.split(",") if s.strip()]
+        single_B = min(B, 40)                       # reduced bootstrap for the singles (spec item 7)
+        b2b_all = back_to_back(seasons)
+        frames = [_with_special(fit_ev([s], s, None, b2b_all, single_B), [s], None, b2b_all, single_B)
+                  for s in seasons]
+        report(frames[-1], seasons[-1])
+        if not args.dry_run:
+            write_append(frames, seasons)
+        return
 
     if args.season:
         b2b = back_to_back([args.season])
@@ -418,6 +432,28 @@ def write(frames: list[pd.DataFrame]) -> None:
     bq.write_df(out, "player_impact", write_disposition="WRITE_TRUNCATE",
                 clustering_fields=["season_window", "player_id"])
     print(f"\nWrote {len(out):,} rows to nhl_models.player_impact.")
+
+
+def write_append(frames: list[pd.DataFrame], seasons: list[str]) -> None:
+    """Append-only backfill of the listed single seasons. Idempotent: deletes ONLY those
+    season_windows (never existing/other rows) before WRITE_APPEND, so a re-run is safe and no
+    existing row is ever rewritten. Never writes the 3yr window."""
+    out = pd.concat(frames, ignore_index=True)
+    cols = ["player_id", "season_window", "off_impact", "off_sd", "def_impact", "def_sd",
+            "pp_impact", "pp_sd", "pk_impact", "pk_sd", "toi_min", "alpha"]
+    out = out[[c for c in cols if c in out.columns]].copy()
+    out["player_id"] = out["player_id"].astype("int64")
+    out["model_version"] = MODEL_VERSION
+    if set(out["season_window"]) - set(seasons):
+        raise ValueError("write_append refuses: frames contain a season_window outside --seasons.")
+    cli = bq.client()
+    tid = f"{bq.project()}.{config.MODELS_DATASET}.player_impact"
+    inlist = ", ".join(f"'{s}'" for s in seasons)
+    cli.query(f"DELETE FROM `{tid}` WHERE season_window IN ({inlist})").result()
+    bq.write_df(out, "player_impact", write_disposition="WRITE_APPEND",
+                clustering_fields=["season_window", "player_id"])
+    print(f"\nAppended {len(out):,} rows for {seasons} to nhl_models.player_impact "
+          f"(existing rows untouched).")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,8 @@ from models.schemas import (
     PlayerTrajectory, TrajectoryCurvePoint, TrajectoryPathPoint, TwinEntry, PhysicalPoint,
     PlayerSearchResult, PlayerRadar, PlayerSummary, PlayerValue, ValueGapRead, GAR_LABELS,
     ImpactContext, WowyPartner, PlayerWowy,
+    PlayerAssessment, TierProb, AssessmentProvenance,
+    PlayerContext, QualityContext, FitLinks, PlayerSituational, PlayerZoneDeployment,
     OverallSummary, OverallComponent, PreviewStat, PlayerPreview,
     DeploymentRow, DeploymentBoard, PlayerDeploymentEntry,
     PlayerContract, CapShareYear,
@@ -564,6 +566,145 @@ async def get_player_wowy(
         small_sample=bool(x['small_sample']),
     ) for x in rows]
     return PlayerWowy(player_id=player_id, season=season, partners=partners)
+
+
+# Tier key -> display label. Mirrors config.ASSESSMENT["TIER_LABELS"] (single source at model time);
+# duplicated here so the API layer does not import models_ml. Keep in sync if the ladder changes.
+_ASSESSMENT_TIER_LABELS = {
+    "elite": "Elite", "first_line": "First-line forward", "second_line": "Second-line forward",
+    "third_line": "Third-line forward", "fourth_line": "Fourth-line forward",
+    "number_one": "Number-one defenseman", "top_pair": "Top-pair defenseman",
+    "second_pair": "Second-pair defenseman", "third_pair": "Third-pair defenseman",
+    "elite_starter": "Elite starter", "starter": "Starter", "tandem": "Tandem goalie",
+    "backup": "Backup", "fringe": "Fringe / replacement",
+}
+# Measured YoY stability (config.GAR_STABILITY_YOY) surfaced verbatim in provenance (consistency rule).
+_ASSESSMENT_R = {"production_r": 0.66, "rapm_r": 0.38, "finishing_r": 0.35}
+_ASSESSMENT_WITHIN_ONE = 0.85
+
+
+@router.get("/{player_id}/assessment", response_model=PlayerAssessment)
+@cache(ttl=3600)
+async def get_player_assessment(
+    player_id: int,
+    season_window: Optional[str] = Query(None, description="Default: 3yr window, else latest single season"),
+) -> PlayerAssessment:
+    """Layer-1 verdict: tier + confidence + role + provenance. Never 404s; an unqualified or
+    never-assessed player returns qualified=false with null tier fields."""
+    tbl = bq_service.get_models_table_id('player_assessment')   # nhl_models table
+    where = f"player_id = {int(player_id)}"
+    if season_window:
+        where += f" AND season_window = '{season_window}'"
+    # Prefer the 3-season window row (contains '_'), then the latest single season.
+    rows = bq_service.query(f"""
+        SELECT * FROM {tbl}
+        WHERE {where}
+        ORDER BY CASE WHEN STRPOS(season_window, '_') > 0 THEN 0 ELSE 1 END, season_window DESC
+        LIMIT 1
+    """)
+    floor_desc = "200+ 5v5 min (skaters) / 15+ games (goalies) in window"
+    if not rows:
+        prov = AssessmentProvenance(
+            pool_size=0, pool_floor_desc=floor_desc, toi_basis_min=0.0, seasons_present=0,
+            point_estimator="none", model_version="assessment_v1",
+            within_one_range_copy=_ASSESSMENT_WITHIN_ONE, **_ASSESSMENT_R)
+        return PlayerAssessment(player_id=player_id, season_window=season_window or "n/a",
+                                position="?", qualified=False, disqualify_reason=None,
+                                last_played_season=None, provenance=prov)
+    r = rows[0]
+    probs = []
+    if r.get('tier_probs'):
+        raw = r['tier_probs']
+        d = json.loads(raw) if isinstance(raw, str) else raw
+        probs = [TierProb(tier=k, label=_ASSESSMENT_TIER_LABELS.get(k, k), prob=float(v))
+                 for k, v in d.items()]
+    prov = AssessmentProvenance(
+        pool_size=int(r.get('pool_size') or 0), pool_floor_desc=floor_desc,
+        toi_basis_min=float(r.get('toi_basis_min') or 0.0),
+        seasons_present=int(r.get('seasons_present') or 0),
+        point_estimator=r.get('point_estimator') or "unknown",
+        model_version=r.get('model_version') or "assessment_v1",
+        within_one_range_copy=_ASSESSMENT_WITHIN_ONE, generated_at=r.get('generated_at'),
+        **_ASSESSMENT_R)
+    return PlayerAssessment(
+        player_id=player_id, season_window=r['season_window'], position=r['position'],
+        qualified=bool(r['qualified']), disqualify_reason=r.get('disqualify_reason'),
+        last_played_season=r.get('last_played_season'),
+        tier=r.get('tier'), tier_label=r.get('tier_label'),
+        tier_confidence=r.get('tier_confidence'), confidence_label=r.get('confidence_label'),
+        tier_prob_within_one=r.get('tier_prob_within_one'), tier_mode=r.get('tier_mode'),
+        tier_probs=probs, assessed_war=r.get('assessed_war'), war_sd=r.get('war_sd'),
+        war_p10=r.get('war_p10'), war_p90=r.get('war_p90'),
+        stability_grade=r.get('stability_grade'), role_primary=r.get('role_primary'),
+        role_deployment=r.get('role_deployment'), provenance=prov)
+
+
+@router.get("/{player_id}/context", response_model=PlayerContext)
+@cache(ttl=3600)
+async def get_player_context(
+    player_id: int,
+    season: Optional[str] = Query(None, description="Season (default: latest with quality data)"),
+) -> PlayerContext:
+    """Layer-2 context in one fetch: strength splits, zone deployment, QoC/QoT, top-5 WOWY, fit
+    links. Never 404s; any absent piece comes back null/empty. D17 small_sample passes through."""
+    qtbl = bq_service.get_full_table_id('mart_player_quality_context')
+    if not season:
+        r = bq_service.query(f"SELECT MAX(season) AS s FROM {qtbl} WHERE player_id = {int(player_id)}")
+        season = (r[0]['s'] if r and r[0]['s'] else None) or "2024-25"
+    # QoC/QoT: the team stint with the most 5v5 TOI this season
+    qrows = bq_service.query(f"""
+        SELECT season, team_id, pos_group, qoc_war_rate, qot_war_rate, qoc_pctile, qot_pctile,
+               toi_5v5_sec
+        FROM {qtbl} WHERE player_id = {int(player_id)} AND season = '{season}'
+        ORDER BY toi_5v5_sec DESC LIMIT 1
+    """)
+    quality = QualityContext(
+        season=qrows[0]['season'], team_id=qrows[0].get('team_id'),
+        pos_group=qrows[0].get('pos_group'), qoc_war_rate=qrows[0].get('qoc_war_rate'),
+        qot_war_rate=qrows[0].get('qot_war_rate'), qoc_pctile=qrows[0].get('qoc_pctile'),
+        qot_pctile=qrows[0].get('qot_pctile'), toi_5v5_sec=qrows[0].get('toi_5v5_sec')) if qrows else None
+    # strength splits (reuse the situational service layer)
+    strength = [PlayerSituational(
+        player_id=row['player_id'], season=row['season'], situation=row['situation'],
+        toi_per_gp=row.get('toi_per_gp'), points_per60=row.get('points_per60'),
+        goals_per60=row.get('goals_per60'), ixg_per60=row.get('ixg_per60'),
+        cf_pct=row.get('cf_pct'), hdcf_per60=row.get('hdcf_per60'))
+        for row in (bq_service.get_player_situational(player_id, season) or [])]
+    # zone deployment
+    zd = bq_service.get_player_zone_deployment(player_id, season)
+    zone = PlayerZoneDeployment(
+        player_id=int(zd[0].get('player_id', player_id)), season=zd[0].get('season', season),
+        team_id=int(zd[0].get('team_id', 0)),
+        oz_starts=int(zd[0].get('oz_starts', 0)), nz_starts=int(zd[0].get('nz_starts', 0)),
+        dz_starts=int(zd[0].get('dz_starts', 0)), total_starts=int(zd[0].get('total_starts', 0)),
+        ozs_pct=float(zd[0].get('ozs_pct', 0.0)), nzs_pct=float(zd[0].get('nzs_pct', 0.0)),
+        dzs_pct=float(zd[0].get('dzs_pct', 0.0))) if zd else None
+    # top-5 WOWY partners (D17 small_sample passthrough)
+    wtbl = bq_service.get_full_table_id('mart_player_wowy')
+    wrows = bq_service.query(f"""
+        WITH names AS (SELECT player_id, ANY_VALUE(first_name || ' ' || last_name) AS name
+                       FROM {bq_service.get_full_table_id('stg_rosters')} GROUP BY player_id)
+        SELECT w.partner_id, n.name AS partner_name, w.toi_together_sec, w.xgf_pct_together,
+               w.xgf_per60_together, w.xga_per60_together, w.xgf_pct_focal_without_partner,
+               w.xgf_pct_partner_without_focal, w.together_minus_focal_alone,
+               w.partner_with_focal_minus_partner_without, w.small_sample
+        FROM {wtbl} w LEFT JOIN names n ON n.player_id = w.partner_id
+        WHERE w.player_id = {int(player_id)} AND w.season = '{season}'
+        ORDER BY w.toi_together_sec DESC LIMIT 5
+    """)
+    wowy_top = [WowyPartner(
+        partner_id=int(x['partner_id']), partner_name=x.get('partner_name'),
+        toi_together_sec=float(x['toi_together_sec']), xgf_pct_together=x.get('xgf_pct_together'),
+        xgf_per60_together=x.get('xgf_per60_together'), xga_per60_together=x.get('xga_per60_together'),
+        xgf_pct_focal_without_partner=x.get('xgf_pct_focal_without_partner'),
+        xgf_pct_partner_without_focal=x.get('xgf_pct_partner_without_focal'),
+        together_minus_focal_alone=x.get('together_minus_focal_alone'),
+        partner_with_focal_minus_partner_without=x.get('partner_with_focal_minus_partner_without'),
+        small_sample=bool(x['small_sample'])) for x in wrows]
+    fit = FitLinks(player_fit=f"/tools/player-fit?player={int(player_id)}",
+                   lineup_lab=f"/tools/lineup-lab?player={int(player_id)}")
+    return PlayerContext(player_id=player_id, season=season, strength_splits=strength,
+                         zone_deployment=zone, quality=quality, wowy_top=wowy_top, fit=fit)
 
 
 def _age_at_season(birth_date, season: str) -> Optional[int]:

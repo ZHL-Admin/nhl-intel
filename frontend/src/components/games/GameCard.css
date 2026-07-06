@@ -136,3 +136,53 @@
   color: var(--color-text-secondary);
   font-style: italic;
 }
+
+/* Compact chip variant (P1 Today: tonight's slate + last night strips) */
+.game-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 148px;
+  padding: var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.game-chip:hover { border-color: var(--color-accent); background: var(--color-bg-elevated); }
+.game-chip--live { border-color: var(--color-live, var(--color-accent)); }
+
+.game-chip__row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+}
+.game-chip__side { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.game-chip__side--home { justify-content: flex-end; }
+.game-chip__logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.game-chip__logo-fallback {
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: var(--color-text-muted);
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+}
+.game-chip__abbrev {
+  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600;
+  color: var(--color-text-primary);
+}
+.game-chip__mid { min-width: 34px; }
+.game-chip__at { color: var(--color-text-muted); font-size: var(--text-sm); }
+.game-chip__score { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); white-space: nowrap; }
+.game-chip__dash { color: var(--color-text-muted); font-style: normal; margin: 0 3px; }
+.game-chip__status {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);
+}
+.game-chip__live-dot {
+  width: 6px; height: 6px; border-radius: var(--radius-full);
+  background: var(--color-live, #ef4444);
+}

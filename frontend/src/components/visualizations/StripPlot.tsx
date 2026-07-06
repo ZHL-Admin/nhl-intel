@@ -17,7 +17,7 @@ interface StripPlotProps {
 const W = 600
 const PAD = 28
 
-export default function StripPlot({ values, mean, markers = [], height = 90, color = '#3b82f6' }: StripPlotProps) {
+export default function StripPlot({ values, mean, markers = [], height = 90, color = 'var(--color-ice-600)' }: StripPlotProps) {
   if (!values.length) return <div className="strip-plot__empty">No games</div>
   const lo = Math.min(...values, ...(markers.map((m) => m.value)))
   const hi = Math.max(...values, ...(markers.map((m) => m.value)))

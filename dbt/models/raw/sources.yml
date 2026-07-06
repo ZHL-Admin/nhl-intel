@@ -30,6 +30,12 @@ sources:
           Server-side win probability + leverage per (game_id, elapsed_seconds) on a 10s grid
           (Phase 2.4; models_ml/score_winprob.py). leverage = WP swing of a goal at that state.
 
+      - name: player_prior_quality
+        description: >
+          Each skater's PRIOR-SEASON shrunk WAR rate per season (models_ml/compute_prior_quality.py),
+          used leak-free by mart_player_quality_context for QoC/QoT. Grain (player_id, season);
+          rookies = 0.0.
+
       - name: team_ratings
         description: >
           Power ratings (Phase 3.1; models_ml/compute_ratings.py). One row per
