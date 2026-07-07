@@ -665,6 +665,48 @@ def _effective_fwd_pos(pid, listed, effpos) -> str:
     return J.effective_fwd_pos(pid, listed, effpos)
 
 
+@lru_cache(maxsize=16)
+def _seed_units(team_id: int, base_season: str) -> dict:
+    """Observed 5v5 units for deployment-aware line seeding, keyed by a team + base season. MERGES the
+    team's full-season int_line_seasons units (floor LINE_SEED_MIN_5V5_MINUTES) with its last-10-games
+    team_current_lines units (proportional LINE_SEED_MIN_5V5_MINUTES_CURRENT floor). Returns
+    {'F3': [(frozenset(ids), minutes)...], 'D2': [...]} sorted by shared minutes desc — so established
+    season units seed first and recent-form units only fill gaps. Cached (the live tool re-evaluates on
+    every edit; this must not re-query per keystroke). Both source tables are already exported to DuckDB."""
+    from models_ml import project_roster_forecast as J
+    CFG = J.CFG
+    out: dict = {"F3": [], "D2": []}
+    season_floor = CFG["LINE_SEED_MIN_5V5_MINUTES"]
+    current_floor = CFG["LINE_SEED_MIN_5V5_MINUTES_CURRENT"]
+
+    def _add(rows, floor):
+        for r in rows:
+            lt = r.get("line_type")
+            if lt not in out:
+                continue
+            mins = float(r["minutes"])
+            if mins < floor:
+                continue
+            members = frozenset(int(x) for x in str(r["line_key"]).split("-"))
+            out[lt].append((members, mins))
+
+    try:
+        _add(bq_service.query(
+            "SELECT line_type, line_key, minutes FROM int_line_seasons "
+            f"WHERE team_id = {int(team_id)} AND season = '{base_season}'"), season_floor)
+    except Exception:  # noqa: BLE001 — table absent -> no season units (still try current)
+        pass
+    try:
+        _add(bq_service.query(
+            "SELECT line_type, line_key, minutes FROM team_current_lines "
+            f"WHERE team_id = {int(team_id)}"), current_floor)
+    except Exception:  # noqa: BLE001 — table absent -> season units only
+        pass
+    for lt in out:
+        out[lt].sort(key=lambda mm: -mm[1])
+    return out
+
+
 @lru_cache(maxsize=2)
 def _load_components(base_season: str) -> dict:
     """player_id -> realized latest-window GAR components (goals scale) for the component breakdown.
@@ -738,58 +780,36 @@ def _place(p, slot, slot_map):
     slot_map[slot] = p
 
 
-def _flex_fill(all_slots, leftovers, slot_map):
-    """Seat surplus / off-position players in any still-empty slot of their group, best first — so a
-    5th left-shot D plays his off side, a winger covers a thin center slot. A hole stays only if the
-    pool truly cannot fill it (then it is replacement level, never dropped)."""
-    empties = [s for s in all_slots if s not in slot_map]
-    for slot, p in zip(empties, sorted(leftovers, key=lambda x: x.projected_war, reverse=True)):
-        _place(p, slot, slot_map)
-
-
-def _assign_forwards(fwds, effpos, CFG, slot_map):
-    """Seat forwards into the 12 forward slots via the SHARED position-aware assignment (project_roster_
-    forecast.assign_forward_sides): projected_war minus off-position penalty, maximized over
-    (forward, slot). Effective position drives the bins; the penalty shapes placement only (team WAR
-    sums raw projected_war). Surplus forwards scratch; holes fill at replacement in _iced_lineup."""
-    from models_ml import project_roster_forecast as J
-    by_side = J.assign_forward_sides(fwds, effpos, CFG)
-    for side, col_slots in _FWD_COLS.items():
-        for slot, p in zip(col_slots, by_side[side]):
-            _place(p, slot, slot_map)
-
-
-def _ice_from_pool(players, inp):
-    """Auto-optimize the depth chart, POSITION- and DEPLOYMENT-AWARE: forwards are seated by a soft-
-    penalty assignment over their EFFECTIVE positions (a listed-LW who takes center draws ices at C),
-    defensemen by handedness side (best at the top), with surplus / short positions flex-filling the
-    rest. A hole is never dropped — an unfilled slot is replacement level. Returns slot->PlayerProj and
-    the scratch pool."""
+def _ice_from_pool(players, inp, seed_units=None):
+    """Auto-optimize the depth chart, POSITION- and DEPLOYMENT-AWARE. Forwards: SEED observed trios
+    (real 5v5 units from seed_units, so a team that splits its stars is reproduced instead of WAR-
+    stacked), then ASSIGN the rest by a soft-penalty assignment over EFFECTIVE positions (a listed-LW
+    who takes center draws ices at C). Defensemen: seed observed pairs, then handedness side, with
+    surplus / short positions flex-filling the rest. A hole is never dropped — an unfilled slot is
+    replacement level. seed_units None -> pure Phase-1 assignment. Returns slot->PlayerProj + scratch."""
     from models_ml import project_roster_forecast as J
     CFG = J.CFG
     war = lambda p: p.projected_war  # noqa: E731
     hand = inp["hand"]
     effpos = inp.get("effpos", {})
+    units = seed_units or {}
     slot_map: dict = {}
 
-    # Forwards: assignment over (forward, forward-slot) on projected_war minus off-position penalty.
-    _assign_forwards([p for p in players if p.pos_group == "F"], effpos, CFG, slot_map)
-
-    # Defensemen by handedness side (left-shot -> LD, right-shot -> RD); unknown balances the sides.
-    def_by = {"L": [], "R": []}
-    for p in sorted((p for p in players if p.pos_group == "D"), key=war, reverse=True):
-        s = hand.get(p.player_id)
-        if s in ("L", "R"):
-            def_by[s].append(p)
-        else:
-            def_by["L" if len(def_by["L"]) <= len(def_by["R"]) else "R"].append(p)
-    d_leftovers = []
-    for side, slots in _DEF_COLS.items():
-        ranked = def_by[side]
-        for slot, p in zip(slots, ranked):
+    # Forwards: seed observed trios, then assign the remaining slots (both share the pure engine).
+    fwd_by_side = J.seed_and_assign_forwards([p for p in players if p.pos_group == "F"],
+                                             units.get("F3", []), effpos, hand, CFG)
+    for side, col_slots in _FWD_COLS.items():
+        for slot, p in zip(col_slots, fwd_by_side[side]):
             _place(p, slot, slot_map)
-        d_leftovers += ranked[len(slots):]
-    _flex_fill(DEF_SLOTS, d_leftovers, slot_map)
+
+    # Defensemen: seed observed pairs, then handedness (left-shot -> LD, right-shot -> RD); a full side
+    # overflows to the other side (a 5th lefty plays his off side) — all handled inside the shared engine,
+    # which returns <= 3 per side. A hole (pool short a side) stays empty -> replacement in _iced_lineup.
+    def_by_side = J.seed_and_assign_defense([p for p in players if p.pos_group == "D"],
+                                            units.get("D2", []), hand, CFG, n_pairs=len(_DEF_COLS["L"]))
+    for side, col_slots in _DEF_COLS.items():
+        for slot, p in zip(col_slots, def_by_side[side]):
+            _place(p, slot, slot_map)
 
     for slot, p in zip(("G1", "G2"), sorted((p for p in players if p.pos_group == "G"),
                                             key=war, reverse=True)):
@@ -1168,8 +1188,9 @@ def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize:
     base_members = _team_current_members(team_id, base_season)
     if not base_members:
         raise ValueError(f"no current roster for team {team_id}")
+    seed_units = _seed_units(team_id, base_season)   # observed 5v5 units for deployment-aware seeding
     base_players = [_proj(m["player_id"], m["position"], inp) for m in base_members]
-    base_slotmap, _ = _ice_from_pool(base_players, inp)
+    base_slotmap, _ = _ice_from_pool(base_players, inp, seed_units)
     base_iced = _iced_lineup(base_slotmap, CFG)
     base_ids = {m["player_id"] for m in base_members}
     base_total = J.lineup_value(base_iced, "projected_war")
@@ -1182,7 +1203,7 @@ def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize:
         pool_src = roster if roster is not None else [{"player_id": m["player_id"]} for m in base_members]
         pool = [_proj(e["player_id"], (inp["index"].get(int(e["player_id"]), {}) or {}).get("position", "F"), inp)
                 for e in pool_src if e.get("player_id") is not None]
-        built_slotmap, scratch = _ice_from_pool(pool, inp)
+        built_slotmap, scratch = _ice_from_pool(pool, inp, seed_units)
     elif roster is not None:
         built_slotmap, scratch = _ice_from_slots(roster, inp)
     else:

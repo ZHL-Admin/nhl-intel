@@ -10,7 +10,7 @@ e25b7ed (radar data layer), b7c9226 (archetypes v2 A3), 3afd20f (v2 A1/A2). Read
 
 ---
 
-## ===== POSITION- & DEPLOYMENT-AWARE LINEUP BUILDERS (Phase 1 COMPLETE; Phase 2 line seeding) =====
+## ===== POSITION- & DEPLOYMENT-AWARE LINEUP BUILDERS (Phase 1 + Phase 2 COMPLETE) =====
 
 **Why:** the lineup builders (Roster Builder auto-optimize, offseason-forecast lineups, roster
 suggestions) seated forwards by the *listed* NHL position and stacked lines WAR-greedily. Two failures:
@@ -36,16 +36,27 @@ not how teams actually deploy (Edmonton splits McDavid & Draisaitl at 5v5).
   `project_roster_forecast.assign_forward_sides` is SHARED by the live tool AND
   `calibrate_roster_builder` so the calibration ices the exact rule. Deterministic (tie-break by
   player_id); a pool < 12 leaves replacement holes.
-- **Recalibrated:** `LEAGUE_AVG_LINEUP_WAR 12.68`, `WAR_TO_RATING 0.03289` (was 12.29 / 0.03198);
-  projected-points MAE **10.52** (~= the 10.5 baseline), verdict SHIP. `roster-forecast-validate` MAE
-  4.50, rank-corr 0.616. Backend verified end-to-end under `SERVING_BACKEND=duckdb`.
-- Docs: `docs/methodology/roster-builder.md` (Effective position + Line assignment sections),
-  `offseason-forecast.md` (step 2 effective-position note).
+- **Recalibrated (Phase 1):** `LEAGUE_AVG_LINEUP_WAR 12.68`, `WAR_TO_RATING 0.03289`; projected-points
+  MAE 10.52, verdict SHIP. Committed on branch `position-aware-lineups` (commit e3487b1).
 
-**Phase 2 — deployment-aware line seeding (NEXT):** seed observed units (`int_line_seasons` /
-`team_current_lines`, shared 5v5 ≥ `LINE_SEED_MIN_5V5_MINUTES=100`) before the Phase-1 assignment so
-the builder reproduces real trios/pairs (splits McDavid & Draisaitl) instead of WAR-stacking; arrivals
-flow through the assignment. PP units out of scope. Then recalibrate again.
+**Phase 2 — deployment-aware line seeding (DONE):**
+- Shared engine `project_roster_forecast.seed_and_assign_forwards` / `seed_and_assign_defense`: SEED
+  observed 5v5 units (full member set present + unplaced, shared minutes ≥ floor), rank into line/pair
+  order by combined projected WAR, then ASSIGN the rest via the Phase-1 assignment. Source = the team's
+  `int_line_seasons` (base season, floor `LINE_SEED_MIN_5V5_MINUTES=100`) MERGED with `team_current_lines`
+  (last-10, floor `..._CURRENT=30`) — a documented deviation from strict prefer-current/fall-back
+  (10-game minutes never clear a season floor, so a strict rule seeds nothing in the offseason; season
+  units dominate by minutes so recent-form units only fill gaps). Both tables already exported to DuckDB.
+- Applied in `_ice_from_pool` (Roster Builder baseline + optimize, via `_seed_units` loader, cached) and
+  the offseason forecast (`_full_lineup` seeded path, `load_seed_units`/`load_handedness` in main;
+  ledger + delta math unchanged, flat build_lineup kept as the None fallback so pure-core tests pass).
+  No per-edit model scoring — live edit path stays fast.
+- **McDavid & Draisaitl split verified** (EDM optimize): McDavid F1C with his 250-min trio, Draisaitl
+  F2C with his own trio (their together-trio is 88 min, below the floor). Compher still C. Deterministic.
+- **Recalibrated (Phase 2):** `LEAGUE_AVG_LINEUP_WAR 12.09`, `WAR_TO_RATING 0.03540`; projected-points
+  MAE **10.51** (~= 10.5), corr **0.465** (up from 0.427 — seeding helps), verdict SHIP.
+- Docs: `roster-builder.md` (Effective position, Line assignment, Line seeding), `offseason-forecast.md`
+  (steps 2 + 4).
 
 ## ===== LIVE ROSTER MEMBERSHIP — current team comes from a live feed, not just games =====
 

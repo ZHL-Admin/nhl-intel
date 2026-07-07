@@ -68,12 +68,11 @@ def _membership_open(bq, season: str) -> dict:
     return out
 
 
-# Position-aware icing, IDENTICAL to backend/services/tools._ice_from_pool: forwards are seated by the
-# SHARED soft-penalty assignment (project_roster_forecast.assign_forward_sides) over their EFFECTIVE
-# positions (faceoff-derived C/L/R/F_FLEX), defensemen by handedness side (<=3 each), surplus / short
-# positions flex-fill the rest. This is what the live tool actually ices, so LEAGUE_AVG_LINEUP_WAR must
-# be calibrated on THIS basis (a pure top-by-WAR lineup overstates it — you cannot ice 7 centers).
-DEF_CAP = {"L": 3, "R": 3}
+# Deployment-aware icing, IDENTICAL to backend/services/tools._ice_from_pool via the SHARED engine
+# (project_roster_forecast.seed_and_assign_forwards / seed_and_assign_defense): seed observed 5v5 units,
+# then seat the rest by the soft-penalty assignment over EFFECTIVE positions (forwards) / handedness
+# (defense, <=3 per side, off-side flex-fill). This is what the live tool actually ices, so
+# LEAGUE_AVG_LINEUP_WAR must be calibrated on THIS basis (a pure top-by-WAR lineup overstates it).
 
 
 def _handedness(bq) -> dict:
@@ -83,25 +82,20 @@ def _handedness(bq) -> dict:
     return out
 
 
-def _iced_total(players, hand, effpos) -> float:
-    """Sum of projected WAR over the position-valid iced 12F/6D/1G (unfilled slots = 0). Forwards are
-    iced by the SAME shared assignment (effective position + off-position penalties) the live tool uses,
-    so the calibration constant matches what absolute_rating actually sums."""
+def _iced_total(players, hand, effpos, tunits) -> float:
+    """Sum of projected WAR over the position-valid iced 12F/6D/1G (unfilled slots = 0). Forwards AND
+    defensemen are iced by the SAME shared seed+assign the live tool uses (seed observed 5v5 units, then
+    the position-aware assignment), so LEAGUE_AVG_LINEUP_WAR matches what absolute_rating actually sums.
+    tunits = {'F3':[...], 'D2':[...]} observed units for this team (None -> pure Phase-1 assignment)."""
     war = lambda p: p.projected_war  # noqa: E731
-    by_side = J.assign_forward_sides([p for p in players if p.pos_group == "F"], effpos, CFG)
-    iced = [p for side in by_side.values() for p in side]   # the iced forwards (<= 12)
+    units = tunits or {}
+    fbs = J.seed_and_assign_forwards([p for p in players if p.pos_group == "F"],
+                                     units.get("F3", []), effpos, hand, CFG)
+    iced = [p for side in fbs.values() for p in side]   # the iced forwards (<= 12)
 
-    def_by = {"L": [], "R": []}
-    for p in sorted((p for p in players if p.pos_group == "D"), key=war, reverse=True):
-        s = hand.get(p.player_id)
-        if s in ("L", "R"):
-            def_by[s].append(p)
-        else:
-            def_by["L" if len(def_by["L"]) <= len(def_by["R"]) else "R"].append(p)
-    iced_d, left_d = [], []
-    for side, cap in DEF_CAP.items():
-        iced_d += def_by[side][:cap]; left_d += def_by[side][cap:]
-    iced_d += sorted(left_d, key=war, reverse=True)[:max(0, 6 - len(iced_d))]
+    dbs = J.seed_and_assign_defense([p for p in players if p.pos_group == "D"],
+                                    units.get("D2", []), hand, CFG, n_pairs=3)
+    iced_d = dbs["L"] + dbs["R"]   # shared engine already caps at 3/side + flex-fills overflow (<= 6)
 
     # Goalie: the SERVING lineup (project_roster_forecast._full_lineup) ices a workload-weighted TANDEM
     # (WAR is a per-82 rate, so summing two goalies double-counts). Weight identically here — with the
@@ -122,12 +116,13 @@ def _team_total_wars(bq, base_season: str, target_season: str, hand: dict, effpo
     aging = J.load_aging(bq)
     ages = J.load_ages(bq, base_season)
     mem = _membership_open(bq, target_season)
+    seed_units = J.load_seed_units(bq, base_season)   # base-season observed units, matching the tool
 
     out = {}
     for tid in mem:
         players = J._projected_players(tid, mem, skater_data, goalie_data, aging, ages,
                                        archetypes, project_value=True)
-        out[int(tid)] = _iced_total(players, hand, effpos)
+        out[int(tid)] = _iced_total(players, hand, effpos, seed_units.get(int(tid)))
     return out
 
 

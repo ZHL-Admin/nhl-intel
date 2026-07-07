@@ -40,8 +40,8 @@ live once in `config.ROSTER_FORECAST` and are calibrated by `models_ml/calibrate
 
 | constant | value | meaning |
 |---|---|---|
-| `LEAGUE_AVG_LINEUP_WAR` | **12.68** | league-mean projected *position-valid* iced-lineup WAR, so an average roster maps to `rating_abs ≈ 0` (≈ 91.5 league-average points) |
-| `WAR_TO_RATING` | **0.03289** | goals/game of team rating per 1 WAR of centered lineup value |
+| `LEAGUE_AVG_LINEUP_WAR` | **12.09** | league-mean projected *deployment-valid* iced-lineup WAR, so an average roster maps to `rating_abs ≈ 0` (≈ 91.5 league-average points) |
+| `WAR_TO_RATING` | **0.03540** | goals/game of team rating per 1 WAR of centered lineup value |
 
 The lineup is iced **position- and deployment-aware** (see *Effective position* and *Line assignment*
 below): forwards are seated by a soft-penalty assignment over the positions they *actually* play,
@@ -117,6 +117,33 @@ avoids it. `LEAGUE_AVG_LINEUP_WAR` and `WAR_TO_RATING` are calibrated on the *ra
 assignment produces. Output is deterministic (forwards pre-sorted by `(−projected_war, player_id)`, so
 equal-value ties resolve stably); a pool under twelve forwards leaves replacement holes, never a
 dropped slot. Defense-pair assignment (handedness) and the goalie tandem are unchanged.
+
+## Deployment-aware line seeding: reproduce observed units, don't WAR-stack
+
+A pure best-C + best-LW + best-RW build is not how a team actually deploys. Edmonton splits Connor
+McDavid and Leon Draisaitl across two 5v5 lines (they reunite only on the power play), yet a WAR-greedy
+builder stacks them on line 1. So **before** the assignment, the builder *seeds* observed units
+(`project_roster_forecast.seed_and_assign_forwards` / `seed_and_assign_defense`):
+
+- **Candidate units** are the team's `int_line_seasons` forward trios and defense pairs for the base
+  season, merged with its `team_current_lines` last-10-games units (a small documented deviation from
+  a strict prefer-current/fall-back rule — 10-game shared minutes never clear a season-scale floor, so
+  a strict rule would seed nothing in the offseason). A unit qualifies only when its **full member set
+  is present and unplaced** in the pool and it clears the shared-5v5 floor
+  (`LINE_SEED_MIN_5V5_MINUTES = 100` for season units, `..._CURRENT = 30` for the 10-game units).
+- Units are accepted greedily in descending shared minutes, skipping any that conflict with an
+  already-placed player. Accepted units are ranked into line/pair order by combined projected WAR
+  (best unit = line 1). Within a trio the C slot goes to the member with the highest faceoffs/game;
+  wings take their effective side (handedness as tiebreak). Within a pair the left-shot takes LD.
+- Everyone left — **all arrivals and edited-in players, who by construction never played with the
+  group** — flows through the Phase 1 assignment for the remaining slots.
+
+This needs no special gating: trade Draisaitl away and his units dissolve automatically because the
+member-set check fails; his linemates fall to the assignment. It reproduces the McDavid/Draisaitl 5v5
+split because the observed data contains it (their dominant trios are *separate*; their shared-line
+minutes fall below the floor). **Power-play units are out of scope** — the seeding is 5v5 deployment
+only. The live re-evaluate path stays fast: seeding + assignment are `O(small)` with no per-edit model
+scoring, and the observed-unit lookup is cached per team.
 
 ---
 

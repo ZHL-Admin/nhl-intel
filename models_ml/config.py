@@ -577,11 +577,11 @@ ROSTER_FORECAST = {
     # Recalibrated in Handoff 12 for the component projection model (project_roster_player), whose WAR
     # scale differs from the old project_skater_war these were first fit on. Roster-Builder-only
     # (absolute_rating is not used by the offseason tool).
-    "LEAGUE_AVG_LINEUP_WAR": 12.68,   # league-mean projected iced-lineup WAR (above replacement); goalie
-    #                                   tandem workload-weighted, forwards iced by the POSITION-AWARE
-    #                                   assignment (effective position + off-position penalties). Recalibrated
-    #                                   via calibrate_roster_builder (Phase 1: 63 team-seasons, MAE 10.52).
-    "WAR_TO_RATING": 0.03289,         # goals/game of team rating per 1 WAR of centered lineup value
+    "LEAGUE_AVG_LINEUP_WAR": 12.09,   # league-mean projected iced-lineup WAR (above replacement); goalie
+    #                                   tandem workload-weighted, skaters iced DEPLOYMENT-AWARE (seed observed
+    #                                   5v5 units, then the position-aware assignment). Recalibrated via
+    #                                   calibrate_roster_builder (Phase 2: 63 team-seasons, MAE 10.51, corr 0.465).
+    "WAR_TO_RATING": 0.03540,         # goals/game of team rating per 1 WAR of centered lineup value
 
     # Roster Builder band calibration (Handoff 12 — used ONLY by roster-evaluate, not the offseason
     # tool). The ABSOLUTE points band is sqrt((kappa * talent_quad_pts)^2 + luck_floor^2): the iced
@@ -681,7 +681,13 @@ ROSTER_FORECAST = {
     # shared >= this many 5v5 minutes is placed intact, in descending shared minutes. This reproduces
     # real deployment (e.g. a team that splits its two stars at 5v5) instead of WAR-stacking. The
     # table's own floor is 30 minutes; we require a higher bar so only genuinely established units seed.
-    "LINE_SEED_MIN_5V5_MINUTES": 100.0,
+    # Sources are MERGED (a small, documented deviation from strict prefer-current/fall-back-to-season):
+    # int_line_seasons full-season units (floor below) plus team_current_lines last-10-games units at the
+    # proportional CURRENT floor. Sorted by shared minutes, season units (larger) seed first, so recent
+    # deployment only fills gaps a season unit does not — a strict "prefer current" rule would seed almost
+    # nothing in the offseason (10-game shared minutes never clear a season-scale floor).
+    "LINE_SEED_MIN_5V5_MINUTES": 100.0,          # int_line_seasons (full season)
+    "LINE_SEED_MIN_5V5_MINUTES_CURRENT": 30.0,   # team_current_lines (last 10 games)
 }
 
 assert ROSTER_FORECAST["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (

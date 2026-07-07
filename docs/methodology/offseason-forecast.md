@@ -122,13 +122,18 @@ import so a WAR delta and the team rating share one goals scale.
    never reads as confident.
 
 4. **Project the lineup at the slot level.** Not "all arrivals minus all departures" — a team ices a
-   fixed lineup (`N_FWD=12`, `N_DEF=6`, `N_GOALIE=1`). Take the best players by projected WAR per
-   position; any unfilled or vacated slot is filled at `REPLACEMENT_WAR` (0.0 — WAR is above
-   replacement by definition; the slot still EXISTS, a departure is never a free hole and never a
-   dropped slot). **Both** the base and updated lineups are built and summed by projected WAR, so a
-   returning player cancels (his aging shows in the per-player ledger, not twice in the team delta)
-   and a no-move roster nets to exactly zero. `net_delta_war = Σ updated slots − Σ base slots`, and
-   the per-player `delta_contribution` partitions it exactly (the consistency discipline, unit-tested).
+   fixed lineup (`N_FWD=12`, `N_DEF=6`, `N_GOALIE=1`). The lineup is built **deployment-aware** (the
+   same engine as the Roster Builder — see `roster-builder.md` → *Line seeding* + *Line assignment*):
+   observed base-season 5v5 units (`int_line_seasons`) are **seeded** among holdovers, then the
+   remaining slots are filled by the position-aware assignment over effective positions; any unfilled
+   or vacated slot is filled at `REPLACEMENT_WAR` (0.0 — WAR is above replacement by definition; the
+   slot still EXISTS, a departure is never a free hole and never a dropped slot). **Both** the base and
+   updated lineups are built the same way and summed by projected WAR, so a returning player cancels
+   (his aging shows in the per-player ledger, not twice in the team delta) and a no-move roster nets to
+   exactly zero. Both lineups use the SAME base-season units, so a departed player's unit dissolves in
+   the updated lineup (member-set check) — arrivals, who never played with the group, flow through the
+   assignment. `net_delta_war = Σ updated slots − Σ base slots`, and the per-player `delta_contribution`
+   partitions it exactly (the consistency discipline, unit-tested). Power-play units are out of scope.
 
 5. **Chemistry + style overlay.** For the projected top two forward trios and top defense pair,
    `score_line` gives each unit's projected xGF share; the updated-minus-base mean share delta becomes
