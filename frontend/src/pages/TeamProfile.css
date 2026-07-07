@@ -439,21 +439,22 @@
 }
 
 .team-profile__info { border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); padding: var(--space-4) var(--space-5); }
-.team-hd { display: flex; align-items: center; }
-.team-hd__logo { width: auto; height: 150px; object-fit: contain; flex-shrink: 0; }
+.team-hd { display: flex; align-items: center; gap: var(--space-4); }
+.team-hd__logo { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
 .team-hd__id { min-width: 0; }
-/* §3.1: team name in the profile header — display serif. */
-.team-hd__name { font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 600; margin: 0; color: var(--color-text-primary); line-height: 1.05; letter-spacing: -0.01em; }
-.team-hd__context { font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: var(--space-2); }
-.team-hd__divider { border: none; border-top: 1px solid var(--color-border); margin: var(--space-4) 0; }
+/* §06: team name in Newsreader display-1. */
+.team-hd__name { font-family: var(--font-display); font-size: var(--text-display-1); font-weight: 500; margin: 0; color: var(--color-text-primary); line-height: 1.05; letter-spacing: -0.01em; }
+.team-hd__context { font-family: var(--font-sans); font-size: var(--text-base); color: var(--color-text-secondary); margin-top: var(--space-1); }
+/* §06 signature: a 3px team-color rule beneath the masthead text (team color as a line). */
+.team-hd__divider { border: none; border-top: 3px solid var(--color-team-primary, var(--color-accent)); margin: var(--space-4) 0; }
 .team-hd__hero { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
-.team-hd__record { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); letter-spacing: -0.01em; }
-.team-hd__pts { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-secondary); }
-.team-hd__power { font-size: var(--text-sm); font-weight: 600; padding: 5px 14px; border-radius: var(--radius-full); color: var(--color-text-inverse); white-space: nowrap; }
-.team-hd__power--r1 { background: var(--color-success); }
-.team-hd__power--r2 { background: var(--color-accent); }
-.team-hd__power--r3 { background: var(--color-text-secondary); }
-.team-hd__power--r4 { background: var(--color-danger); }
+.team-hd__record { font-family: var(--font-sans); font-size: var(--text-base); font-weight: 500; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.team-hd__pts { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.team-hd__power { font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 500; padding: 3px 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); color: var(--color-text-secondary); white-space: nowrap; }
+.team-hd__power--r1 { border-color: var(--line-blue); color: var(--line-blue); }
+.team-hd__power--r2 { border-color: var(--color-border-strong); }
+.team-hd__power--r3 { border-color: var(--color-border-strong); }
+.team-hd__power--r4 { border-color: var(--line-red); color: var(--line-red); }
 /* Generated identity verdict, just under the record line (moved out of the Overview body). */
 /* §3.1: verdict reads in display serif. */
 .team-hd__verdict { font-family: var(--font-display); font-size: var(--text-base); line-height: 1.5; color: var(--color-text-secondary); margin: var(--space-3) 0 0; max-width: 70ch; }
