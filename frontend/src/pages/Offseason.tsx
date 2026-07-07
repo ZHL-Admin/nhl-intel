@@ -8,6 +8,7 @@ import {
   getTeamLogoUrl, getTeamName, getTeamColor, setTeamPrimaryColor, clearTeamPrimaryColor, DIVISIONS,
 } from '../utils/teams'
 import { nextSeasonOf } from '../utils/forecastFormat'
+import { drawOffseasonCard } from '../utils/offseasonShareCard'
 import ForecastHeroStats from '../components/forecast/ForecastHeroStats'
 import LeagueRail from '../components/forecast/LeagueRail'
 import MoveLedger from '../components/forecast/MoveLedger'
@@ -56,7 +57,11 @@ function TeamDetail({ detail, loading, error, onRetry }: {
           <div className="off-verdict__share">
             <span className="off-verdict__kicker mono">OFFSEASON FORECAST · {shareStamp()}</span>
             <ShareActions kicker={`OFFSEASON FORECAST · ${shareStamp()}`} verdict={detail.verdict}
-              shareName={`offseason-${detail.forecast.team_abbrev?.toLowerCase() ?? 'team'}`} />
+              shareName={`openice-offseason-${detail.forecast.team_abbrev?.toLowerCase() ?? 'team'}-${nextSeasonOf(detail.forecast.transition)}`}
+              renderCard={() => drawOffseasonCard({
+                row: detail.forecast, moves: detail.moves,
+                nextSeason: nextSeasonOf(detail.forecast.transition), dateStamp: shareStamp(),
+              })} />
           </div>
         </div>
         <p className="verdict__lead">{detail.verdict}</p>
@@ -77,7 +82,8 @@ function TeamDetail({ detail, loading, error, onRetry }: {
 
       <section className="sec">
         <SectionHead n="04" title="Projected lineup" />
-        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals} team={detail.forecast.team_abbrev} />
+        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals}
+          team={detail.forecast.team_abbrev} fits={detail.line_fits} />
       </section>
     </div>
   )
@@ -150,6 +156,7 @@ export default function Offseason() {
     <PageLayout>
       <div className="off">
         <PageCard
+          eyebrow="Studio"
           title="Offseason forecast"
           subtitle="Projected WAR change for every roster, updated daily."
           controls={
