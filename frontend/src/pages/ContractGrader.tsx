@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Info, ChevronDown, FileSignature, ArrowRight } from 'lucide-react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
-  Tooltip as RTooltip, ReferenceLine, Label,
+  Tooltip as RTooltip, ReferenceLine, ReferenceArea, Label,
 } from 'recharts'
 import {
   PageLayout, PageCard, PlayerPicker, PlayerAvatar, Tabs, ChartPanel, Tooltip,
@@ -114,6 +114,11 @@ function PaidVsWorthChart({ g, unit, ghostAAV }: { g: ContractGrade; unit: '$' |
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 12, right: 56, bottom: 4, left: 4 }}>
         <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
+        {/* §S5: the contract window shades in --crease, spanning exactly the entered term. */}
+        {data.length > 0 && (
+          <ReferenceArea x1={data[0].season} x2={data[data.length - 1].season}
+            fill="var(--crease)" fillOpacity={1} stroke="none" ifOverflow="extendDomain" />
+        )}
         <XAxis dataKey="season" stroke="var(--color-border)"
           tick={(props: any) => {
             const row = data[props.index]
@@ -132,18 +137,31 @@ function PaidVsWorthChart({ g, unit, ghostAAV }: { g: ContractGrade; unit: '$' |
         <Area dataKey="bandSpan" stackId="band" stroke="none" fill="var(--color-text-muted)" fillOpacity={0.10} isAnimationActive={false} />
         {/* worth-vs-paid gap shading */}
         <Area dataKey="base" stackId="g" stroke="none" fill="transparent" isAnimationActive={false} />
-        <Area dataKey="surplus" stackId="g" stroke="none" fill="var(--color-success)" fillOpacity={0.20} animationDuration={400} />
-        <Area dataKey="deficit" stackId="g" stroke="none" fill="var(--color-danger)" fillOpacity={0.20} animationDuration={400} />
+        <Area dataKey="surplus" stackId="g" stroke="none" fill="var(--color-data-positive)" fillOpacity={0.18} animationDuration={400} />
+        <Area dataKey="deficit" stackId="g" stroke="none" fill="var(--color-data-negative)" fillOpacity={0.18} animationDuration={400} />
         {ghost != null && (
           <ReferenceLine y={ghost} stroke="var(--color-text-muted)" strokeDasharray="3 3" strokeWidth={1}>
             <Label value="actual deal" position="insideBottomLeft" fill="var(--color-text-muted)" style={{ fontSize: 10 }} />
           </ReferenceLine>
         )}
-        <Line type="monotone" dataKey="fair" stroke="var(--color-success)" strokeWidth={2} dot={false} animationDuration={400}>
-          <Label value="worth" position="right" dy={-3} fill="var(--color-success)" style={{ fontSize: 11, fontWeight: 600 }} />
-        </Line>
-        <Line type="monotone" dataKey="paid" stroke="var(--color-text-primary)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false}>
-          <Label value="paid" position="right" dy={12} fill="var(--color-text-primary)" style={{ fontSize: 11, fontWeight: 600 }} />
+        {/* §S5: the AAV as a flat 1px "cap hit" reference line, labeled in Newsreader italic. */}
+        <ReferenceLine y={data.reduce((s, r) => s + r.paid, 0) / (data.length || 1)}
+          stroke="var(--color-text-primary)" strokeWidth={1}>
+          <Label value="cap hit" position="right" dy={12}
+            fill="var(--color-text-secondary)"
+            style={{ fontSize: 13, fontStyle: 'italic', fontFamily: 'var(--font-display)' }} />
+        </ReferenceLine>
+        {/* §S5: red "now" tick at the first (today) season. */}
+        {data.length > 0 && (
+          <ReferenceLine x={data[0].season} stroke="var(--line-red)" strokeWidth={1}>
+            <Label value="now" position="insideTopLeft" fill="var(--line-red)"
+              style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }} />
+          </ReferenceLine>
+        )}
+        {/* §S5: projected value line is dashed (solid=observed / dashed=projected). */}
+        <Line type="monotone" dataKey="fair" stroke="var(--color-data-positive)" strokeWidth={2}
+          strokeDasharray="5 4" dot={false} animationDuration={400}>
+          <Label value="worth" position="right" dy={-3} fill="var(--color-data-positive)" style={{ fontSize: 11, fontWeight: 600 }} />
         </Line>
       </ComposedChart>
     </ResponsiveContainer>
