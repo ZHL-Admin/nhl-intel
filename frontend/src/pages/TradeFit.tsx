@@ -246,8 +246,9 @@ export default function TradeFit() {
     <PageLayout>
       <div className="tf">
         <PageCard
-          title="Find a fit"
-          subtitle="Where would a player help most? Score him against all 32 rosters."
+          eyebrow="Studio"
+          title="Player Fit"
+          subtitle="Pick a player and a team, and score the fit against that roster's needs."
           bodyClassName="tf__body"
         >
         {showResult ? (

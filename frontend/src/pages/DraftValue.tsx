@@ -245,8 +245,9 @@ export default function DraftValue() {
     <PageLayout>
       <div className="dv">
         <PageCard
+          eyebrow="Studio"
           title="Draft value"
-          subtitle="What picks are worth, measured from draft history."
+          subtitle="What a draft slot is actually worth, measured from draft history."
         >
         {/* curve */}
         <section className="dv-section">

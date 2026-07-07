@@ -334,7 +334,8 @@ export default function ContractGrader() {
     <PageLayout>
       <div className="cg-page">
         <PageCard
-          title="Contracts"
+          eyebrow="Studio"
+          title="Contract Grader"
           subtitle="Grade any deal against the aging curve and the market."
           controls={
             <Tabs

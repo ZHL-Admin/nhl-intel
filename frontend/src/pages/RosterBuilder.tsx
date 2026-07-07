@@ -212,8 +212,9 @@ export default function RosterBuilder() {
     <PageLayout>
       <div className="rb">
         <PageCard
-          title="Roster moves"
-          subtitle="Evaluate or suggest roster changes against team needs."
+          eyebrow="Studio"
+          title="Roster Builder"
+          subtitle="Assemble the lineup card and let the model evaluate it or suggest additions."
         >
           <TeamBar teamId={teamId} onSelect={onSelectTeam} evaluating={evaluating}
                    onOptimize={autoOptimize} onReset={resetToCurrent} />

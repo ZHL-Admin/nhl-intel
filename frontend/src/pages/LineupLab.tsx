@@ -19,6 +19,7 @@ import { PlayerCardData } from '../components/common/PlayerCard'
 import { lineFit, lineFitSuggestions } from '../api/tools'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import { LineFitProjection, PlayerSearchResult, LineMemberOut, LineSuggestions, BetterFitSwap } from '../api/types'
+import { BRAND_NAME } from '../config/brand'
 import './LineupLab.css'
 
 type LineType = 'F3' | 'D2' | 'UNIT5'
@@ -67,9 +68,9 @@ const collectMembers = (proj: LineFitProjection): Record<number, LineMemberOut> 
 function ShareButton({ url, grade, xgf }: { url: string; grade: string; xgf: number }) {
   const [copied, setCopied] = useState(false)
   const onShare = async () => {
-    const text = `My projected line grades ${grade} — ${xgf}% expected-goals share. Build yours in NHL Intel’s Lineup Lab:`
+    const text = `My projected line grades ${grade} — ${xgf}% expected-goals share. Build yours in ${BRAND_NAME}’s Lineup Lab:`
     if (typeof navigator !== 'undefined' && (navigator as any).share) {
-      try { await (navigator as any).share({ title: 'NHL Intel · Lineup Lab', text, url }) } catch { /* dismissed */ }
+      try { await (navigator as any).share({ title: `${BRAND_NAME} · Lineup Lab`, text, url }) } catch { /* dismissed */ }
       return
     }
     try {
@@ -334,8 +335,9 @@ export default function LineupLab() {
     <PageLayout>
       <div className="lab">
         <PageCard
-          title="Line chemistry"
-          subtitle="Project any combination’s expected results before it plays a shift."
+          eyebrow="Studio"
+          title="Lineup Lab"
+          subtitle="Place five skaters on the sheet and project the line before it takes a shift."
           controls={!showResult && !loading ? (
             <div className="lab__build-bar">
               <Tabs

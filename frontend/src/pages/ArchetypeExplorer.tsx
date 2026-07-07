@@ -160,8 +160,9 @@ export default function ArchetypeExplorer() {
     <PageLayout>
       <div className="arch">
         <PageCard
-          title="Archetypes"
-          subtitle="Archeypes are discovered by clustering. Browse the gallery to see each one's characteristic radar shape, what it always shows, and who exemplifies it."
+          eyebrow="Learn"
+          title="Player archetypes"
+          subtitle="Playing-style families, discovered by clustering. Browse the gallery to see each one's characteristic radar shape, what it always shows, and who defines it."
           controls={!selected ? (
             <div className="arch__toolbar">
               <Tabs
