@@ -33,8 +33,31 @@
 @keyframes trade-spin { to { transform: rotate(360deg); } }
 
 .trade-builder__panels {
-  display: grid; gap: var(--space-4);
+  display: grid; gap: var(--space-6);
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  position: relative;
+}
+/* §S4: the two-side ledger is symmetric and divided by the trade's center line —
+   a vertical 1px --line-red rule (this page's only permitted second red line). */
+.trade-builder__panels[data-count="2"] { grid-template-columns: 1fr 1fr; }
+.trade-builder__panels[data-count="2"]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-red);
+  transform: translateX(-50%);
+}
+/* Below 900px the columns stack and the rule becomes a horizontal divider. */
+@media (max-width: 900px) {
+  .trade-builder__panels[data-count="2"] { grid-template-columns: 1fr; }
+  .trade-builder__panels[data-count="2"]::before {
+    left: 0; right: 0; top: 50%; bottom: auto;
+    width: auto; height: 1px;
+    transform: translateY(-50%);
+  }
 }
 
 /* empty team slot — a subtle dashed inset prompting the next team, with the same chip grid as setup.
