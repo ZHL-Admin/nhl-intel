@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -113,6 +113,48 @@ def build_lineup(players: list[PlayerProj], n_slots: int, value_attr: str,
                                 projected_war=cfg["REPLACEMENT_WAR"], war_sd=0.0, no_track_record=False,
                                 replacement=True, slot=f"{slot_prefix}{j + 1}"))
         total += cfg["REPLACEMENT_WAR"]
+    return slots, total
+
+
+def _norm_goalie_shares(shares, n_slots: int, cfg: dict) -> list[float]:
+    """A length-n_slots workload split summing to 1. Falls back to the league default (then a flat
+    split if that is also short), and renormalizes defensively so the tandem always ices exactly one
+    season of goaltending regardless of what the caller supplies."""
+    s = list(shares) if shares else list(cfg["GOALIE_WORKLOAD_FALLBACK"])
+    s = (s + [0.0] * n_slots)[:n_slots]
+    tot = sum(s)
+    if tot <= 0:
+        return [1.0 / n_slots] * n_slots
+    return [x / tot for x in s]
+
+
+def build_goalie_tandem(goalies: list[PlayerProj], n_slots: int, value_attr: str,
+                        shares, cfg: dict = CFG) -> tuple[list[PlayerProj], float]:
+    """Ice a goalie TANDEM, workload-weighted. Unlike skaters (build_lineup, summed at full value), the
+    top-n_slots goalies each carry a full-season per-82 WAR rate, so we weight each by his expected share
+    of starts (shares sum to 1) — the tandem then contributes exactly ONE season of goaltending. Each
+    iced goalie's value fields (base_war, projected_war, war_sd) are scaled IN PLACE by his share so the
+    weighting flows through the ledger delta and the band unchanged; the displayed value is thus his
+    role-adjusted contribution, not his full-82 rate. An empty backup slot is replacement * its share.
+    """
+    w = _norm_goalie_shares(shares, n_slots, cfg)
+    ranked = sorted(goalies, key=lambda p: getattr(p, value_attr), reverse=True)[:n_slots]
+    slots: list[PlayerProj] = []
+    total = 0.0
+    for i in range(n_slots):
+        share = w[i]
+        if i < len(ranked):
+            # A SCALED COPY (not in-place): forecast_team runs twice for teams with moves, so mutating
+            # the shared PlayerProj would compound the share on the second pass (share^2).
+            src = ranked[i]
+            p = replace(src, slot=f"G{i + 1}", base_war=src.base_war * share,
+                        projected_war=src.projected_war * share, war_sd=src.war_sd * share)
+        else:
+            p = PlayerProj(player_id=None, name=None, position="G", pos_group="G", is_goalie=True,
+                           base_war=cfg["REPLACEMENT_WAR"] * share, projected_war=cfg["REPLACEMENT_WAR"] * share,
+                           war_sd=0.0, no_track_record=False, replacement=True, slot=f"G{i + 1}")
+        slots.append(p)
+        total += getattr(p, value_attr)
     return slots, total
 
 
@@ -276,7 +318,8 @@ def absolute_rating(total_lineup_war: float, chemistry_adj: float = 0.0, cfg: di
 
 def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerProj],
                   base_rating: float, base_components: dict, n_moves: int | None = None,
-                  xgf_share_delta: float | None = None, cfg: dict = CFG) -> dict:
+                  xgf_share_delta: float | None = None, cfg: dict = CFG,
+                  goalie_shares=None) -> dict:
     """Assemble one team's forecast from its two projected rosters. Pure: callers supply already
     projected PlayerProj lists (base_war + projected_war filled), the base rating + components, and
     the line-fit xGF share delta. Returns the roster_forecast row payload + ledger.
@@ -295,8 +338,9 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
 
     # Both lineups ranked + summed by projected (next-season) value, so the delta is purely the
     # effect of the MOVES (returning players cancel; aging shows in the per-player ledger).
-    base_lineup, _ = _full_lineup(fwd_b, def_b, g_b, "projected_war", cfg)
-    upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg)
+    # Same team both sides -> same goalie workload split, so a returning tandem cancels in the delta.
+    base_lineup, _ = _full_lineup(fwd_b, def_b, g_b, "projected_war", cfg, goalie_shares)
+    upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg, goalie_shares)
 
     # Roster membership sets classify a move as a real join/leave (vs a lineup promotion/demotion).
     base_roster_ids = {p.player_id for p in base_players if p.player_id is not None}
@@ -339,11 +383,12 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     }
 
 
-def _full_lineup(fwd, dmen, goalies, value_attr, cfg):
-    """Build F/D/G slots and concatenate into one lineup; return (slots, total)."""
+def _full_lineup(fwd, dmen, goalies, value_attr, cfg, goalie_shares=None):
+    """Build F/D/G slots and concatenate into one lineup; return (slots, total). Skaters are summed at
+    full value; the goalie tandem is workload-weighted (goalie_shares, defaulting to the league split)."""
     fs, ft = build_lineup(fwd, cfg["N_FWD"], value_attr, "F", cfg)
     ds, dt = build_lineup(dmen, cfg["N_DEF"], value_attr, "D", cfg)
-    gs, gt = build_lineup(goalies, cfg["N_GOALIE"], value_attr, "G", cfg)
+    gs, gt = build_goalie_tandem(goalies, cfg["N_GOALIE"], value_attr, goalie_shares, cfg)
     return fs + ds + gs, ft + dt + gt
 
 
@@ -664,6 +709,33 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
     return out
 
 
+def load_goalie_workload(bq, base_season: str) -> dict:
+    """team_id -> [starter_share, backup_share] from the team's PRIOR-SEASON goalie usage: its top-2
+    goalies by games played, normalized to sum to 1. This is the expected start distribution we weight
+    next season's projected tandem by — a workhorse-starter club and an even-timeshare club weight their
+    backup differently. A team with fewer than two goalies (or no goalie games) is omitted, so the caller
+    falls back to GOALIE_WORKLOAD_FALLBACK. Reads stg_rosters (per-game appearances), goalies only."""
+    sql = f"""
+    WITH g AS (
+        SELECT team_id, player_id, COUNT(*) AS gp
+        FROM {bq.staging('stg_rosters')}
+        WHERE season = '{base_season}' AND position_code = 'G' AND {GAME_TYPE_FILTER}
+        GROUP BY team_id, player_id
+    ), ranked AS (
+        SELECT team_id, gp, ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY gp DESC) AS rn FROM g
+    )
+    SELECT team_id, MAX(IF(rn = 1, gp, 0)) AS g1, MAX(IF(rn = 2, gp, 0)) AS g2
+    FROM ranked WHERE rn <= 2 GROUP BY team_id
+    """
+    out: dict = {}
+    for _, x in bq.query_df(sql).iterrows():
+        g1, g2 = float(x.g1), float(x.g2)
+        if g2 <= 0 or (g1 + g2) <= 0:
+            continue  # only one goalie logged -> league-default split
+        out[int(x.team_id)] = [g1 / (g1 + g2), g2 / (g1 + g2)]
+    return out
+
+
 def _pos_group(position: str) -> str:
     if position == "G":
         return "G"
@@ -762,12 +834,14 @@ def main() -> None:
     ratings = load_team_ratings(bq, base_season)
     skater_data = load_skater_war_multi(bq, base_season, n_back)
     goalie_data = load_goalie_war_multi(bq, base_season, n_back)
+    goalie_workload = load_goalie_workload(bq, base_season)   # team_id -> [starter, backup] start shares
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
     ages = load_ages(bq, base_season)
 
     forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
-                                    aging, ages, archetypes, trans, run_id, sample=args.sample)
+                                    aging, ages, archetypes, trans, run_id, sample=args.sample,
+                                    goalie_workload=goalie_workload)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
     print(f"report -> {report}")
@@ -845,7 +919,8 @@ def _style_note(bq, team_id, upd_lineup, season):
 
 
 def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ages, archetypes,
-             trans, run_id, sample=None):
+             trans, run_id, sample=None, goalie_workload=None):
+    goalie_workload = goalie_workload or {}
     scored_at = datetime.now(timezone.utc).isoformat()
     names = load_player_names(bq)
     team_ids = sorted(set(base_mem) | set(upd_mem))
@@ -862,17 +937,19 @@ def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ag
         upd_players = _projected_players(tid, upd_mem, skater_data, goalie_data, aging, ages,
                                          archetypes, project_value=True)
         rc = ratings[tid]
+        gshares = goalie_workload.get(tid)   # None -> forecast_team uses the league-default split
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
         # full-roster symmetric difference (a season's call-ups are not offseason moves).
         f = forecast_team(base_players, upd_players, rc["rating"], rc,
-                          xgf_share_delta=None)  # chemistry filled next (needs the built lineups)
+                          xgf_share_delta=None, goalie_shares=gshares)  # chemistry filled next
         # The line-fit / style overlays are only meaningful when the roster actually changed. Skip
         # them for a no-move team (e.g. the whole league before next-season rosters are published),
         # which keeps that run fast and avoids pointless score_line/score_team_fit round-trips.
         has_moves = any(m["move_type"] in ("arrival", "departure") for m in f["ledger"])
         if has_moves:
             chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
-            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta)
+            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta,
+                              goalie_shares=gshares)
             f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
         else:
             chem_delta = None

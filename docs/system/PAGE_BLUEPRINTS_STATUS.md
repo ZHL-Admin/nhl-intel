@@ -53,3 +53,10 @@ verdict banners on the strongest tools. Per code-wins-over-doc, the chosen appro
   prose shipped earlier; the full case/shape 7-5 grid + season-reality strip + receipts teaser +
   Overall-card move + Log tab is a large recompose of a 1428-line file and needs the exact §2.5 spec
   (not in any doc) or an explicit "use your judgment" go-ahead before attempting — not improvised.
+
+## B2 §2.5 — RESOLVED (use-judgment go-ahead)
+Audited the live Overview: prior B2 work had already recomposed it — the case (verdict) / shape
+(radar) grid, season-totals + "Is it real?" reality strip, "Full impact breakdown →" receipts teaser,
+Overall-in-grid, and the Game Log tab all existed. The one genuine gap vs the "7-col case / 5-col
+shape" target was the hero split, which was inverted (45% case / 55% shape). Flipped to 58.333% /
+~42% so the case leads at 7/12 and the shape reads at 5/12 (stacks vertically ≤860px). §2.5 complete.

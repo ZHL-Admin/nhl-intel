@@ -511,10 +511,17 @@ ROSTER_FORECAST = {
     "RANDOM_SEED": 7,                 # deterministic tie-breaks only; the job does no sampling
 
     # The dressed lineup a team ices. The talent total is summed over FILLED slots, never "all
-    # arrivals minus all departures" — a team plays a fixed lineup. 12 F + 6 D + 1 starter.
+    # arrivals minus all departures" — a team plays a fixed lineup. 12 F + 6 D + a goalie TANDEM.
     "N_FWD": 12,
     "N_DEF": 6,
-    "N_GOALIE": 1,
+    "N_GOALIE": 2,                    # starter + backup. UNLIKE skaters, the two goalies are NOT
+    # summed at full value: WAR is a per-82 rate (models_ml.compute_contract_value.blended_war_rate),
+    # so two goalies each carry a full-season rate. Summing them would double-count goaltending (a team
+    # plays ONE season split between them). The goalie slots are therefore WORKLOAD-WEIGHTED by expected
+    # starts (shares sum to 1), so the tandem contributes exactly one season of goaltending, distributed.
+    # Shares come from each team's PRIOR-YEAR goalie usage (load_goalie_workload); this league default is
+    # the fallback for a team with too-thin prior data and for the roster builder's arbitrary rosters.
+    "GOALIE_WORKLOAD_FALLBACK": [0.65, 0.35],   # starter ~53 starts / backup ~29 — typical modern tandem
     "GAMES_PER_SEASON": 82,           # season WAR (wins) -> per-game goals scaling
 
     # Robust end-of-season roster: a player is a roster member of his LATEST-game team that season

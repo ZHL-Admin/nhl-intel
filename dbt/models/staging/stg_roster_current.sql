@@ -86,17 +86,24 @@ ranked as (
     join joined j using (player_id, team_abbrev)
 ),
 
--- Canonical team_abbrev -> team_id map (abbrev is unique per current franchise). Sourced from
--- stg_games (a STAGING model) rather than a mart, so this staging model has no mart dependency.
+-- Canonical team_abbrev -> team_id map, sourced from stg_games (a STAGING model, so no mart dependency).
+-- A single franchise can carry MORE THAN ONE team_id over time under the SAME abbrev — e.g. Utah:
+-- id 59 ("Utah Hockey Club", 2024-25) then id 68 ("Utah Mammoth", 2025-26). The live roster MUST resolve
+-- to the CURRENT id or it won't line up with the base roster / team_ratings / forecast (all keyed to the
+-- latest id), which would make an entire returning roster read as departed. So we take each abbrev's id
+-- from its MOST RECENT game (any_value here was non-deterministic and could pin the stale id).
 team_map as (
-    select team_abbrev, any_value(team_id) as team_id
-    from (
-        select home_team_id as team_id, home_team_abbrev as team_abbrev from {{ ref('stg_games') }}
-        union all
-        select away_team_id as team_id, away_team_abbrev as team_abbrev from {{ ref('stg_games') }}
+    select team_abbrev, team_id from (
+        select team_abbrev, team_id,
+               row_number() over (partition by team_abbrev order by game_id desc) as rn
+        from (
+            select home_team_id as team_id, home_team_abbrev as team_abbrev, game_id from {{ ref('stg_games') }}
+            union all
+            select away_team_id as team_id, away_team_abbrev as team_abbrev, game_id from {{ ref('stg_games') }}
+        )
+        where team_abbrev is not null and team_id is not null
     )
-    where team_abbrev is not null and team_id is not null
-    group by team_abbrev
+    where rn = 1
 ),
 
 final as (

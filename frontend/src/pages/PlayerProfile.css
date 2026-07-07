@@ -634,7 +634,8 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 
 /* [3] Hero card: verdict (left 40%) + shape (right) in one bordered card */
 .player-ov__hero { display: flex; background: var(--color-bg-elevated); border-radius: var(--radius-lg); overflow: hidden; }
-.player-ov__hero-left { flex: 0 0 45%; padding: 18px 20px; display: flex; flex-direction: column; border-right: 0.5px solid var(--color-border-subtle); }
+/* §2.5 grid: the case (verdict) leads at 7/12; the shape (radar) reads at 5/12. */
+.player-ov__hero-left { flex: 0 0 58.333%; padding: 18px 20px; display: flex; flex-direction: column; border-right: 0.5px solid var(--color-border-subtle); }
 .player-ov__hero-right { flex: 1; min-width: 0; padding: 18px 20px; display: flex; flex-direction: column; }
 
 .player-ov__pctblock { display: flex; align-items: end; gap: 12px; margin-top: 10px; }

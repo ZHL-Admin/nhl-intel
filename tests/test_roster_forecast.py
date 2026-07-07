@@ -96,6 +96,35 @@ def test_goalie_band_wider_than_skater_band():
     assert forecast_band(with_goalie_move, 1) > forecast_band(skater_move[:len(base)], 1)
 
 
+# ---------------------------------------------------------------- goalie tandem is workload-weighted
+def test_goalie_tandem_workload_weighted_not_summed():
+    starter = PlayerProj(200, "Starter", "G", "G", True, 2.0, 2.0, 1.2, False)
+    backup = PlayerProj(201, "Backup", "G", "G", True, 1.0, 1.0, 0.9, False)
+    slots, total = J.build_goalie_tandem([starter, backup], 2, "projected_war", [0.65, 0.35], CFG)
+    # Weighted, NOT summed: 0.65*2.0 + 0.35*1.0 = 1.65. A naive sum (3.0) would double-count goaltending.
+    assert abs(total - (0.65 * 2.0 + 0.35 * 1.0)) < 1e-9
+    assert [s.slot for s in slots] == ["G1", "G2"]              # best goalie is the starter
+    assert abs(slots[0].projected_war - 0.65 * 2.0) < 1e-9      # each scaled by his own share
+    assert abs(slots[1].projected_war - 0.35 * 1.0) < 1e-9
+
+
+def test_goalie_tandem_shares_renormalize_and_backfill_replacement():
+    lone = PlayerProj(200, "Starter", "G", "G", True, 2.0, 2.0, 1.2, False)
+    # One goalie on the roster -> the backup slot is replacement * its share; shares still sum to 1.
+    slots, total = J.build_goalie_tandem([lone], 2, "projected_war", [0.7, 0.3], CFG)
+    assert slots[1].replacement and slots[1].player_id is None
+    assert abs(total - (0.7 * 2.0 + 0.3 * CFG["REPLACEMENT_WAR"])) < 1e-9
+
+
+def test_goalie_tandem_does_not_mutate_source():
+    # forecast_team builds the lineup twice for teams with moves; the shared PlayerProj must be intact
+    # (in-place scaling would compound to share^2 on the second pass).
+    g = PlayerProj(200, "G", "G", "G", True, 2.0, 2.0, 1.2, False)
+    J.build_goalie_tandem([g], 2, "projected_war", [0.65, 0.35], CFG)
+    J.build_goalie_tandem([g], 2, "projected_war", [0.65, 0.35], CFG)
+    assert g.projected_war == 2.0 and g.base_war == 2.0
+
+
 # ---------------------------------------------------------------- multi-season blend (Tier 0)
 def test_blend_anchors_projection_to_track_record():
     # a player with a consistent ~0.2 WAR across three full seasons must project NEAR 0.2, not collapse
