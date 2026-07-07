@@ -1,0 +1,16 @@
+.share-actions { display: inline-flex; gap: var(--space-2); }
+.share-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.share-actions__btn:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }

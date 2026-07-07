@@ -8,10 +8,9 @@
  * component never invents copy. The share card (⤓ Card) renders a 1200x630 PNG client-side (brand mark
  * bottom-right) — the social-distribution mechanism required on trade/contract/fit/lineup verdicts.
  */
-import { useRef, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, Download } from 'lucide-react'
-import { drawShareCard } from '../../utils/shareCard'
+import ShareActions from './ShareActions'
 import './VerdictCard.css'
 
 export interface VerdictConfidence {
@@ -42,27 +41,6 @@ export default function VerdictCard({
 }: VerdictCardProps) {
   const dotClass = confidence ? `verdict-card__dot verdict-card__dot--${confidence.tone}` : ''
 
-  const copyLink = () => { navigator.clipboard?.writeText(window.location.href).catch(() => {}) }
-
-  const downloadRef = useRef(false)
-  const shareCard = async () => {
-    if (downloadRef.current) return
-    downloadRef.current = true
-    try {
-      const blob = await drawShareCard({ kicker, verdict, confidence })
-      if (blob) {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${shareName}.png`
-        a.click()
-        URL.revokeObjectURL(url)
-      }
-    } finally {
-      downloadRef.current = false
-    }
-  }
-
   return (
     <section className="verdict-card">
       <span className="verdict-card__kicker">{kicker}</span>
@@ -80,14 +58,7 @@ export default function VerdictCard({
           ? <Link className="verdict-card__method" to={`/learn/methods/${methodSlug}`}>How we measure this ↗</Link>
           : <span />}
         {shareable && (
-          <div className="verdict-card__actions">
-            <button type="button" className="verdict-card__action" onClick={copyLink}>
-              <Copy size={14} /> Copy link
-            </button>
-            <button type="button" className="verdict-card__action" onClick={shareCard}>
-              <Download size={14} /> Card
-            </button>
-          </div>
+          <ShareActions kicker={kicker} verdict={verdict} confidence={confidence} shareName={shareName} />
         )}
       </div>
     </section>

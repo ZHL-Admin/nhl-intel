@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import {
   PageLayout, PageCard, PlayerPicker, PlayerAvatar, Tabs, ChartPanel, Tooltip,
-  SkeletonLoader, ComponentStackBar,
+  SkeletonLoader, ComponentStackBar, ShareActions,
 } from '../components/common'
 import { useChartPanelHeight } from '../components/common/ChartPanel'
 import type { StackSegment } from '../components/common'
@@ -30,6 +30,12 @@ const seasonStr = (y: number) => `${y}-${String(y + 1).slice(2)}`
 const GRADE_TONE: Record<string, 'positive' | 'neutral' | 'caution'> = {
   A: 'positive', B: 'positive', C: 'neutral', D: 'caution', F: 'caution',
 }
+
+/** Verdict-kicker date stamp, e.g. "JUL 6" (browser-local; the share card echoes it). */
+const shareStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+/** Map a grade's confidence word to the VerdictCard confidence tone. */
+const confTone = (word?: string): 'high' | 'medium' | 'low' =>
+  word === 'high' ? 'high' : word === 'proxy' || word === 'low' ? 'low' : 'medium'
 
 /** Everything the result panel shows derives from one grade response (the shown deal). */
 function derive(g: ContractGrade) {
@@ -440,6 +446,13 @@ export default function ContractGrader() {
                   <div className={`cg-banner cg-banner--${GRADE_TONE[grade.grade]}`}>
                     <div className={`cg-medallion cg-medallion--${GRADE_TONE[grade.grade]}`}>{grade.grade}</div>
                     <div className="cg-banner__body">
+                      <div className="cg-banner__kickrow">
+                        <span className="cg-banner__kicker mono">CONTRACT GRADE · {shareStamp()}</span>
+                        <ShareActions kicker={`CONTRACT GRADE · ${shareStamp()}`} verdict={grade.verdict}
+                          confidence={{ tone: confTone(grade.confidence), word: grade.confidence,
+                            phrase: grade.war_sd != null ? `±${war1(grade.war_sd)} WAR` : undefined }}
+                          shareName={`contract-${player?.name?.replace(/\s+/g, '-').toLowerCase() ?? 'grade'}`} />
+                      </div>
                       <div className="cg-banner__eyebrow">
                         {effectiveMode === 'actual' ? 'Actual contract' : 'Hypothetical contract'}
                         {effectiveMode === 'hypothetical' && actualGrade && (

@@ -31,3 +31,25 @@ inert. Accepted as a known gap (no backend change); revisit if a pregame win-pro
 - **P1** tab labels already sentence case ("The game", "Box score").
 - **P2** P4 bars: neutral fills + team-color end dots — implemented in CompareRows; verify in a
   red-vs-blue matchup and both themes.
+
+## D34 Studio verdicts — augment, not replace (B4)
+The blueprint framing was "wire VerdictCard into 8 tools," but the code already had richer bespoke
+verdict banners on the strongest tools. Per code-wins-over-doc, the chosen approach (user-confirmed):
+- **Share grammar extracted** to one `ShareActions` (Copy link + ⤓ Card PNG); `VerdictCard` now uses it too.
+- **Augmented the bespoke banners** with a mono kicker overline + `ShareActions`: ContractGrader
+  (`cg-banner`), TradeBuilder (`TradeSummaryBand`), TradeFit (result bar — replaced the URL-only Share
+  with the standard Copy-link + Card so it gains the image card), Offseason ("The verdict" §01),
+  RosterBuilder (`rb-headline`). LineupLab already had a graded share button (left as-is).
+- **Explorers left without a page verdict — deliberately.** TradeOutcomes (historical browse, three
+  tabs + drill), DraftValue (pick-value curves / steals & busts research), and the trades
+  ArchetypeExplorer have no single input→verdict; their verdict units are per-row (a trade balance
+  card, a pick row) and are already verdict-shaped. Bolting a page-level VerdictCard on would be
+  artificial, so it was not done.
+
+## B2 status
+- **§2.4 Players-index compare affordance — DONE.** "Compare with…" button in the row preview
+  (`PlayerRowExpansion`) opens the `EntityPicker` → `/players/compare?a=<row>&b=<pick>`. Verified.
+- **§2.5 PlayerProfile Overview recompose — still open.** Tab-rename (→ "Receipts") + serif verdict
+  prose shipped earlier; the full case/shape 7-5 grid + season-reality strip + receipts teaser +
+  Overall-card move + Log tab is a large recompose of a 1428-line file and needs the exact §2.5 spec
+  (not in any doc) or an explicit "use your judgment" go-ahead before attempting — not improvised.

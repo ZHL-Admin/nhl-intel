@@ -617,7 +617,14 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
     prior season (NHL rolls the season label later), so we read team membership from it directly rather
     than gating on its label. Universe = live-roster players UNION the base-season robust roster, which
     excludes stale fallback-only players (retired/in-Europe) that would otherwise be phantom arrivals.
-    A player only counts as MOVED when he is actively on a different club's live roster.
+
+    PUBLISHED ROSTER IS AUTHORITATIVE: the base-season team is only a fallback for a club that has NO
+    current published roster. Once a team's live roster is published (all 32 are, in the offseason), it
+    is the complete statement of that club's membership — so a base-season holdover who is absent from
+    his old team's published roster has DEPARTED (released/unsigned UFA), not merely "not yet re-listed".
+    Keeping him would leave released players (e.g. a bought-out veteran) phantom-rostered all summer and
+    crowd real signings out of the projected lineup. He is dropped here; his vacated slot fills at
+    replacement. A player still counts as MOVED only when he is actively on a different club's live roster.
     """
     sql = f"""
     WITH base AS (
@@ -635,12 +642,17 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
         SELECT player_id, team_id, COALESCE(position_code, '') AS position_code,
                COALESCE(full_name, '') AS name
         FROM {bq.staging('stg_roster_current')} WHERE team_id IS NOT NULL
-    )
+    ),
+    teams_with_live AS (SELECT DISTINCT team_id FROM live)
     SELECT player_id,
            COALESCE(l.team_id, b.team_id) AS team_id,
            COALESCE(NULLIF(l.position_code, ''), b.position_code) AS position_code,
            COALESCE(NULLIF(l.name, ''), b.name) AS name
     FROM live l FULL OUTER JOIN base b USING (player_id)
+    -- Keep a player iff he is on a live roster, OR his base team has no published roster at all
+    -- (early offseason / a team we could not pull). Otherwise he is a real departure and is dropped.
+    WHERE l.team_id IS NOT NULL
+       OR b.team_id NOT IN (SELECT team_id FROM teams_with_live)
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():

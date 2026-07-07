@@ -25,7 +25,7 @@ for (const theme of themes) {
     await ctx.addInitScript((t) => localStorage.setItem('nhl-intel-theme', t), theme)
     const page = await ctx.newPage()
     await page.goto(base + route, { waitUntil: 'networkidle', timeout: 45000 }).catch(() => {})
-    await page.waitForTimeout(1500)
+    await page.waitForTimeout(Number(process.env.WAIT || 1500))
     const file = `${outDir}${name}-${theme}-${width}.png`
     await page.screenshot({ path: file, fullPage: true })
     console.log('wrote', file)

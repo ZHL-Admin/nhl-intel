@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Wand2, RotateCcw, X, Plus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { PageLayout, PageCard, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, ShareActions } from '../components/common'
 import PlayerPicker from '../components/common/PlayerPicker'
 import TeamQuickJump from '../components/common/TeamQuickJump'
 import { rosterEvaluate, rosterSuggest } from '../api/tools'
@@ -88,6 +88,9 @@ function projBySlot(d: RosterEvaluateResponse | null): Record<string, RosterPlay
   if (d.goalies.backup) take(d.goalies.backup)
   return m
 }
+
+/** Verdict-kicker date stamp, e.g. "JUL 6" (browser-local; the share card echoes it). */
+const shareStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 
 function gradeClass(grade: string | null | undefined): string {
   if (!grade) return ''
@@ -397,8 +400,18 @@ function ProjectionPanel({ data, abbrev, evaluating }: {
   ]
   const posMax = Math.max(2, ...posRows.map((r) => r.v))
 
+  const shareVerdict = deltaSign === 'flat'
+    ? `This roster projects even with ${abbrev}’s current roster.`
+    : `This roster projects ${deltaSign === 'up' ? '+' : MINUS}${Math.abs(Math.round(delta))} points vs ${abbrev}’s current roster.`
+
   return (
     <div className={`rb-panel ${evaluating ? 'is-evaluating' : ''}`}>
+      <div className="rb-kickrow">
+        <span className="rb-kicker mono">ROSTER PROJECTION · {shareStamp()}</span>
+        <ShareActions kicker={`ROSTER PROJECTION · ${shareStamp()}`} verdict={shareVerdict}
+          confidence={{ tone: 'medium', word: 'projection', phrase: `± ${d.delta_band.toFixed(1)} pts` }}
+          shareName={`roster-${abbrev?.toLowerCase() ?? 'build'}`} />
+      </div>
       <div className={`rb-headline rb-headline--${deltaSign}`}>
         <span className="rb-headline__delta mono">
           {deltaSign === 'flat' ? '±0' : `${deltaSign === 'up' ? '+' : MINUS}${Math.abs(Math.round(delta))}`}

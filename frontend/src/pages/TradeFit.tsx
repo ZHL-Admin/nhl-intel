@@ -8,8 +8,8 @@
  */
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Check, Info, ArrowRight, RotateCcw, Share2, Zap, Sparkles, Search, X } from 'lucide-react'
-import { PageLayout, PageCard, SkeletonLoader, Tooltip } from '../components/common'
+import { Info, ArrowRight, RotateCcw, Zap, Sparkles, Search, X } from 'lucide-react'
+import { PageLayout, PageCard, SkeletonLoader, Tooltip, ShareActions } from '../components/common'
 import { tradeFit, bestTeamFits, searchPlayers } from '../api/tools'
 import { getPlayerPreview, getOverallLeaders } from '../api/players'
 import { getStyleMap } from '../api/teams'
@@ -57,23 +57,8 @@ function levelColor(level?: number | null): string {
   return '#d97706'                               // weak — amber (the soft spot)
 }
 
-/** Share the current fit — Web Share API on mobile, clipboard link otherwise. */
-function ShareButton({ url, name, team, grade }: { url: string; name: string; team: string; grade: string }) {
-  const [copied, setCopied] = useState(false)
-  const onShare = async () => {
-    const text = `${name} grades ${grade} as a fit for the ${team} in NHL Intel’s Player Fit:`
-    if (typeof navigator !== 'undefined' && (navigator as any).share) {
-      try { await (navigator as any).share({ title: 'NHL Intel · Player Fit', text, url }) } catch { /* dismissed */ }
-      return
-    }
-    try { await navigator.clipboard.writeText(`${text} ${url}`); setCopied(true); setTimeout(() => setCopied(false), 2200) } catch { /* blocked */ }
-  }
-  return (
-    <button className={`tf__share${copied ? ' tf__share--copied' : ''}`} onClick={onShare}>
-      {copied ? <><Check size={15} /> Link copied</> : <><Share2 size={15} /> Share</>}
-    </button>
-  )
-}
+/** Verdict-kicker date stamp, e.g. "JUL 6" (browser-local; the share card echoes it). */
+const shareStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 
 function TeamGrid({ teams, activeId, onPick }: {
   teams: TeamOpt[]; activeId?: number | null; onPick: (t: TeamOpt) => void
@@ -272,8 +257,13 @@ export default function TradeFit() {
                 <RotateCcw size={15} /> Score another
               </button>
               {shareUrl && (
-                <ShareButton url={shareUrl} name={result!.player_name ?? 'This player'}
-                  team={team?.name ?? ''} grade={result!.overall_grade} />
+                <div className="tf__share-row">
+                  <span className="tf__kicker mono">FIT VERDICT · {shareStamp()}</span>
+                  <ShareActions kicker={`FIT VERDICT · ${shareStamp()}`}
+                    verdict={result!.verdict_sentence}
+                    confidence={{ tone: 'medium', word: result!.overall_grade, phrase: `${result!.overall_score.toFixed(0)} / 100 fit` }}
+                    shareName={`fit-${(result!.player_name ?? 'player').replace(/\s+/g, '-').toLowerCase()}`} />
+                </div>
               )}
             </div>
             <Hero result={result!} player={player} team={team} />

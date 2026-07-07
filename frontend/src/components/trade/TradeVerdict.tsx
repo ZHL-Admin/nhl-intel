@@ -10,13 +10,21 @@
  * lens — shown for player-for-player sides, de-emphasized on pick/prospect-heavy sides where it is
  * semantically muddy.
  */
-import { ComponentStackBar } from '../common'
+import { ComponentStackBar, ShareActions } from '../common'
 import { TeamTradeResult } from '../../api/types'
 import { getTeamAbbrev, getTeamLogoUrl, getTeamName } from '../../utils/teams'
 import { fmtWar, fmtWarBand, fmtDollarsM, fmtCapShare, deltaClass, CAP_DOLLAR_TAG } from '../../utils/format'
 import './TradeVerdict.css'
 
 export interface Domains { talent: [number, number]; surplus: [number, number] }
+
+/** Verdict-kicker date stamp, e.g. "JUL 6" (browser-local; the share card echoes it). */
+const shareStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+/** One deterministic share sentence from each side's categorical lean, e.g.
+ * "Canadiens win the trade; Bruins retool — shed cost for futures." */
+function tradeShareVerdict(teams: TeamTradeResult[]): string {
+  return teams.map((t) => `${getTeamName(getTeamAbbrev(t.team_id))} ${teamLean(t).label.toLowerCase()}`).join('; ')
+}
 
 function barColor(v: number | null | undefined): string {
   if (v == null || Math.abs(v) < 1e-9) return 'var(--color-data-neutral)'
@@ -47,7 +55,14 @@ export function TradeSummaryBand({ teams }: { teams: TeamTradeResult[] }) {
   if (!teams.length) return null
   return (
     <div className="trade-verdict__summary">
-      <h2 className="trade-verdict__summary-title">The Numbers</h2>
+      <div className="trade-verdict__summary-head">
+        <h2 className="trade-verdict__summary-title">The Numbers</h2>
+        <div className="trade-verdict__summary-share">
+          <span className="trade-verdict__kicker mono">TRADE VERDICT · {shareStamp()}</span>
+          <ShareActions kicker={`TRADE VERDICT · ${shareStamp()}`} verdict={tradeShareVerdict(teams)}
+            shareName="trade-verdict" />
+        </div>
+      </div>
       <div className="trade-verdict__summary-grid">
         {teams.map((t) => (
           <div key={t.team_id} className="trade-verdict__summary-team">
