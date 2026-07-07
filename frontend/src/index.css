@@ -15,6 +15,14 @@
   transition: background-color 200ms ease, color 200ms ease;
 }
 
+/* Position-group dot colors (§07): the single site-wide mapping for F/D/G dot-chips,
+   drawn from the data palette. Use these wherever a position group appears. */
+:root {
+  --pos-forward: var(--color-data-1);  /* blue */
+  --pos-defense: var(--color-data-3);  /* teal */
+  --pos-goalie:  var(--color-data-5);  /* gold */
+}
+
 /* ============================================================================
    Global Styles
    ============================================================================ */
