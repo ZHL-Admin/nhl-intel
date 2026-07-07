@@ -1,63 +1,60 @@
-.studio-hub__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
-}
+/* §09 Studio hub — a contents list at reading width, no cards. */
+.studio-hub { max-width: 760px; }
 
-.studio-hub__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.studio-hub__card-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  text-decoration: none;
-}
-.studio-hub__card-name {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-.studio-hub__card-blurb {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
+.studio-hub__list { display: flex; flex-direction: column; }
 
-.studio-hub__modes {
+.studio-hub__row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: auto;
-}
-.studio-hub__mode-wrap { display: inline-flex; align-items: center; gap: var(--space-2); }
-.studio-hub__mode-sep { color: var(--color-text-muted); }
-.studio-hub__mode {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-accent);
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-height: 72px;
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
   text-decoration: none;
+  color: var(--color-text-primary);
+  transition: background var(--dur-fast) var(--ease-out);
 }
-.studio-hub__mode:hover { text-decoration: underline; }
+.studio-hub__row:first-child { border-top: none; }
+.studio-hub__row:hover { background: var(--crease); }
 
-@media (max-width: 767px) {
-  .studio-hub__grid { grid-template-columns: 1fr; }
+.studio-hub__row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.studio-hub__row-name {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  transition: color var(--dur-fast) var(--ease-out);
 }
-
-/* 2.9: inline picker launcher on the player-based area cards */
-.studio-hub__launcher {
-  display: inline-flex; align-items: center; gap: 6px;
-  width: 100%;
-  padding: 7px var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
+.studio-hub__row:hover .studio-hub__row-name { color: var(--line-blue); }
+.studio-hub__row-blurb {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+.studio-hub__row-contract {
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.studio-hub__launcher:hover { border-color: var(--color-border-strong); color: var(--color-text-secondary); }
+
+/* Learn group divider */
+.studio-hub__group {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: var(--space-8) 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+@media (max-width: 640px) {
+  .studio-hub__row { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .studio-hub__row-contract { align-self: flex-start; }
+}
