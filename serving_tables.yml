@@ -132,6 +132,9 @@ tables:
   - {name: team_current_lines,     dataset: models, kind: precompute, cap: full, built: true, indexes: [team_id]}
   - {name: serving_game_skater_box,dataset: models, kind: precompute, cap: full, built: true, indexes: [game_id, player_id]}
   - {name: player_situation_toi,   dataset: models, kind: precompute, cap: full, built: true, indexes: [[player_id, season]]}
+  # player_effective_position: the position a player ACTUALLY plays (from faceoff volume), overriding
+  # the listed feed for the Roster Builder / offseason-forecast lineups (C/L/R/F_FLEX + locked).
+  - {name: player_effective_position, dataset: models, kind: precompute, cap: full, built: true, indexes: [player_id]}
   # best_team_fits is NOT precomputed: it runs live on DuckDB (cheap once inputs are local) + cached.
 
 # =============================================================================

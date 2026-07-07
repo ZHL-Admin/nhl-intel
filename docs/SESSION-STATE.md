@@ -10,6 +10,43 @@ e25b7ed (radar data layer), b7c9226 (archetypes v2 A3), 3afd20f (v2 A1/A2). Read
 
 ---
 
+## ===== POSITION- & DEPLOYMENT-AWARE LINEUP BUILDERS (Phase 1 COMPLETE; Phase 2 line seeding) =====
+
+**Why:** the lineup builders (Roster Builder auto-optimize, offseason-forecast lineups, roster
+suggestions) seated forwards by the *listed* NHL position and stacked lines WAR-greedily. Two failures:
+listed position is often wrong (J.T. Compher lists at LW but plays C), and best-C+best-LW+best-RW is
+not how teams actually deploy (Edmonton splits McDavid & Draisaitl at 5v5).
+
+**Phase 1 — effective position (DONE):**
+- New nightly precompute `nhl_models.player_effective_position`
+  (`models_ml/precompute_serving.build_player_effective_position`, registered in `serving_tables.yml`,
+  built by the DAG `precompute_serving --all` step, exported to DuckDB): per player, the position he
+  ACTUALLY plays (`C`/`L`/`R`/`F_FLEX`) from last-2-seasons faceoffs-per-game (`stg_statsrest_faceoffs`,
+  GP-weighted), plus `locked`. Thresholds in `config.EFFECTIVE_POSITION` (C ≥ 7 fo/gp, W ≤ 2.5, ≥ 10 GP
+  to lock). Validated on the disagreement list: Compher + 13 two-way centers flip to C; pure wingers
+  (Kucherov, Marchand, Rantanen, Nylander) stay; real centers stay C.
+- Consumed via `_load_effective_position` (tools.py, in `_forecast_inputs`) and
+  `project_roster_forecast.load_effective_position` (offseason). Forward display position = effective
+  (Compher shows C); `roster_suggest._pos_ok` matches on effective (F_FLEX matches any forward slot).
+- **Soft-penalty assignment** replaces the greedy column-fill in `_ice_from_pool`: forwards are seated
+  by `scipy.optimize.linear_sum_assignment` maximizing `projected_war − off_position_penalty` over
+  (forward, slot). Penalties in `config.ROSTER_FORECAST` (`OFF_POSITION_PENALTY_CW=0.35`,
+  `WING_SIDE_PENALTY=0.05`, F_FLEX=0). **The penalty shapes the ASSIGNMENT ONLY** — team WAR / points
+  sum RAW `projected_war`, never net of penalties. The pure engine
+  `project_roster_forecast.assign_forward_sides` is SHARED by the live tool AND
+  `calibrate_roster_builder` so the calibration ices the exact rule. Deterministic (tie-break by
+  player_id); a pool < 12 leaves replacement holes.
+- **Recalibrated:** `LEAGUE_AVG_LINEUP_WAR 12.68`, `WAR_TO_RATING 0.03289` (was 12.29 / 0.03198);
+  projected-points MAE **10.52** (~= the 10.5 baseline), verdict SHIP. `roster-forecast-validate` MAE
+  4.50, rank-corr 0.616. Backend verified end-to-end under `SERVING_BACKEND=duckdb`.
+- Docs: `docs/methodology/roster-builder.md` (Effective position + Line assignment sections),
+  `offseason-forecast.md` (step 2 effective-position note).
+
+**Phase 2 — deployment-aware line seeding (NEXT):** seed observed units (`int_line_seasons` /
+`team_current_lines`, shared 5v5 ≥ `LINE_SEED_MIN_5V5_MINUTES=100`) before the Phase-1 assignment so
+the builder reproduces real trios/pairs (splits McDavid & Draisaitl) instead of WAR-stacking; arrivals
+flow through the assignment. PP units out of scope. Then recalibrate again.
+
 ## ===== LIVE ROSTER MEMBERSHIP — current team comes from a live feed, not just games =====
 
 **Why:** a player's "current team" used to be derived only from the team_id on his most recent NHL

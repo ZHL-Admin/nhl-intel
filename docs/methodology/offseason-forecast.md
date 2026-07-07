@@ -96,6 +96,15 @@ import so a WAR delta and the team rating share one goals scale.
    `no_track_record`: replacement level + a deliberately wide band (`NO_TRACK_RECORD_WAR_SD = 1.2`).
    Never a fabricated value.
 
+   **Effective position (display).** A forward's *listed* position is overridden with the position he
+   actually plays, from `nhl_models.player_effective_position` (faceoff volume — see
+   *Effective position* in `roster-builder.md`): J.T. Compher, listed LW, shows and lines up at C.
+   `load_effective_position` / `apply_effective_position` apply the override only for a concrete C/L/R
+   (an F_FLEX or a player with no faceoff evidence keeps his listed position — never a guess). Position
+   is **not** a value input, so this changes the displayed lineup, ledger positions, and line
+   composition, never the projected WAR, the ledger reconciliation, or the delta. PP units are out of
+   scope; the split logic is 5v5 deployment only.
+
 3. **Project each player forward one season (value).** Skater: regress toward the repeatable lens,
    then age. **Reliability shrink** — each `player_gar` component is shrunk toward its position mean
    by its MEASURED year-over-year reliability (`config.GAR_STABILITY_YOY`, referenced not re-derived:

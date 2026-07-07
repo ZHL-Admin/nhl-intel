@@ -579,6 +579,7 @@ def _forecast_inputs(base_season: str) -> dict:
         "components": _load_components(base_season),
         "index": _league_player_index(base_season),
         "hand": _load_handedness(),
+        "effpos": _load_effective_position(),
         "proj": _load_projections(),
     }
 
@@ -633,6 +634,35 @@ def _load_handedness() -> dict:
     for r in bq_service.query("SELECT player_id, shoots FROM stg_player_bio WHERE shoots IS NOT NULL"):
         out[int(r["player_id"])] = str(r["shoots"])
     return out
+
+
+@lru_cache(maxsize=1)
+def _load_effective_position() -> dict:
+    """player_id -> {'effective', 'locked', 'fo_per_gp'} from the player_effective_position precompute:
+    the position a forward ACTUALLY plays (C/L/R/F_FLEX), derived from faceoff volume rather than the
+    listed roster feed (J.T. Compher lists as LW but takes center draws). Drives the position-aware
+    binning + off-position penalties in _ice_from_pool and the effective-position match in roster_suggest.
+    A player absent here (no faceoff rows) is not in the dict, so the caller falls back to listed position."""
+    out: dict = {}
+    try:
+        rows = bq_service.query(
+            "SELECT player_id, effective_position, locked, fo_per_gp FROM player_effective_position")
+    except Exception:  # noqa: BLE001 — table absent (not yet precomputed/exported) -> fall back to listed
+        return {}
+    for r in rows:
+        out[int(r["player_id"])] = {
+            "effective": str(r["effective_position"]),
+            "locked": bool(r["locked"]),
+            "fo_per_gp": float(r["fo_per_gp"]) if r.get("fo_per_gp") is not None else 0.0,
+        }
+    return out
+
+
+def _effective_fwd_pos(pid, listed, effpos) -> str:
+    """Thin wrapper over the shared engine's effective_fwd_pos (single source of truth): a forward's
+    effective position code ('C'/'L'/'R'/'F_FLEX'), from player_effective_position or the listed feed."""
+    from models_ml import project_roster_forecast as J
+    return J.effective_fwd_pos(pid, listed, effpos)
 
 
 @lru_cache(maxsize=2)
@@ -691,6 +721,10 @@ def _proj(pid, position, inp):
     name = (inp["index"].get(int(pid), {}) or {}).get("name") or inp["names"].get(int(pid))
     p = J.make_player_proj(int(pid), name, position, inp["skater"], inp["goalie"],
                            inp["aging"], inp["ages"], inp["arch"], project_value=True)
+    # Display the EFFECTIVE (faceoff-derived) position for a forward — a listed-LW who plays center
+    # (Compher) shows as C. Value is untouched (position is not a value input); F_FLEX / no-evidence
+    # forwards keep their listed position. The assignment reads effpos directly, so this is display-only.
+    p.position = J.apply_effective_position(p.position, int(pid), inp.get("effpos", {}))
     pr = inp["proj"].get(int(pid))
     if pr is not None:
         p.projected_war = pr["war"]
@@ -713,26 +747,33 @@ def _flex_fill(all_slots, leftovers, slot_map):
         _place(p, slot, slot_map)
 
 
+def _assign_forwards(fwds, effpos, CFG, slot_map):
+    """Seat forwards into the 12 forward slots via the SHARED position-aware assignment (project_roster_
+    forecast.assign_forward_sides): projected_war minus off-position penalty, maximized over
+    (forward, slot). Effective position drives the bins; the penalty shapes placement only (team WAR
+    sums raw projected_war). Surplus forwards scratch; holes fill at replacement in _iced_lineup."""
+    from models_ml import project_roster_forecast as J
+    by_side = J.assign_forward_sides(fwds, effpos, CFG)
+    for side, col_slots in _FWD_COLS.items():
+        for slot, p in zip(col_slots, by_side[side]):
+            _place(p, slot, slot_map)
+
+
 def _ice_from_pool(players, inp):
-    """Auto-optimize the depth chart, POSITION-AWARE: forwards fill their natural C/L/R column and
-    defensemen their handedness side (best at the top), with surplus / short positions flex-filling
-    the rest. A hole is never dropped — an unfilled slot is replacement level. Returns slot->PlayerProj
-    and the scratch pool."""
+    """Auto-optimize the depth chart, POSITION- and DEPLOYMENT-AWARE: forwards are seated by a soft-
+    penalty assignment over their EFFECTIVE positions (a listed-LW who takes center draws ices at C),
+    defensemen by handedness side (best at the top), with surplus / short positions flex-filling the
+    rest. A hole is never dropped — an unfilled slot is replacement level. Returns slot->PlayerProj and
+    the scratch pool."""
+    from models_ml import project_roster_forecast as J
+    CFG = J.CFG
     war = lambda p: p.projected_war  # noqa: E731
     hand = inp["hand"]
+    effpos = inp.get("effpos", {})
     slot_map: dict = {}
 
-    # Forwards by natural position; F1 = best at each position, so line 1 is the best C+LW+RW.
-    fwd_by = {"L": [], "C": [], "R": []}
-    for p in sorted((p for p in players if p.pos_group == "F"), key=war, reverse=True):
-        fwd_by[p.position if p.position in ("L", "C", "R") else "C"].append(p)
-    leftovers = []
-    for pos, slots in _FWD_COLS.items():
-        ranked = fwd_by[pos]
-        for slot, p in zip(slots, ranked):
-            _place(p, slot, slot_map)
-        leftovers += ranked[len(slots):]
-    _flex_fill(FWD_SLOTS, leftovers, slot_map)
+    # Forwards: assignment over (forward, forward-slot) on projected_war minus off-position penalty.
+    _assign_forwards([p for p in players if p.pos_group == "F"], effpos, CFG, slot_map)
 
     # Defensemen by handedness side (left-shot -> LD, right-shot -> RD); unknown balances the sides.
     def_by = {"L": [], "R": []}
@@ -1068,15 +1109,18 @@ def roster_slot_suggestions(team_id: int, slot: str, roster: Optional[list[dict]
                        key=lambda p: p.projected_war, reverse=True)[:top_n]
         return {"slot": slot, "suggestions": [_suggest_out(p, inp, None) for p in cands]}
 
-    # Respect the slot's exact position: a center slot suggests only centers, a wing slot only that
-    # side's wings (position_code L/C/R), a D slot only that handedness side (LD = left-shot). Players
-    # mostly play one position, and wings have a preferred side, so cross-position suggestions are wrong.
+    # Respect the slot's exact position, using the EFFECTIVE position (what a player actually plays):
+    # a center slot suggests centers, a wing slot that side's wings, a D slot that handedness side
+    # (LD = left-shot). A listed-LW who takes center draws (effective C) is offered for C slots; an
+    # F_FLEX forward (no strong faceoff signal) matches ANY forward slot. Cross-position is wrong.
     target = slot[-1]   # 'L' / 'C' / 'R' for F, 'L' / 'R' for D
     hand = inp["hand"]
+    effpos = inp.get("effpos", {})
 
     def _pos_ok(p):
         if pos_group == "F":
-            return p.position == target
+            ep = _effective_fwd_pos(p.player_id, p.position, effpos)
+            return ep == target or ep == "F_FLEX"
         if pos_group == "D":
             return hand.get(p.player_id, target) == target   # unknown-hand D matches either side
         return True

@@ -162,6 +162,85 @@ def lineup_value(slots: list[PlayerProj], value_attr: str) -> float:
     return sum(getattr(p, value_attr) for p in slots)
 
 
+# ── Position-aware forward assignment (SHARED: Roster Builder tool + its calibration) ─────────────
+# The Roster Builder ices forwards by their EFFECTIVE position (what they actually play, from faceoff
+# volume) and prefers to keep a center at C, a winger on his side — solved as an assignment over
+# (forward, forward-slot). This pure core is shared by backend.services.tools._ice_from_pool AND
+# models_ml.calibrate_roster_builder so LEAGUE_AVG_LINEUP_WAR is fit on the exact rule the tool ices.
+FWD_SIDE_SLOTS = 4   # 4 forward lines -> 4 slots per L / C / R side (12 forwards)
+
+
+def effective_fwd_pos(pid, listed: str, effpos: dict) -> str:
+    """A forward's effective position code (C/L/R/F_FLEX): the faceoff-derived override from effpos when
+    present, else his listed position (F_FLEX if that is not a concrete C/L/R). effpos: player_id ->
+    {'effective','locked',...} (load_effective_position); absent -> listed."""
+    e = effpos.get(int(pid)) if pid is not None else None
+    if e is not None and e.get("effective") in ("C", "L", "R", "F_FLEX"):
+        return e["effective"]
+    return listed if listed in ("C", "L", "R") else "F_FLEX"
+
+
+def _fwd_role(p: PlayerProj, effpos: dict) -> tuple:
+    """(kind, side, locked) for a forward — kind in {'C','W','FLEX'}, side in {'L','R',None}. `locked`
+    is the faceoff-evidence strength that gates the off-position C<->W penalty (a listed-only fallback
+    is never locked). Used only to SHAPE the assignment, never to change a player's value."""
+    e = effpos.get(int(p.player_id)) if p.player_id is not None else None
+    ep = effective_fwd_pos(p.player_id, p.position, effpos)
+    locked = bool(e["locked"]) if e is not None else False
+    if ep == "C":
+        return ("C", None, locked)
+    if ep in ("L", "R"):
+        return ("W", ep, locked)
+    return ("FLEX", None, False)
+
+
+def fwd_slot_penalty(role: tuple, slot_side: str, cfg: dict = CFG) -> float:
+    """Off-position penalty (WAR units) for placing a forward with `role` at a slot on `slot_side`
+    ('L'/'C'/'R'). ASSIGNMENT-SHAPING ONLY — subtracted from value when deciding who-sits-where, NEVER
+    from lineup_value or the team WAR total (a player's value does not shrink because he is off his
+    natural spot; the optimizer just avoids it). F_FLEX pays nothing anywhere; a LOCKED C at a wing (or
+    LOCKED W at C) pays OFF_POSITION_PENALTY_CW; a winger on his off side pays WING_SIDE_PENALTY. An
+    unlocked, listed-only guess pays no C<->W cost (no evidence to enforce it)."""
+    kind, side, locked = role
+    if kind == "FLEX":
+        return 0.0
+    if kind == "C":
+        return cfg["OFF_POSITION_PENALTY_CW"] if (slot_side != "C" and locked) else 0.0
+    # winger
+    if slot_side == "C":
+        return cfg["OFF_POSITION_PENALTY_CW"] if locked else 0.0
+    return 0.0 if slot_side == side else cfg["WING_SIDE_PENALTY"]
+
+
+def assign_forward_sides(fwds: list[PlayerProj], effpos: dict, cfg: dict = CFG) -> dict:
+    """Seat forwards by solving the (forward, forward-slot) assignment that maximizes
+    sum(projected_war - off_position_penalty). Returns {'L':[...], 'C':[...], 'R':[...]} of the ICED
+    forwards per side, each ranked best-first (F1..F4; <= FWD_SIDE_SLOTS per side). The penalty biases a
+    locked center to C and a winger to his side WITHOUT altering value (callers sum RAW projected_war
+    over the returned players). Deterministic: forwards are pre-sorted by (-projected_war, player_id) so
+    equal-value ties resolve stably. A pool > 12 scratches the surplus; a pool < 12 leaves side slots
+    short (the caller fills those with replacement — a hole is never dropped)."""
+    from scipy.optimize import linear_sum_assignment
+    import numpy as np
+
+    by_side: dict = {"L": [], "C": [], "R": []}
+    fwds = sorted(fwds, key=lambda p: (-p.projected_war, p.player_id or 0))
+    if not fwds:
+        return by_side
+    roles = [_fwd_role(p, effpos) for p in fwds]
+    col_side = [s for s in ("L", "C", "R") for _ in range(FWD_SIDE_SLOTS)]   # 12 slot-columns, 4/side
+    val = np.empty((len(fwds), len(col_side)), dtype=float)
+    for i, p in enumerate(fwds):
+        for j, side in enumerate(col_side):
+            val[i][j] = p.projected_war - fwd_slot_penalty(roles[i], side, cfg)
+    rows, cidx = linear_sum_assignment(val, maximize=True)
+    for i, j in zip(rows, cidx):
+        by_side[col_side[j]].append(fwds[i])
+    for side in by_side:   # best-first within each side (value is identical across a side's slots)
+        by_side[side].sort(key=lambda x: (-x.projected_war, x.player_id or 0))
+    return by_side
+
+
 @dataclass
 class LineupForecast:
     net_delta_war: float
@@ -563,6 +642,41 @@ def load_ages(bq, season: str) -> dict:
             if x.birth_year is not None}
 
 
+def load_effective_position(bq) -> dict:
+    """player_id -> {'effective','locked','fo_per_gp'} from nhl_models.player_effective_position: the
+    position a forward ACTUALLY plays (from faceoff volume), the strength of that evidence (`locked`),
+    and his faceoffs/game. The SINGLE canonical loader — it both overrides a forward's displayed
+    position (apply_effective_position) and drives the position-aware assignment (assign_forward_sides),
+    so the tool and its calibration ice identically. Empty dict if the table is missing (older serving
+    file) -> listed positions + pure top-by-WAR icing (the pre-effective-position behavior)."""
+    try:
+        df = bq.query_df(
+            f"SELECT player_id, effective_position, locked, fo_per_gp "
+            f"FROM {bq.models('player_effective_position')}")
+    except Exception:  # noqa: BLE001 — table absent (not yet precomputed/exported) -> listed positions
+        return {}
+    out: dict = {}
+    for _, x in df.iterrows():
+        out[int(x.player_id)] = {
+            "effective": str(x.effective_position),
+            "locked": bool(x.locked),
+            "fo_per_gp": float(x.fo_per_gp) if x.fo_per_gp is not None else 0.0,
+        }
+    return out
+
+
+def apply_effective_position(position: str, pid, effpos: dict) -> str:
+    """Override a FORWARD's listed position with his effective (faceoff-derived) one when it is a
+    concrete C/L/R. Defensemen and goalies pass through unchanged; a forward with no override, or an
+    F_FLEX (no strong faceoff signal), keeps his listed position — no forward is pushed off a real
+    position without evidence."""
+    if not effpos or position in ("D", "G"):
+        return position
+    e = effpos.get(int(pid))
+    ep = e["effective"] if e else None
+    return ep if ep in ("C", "L", "R") else position
+
+
 def load_player_names(bq) -> dict:
     """player_id -> 'First Last' from the latest game a player dressed (covers base-roster departures
     and updated players resolved via the game fallback, who carry no live-snapshot name)."""
@@ -838,10 +952,11 @@ def main() -> None:
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
     ages = load_ages(bq, base_season)
+    effpos = load_effective_position(bq)   # forward listed-position -> effective (faceoff-derived) override
 
     forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
                                     aging, ages, archetypes, trans, run_id, sample=args.sample,
-                                    goalie_workload=goalie_workload)
+                                    goalie_workload=goalie_workload, effpos=effpos)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
     print(f"report -> {report}")
@@ -853,10 +968,17 @@ def main() -> None:
     _write_tables(bq, forecasts, move_rows)
 
 
-def _projected_players(team_id, mem, skater_data, goalie_data, aging, ages, archetypes, project_value):
+def _projected_players(team_id, mem, skater_data, goalie_data, aging, ages, archetypes, project_value,
+                       effpos=None):
+    """Project a team's roster forward. effpos (player_id -> effective C/L/R) overrides a forward's
+    listed position with the position he actually plays, so the displayed lineup + ledger + line
+    composition reflect real deployment. The projected-WAR math is untouched (position is not a value
+    input), so the ledger still reconciles and returning players still cancel in the delta."""
+    effpos = effpos or {}
     out = []
     for m in mem.get(team_id, []):
-        out.append(make_player_proj(m["player_id"], m.get("name"), m["position"], skater_data,
+        pos = apply_effective_position(m["position"], m["player_id"], effpos)
+        out.append(make_player_proj(m["player_id"], m.get("name"), pos, skater_data,
                                     goalie_data, aging, ages, archetypes, project_value))
     return out
 
@@ -919,8 +1041,9 @@ def _style_note(bq, team_id, upd_lineup, season):
 
 
 def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ages, archetypes,
-             trans, run_id, sample=None, goalie_workload=None):
+             trans, run_id, sample=None, goalie_workload=None, effpos=None):
     goalie_workload = goalie_workload or {}
+    effpos = effpos or {}
     scored_at = datetime.now(timezone.utc).isoformat()
     names = load_player_names(bq)
     team_ids = sorted(set(base_mem) | set(upd_mem))
@@ -933,9 +1056,9 @@ def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ag
         if tid not in ratings:
             continue
         base_players = _projected_players(tid, base_mem, skater_data, goalie_data, aging, ages,
-                                          archetypes, project_value=True)
+                                          archetypes, project_value=True, effpos=effpos)
         upd_players = _projected_players(tid, upd_mem, skater_data, goalie_data, aging, ages,
-                                         archetypes, project_value=True)
+                                         archetypes, project_value=True, effpos=effpos)
         rc = ratings[tid]
         gshares = goalie_workload.get(tid)   # None -> forecast_team uses the league-default split
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
