@@ -29,7 +29,9 @@
 .t-panel__sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: 0 0 var(--space-4); }
 
 /* tilt motif (shared, 3 sizes) */
-.tilt { position: relative; width: 100%; background: var(--color-bg-elevated); border-radius: var(--radius-sm); overflow: hidden; }
+/* §S6: a hairline track (no filled block); the winner band + tick sit on a thin baseline. */
+.tilt { position: relative; width: 100%; background: none; overflow: visible; }
+.tilt::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--color-border); transform: translateY(-50%); }
 .tilt--full { height: 30px; margin: var(--space-3) 0 var(--space-2); }
 .tilt--compact { height: 18px; margin: var(--space-2) 0; }
 .tilt--sparkline { height: 12px; width: 60px; }
@@ -214,6 +216,8 @@
 .tr-quickjump-wrap { margin-top: var(--space-4); }
 
 /* notable-trades — two top-10 cards (recent | lopsided), kept equal height */
+.feed { display: flex; flex-direction: column; gap: var(--space-4); }
+.feed-legend { display: flex; flex-wrap: wrap; gap: var(--space-5); }
 .feed-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: stretch; }
 @media (max-width: 760px) { .feed-two { grid-template-columns: 1fr; } }
 .feed-frame { font-size: var(--text-sm); }

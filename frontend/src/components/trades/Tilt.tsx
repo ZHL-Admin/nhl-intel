@@ -28,8 +28,9 @@ export default function Tilt({ signed, bandHw, color, even, edge = false, incomp
   const neutral = even || incomplete
   const tickColor = neutral ? 'var(--color-text-muted)'
     : edge ? `color-mix(in srgb, ${color} 55%, var(--color-bg-elevated))` : color
+  // §S6: the winning band fills in the winner's team color at 60% (decisive); an edge stays faint.
   const bandFill = neutral ? 'transparent'
-    : `color-mix(in srgb, ${color} ${edge ? 12 : 22}%, transparent)`
+    : `color-mix(in srgb, ${color} ${edge ? 20 : 60}%, transparent)`
   const bandLeft = shown ? Math.min(lo, hi) : 50
   const bandWidth = shown ? Math.abs(hi - lo) : 0
 
