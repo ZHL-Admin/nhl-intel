@@ -1,5 +1,5 @@
 .page-layout {
-  padding-top: 56px;
+  padding-top: var(--nav-height);
   min-height: 100vh;
 }
 
@@ -11,8 +11,13 @@
   }
 }
 
+/* Container matches the shell's width + gutter so page titles align with the wordmark (§9). */
 .page-layout__container {
-  max-width: 1024px;
+  max-width: var(--container-max);
   margin: 0 auto;
-  padding: var(--space-8) 0;
+  padding: var(--space-8) var(--container-gutter);
+}
+
+@media (max-width: 640px) {
+  .page-layout__container { padding: var(--space-5) var(--space-4); }
 }

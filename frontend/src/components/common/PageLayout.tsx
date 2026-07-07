@@ -1,5 +1,6 @@
 import React, { createContext, useContext } from 'react'
 import NavBar from './NavBar'
+import CommandPalette from './CommandPalette'
 import FooterMeta from './FooterMeta'
 import './PageLayout.css'
 
@@ -21,6 +22,7 @@ function PageLayout({ children }: PageLayoutProps) {
   return (
     <>
       <NavBar />
+      <CommandPalette />
       <main className="page-layout">
         <div className="page-layout__container">
           {children}

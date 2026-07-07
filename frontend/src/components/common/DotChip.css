@@ -1,0 +1,39 @@
+.dot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.dot-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* filled = confirmed */
+.dot-chip__dot--filled { background: var(--dot-color); }
+
+/* projected = hollow ring */
+.dot-chip__dot--projected {
+  background: transparent;
+  border: 1.5px solid var(--dot-color);
+}
+
+/* leaning = ring with the left half filled (a faceoff dot) */
+.dot-chip__dot--leaning {
+  border: 1.5px solid var(--dot-color);
+  background: linear-gradient(to right, var(--dot-color) 0 50%, transparent 50% 100%);
+}
+
+.dot-chip__label {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}

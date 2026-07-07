@@ -1,0 +1,71 @@
+/* The annotation rail (§6.3): Tufte-style sidenotes in the margin. */
+.rail {
+  width: var(--rail-width);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rail__note {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  text-indent: 0;
+}
+.rail__note--italic { font-style: italic; }
+
+.rail__marker,
+.ref__marker {
+  color: var(--line-blue);
+  font-family: var(--font-sans);
+  font-size: 0.68em;
+  font-weight: 600;
+  vertical-align: super;
+  line-height: 0;
+}
+.rail__marker { margin-right: 4px; }
+
+/* Data-as-of note: micro mono */
+.rail__asof {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* In-content reference marker */
+.ref { position: relative; }
+.ref__marker {
+  background: none;
+  border: none;
+  padding: 0 1px;
+  cursor: pointer;
+}
+.ref__marker:hover { color: var(--line-blue-hover); }
+
+/* Below 1200px the rail collapses; the Ref popover carries the note (§6.3). */
+.ref__popover {
+  position: absolute;
+  z-index: 60;
+  left: 0;
+  top: 1.4em;
+  width: min(280px, 72vw);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+/* On wide screens the rail is visible, so the tap-popover is redundant — hide it. */
+@media (min-width: 1200px) {
+  .ref__popover { display: none; }
+}
+@media (max-width: 1199px) {
+  .rail { display: none; }
+}

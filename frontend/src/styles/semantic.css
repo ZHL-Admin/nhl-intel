@@ -1,42 +1,52 @@
 /* =============================================================================
-   The Sheet Design System — semantic tokens (DS0)
-   The EXISTING token names, reassigned to the new values. Component CSS keeps working;
-   only values change. Surfaces / text / accent / status are exact literals (§2.2, §2.4);
-   dataviz families reference the --oi-* primitives (theme-aware). New names live here too.
+   The Sheet Design System v2 — semantic tokens (DS0)
+   The EXISTING token names, reassigned to the v2 "day sheet" / "night game" values, plus
+   the new rink-line brand tokens. Component CSS keeps working; only values change. Surfaces
+   / text / accent / status are exact literals (v2 §4); dataviz families reference the
+   theme-aware --oi-* primitives. Layout / radius / shadow / motion tokens live here too (§5).
    ============================================================================= */
 
 :root {
-  /* --- Page surfaces (light) --- */
-  --color-bg-base: #FDFCFA;
+  /* --- Page surfaces (light "day sheet"): ice, not cream --- */
+  --color-bg-base: #F6F9FA;
   --color-bg-surface: #FFFFFF;
-  --color-bg-elevated: #F2F0EA;
+  --color-bg-elevated: #EDF3F5;
   --color-bg-overlay: #FFFFFF;
 
-  /* --- Borders (light) --- */
-  --color-border: #E4E1D9;
-  --color-border-subtle: #ECE9E2;
-  --color-border-strong: #C9C5BA;
+  /* --- Borders / hairlines (light) --- */
+  --color-border: #D8E2E6;
+  --color-border-subtle: #E7EEF1;
+  --color-border-strong: #B9C7CD;
 
-  /* --- Text (light) — muted/secondary darkened to pass 4.5:1 --- */
-  --color-text-primary: #1A1917;
-  --color-text-secondary: #5C5850;
-  --color-text-muted: #79756C;
-  --color-text-inverse: #FFFFFF;
+  /* --- Text (light) --- */
+  --color-text-primary: #101820;
+  --color-text-secondary: #46545E;
+  --color-text-muted: #8A99A3;
+  --color-text-inverse: #F6F9FA;
   --color-text-on-accent: #FFFFFF;
 
-  /* --- Accent: ink (interactive) --- */
-  --color-accent: #1A1917;
-  --color-accent-hover: #403D37;
-  --color-accent-subtle: #F2F0EA;
+  /* --- Rink lines (v2 brand) --- */
+  --line-blue: #0033A0;          /* threshold: links, active, selected, focus */
+  --line-blue-hover: #00287D;
+  --line-red: #C8102E;           /* center/now: the page rule, live, negative */
+  --line-red-hover: #A00D24;
+  --crease: #E3F1F9;             /* selection + hover wash */
+  --boards-yellow: #B77E00;      /* caution text */
+  --boards-yellow-bg: #FFF4D6;
+
+  /* --- Accent: ink (primary buttons stay ink) --- */
+  --color-accent: #101820;
+  --color-accent-hover: #22303A;
+  --color-accent-subtle: var(--crease);
 
   /* --- Status + valence (light) --- */
-  --color-success: #1E7F4F;
-  --color-success-bg: #EAF5EF;
-  --color-danger: #C2402F;
-  --color-danger-bg: #FBEEEC;
-  --color-warning: #A9761B;
-  --color-warning-bg: #FBF3E3;
-  --color-live: #DC2626;
+  --color-success: #177245;
+  --color-success-bg: #E6F3EC;
+  --color-danger: #C8102E;
+  --color-danger-bg: #FBE9EC;
+  --color-warning: #B77E00;
+  --color-warning-bg: #FFF4D6;
+  --color-live: #C8102E;
   --color-live-text: #FFFFFF;
 
   /* --- Dataviz (family primitives; theme-aware via --oi-*) --- */
@@ -48,15 +58,16 @@
   --color-ice-600: var(--oi-ice-600);
   --color-ice-700: var(--oi-ice-700);
 
-  --color-data-1: var(--oi-cat-1);
-  --color-data-2: var(--oi-cat-2);
-  --color-data-3: var(--oi-cat-3);
-  --color-data-4: var(--oi-cat-4);
-  --color-data-5: var(--oi-cat-5);
-  --color-data-6: var(--oi-cat-6);
-  --color-data-neutral: var(--oi-cat-6);
-  --color-data-positive: var(--color-success);
-  --color-data-negative: var(--color-danger);
+  --color-data-1: var(--oi-cat-1);   /* blue */
+  --color-data-2: var(--oi-cat-2);   /* red */
+  --color-data-3: var(--oi-cat-3);   /* teal */
+  --color-data-4: var(--oi-cat-4);   /* purple */
+  --color-data-5: var(--oi-cat-5);   /* gold */
+  --color-data-6: var(--oi-cat-6);   /* stone */
+  --color-data-neutral: #9AA7AE;
+  /* Above / below expected = blue / red, tied to the rink lines (theme-aware). */
+  --color-data-positive: var(--line-blue);
+  --color-data-negative: var(--line-red);
 
   --color-div-1: var(--oi-div-1);
   --color-div-2: var(--oi-div-2);
@@ -83,10 +94,10 @@
   --bg-accent: var(--oi-ice-200);
 
   /* Team primary — set dynamically on team/player pages (identity chrome only). */
-  --color-team-primary: #1A1917;
+  --color-team-primary: #101820;
 
-  /* Focus treatment (universal) */
-  --focus-ring: #4A78E0;
+  /* Focus treatment (universal) — crossing the blue line */
+  --focus-ring: var(--line-blue);
 
   /* --- Spacing (4-based, unchanged) --- */
   --space-1: 4px;
@@ -101,69 +112,84 @@
   --space-16: 64px;
   --space-20: 80px;
 
-  /* --- Radius: controls/insets 8, cards 12, sheets 16, chips full --- */
-  --radius-sm: 4px;    /* legacy only; new work never uses this */
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
+  /* --- Radius: crisp by default, one reserved signature (v2 §5) --- */
+  --radius-sm: 2px;      /* buttons, inputs, tags, table cells */
+  --radius-md: 6px;      /* menus, popovers, tooltips */
+  --radius-lg: 10px;     /* dialogs, command palette */
+  --radius-xl: 10px;     /* legacy alias → lg (no more 16px sheets) */
+  --radius-rink: 24px;   /* RESERVED: rink-cornered frames only (shot maps, style maps,
+                            the Lineup Lab board, the archetype key). Never on buttons/cards. */
+  --radius-full: 9999px; /* dots, avatars, jersey-number circles only */
 
-  /* --- Elevation: hairlines carry structure; shadows for overlays/PageCard only.
-         shadow-md / shadow-xl are retired from new work (kept for legacy). --- */
-  --shadow-sm: 0 1px 2px 0 rgba(20, 20, 18, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(20, 20, 18, 0.07), 0 2px 4px -1px rgba(20, 20, 18, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(20, 20, 18, 0.10), 0 4px 6px -2px rgba(20, 20, 18, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(20, 20, 18, 0.10), 0 10px 10px -5px rgba(20, 20, 18, 0.04);
+  /* --- Elevation: overlays only (v2 §5). Unmigrated components go flat immediately. --- */
+  --shadow-overlay: 0 12px 32px rgba(16, 24, 32, 0.14);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: var(--shadow-overlay);
+  --shadow-xl: var(--shadow-overlay);
+
+  /* --- Layout (v2 §5) --- */
+  --container-max: 1120px;
+  --container-gutter: var(--space-6);
+  --nav-height: 56px;
+  --rail-width: 280px;
+
+  /* --- Motion (v2 §5) --- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
+  --dur-draw: 260ms;
 }
 
 html[data-theme="dark"] {
-  /* --- Page surfaces (dark, rebuilt warm) --- */
-  --color-bg-base: #151412;
-  --color-bg-surface: #1C1B18;
-  --color-bg-elevated: #24231F;
-  --color-bg-overlay: #2B2A25;
+  /* --- Page surfaces (dark "night game") --- */
+  --color-bg-base: #0C1218;
+  --color-bg-surface: #121A22;
+  --color-bg-elevated: #1A242E;
+  --color-bg-overlay: #1A242E;
 
   /* --- Borders (dark) --- */
-  --color-border: #34322C;
-  --color-border-subtle: #262420;
-  --color-border-strong: #4A473F;
+  --color-border: #223039;
+  --color-border-subtle: #182129;
+  --color-border-strong: #33454F;
 
   /* --- Text (dark) --- */
-  --color-text-primary: #F0EEE7;
-  --color-text-secondary: #ABA79C;
-  --color-text-muted: #837F74;
-  --color-text-inverse: #151412;
-  --color-text-on-accent: #151412;
+  --color-text-primary: #EAF2F6;
+  --color-text-secondary: #9FB0BA;
+  --color-text-muted: #66788A;
+  --color-text-inverse: #0C1218;
+  --color-text-on-accent: #0C1218;
+
+  /* --- Rink lines (dark) --- */
+  --line-blue: #5B8CFF;
+  --line-blue-hover: #7DA4FF;
+  --line-red: #E5455A;
+  --line-red-hover: #F06B7C;
+  --crease: #13273A;
+  --boards-yellow: #E0A61E;
+  --boards-yellow-bg: #2A2310;
 
   /* --- Accent (dark) --- */
-  --color-accent: #F0EEE7;
-  --color-accent-hover: #D6D3C9;
-  --color-accent-subtle: #2B2A25;
+  --color-accent: #EAF2F6;
+  --color-accent-hover: #FFFFFF;
+  --color-accent-subtle: var(--crease);
 
   /* --- Status + valence (dark) --- */
   --color-success: #46C286;
   --color-success-bg: #12291D;
-  --color-danger: #EE7A66;
+  --color-danger: #E5455A;
   --color-danger-bg: #2E1512;
-  --color-warning: #DFB052;
-  --color-warning-bg: #2B2210;
-  --color-live: #EF4444;
+  --color-warning: #E0A61E;
+  --color-warning-bg: #2A2310;
+  --color-live: #E5455A;
 
-  /* Valence data ink follows the dark status hues */
-  --color-data-positive: var(--color-success);
-  --color-data-negative: var(--color-danger);
+  /* Valence data ink follows the rink lines */
+  --color-data-neutral: #66788A;
 
-  /* Data-ink hooks (dark: fill = ice-400, bg = ice-200-dark) */
-  --fill-accent: var(--oi-ice-400);
+  /* Data-ink hooks (dark) */
+  --fill-accent: var(--oi-ice-500);
   --bg-accent: var(--oi-ice-200);
 
   /* Team primary (dark default) */
-  --color-team-primary: #F0EEE7;
-
-  /* Focus ring (dark) */
-  --focus-ring: #6E96EA;
-
-  /* Shadows drop to ~60% since hairlines carry structure (§10) */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -2px rgba(0, 0, 0, 0.30);
+  --color-team-primary: #EAF2F6;
 }
