@@ -130,6 +130,19 @@ img {
 .col-6 { grid-column: span 6; }
 .col-4 { grid-column: span 4; }
 
+/* Dossier layout (§00 template): main column + annotation Rail; the rail collapses below
+   1200px (Rail.css hides it and Refs open their notes as popovers). */
+.dossier {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-width);
+  gap: var(--space-8);
+  align-items: start;
+}
+.dossier__main { min-width: 0; }
+@media (max-width: 1199px) {
+  .dossier { grid-template-columns: 1fr; }
+}
+
 /* Section title pattern (NOT inside a card) — Newsreader per v2 §3 */
 .section-title {
   font-family: var(--font-display);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { PageLayout, PageCard, SkeletonLoader, TabNav, PodiumCards, ComparisonRow, MatchupPreviewCard } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, TabNav, PodiumCards, ComparisonRow, MatchupPreviewCard, RailProvider, Rail, Note, Ref } from '../components/common'
 import Badge from '../components/common/Badge'
 import GameNarrative from '../components/games/GameNarrative'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -269,6 +269,9 @@ function GameDetail() {
             />
           }
         >
+          <RailProvider>
+          <div className="dossier">
+          <div className="dossier__main">
           <CompletedGameTabContent
             activeTab={activeTab}
             gameDetail={gameDetail}
@@ -276,6 +279,15 @@ function GameDetail() {
             homeTeamColor={homeTeamColor}
             awayTeamColor={awayTeamColor}
           />
+          </div>
+          {/* TODO-copy: verify these definitions with an editorial pass (§S1). */}
+          <Rail>
+            <Note n={1}>xG (expected goals) scores each shot by its chance of going in given location and type — the model's read of who created the better chances, apart from what went in.</Note>
+            <Note n={2}>The worm traces cumulative expected-goal difference through the game: above the line the home side is out-chancing, below it the away side. Goals are marked as dots.</Note>
+            <Note n={3} italic>GSAx — goals saved above expected — is the xG on shots a goalie faced minus the goals allowed. Positive means saves beyond what an average netminder makes.</Note>
+          </Rail>
+          </div>
+          </RailProvider>
         </PageCard>
       </div>
     </PageLayout>
@@ -500,7 +512,7 @@ function AnalyticsTab({
         <SkaterImpactTable gameId={game_id} />
       </div>
 
-      <h2 className="page-region-title" style={{ marginBottom: 'var(--space-4)' }}>Receipts</h2>
+      <h2 className="page-region-title" style={{ marginBottom: 'var(--space-4)' }}>Receipts <Ref n={1} /></h2>
       {/* V4: two explicit height-assigned columns so neither strands whitespace. */}
       <div className="gd-receipts">
         <div className="gd-receipts__col">

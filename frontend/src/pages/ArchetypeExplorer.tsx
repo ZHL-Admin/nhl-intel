@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { PageLayout, PageCard, Tabs, SkeletonLoader, PlayerAvatar } from '../components/common'
+import { PageLayout, PageCard, Tabs, SkeletonLoader, PlayerAvatar, RailProvider, Rail, Note, Ref } from '../components/common'
 import SkillRadar from '../components/visualizations/SkillRadar'
 import { getArchetypes } from '../api/archetypes'
 import { ArchetypeCard, ArchetypeTrait, RadarSpoke } from '../api/types'
@@ -63,7 +63,7 @@ function ReferenceKey({ template, pos }: { template: RadarSpoke[]; pos: 'F' | 'D
         <SkillRadar spokes={ref} size={300} baseline={`Percentile vs ${POS_NOUN[pos]}`} />
       </div>
       <div className="arch-key__copy">
-        <div className="arch-key__title">How to read these</div>
+        <div className="arch-key__title">How to read these <Ref n={2} /></div>
         <p>
           Each card below plots the same {template.length} axes — a player type's characteristic
           shape, as percentiles within {POS_NOUN[pos]}. The card labels are abbreviated and grouped
@@ -171,6 +171,9 @@ export default function ArchetypeExplorer() {
             </div>
           ) : undefined}
         >
+        <RailProvider>
+        <div className="dossier">
+        <div className="dossier__main">
         {error && <p className="arch__msg">{error}</p>}
         {!cards && !error && <SkeletonLoader />}
 
@@ -179,6 +182,15 @@ export default function ArchetypeExplorer() {
         {cards && !selected && (
           <Gallery cards={cards} pos={effPos} onOpen={(k) => setParam('type', k)} />
         )}
+        </div>
+        {/* TODO-copy: verify these definitions with an editorial pass (§S1). */}
+        <Rail>
+          <Note n={1}>Archetypes are found by clustering players on their standardized skill fingerprints; each family is a region of that space. A player's archetype is the nearest family.</Note>
+          <Note n={2} italic>Read a radar by shape, not size alone: each axis is a percentile within position, the rings mark the 50th and 90th, and the blue polygon is the specimen's signature.</Note>
+          <Note n={3}>Coverage: archetypes are computed for skaters with enough minutes to estimate a stable fingerprint; goalies and very-low-minute players are excluded.</Note>
+        </Rail>
+        </div>
+        </RailProvider>
         </PageCard>
       </div>
     </PageLayout>
