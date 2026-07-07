@@ -117,8 +117,10 @@
 
 .player-hd { display: flex; align-items: center; gap: var(--space-5); }
 .player-hd__id { min-width: 0; }
+/* §08: player name in Newsreader display-1. */
 .player-hd__name {
-  font-size: var(--text-3xl); font-weight: 700; margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-display-1); font-weight: 500; margin: 0;
   color: var(--color-text-primary); line-height: 1.05; letter-spacing: -0.01em;
 }
 .player-hd__context {
@@ -464,30 +466,37 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .trajectory__tag { font-size: var(--font-size-xs,0.72rem); padding: 1px 7px; border-radius: 999px; background: var(--color-surface-elevated, rgba(127,127,127,0.12)); color: var(--color-text-secondary,#888); }
 
 /* Skills radar header visual (Part B) */
+/* §08: uncarded radar — no elevated background. */
 .player-profile__radar {
   display: grid;
   grid-template-columns: minmax(0, 460px) 1fr;
   gap: var(--space-6, 24px);
   align-items: center;
   margin: var(--space-4, 16px) 0;
-  padding: var(--space-4, 16px);
-  border-radius: 14px;
-  background: var(--color-bg-elevated);
+  padding: 0;
+  border-radius: 0;
+  background: none;
   flex: 1;
 }
 .player-profile__radar-overall {
-  font-size: 1.5rem; font-weight: 800; color: var(--color-text); margin-bottom: 10px;
+  font-family: var(--font-display);
+  font-size: var(--text-display-1); font-weight: 500; color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums; margin-bottom: 10px;
 }
 .player-profile__radar-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+/* Skill chips → dot-chips: a dot + eyebrow label, no pill background (§08). */
 .player-profile__radar-chip {
-  padding: 4px 11px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
-  background: var(--color-accent-soft, rgba(59,130,246,0.14)); color: var(--color-accent, #3b82f6);
-  text-decoration: none; cursor: pointer; transition: filter 140ms ease;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0; border-radius: 0; font-size: var(--text-eyebrow); font-weight: 550;
+  font-stretch: 110%; text-transform: uppercase; letter-spacing: 0.06em;
+  background: none; color: var(--color-text-secondary);
+  text-decoration: none; cursor: pointer; transition: color 140ms ease;
 }
-.player-profile__radar-chip:hover { filter: brightness(1.08); text-decoration: underline; }
-.player-profile__radar-chip--def {
-  background: var(--color-bg-hover, rgba(127,127,127,0.12)); color: var(--color-text-secondary);
+.player-profile__radar-chip::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--line-blue); flex-shrink: 0;
 }
+.player-profile__radar-chip:hover { color: var(--color-text-primary); text-decoration: none; }
+.player-profile__radar-chip--def::before { background: var(--color-text-muted); }
 .player-profile__radar-descriptor {
   font-size: 0.9rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;
 }
@@ -632,11 +641,11 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .player-ov__total-val { font-size: 23px; font-weight: 500; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
 .player-ov__total-pill { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: var(--radius-md); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* [3] Hero card: verdict (left 40%) + shape (right) in one bordered card */
-.player-ov__hero { display: flex; background: var(--color-bg-elevated); border-radius: var(--radius-lg); overflow: hidden; }
+/* [3] §08: uncarded — the verdict (left) beside the radar shape (right), no box. */
+.player-ov__hero { display: flex; gap: var(--space-8); background: none; border-radius: 0; }
 /* §2.5 grid: the case (verdict) leads at 7/12; the shape (radar) reads at 5/12. */
-.player-ov__hero-left { flex: 0 0 58.333%; padding: 18px 20px; display: flex; flex-direction: column; border-right: 0.5px solid var(--color-border-subtle); }
-.player-ov__hero-right { flex: 1; min-width: 0; padding: 18px 20px; display: flex; flex-direction: column; }
+.player-ov__hero-left { flex: 0 0 58.333%; padding: 0; display: flex; flex-direction: column; }
+.player-ov__hero-right { flex: 1; min-width: 0; padding: 0; display: flex; flex-direction: column; }
 
 .player-ov__pctblock { display: flex; align-items: end; gap: 12px; margin-top: 10px; }
 .player-ov__pct { font-size: 54px; font-weight: 500; line-height: 0.9; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
@@ -651,8 +660,18 @@ a.player-hd__chip:hover { color: var(--color-text-primary); border-color: var(--
 .player-ov__agree--ok { color: var(--color-success); background: var(--color-success-bg); }
 .player-ov__agree--warn { color: var(--color-warning); background: var(--color-warning-bg); }
 
-/* §3.1/§2.5: the verdict prose reads in display serif, 17/28. */
-.player-ov__hero-prose { margin: 16px 0 0; font-family: var(--font-display); font-size: 16px; font-weight: 400; line-height: 125%; color: var(--color-text-primary); }
+/* §08 signature: the verdict as a Newsreader-italic pull-quote with a blue left border. */
+.player-ov__hero-prose {
+  margin: 16px 0 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--line-blue);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-title);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
 .player-ov__hero-prose--muted { font-style: italic; color: var(--color-text-muted); }
 .player-ov__hero-link { margin-top: auto; padding-top: 14px; display: inline-flex; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; font-size: 12px; color: var(--color-text-secondary); }
 .player-ov__hero-link:hover { text-decoration: underline; }
