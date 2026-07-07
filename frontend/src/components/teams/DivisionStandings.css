@@ -18,32 +18,44 @@
   transition: background 120ms ease;
 }
 .div-standings__row:first-child { border-top: none; }
-.div-standings__row:hover { background: var(--color-bg-elevated); }
+.div-standings__row:hover { background: var(--crease); }
 
-/* R9 playoff cut line — 1px danger dashed with a "cut" microlabel, after the 3rd team. */
+/* §05 signature: the playoff cut as a real blue threshold line, after the 3rd team,
+   labelled "playoff line" in an eyebrow at its right end. Blue literally marks who's in. */
 .div-standings__row.is-cut::after {
   content: '';
   position: absolute;
   left: 0; right: 0; bottom: -1px;
-  border-top: 1px dashed var(--color-danger);
+  border-top: 1px dashed var(--line-blue);
 }
 .div-standings__row.is-cut::before {
-  content: 'cut';
+  content: 'playoff line';
   position: absolute;
-  right: var(--space-2); bottom: -8px;
+  right: 0; bottom: -8px;
   z-index: 1;
   padding: 0 4px;
-  font-family: var(--font-mono);
-  font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--color-danger);
-  background: var(--color-bg-surface);
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 550; font-stretch: 110%;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--line-blue);
+  background: var(--color-bg-base);
 }
 
-.div-standings__rank { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; }
+/* Division subheads as Newsreader title, no boxes (§05). */
+.div-standings .page-region-title {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-primary);
+}
+
+.div-standings__rank { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .div-standings__logo { width: 20px; height: 20px; object-fit: contain; }
-.div-standings__abbrev { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
-.div-standings__record { font-size: var(--text-xs); color: var(--color-text-secondary); }
-.div-standings__pts { font-size: var(--text-base); font-weight: 700; font-variant-numeric: tabular-nums; }
+.div-standings__abbrev { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; }
+.div-standings__record { font-size: var(--text-xs); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.div-standings__pts { font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .div-standings__empty { padding: var(--space-8) 0; color: var(--color-text-muted); }
 

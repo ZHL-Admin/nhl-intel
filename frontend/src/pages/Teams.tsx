@@ -52,8 +52,9 @@ function Teams() {
     <PageLayout>
       <div className="teams">
         <PageCard
-          title="Teams"
-          subtitle="Standings, strength, and luck."
+          eyebrow="Teams"
+          title="The league"
+          subtitle="Look up a team, or browse the league's shape — every club plotted by how it plays, then the standings against the playoff line."
           controls={
             <div className="teams__viewbar">
               <Tabs

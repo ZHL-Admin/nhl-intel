@@ -191,9 +191,10 @@ function useLuckDomain(rows: DeservedStandingRow[]): [number, number] {
 
 function DeservedRow({ r, rank, domain }: { r: DeservedStandingRow; rank: number; domain: [number, number] }) {
   const lucky = r.luck_delta > 0
+  // §03 diverging gauge: blue right (outperforming the model) / red left (underperforming).
   const seg: StackSegment[] = [{
     key: 'luck', label: 'Luck (actual − deserved)', value: r.luck_delta,
-    color: lucky ? 'var(--color-success)' : 'var(--color-danger)',
+    color: lucky ? 'var(--color-data-positive)' : 'var(--color-data-negative)',
   }]
   return (
     <Link to={`/teams/${r.team_id}`} className="rrow rrow--deserved">
@@ -210,7 +211,7 @@ function DeservedRow({ r, rank, domain }: { r: DeservedStandingRow; rank: number
       <span className="rrow__bar">
         <ComponentStackBar
           variant="total" segments={seg} total={r.luck_delta} domain={domain}
-          totalColor={lucky ? 'var(--color-success)' : 'var(--color-danger)'} formatValue={fmtPts}
+          totalColor={lucky ? 'var(--color-data-positive)' : 'var(--color-data-negative)'} formatValue={fmtPts}
         />
       </span>
       <span className={`rrow__luck ${r.luck_delta > 0 ? 'rrow__luck--pos' : r.luck_delta < 0 ? 'rrow__luck--neg' : ''}`}>
