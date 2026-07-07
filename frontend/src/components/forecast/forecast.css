@@ -163,3 +163,75 @@
   .dc__rowlabel { justify-self: start; padding-top: var(--space-1); }
   .dc__fit { justify-self: start; }
 }
+
+/* ============================================================================
+   §S2 — Offseason center-zero diverging board (league view)
+   ============================================================================ */
+.olb { display: flex; flex-direction: column; gap: var(--space-3); }
+.olb__rows { display: flex; flex-direction: column; }
+.olb__row {
+  display: grid;
+  grid-template-columns: 28px 20px minmax(110px, 190px) minmax(160px, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-3);
+  height: 34px;
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.olb__row:hover { background: var(--crease); }
+.olb__rank { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.olb__logo { width: 20px; height: 20px; object-fit: contain; }
+.olb__name { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The track carries the shared zero line (center) — contiguous rows read as one line. */
+.olb__track { position: relative; height: 100%; }
+.olb__track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+}
+.olb__fill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius: var(--radius-full);
+}
+.olb__fill.is-up { background: var(--color-data-positive); }
+.olb__fill.is-down { background: var(--color-data-negative); }
+.olb__dash {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0;
+  border-top: 2px dashed;
+}
+.olb__dash.is-up { border-color: var(--color-data-positive); }
+.olb__dash.is-down { border-color: var(--color-data-negative); }
+.olb__val { font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+.olb__val.is-up { color: var(--color-data-positive); }
+.olb__val.is-down { color: var(--color-data-negative); }
+
+.olb__legend {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .olb__row { grid-template-columns: 24px 18px minmax(80px, 1fr) minmax(120px, 1.4fr) 46px; gap: var(--space-2); }
+}
