@@ -16,13 +16,15 @@ import './PageCard.css'
 /** True for anything rendered inside a PageCard — card components consume this to drop their chrome. */
 export const PageCardContext = createContext(false)
 
-export default function PageCard({ title, subtitle, back, header, controls, bodyClassName, children }: {
+export default function PageCard({ eyebrow, title, subtitle, back, header, controls, bodyClassName, children }: {
+  /** Section eyebrow (e.g. "Studio") — the Sheet's overline (§00 6.2). */
+  eyebrow?: string
   title?: string
   subtitle?: ReactNode
   back?: { to: string; label: string }
-  /** A custom header node (e.g. an IdentityHeader) used instead of the title/subtitle row. */
+  /** A custom header node (e.g. a masthead) used instead of the title/subtitle row. */
   header?: ReactNode
-  /** Page controls (tabs / filters / toolbar) rendered in the header region, above the divider. */
+  /** Page controls (tabs / filters / toolbar) rendered in the header region, above the red rule. */
   controls?: ReactNode
   /** Optional class on the body wrapper (e.g. for a grid/list layout). */
   bodyClassName?: string
@@ -34,8 +36,9 @@ export default function PageCard({ title, subtitle, back, header, controls, body
         <header className="page-card__head">
           {back && <Link to={back.to} className="page-card__back">← {back.label}</Link>}
           {header ?? (
-            (title || subtitle) && (
+            (eyebrow || title || subtitle) && (
               <div className="page-card__row">
+                {eyebrow && <p className="page-card__eyebrow">{eyebrow}</p>}
                 {title && <h1 className="page-card__title">{title}</h1>}
                 {subtitle && <p className="page-card__sub">{subtitle}</p>}
               </div>
@@ -43,6 +46,7 @@ export default function PageCard({ title, subtitle, back, header, controls, body
           )}
           {controls && <div className="page-card__controls">{controls}</div>}
         </header>
+        {/* The Sheet's one red rule (§00 6.2), closing the header. */}
         <div className="page-card__divider" />
         <div className={bodyClassName ? `page-card__body ${bodyClassName}` : 'page-card__body'}>
           {children}

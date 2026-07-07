@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Calendar, MapPin } from 'lucide-react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { PageLayout, PageCard, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, MatchupPreviewCard } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, TabNav, PodiumCards, ComparisonRow, MatchupPreviewCard } from '../components/common'
 import Badge from '../components/common/Badge'
 import GameNarrative from '../components/games/GameNarrative'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -32,6 +31,45 @@ function seriesLabel(gameId: number): string | null {
   const round = roundNames[s[7]] || 'Playoffs'
   const game = parseInt(s[9], 10)
   return Number.isNaN(game) ? round : `${round} · Game ${game}`
+}
+
+// §02 signature: the serif score masthead. Away/home names in Newsreader display-2 flank the
+// score in Newsreader 44 tabular; each name is underlined by a 3px rule in its team color (team
+// color as a line, never a fill); a mono status line sits beneath. The red rule (PageCard) closes it.
+function GameMasthead({ away, home, awayColor, homeColor, awayScore, homeScore, status, preview }: {
+  away: string; home: string; awayColor: string; homeColor: string
+  awayScore: number | null; homeScore: number | null; status: string; preview?: boolean
+}) {
+  const awayLeads = !preview && (awayScore ?? 0) >= (homeScore ?? 0)
+  const homeLeads = !preview && (homeScore ?? 0) >= (awayScore ?? 0)
+  return (
+    <div className="game-masthead">
+      <div className="game-masthead__grid">
+        <div className="game-masthead__team game-masthead__team--away">
+          <img className="game-masthead__logo" src={getTeamLogoUrl(away)} alt=""
+            onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+          <span className="game-masthead__name" style={{ borderColor: awayColor }}>{away}</span>
+        </div>
+        <div className="game-masthead__score">
+          {preview ? (
+            <span className="game-masthead__vs">vs</span>
+          ) : (
+            <span className="num">
+              <span className={awayLeads ? '' : 'game-masthead__trail'}>{awayScore ?? 0}</span>
+              <span className="game-masthead__dash">–</span>
+              <span className={homeLeads ? '' : 'game-masthead__trail'}>{homeScore ?? 0}</span>
+            </span>
+          )}
+        </div>
+        <div className="game-masthead__team game-masthead__team--home">
+          <span className="game-masthead__name" style={{ borderColor: homeColor }}>{home}</span>
+          <img className="game-masthead__logo" src={getTeamLogoUrl(home)} alt=""
+            onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+        </div>
+      </div>
+      <p className="game-masthead__status">{status}</p>
+    </div>
+  )
 }
 
 function GameDetail() {
@@ -160,65 +198,21 @@ function GameDetail() {
       <PageLayout>
         <div className="game-detail">
           <PageCard
+            back={{ to: '/games', label: 'Games' }}
             header={
-              <IdentityHeader
-            backLink={{
-              label: `← Games`,
-              to: '/games'
-            }}
-            leftContent={
-              <div>
-                <img
-                  src={getTeamLogoUrl(away_team.team_abbrev)}
-                  alt={away_team.team_abbrev}
-                  style={{ width: 48, height: 48 }}
-                />
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                    {away_team.team_abbrev}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                    Away
-                  </div>
-                </div>
-              </div>
-            }
-            centerContent={
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 500, color: 'var(--color-text-muted)' }}>
-                  vs
-                </div>
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-2)' }}>
-                  {new Date(gameDetail.game_date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </div>
-                <Badge variant="preview" />
-              </div>
-            }
-            rightContent={
-              <div style={{ textAlign: 'right' }}>
-                <img
-                  src={getTeamLogoUrl(home_team.team_abbrev)}
-                  alt={home_team.team_abbrev}
-                  style={{ width: 48, height: 48, marginLeft: 'auto' }}
-                />
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                    {home_team.team_abbrev}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                    Home
-                  </div>
-                </div>
-              </div>
-            }
-            teamColors={{
-              away: awayTeamColor,
-              home: homeTeamColor
-            }}
+              <GameMasthead
+                away={away_team.team_abbrev}
+                home={home_team.team_abbrev}
+                awayColor={awayTeamColor}
+                homeColor={homeTeamColor}
+                awayScore={null}
+                homeScore={null}
+                preview
+                status={[
+                  new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+                  gameDetail.venue_name,
+                  'Preview',
+                ].filter(Boolean).join('  ·  ')}
               />
             }
           >
@@ -250,73 +244,21 @@ function GameDetail() {
     <PageLayout>
       <div className="game-detail">
         <PageCard
+          back={{ to: '/games', label: 'Games' }}
           header={
-            <IdentityHeader
-          backLink={{
-            label: `← Games`,
-            to: '/games'
-          }}
-          absoluteBack
-          leftContent={
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}>
-              {/* Status */}
-              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-secondary)' }}>
-                Final
-              </span>
-              {/* Playoff series (under Final, above the score) */}
-              {seriesLabel(gameDetail.game_id) && (
-                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-                  {seriesLabel(gameDetail.game_id)}
-                </span>
-              )}
-
-              {/* Scoreboard row: logos, abbreviations and score all centered on one line */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-6)', flexWrap: 'wrap', marginTop: 'var(--space-1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                  <img src={getTeamLogoUrl(away_team.team_abbrev)} alt={away_team.team_abbrev} style={{ width: 46, height: 46 }} />
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>{away_team.team_abbrev}</span>
-                </div>
-
-                <div style={{ fontSize: 'var(--text-4xl)', fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1, whiteSpace: 'nowrap' }}>
-                  <span style={{ color: (away_team.score ?? 0) >= (home_team.score ?? 0) ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                    {away_team.score ?? 0}
-                  </span>
-                  <span style={{ color: 'var(--color-text-muted)', margin: '0 var(--space-3)' }}>–</span>
-                  <span style={{ color: (home_team.score ?? 0) >= (away_team.score ?? 0) ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                    {home_team.score ?? 0}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>{home_team.team_abbrev}</span>
-                  <img src={getTeamLogoUrl(home_team.team_abbrev)} alt={home_team.team_abbrev} style={{ width: 46, height: 46 }} />
-                </div>
-              </div>
-
-              {/* Date · arena · (type when not a playoff series) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 'var(--space-5)', marginTop: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <Calendar size={14} />
-                  {new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-                {gameDetail.venue_name && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <MapPin size={14} />
-                    {gameDetail.venue_name}
-                  </span>
-                )}
-                {!seriesLabel(gameDetail.game_id) && gameTypeLabel(gameDetail.game_id) && (
-                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
-                    {gameTypeLabel(gameDetail.game_id)}
-                  </span>
-                )}
-              </div>
-            </div>
-          }
-          teamColors={{
-            away: awayTeamColor,
-            home: homeTeamColor
-          }}
+            <GameMasthead
+              away={away_team.team_abbrev}
+              home={home_team.team_abbrev}
+              awayColor={awayTeamColor}
+              homeColor={homeTeamColor}
+              awayScore={away_team.score}
+              homeScore={home_team.score}
+              status={[
+                seriesLabel(gameDetail.game_id) || 'Final',
+                new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                gameDetail.venue_name,
+                !seriesLabel(gameDetail.game_id) ? gameTypeLabel(gameDetail.game_id) : '',
+              ].filter(Boolean).join('  ·  ')}
             />
           }
           controls={
