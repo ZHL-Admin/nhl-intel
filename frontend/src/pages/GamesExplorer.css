@@ -1,86 +1,24 @@
-.games-explorer__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
-}
-
-.games-explorer__error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-12) var(--space-6);
-  gap: var(--space-4);
-}
-
-.games-explorer__error-message {
-  font-size: var(--text-base);
-  color: var(--color-data-negative);
-  text-align: center;
-}
-
-.games-explorer__retry-button {
-  background-color: var(--color-accent);
-  color: white;
-  padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  transition: background-color 150ms ease;
-}
-
-.games-explorer__retry-button:hover {
-  background-color: var(--color-accent-hover);
-}
-
-.games-explorer__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-12) var(--space-6);
-  gap: var(--space-3);
-  text-align: center;
-}
-
-.games-explorer__empty-message {
-  font-size: var(--text-lg);
-  color: var(--color-text-secondary);
-}
-
-.games-explorer__empty-hint {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-@media (max-width: 960px) {
-  .games-explorer__grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .games-explorer__grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Blueprint 2.2: status-grouped row sections */
+/* §01 Games Explorer — scoreboard list at container width. */
 .games-explorer__sections { display: flex; flex-direction: column; gap: var(--space-8); }
-.games-explorer__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.games-explorer__section { display: flex; flex-direction: column; }
 .games-explorer__rows { display: flex; flex-direction: column; }
 
-.games-explorer__empty {
-  padding: var(--space-12) 0;
-  text-align: center;
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
+/* Status group divider: an eyebrow label, no box. */
+.games-explorer__group {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
-.games-explorer__empty-link {
-  display: inline-block;
-  margin-top: var(--space-3);
-  color: var(--color-accent);
-  font-weight: 500;
-  text-decoration: none;
+
+/* Flat skeleton block matching row height — no shimmer (§01 remove list). */
+.game-row-skeleton {
+  height: 64px;
+  margin-bottom: 1px;
 }
-.games-explorer__empty-link:hover { text-decoration: underline; }

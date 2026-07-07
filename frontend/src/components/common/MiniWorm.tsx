@@ -2,20 +2,26 @@ import './MiniWorm.css';
 
 interface MiniWormProps {
   data: { time: number; diff: number }[];
-  /** Kept for call-site compatibility; R8 sparklines are single-ink (ice), no team fills/markers. */
+  /** Kept for call-site compatibility; R8 sparklines are single-ink, no fills. */
   goals?: { time: number; label: string }[];
   homeColor?: string;
   awayColor?: string;
+  /** Stroke color; defaults to ice data ink. Pass a team color on the scoreboard (§01). */
+  color?: string;
+  /** Draw a hairline midline at zero differential (§01 chart grammar). */
+  midline?: boolean;
   width?: number;
   height?: number;
 }
 
 /**
- * MiniWorm — the R8 sparkline (§6). A single 1.5px ice stroke of the score/xG differential over
- * time with a last-point dot; no fills, no axes. Fixed 96x28 box; lives only inside rows and
- * identity headers. (The full worm with fills, baseline, and goal markers is R3, in GameDetail.)
+ * MiniWorm — the R8 sparkline (§6). A single 1.5px stroke of the score/xG differential over
+ * time with a last-point dot; no fills, no axes. Team-colored on the scoreboard with an optional
+ * hairline midline. (The full worm with fills, baseline, and goal markers is R3, in GameDetail.)
  */
-export default function MiniWorm({ data, width = 96, height = 28 }: MiniWormProps) {
+export default function MiniWorm({
+  data, color = 'var(--color-ice-600)', midline = false, width = 96, height = 28,
+}: MiniWormProps) {
   if (data.length === 0) {
     return <div className="mini-worm mini-worm--empty" style={{ width, height }} />;
   }
@@ -34,15 +40,19 @@ export default function MiniWorm({ data, width = 96, height = 28 }: MiniWormProp
 
   return (
     <svg className="mini-worm" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {midline && (
+        <line x1={0} y1={height / 2} x2={width} y2={height / 2}
+          stroke="var(--color-border)" strokeWidth={1} />
+      )}
       <path
         d={pathData}
         fill="none"
-        stroke="var(--color-ice-600)"
+        stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={xScale(last.time)} cy={yScale(last.diff)} r={2.5} fill="var(--color-ice-600)" />
+      <circle cx={xScale(last.time)} cy={yScale(last.diff)} r={2.5} fill={color} />
     </svg>
   );
 }

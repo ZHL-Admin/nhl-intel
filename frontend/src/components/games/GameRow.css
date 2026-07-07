@@ -1,49 +1,90 @@
+/* §01 scoreboard row: 64px, full container width, hairline separators, crease hover. */
 .game-row {
   display: grid;
-  grid-template-columns: 140px 1fr 120px minmax(120px, auto);
+  grid-template-columns: minmax(200px, 1fr) 96px 160px 72px;
   align-items: center;
-  gap: var(--space-4);
-  min-height: 52px;
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-5);
+  min-height: 64px;
+  padding: var(--space-2) var(--space-2);
   border-top: 1px solid var(--color-border-subtle);
   text-decoration: none;
   color: var(--color-text-primary);
-  transition: background 120ms ease;
+  transition: background var(--dur-fast) var(--ease-out);
 }
-.game-row:hover { background: var(--color-bg-elevated); }
+.game-row:hover { background: var(--crease); }
 .game-row:first-child { border-top: none; }
 
-.game-row__status { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
-.game-row__status--live { color: var(--color-live); font-weight: 600; }
+/* Teams: two stacked lines, logo + name (+ score once scored) */
+.game-row__teams { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.game-row__team {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  height: 22px;
+}
+.game-row__logo { width: 20px; height: 20px; object-fit: contain; }
+.game-row__name {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-row__team--leader .game-row__name { color: var(--color-text-primary); }
+.game-row__score {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+.game-row__team--leader .game-row__score { color: var(--color-text-primary); }
 
-.game-row__match { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.game-row__logo { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
-.game-row__abbrev { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
-.game-row__mid { min-width: 44px; text-align: center; }
-.game-row__score { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
-.game-row__at { color: var(--color-text-muted); }
+/* Status column */
+.game-row__status { font-size: var(--text-sm); }
+.game-row__live { display: inline-flex; align-items: center; gap: 6px; }
+.game-row__live-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--line-red);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.game-row__time { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-muted); }
+.game-row__final { color: var(--color-text-muted); }
 
-.game-row__lean { display: flex; align-items: center; }
+/* Worm / lean */
+.game-row__worm { display: flex; align-items: center; justify-content: flex-end; }
 .game-row__lean-track {
   width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-bg-elevated);
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
   overflow: hidden;
 }
 .game-row__lean-fill { display: block; height: 100%; }
 
-.game-row__reason { font-size: var(--text-xs); color: var(--color-text-secondary); text-align: right; white-space: nowrap; }
+/* Percent column */
+.game-row__pct { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+.game-row__pct-val { font-size: var(--text-base); font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.game-row__pct-team {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
 
 @media (max-width: 767px) {
   .game-row {
     grid-template-columns: 1fr auto;
-    grid-template-areas: 'match status' 'lean reason';
     gap: var(--space-2) var(--space-3);
-    padding: var(--space-3);
+    padding: var(--space-3) var(--space-2);
   }
-  .game-row__status { grid-area: status; text-align: right; }
-  .game-row__match { grid-area: match; }
-  .game-row__lean { grid-area: lean; }
-  .game-row__reason { grid-area: reason; }
+  .game-row__worm { display: none; }
+  .game-row__pct { justify-content: center; }
 }

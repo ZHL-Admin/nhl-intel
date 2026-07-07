@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PageLayout, PageCard } from '../components/common';
+import { PageLayout, PageHeader } from '../components/common';
 import DateStrip from '../components/common/DateStrip';
 import GameRow from '../components/games/GameRow';
-import GameCardSkeleton from '../components/games/GameCardSkeleton';
 import { getGameDates, getGamesByDate } from '../api/games';
 import { GameDate as GameDateType, Game } from '../api/types';
 import { formatDateForAPI } from '../utils/teams';
 import { usePageTitle } from '../hooks/usePageTitle';
 import './GamesExplorer.css';
+
+// §01: status groups read as eyebrow dividers, not boxes.
+const GROUP_LABEL: Record<string, string> = { live: 'In progress', upcoming: 'Tonight', final: 'Final' };
 
 function GamesExplorer() {
   const [gameDates, setGameDates] = useState<GameDateType[]>([]);
@@ -152,36 +154,34 @@ function GamesExplorer() {
     }
   };
 
-  // Blueprint 2.2: status-grouped sections (LIVE / UPCOMING / FINAL) of scannable rows.
-  const sections: { key: string; label: string; games: Game[] }[] = [
-    { key: 'live', label: 'Live', games: games.filter(g => g.is_live) },
-    { key: 'upcoming', label: 'Upcoming', games: games.filter(g => g.is_preview && !g.is_live) },
-    { key: 'final', label: 'Final', games: games.filter(g => !g.is_preview && !g.is_live) },
+  // Status-grouped sections (§01): live first, then tonight, then final.
+  const sections: { key: string; games: Game[] }[] = [
+    { key: 'live', games: games.filter(g => g.is_live) },
+    { key: 'upcoming', games: games.filter(g => g.is_preview && !g.is_live) },
+    { key: 'final', games: games.filter(g => !g.is_preview && !g.is_live) },
   ].filter(s => s.games.length > 0);
 
-  if (datesLoading) {
-    return (
-      <PageLayout>
-        <PageCard
-          title="Games"
-          subtitle="What's on, what happened, and which game deserves your click."
-        >
-          <div className="games-explorer__grid">
-            {[1, 2, 3].map((i) => (
-              <GameCardSkeleton key={i} />
-            ))}
-          </div>
-        </PageCard>
-      </PageLayout>
-    );
-  }
+  // Sheet header: the serif human date is the page title (the signature moment).
+  const humanDate = selectedDate
+    ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric',
+      })
+    : 'Games';
+  const liveCount = games.filter(g => g.is_live).length;
+  const dek = datesLoading
+    ? 'Loading the slate…'
+    : games.length === 0
+      ? 'No games on this date.'
+      : `${games.length} game${games.length > 1 ? 's' : ''}${liveCount ? ` · ${liveCount} live now` : ''}`;
 
   return (
     <PageLayout>
-      <PageCard
-        title="Games"
-        subtitle="What's on, what happened, and which game deserves your click."
-        controls={
+      <PageHeader
+        eyebrow="Games"
+        title={humanDate}
+        subtitle={dek}
+      >
+        {!datesLoading && (
           <DateStrip
             dates={gameDates}
             selectedDate={selectedDate}
@@ -189,48 +189,47 @@ function GamesExplorer() {
             onPickDate={handlePickDate}
             todayDate={todayDate}
           />
-        }
-      >
-        {error && (
-          <div className="games-explorer__error">
-            <p className="games-explorer__error-message">{error}</p>
-            <button
-              className="games-explorer__retry-button"
-              onClick={() => fetchGames(selectedDate)}
-            >
-              Retry
-            </button>
-          </div>
         )}
+      </PageHeader>
 
-        {loading && !error && (
-          <div className="games-explorer__grid">
-            {[1, 2, 3].map((i) => (
-              <GameCardSkeleton key={i} />
-            ))}
+      {error && (
+        <div className="error-state">
+          <p className="error-state__msg">{error}</p>
+          <div className="error-state__action">
+            <button className="btn btn--secondary" onClick={() => fetchGames(selectedDate)}>Retry</button>
           </div>
-        )}
+        </div>
+      )}
 
-        {!loading && !error && games.length === 0 && (
-          <div className="games-explorer__empty">
-            <p>No games. The board wakes up at puck drop.</p>
-            <Link to="/" className="games-explorer__empty-link">Back to Today →</Link>
-          </div>
-        )}
+      {loading && !error && (
+        <div className="games-explorer__rows">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="game-row-skeleton skeleton" />
+          ))}
+        </div>
+      )}
 
-        {!loading && !error && games.length > 0 && (
-          <div className="games-explorer__sections">
-            {sections.map((s) => (
-              <section key={s.key} className="games-explorer__section">
-                <h2 className="page-region-title">{s.label}</h2>
-                <div className="games-explorer__rows">
-                  {s.games.map((game) => <GameRow key={game.game_id} game={game} />)}
-                </div>
-              </section>
-            ))}
+      {!loading && !error && games.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__line">No games on this date. The board wakes up at puck drop.</p>
+          <div className="empty-state__action">
+            <Link to="/" className="btn btn--quiet">Back to Today →</Link>
           </div>
-        )}
-      </PageCard>
+        </div>
+      )}
+
+      {!loading && !error && games.length > 0 && (
+        <div className="games-explorer__sections">
+          {sections.map((s) => (
+            <section key={s.key} className="games-explorer__section">
+              <h2 className="games-explorer__group">{GROUP_LABEL[s.key]}</h2>
+              <div className="games-explorer__rows">
+                {s.games.map((game) => <GameRow key={game.game_id} game={game} />)}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </PageLayout>
   );
 }
