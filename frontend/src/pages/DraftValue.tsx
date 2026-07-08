@@ -72,18 +72,60 @@ function annotationLabel(a: Annotation, yMax: number, fill: string) {
   }
 }
 
+// §S7: a curve landmark — a small ink dot with a 1px leader line and a Newsreader-italic callout.
+// Leader lines drop below 900px (narrow), where only the dot stays.
+function landmarkLabel(text: string, narrow: boolean, up = true) {
+  return ({ viewBox }: any) => {
+    if (!viewBox) return null
+    const x = viewBox.x ?? 0
+    const y = viewBox.y ?? 0
+    const len = 22
+    const ty = up ? y - len - 4 : y + len + 12
+    return (
+      <g>
+        {!narrow && <line x1={x} y1={y} x2={x} y2={up ? y - len : y + len} stroke="var(--color-border-strong)" strokeWidth={1} />}
+        <circle cx={x} cy={y} r={3} fill="var(--color-text-primary)" opacity={0.5} />
+        {!narrow && (
+          <text x={x} y={ty} textAnchor="middle"
+            style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 13, fill: 'var(--color-text-secondary)' }}>
+            {text}
+          </text>
+        )}
+      </g>
+    )
+  }
+}
+
 function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annotations: Annotation[] }) {
   const height = useChartPanelHeight()
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 900
+  // Split the expected curve: solid where the sample is dense (fitted), dashed in the sparse tail.
+  const boundaryPick = [...curve].reverse().find((r) => r.n >= 30)?.overall_pick ?? curve[curve.length - 1]?.overall_pick ?? 217
   const data = curve.map((r) => ({
     ...r,
     bandLo: r.p10_smooth,
     bandSpan: Math.max(0, r.p90_smooth - r.p10_smooth),
+    evFit: r.overall_pick <= boundaryPick ? r.ev_mean_smooth : null,
+    evExtrap: r.overall_pick >= boundaryPick ? r.ev_mean_smooth : null,
   }))
   const yMax = Math.max(
     ...data.map((d) => d.p90_smooth),
     ...annotations.map((a) => a.realized_value),
     ...data.map((d) => d.ev_mean_smooth),
   )
+  // Three structural landmarks: 1st-overall value, the early-pick cliff, round-2 flattening.
+  const at = (pick: number) => curve.find((c) => c.overall_pick === pick)
+  const firstOverall = curve[0]
+  let cliffPick = 3, cliffDrop = 0
+  for (let i = 1; i < Math.min(curve.length, 15); i++) {
+    const d = curve[i - 1].ev_mean_smooth - curve[i].ev_mean_smooth
+    if (d > cliffDrop) { cliffDrop = d; cliffPick = curve[i].overall_pick }
+  }
+  const landmarks = [
+    firstOverall && { x: firstOverall.overall_pick, y: firstOverall.ev_mean_smooth, text: `1st overall ≈ ${firstOverall.ev_mean_smooth.toFixed(1)} WAR`, up: true },
+    at(cliffPick) && { x: cliffPick, y: at(cliffPick)!.ev_mean_smooth, text: 'the cliff after the top picks', up: true },
+    at(45) && { x: 45, y: at(45)!.ev_mean_smooth, text: 'round 2 flattens', up: false },
+  ].filter(Boolean) as { x: number; y: number; text: string; up: boolean }[]
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 16, right: 16, bottom: 18, left: 4 }}>
@@ -111,12 +153,20 @@ function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annota
               would clip past the chart's right edge */}
           <Label content={lineLabel('median', 'var(--color-text-muted)', 10, 400)} />
         </Line>
-        <Line type="monotone" dataKey="ev_mean_smooth" stroke="var(--color-data-1)" strokeWidth={2.25}
-          dot={false} animationDuration={400}>
-          <Label content={lineLabel('expected', 'var(--color-data-1)', 11, 600)} />
+        {/* §S7: fitted region solid 2px --line-blue; sparse extrapolated tail dashed. */}
+        <Line type="monotone" dataKey="evFit" stroke="var(--line-blue)" strokeWidth={2}
+          dot={false} connectNulls={false} animationDuration={400}>
+          <Label content={lineLabel('expected', 'var(--line-blue)', 11, 600)} />
         </Line>
+        <Line type="monotone" dataKey="evExtrap" stroke="var(--line-blue)" strokeWidth={2}
+          strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={false} />
+        {landmarks.map((m) => (
+          <ReferenceDot key={m.text} x={m.x} y={m.y} r={0} fill="none" stroke="none">
+            <Label content={landmarkLabel(m.text, narrow, m.up)} />
+          </ReferenceDot>
+        ))}
         {annotations.map((a) => {
-          const color = a.tone === 'steal' ? 'var(--color-success)' : 'var(--color-danger)'
+          const color = a.tone === 'steal' ? 'var(--color-data-positive)' : 'var(--color-data-negative)'
           return (
             <ReferenceDot key={a.label} x={a.overall_pick} y={a.realized_value} r={4}
               fill={color} stroke="var(--color-bg-surface)" strokeWidth={1.5}>
@@ -260,6 +310,12 @@ export default function DraftValue() {
           <ChartPanel title="Realized value by pick" subtitle="Smoothed across pick number; later picks never worth more in expectation">
             {curve ? <CurveChart curve={curve} annotations={annotations} /> : <SkeletonLoader height={280} />}
           </ChartPanel>
+          {/* §S7: this is a real figure sequence — earned figure numbering. */}
+          <p className="dv-figcap">
+            <span className="dv-figcap__n">Fig. 1</span>
+            Realized 7-year WAR by draft slot: a fitted expected-value curve (solid) with its
+            sparse-sample tail extrapolated (dashed) and the middle 80% of outcomes shaded.
+          </p>
         </section>
 
         <div className="page-divider" />
