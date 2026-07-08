@@ -67,9 +67,11 @@
   gap: var(--space-3);
 }
 
-/* §04 series tiles: flat, hairline, 2px radius, ice surface — no team-color fills. */
+/* §04/§S8 series tiles: flat, 2px radius, ice surface. Simulated series (a bracket
+   prediction, not yet played) carry a DASHED border per the solid/dashed law. */
 .pl-series {
-  border: 1px solid var(--color-border);
+  position: relative;
+  border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   overflow: hidden;
@@ -147,3 +149,43 @@
 .pl-odds__cup { position: relative; min-width: 120px; }
 .pl-odds__bar { position: absolute; left: var(--space-16); top: 50%; transform: translateY(-50%); height: 8px; border-radius: var(--radius-full); opacity: 0.85; }
 .pl-odds__cupval { position: relative; font-weight: 700; color: var(--color-text-primary); }
+
+/* ============================================================================
+   §S8 — bracket connectors, elimination, mobile accordion
+   ============================================================================ */
+/* Eliminated team (the projected loser of a series): 45% opacity + grayscale logo. */
+.pl-series__team:not(.is-winner) { opacity: 0.55; }
+.pl-series__team:not(.is-winner) .pl-series__logo { filter: grayscale(1); opacity: 0.45; }
+
+/* Connector stubs: 1px --color-border-strong elbows reaching toward the center.
+   West columns (1–3) reach right; East columns (5–7) reach left; the advancing
+   (winner) row's stub crosses the blue line at 2px. */
+.pl-col__body { position: relative; }
+.pl-series::before,
+.pl-series::after { content: none; }
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series::after,
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--space-3);
+  height: 0;
+  border-top: 1px solid var(--color-border-strong);
+  transform: translateY(-50%);
+}
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series::after { right: calc(-1 * var(--space-3)); }
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series::before { left: calc(-1 * var(--space-3)); }
+/* the advancing path crosses the blue line */
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series:has(.is-winner)::after,
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series:has(.is-winner)::before {
+  border-top-width: 2px;
+  border-top-color: var(--line-blue);
+}
+
+/* Below 900px the bracket becomes a vertical accordion per round; tiles keep their anatomy. */
+@media (max-width: 900px) {
+  .pl-bracket { grid-template-columns: 1fr; gap: var(--space-5); }
+  .pl-col__body { justify-content: flex-start; gap: var(--space-3); }
+  .pl-series::after, .pl-series::before { content: none !important; }
+  .pl-bracket__conf { display: none; }
+}
