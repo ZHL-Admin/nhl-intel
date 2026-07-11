@@ -1,0 +1,14 @@
+# Deployment Atlas — research artifacts are never committed.
+# The site's removal test depends on this folder being deletable with zero
+# tracked-data residue.
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# All fetched + derived data: raw JSON, Parquet, DuckDB, manifest, run meta.
+data/
+
+# Report figures are regenerated; keep the markdown reports, drop binaries.
+reports/figures/*.png
