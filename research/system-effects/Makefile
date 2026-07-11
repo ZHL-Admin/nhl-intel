@@ -4,7 +4,7 @@
 PY := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: venv test clean phase0 report0
+.PHONY: venv test clean phase0 phase1 backfill
 
 venv:
 	python3 -m venv .venv
@@ -15,8 +15,15 @@ venv:
 phase0:
 	$(PY) -m syseff.probe_rightrail
 
-report0: phase0
-	@echo "See reports/phase0.md"
+# Gate A — historical right-rail coach backfill (resumable) + parse to parquet.
+backfill:
+	$(PY) -m syseff.backfill_rightrail
+	$(PY) -m syseff.backfill_rightrail --parse
+
+# Phase 1 — regime ledger, validation, cohorts. Reproducible from cache.
+phase1:
+	$(PY) -m syseff.phase1
+	@echo "See reports/phase1.md"
 
 test:
 	$(PY) -m pytest -q
