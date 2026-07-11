@@ -185,6 +185,39 @@ def aggregate(prim: pl.DataFrame, game_ids: list[int], team_id: int) -> dict:
 
 
 DEPLOY_DIR = config.PARQUET / "deploy"
+PK_DIR = config.PARQUET / "pk"
+
+
+def build_pk(season: str, write: bool = True) -> pl.DataFrame:
+    """Per (game, DEFENDING team) PK shot-location-against primitive: location bins of
+    unblocked attempts conceded while shorthanded. Strength ice-derived (is_pp_for on the
+    shooting side => the shooter's OPPONENT is the shorthanded/defending team)."""
+    j = _shot_context(season).filter(pl.col("is_pp_for"))
+    g = _games(season).select("game_id", "home_team_id", "away_team_id")
+    j = j.with_columns(
+        def_team=pl.when(pl.col("shooter_is_home")).then(pl.col("away_team_id"))
+        .otherwise(pl.col("home_team_id")))
+    out = j.group_by("game_id", pl.col("def_team").alias("team_id")).agg(
+        att_pk_against=pl.len(),
+        inner_pk_against=(pl.col("loc_bin") == "inner").sum(),
+        outer_pk_against=(pl.col("loc_bin") == "outer").sum(),
+        point_pk_against=(pl.col("loc_bin") == "point").sum())
+    if write:
+        PK_DIR.mkdir(parents=True, exist_ok=True)
+        out.write_parquet(PK_DIR / f"{season.replace('-', '_')}.parquet")
+    return out
+
+
+def pk_location(pk: pl.DataFrame, game_ids: list[int], team_id: int) -> dict:
+    d = pk.filter(pl.col("game_id").is_in(game_ids) & (pl.col("team_id") == team_id))
+    if d.height == 0:
+        return {"pk_loc_inner_against": None, "pk_loc_outer_against": None,
+                "pk_loc_point_against": None, "att_pk_against": 0}
+    s = d.sum(); att = float(s["att_pk_against"][0])
+    return {"att_pk_against": att,
+            "pk_loc_inner_against": float(s["inner_pk_against"][0]) / att if att else None,
+            "pk_loc_outer_against": float(s["outer_pk_against"][0]) / att if att else None,
+            "pk_loc_point_against": float(s["point_pk_against"][0]) / att if att else None}
 
 
 def build_deploy(season: str, write: bool = True) -> pl.DataFrame:
@@ -211,6 +244,7 @@ def build_deploy(season: str, write: bool = True) -> pl.DataFrame:
 
 
 _POS_CACHE = {}
+_FWD_CACHE = {}
 def _positions() -> dict:
     if not _POS_CACHE:
         ros = pl.read_parquet(config.ATLAS_PARQUET / "rosters.parquet")
@@ -220,6 +254,7 @@ def _positions() -> dict:
         ros = ros.with_columns(pg=pl.when(pl.col("position_code") == "D").then(pl.lit("D")).otherwise(pl.lit("F")))
         m = ros.group_by("player_id", "pg").len().sort("len", descending=True).unique("player_id", keep="first")
         _POS_CACHE.update(dict(zip(m["player_id"].to_list(), m["pg"].to_list())))
+        _FWD_CACHE.update({k: v == "F" for k, v in _POS_CACHE.items()})  # built ONCE
     return _POS_CACHE
 
 
@@ -230,10 +265,9 @@ def deployment_over(deploy: pl.DataFrame, game_ids: list[int], team_id: int,
         return {"top6_fwd_toi_share": None, "zone_start_polarization": None}
     pl_agg = d.group_by("pid").agg(toi=pl.col("toi_sec").sum(),
                                    oz=pl.col("oz_starts").sum(), dz=pl.col("dz_starts").sum())
-    pos = _positions()
+    _positions()  # ensure caches built
     pl_agg = pl_agg.with_columns(
-        is_fwd=pl.col("pid").replace_strict({k: v == "F" for k, v in pos.items()},
-                                            default=True, return_dtype=pl.Boolean))
+        is_fwd=pl.col("pid").replace_strict(_FWD_CACHE, default=True, return_dtype=pl.Boolean))
     fwd = pl_agg.filter(pl.col("is_fwd")).sort("toi", descending=True)
     top6 = fwd.head(6)["toi"].sum()
     total_fwd = fwd["toi"].sum()
