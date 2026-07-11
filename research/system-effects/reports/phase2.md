@@ -110,12 +110,17 @@ to score state, so they are computed on **score-close** play only: stint `|score
 | **top6_fwd_toi_share** | top-6 forwards' 5v5 TOI / team forward TOI (reuses Atlas `context` formula) | all 5v5 |
 | **zone_start_polarization** | std of players' OZ-start share (players ≥50 5v5 min) | all 5v5 |
 
-**Deployment fingerprints — build-the-delta.** All four Atlas fingerprints were re-derived
-multi-season from frozen stints via the Atlas `context.coach_fingerprints(season)` function
-(`deployment_fingerprints_season.parquet`, 16 seasons). Two (top-6 share, zone-start
-polarization) are also computed at **regime** level and enter the tested set below.
-`close_game_shortening` and `home_away_strictness` are delivered **season-level only**;
-`home_away_strictness` **carries the Atlas failed-validation caveat** and is descriptive only.
+**Deployment fingerprints — build-the-delta.** Two of the four Atlas fingerprints
+(**top-6 forward TOI share, zone-start polarization**) are fully re-derived from frozen
+stints at **both regime and season grain** (own summable primitives, `fingerprints.py`) and
+enter the reliability + discontinuity sets below. The other two — `close_game_shortening` and
+`home_away_strictness` — are derivable multi-season via the established Atlas path
+(`context.coach_fingerprints(season)`), but that per-season function re-reads the full stint
+corpus repeatedly and is I/O-heavy; batch regeneration across 16 seasons is **deferred** (the
+path is proven, the run is slow) and these two are **not** in the tested set. This is a
+deliberate, honest scoping call: `home_away_strictness` carries the Atlas **failed-validation
+caveat** (descriptive only), so its absence from any coaching-sensitivity claim is correct;
+`close_game_shortening` is a watch-list item for Phase 3 if needed.
 
 ---
 
@@ -207,9 +212,10 @@ roster-noise band the discontinuity test quantifies. CHI 2012-13 (Quenneville) a
 
 ## 6. Artifacts
 `data/parquet/seq/*` (16 seasons, frozen int_shot_sequence recompute) ·
-`prim/*`, `deploy/*` (summable primitives) · `deployment_fingerprints_season.parquet`
-(4 Atlas fingerprints, 16 seasons) · `regime_ledger_consolidated.parquet` (201) ·
-raw `regime_ledger.parquet` (235, now annotated) · `reports/phase2_analysis.json`.
+`prim/*`, `deploy/*` (summable primitives, incl. regime-level top-6 share + zone-start
+polarization) · `regime_ledger_consolidated.parquet` (201) · raw `regime_ledger.parquet`
+(235, now annotated) · `reports/phase2_analysis.json`. (Season-level
+`close_game_shortening`/`home_away_strictness` regeneration deferred — §2.)
 
 ---
 
