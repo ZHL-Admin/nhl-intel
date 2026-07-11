@@ -56,6 +56,16 @@ parsed as (
     from shifts
     -- Exclude goal-event annotation rows (null/empty duration).
     where duration_mmss is not null and duration_mmss != ''
+      -- Well-formedness guard (P4/D9): a handful of 2019-20 rows carry an empty
+      -- endTime ('') with duration '00:00', so split(end_mmss,':')[offset(1)] casts
+      -- '' -> int64 and errors before the outer duration filter can drop them. These
+      -- are degenerate zero-duration records already excluded by
+      -- `duration_seconds between 1 and 1200` below, so this guard is a proven no-op
+      -- on output (see docs/rebuild-reports/p4-blocker.md) — it only stops the cast
+      -- from evaluating on rows the view already discards.
+      and start_mmss like '%:%' and end_mmss like '%:%'
+      and split(start_mmss, ':')[safe_offset(1)] != ''
+      and split(end_mmss, ':')[safe_offset(1)] != ''
 )
 
 select
