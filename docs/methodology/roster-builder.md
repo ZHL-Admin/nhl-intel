@@ -40,14 +40,17 @@ live once in `config.ROSTER_FORECAST` and are calibrated by `models_ml/calibrate
 
 | constant | value | meaning |
 |---|---|---|
-| `LEAGUE_AVG_LINEUP_WAR` | **12.53** | league-mean projected *position-valid* iced-lineup WAR, so an average roster maps to `rating_abs ≈ 0` (≈ 91.5 league-average points) |
-| `WAR_TO_RATING` | **0.03174** | goals/game of team rating per 1 WAR of centered lineup value |
+| `LEAGUE_AVG_LINEUP_WAR` | **12.09** | league-mean projected *deployment-valid* iced-lineup WAR, so an average roster maps to `rating_abs ≈ 0` (≈ 91.5 league-average points) |
+| `WAR_TO_RATING` | **0.03540** | goals/game of team rating per 1 WAR of centered lineup value |
 
-The lineup is iced **position-aware** — forwards fill their natural C/L/R column (≤4 each), defensemen
-their handedness side (≤3 each, left-shot → LD, right-shot → RD), with surplus and short positions
-flex-filling the rest (a center covers a thin wing slot; a 5th lefty plays his off side). This is what
-a real depth chart does — you cannot ice seven centers — and `LEAGUE_AVG_LINEUP_WAR` is calibrated on
-this same basis (a pure top-by-WAR lineup overstates the iceable total by ~0.85 WAR).
+The lineup is iced **position- and deployment-aware** (see *Effective position* and *Line assignment*
+below): forwards are seated by a soft-penalty assignment over the positions they *actually* play,
+defensemen by handedness side (≤3 each, left-shot → LD, right-shot → RD), with surplus and short
+positions flex-filling the rest (a 5th center overflows to a wing; a 5th lefty plays his off side).
+This is what a real depth chart does — you cannot ice seven centers — and `LEAGUE_AVG_LINEUP_WAR` is
+calibrated on this **exact same rule** (`calibrate_roster_builder.py` shares
+`project_roster_forecast.assign_forward_sides` with the live tool; a pure top-by-WAR lineup overstates
+the iceable total).
 
 `WAR_TO_RATING` is roughly **half** the offseason move-scale `GOALS_PER_WIN / GAMES_PER_SEASON`
 (6/82 = 0.073). Summed lineup WAR maps to team goal-differential at a **compressed** rate — shared
@@ -56,6 +59,91 @@ not stack linearly all mean nineteen players' worth of above-replacement value d
 one-for-one into team goal difference. We fit the slope against the **measured** (de-lucked) rating so
 the rating→points step stays the separate, already-validated map and the two calibrations do not
 contaminate each other. Forcing the naive 6/82 overstates the spread and inflates the points error.
+
+---
+
+## Effective position: what a player actually plays
+
+The NHL roster feed lists a *nominal* position that is often not where a player lines up — J.T.
+Compher is listed at LW but has taken center-level faceoff volume for years, and dozens of listed
+"centers" are really wingers who rarely take a draw. Icing off the listed position mis-seats those
+players and hides real centers from center slots. So a nightly precompute,
+`nhl_models.player_effective_position` (`models_ml/precompute_serving.build_player_effective_position`),
+derives the position each forward *actually* plays from **faceoff volume** — the cleanest deployment
+signal, since a center takes draws every shift and a winger almost never.
+
+For each player it sums `stg_statsrest_faceoffs` over the last `EFFECTIVE_POSITION.FO_WINDOW_SEASONS`
+(**2**) seasons (regular season + playoffs, GP-weighted) and classifies forwards by faceoffs-per-game:
+
+| condition (games ≥ `FO_MIN_GP` = 10) | effective position | locked |
+|---|---|---|
+| `fo_per_gp ≥ FO_CENTER_PER_GP` (**7**) | `C` | yes |
+| `fo_per_gp ≤ FO_WINGER_PER_GP` (**2.5**) | winger — listed side if L/R, else by handedness (L-shot → L, R-shot → R) | yes |
+| otherwise / thin sample / rookie | `F_FLEX` (fills any forward slot) | no |
+| no faceoff rows at all | *absent* → the builder falls back to the listed position | — |
+
+Defensemen and goalies pass through unchanged (`effective = listed`, locked). Thresholds live in
+`config.EFFECTIVE_POSITION` and are validated on the disagreement list: Compher and thirteen other
+two-way centers listed on the wing flip to `C`; established wingers (Kucherov, Marchand, Rantanen,
+Nylander) stay wingers; real centers stay `C`. **Fail loud, never fabricate** — a player with no
+faceoff evidence keeps his listed position, never a guess. The same map also feeds `roster_suggest`
+(a wing-listed center is offered for `C` slots; an `F_FLEX` matches any forward slot) and the
+offseason forecast's displayed lineup (Compher appears at `C` there too).
+
+## Line assignment: stick at C unless a wing is required
+
+Given the pool's effective positions, forwards are seated by solving an **assignment problem** over
+(forward, forward-slot) rather than a greedy column fill (`assign_forward_sides`, shared by the tool
+and its calibration, `scipy.optimize.linear_sum_assignment`):
+
+```
+value(player, slot) = projected_war − off_position_penalty(player, slot)          # maximize the total
+```
+
+The penalties (WAR units, `config.ROSTER_FORECAST`, tune-friendly) bias placement toward natural
+positions:
+
+| situation | penalty |
+|---|---|
+| a **locked** C at a wing, or a **locked** winger at C | `OFF_POSITION_PENALTY_CW` = **0.35** |
+| a winger on his off side (L on RW, R on LW) | `WING_SIDE_PENALTY` = **0.05** |
+| an `F_FLEX` forward anywhere | 0 |
+
+**The penalty shapes the assignment only.** It decides *who sits where* — so a center sticks at C
+unless the pool genuinely needs him on a wing (a 5th locked center overflows to a wing, paying the
+penalty), and a winger prefers his side. It is **never** subtracted from `lineup_value` or the team
+WAR total: a player's value does not shrink because he is off his natural spot; the optimizer simply
+avoids it. `LEAGUE_AVG_LINEUP_WAR` and `WAR_TO_RATING` are calibrated on the *raw* iced WAR this
+assignment produces. Output is deterministic (forwards pre-sorted by `(−projected_war, player_id)`, so
+equal-value ties resolve stably); a pool under twelve forwards leaves replacement holes, never a
+dropped slot. Defense-pair assignment (handedness) and the goalie tandem are unchanged.
+
+## Deployment-aware line seeding: reproduce observed units, don't WAR-stack
+
+A pure best-C + best-LW + best-RW build is not how a team actually deploys. Edmonton splits Connor
+McDavid and Leon Draisaitl across two 5v5 lines (they reunite only on the power play), yet a WAR-greedy
+builder stacks them on line 1. So **before** the assignment, the builder *seeds* observed units
+(`project_roster_forecast.seed_and_assign_forwards` / `seed_and_assign_defense`):
+
+- **Candidate units** are the team's `int_line_seasons` forward trios and defense pairs for the base
+  season, merged with its `team_current_lines` last-10-games units (a small documented deviation from
+  a strict prefer-current/fall-back rule — 10-game shared minutes never clear a season-scale floor, so
+  a strict rule would seed nothing in the offseason). A unit qualifies only when its **full member set
+  is present and unplaced** in the pool and it clears the shared-5v5 floor
+  (`LINE_SEED_MIN_5V5_MINUTES = 100` for season units, `..._CURRENT = 30` for the 10-game units).
+- Units are accepted greedily in descending shared minutes, skipping any that conflict with an
+  already-placed player. Accepted units are ranked into line/pair order by combined projected WAR
+  (best unit = line 1). Within a trio the C slot goes to the member with the highest faceoffs/game;
+  wings take their effective side (handedness as tiebreak). Within a pair the left-shot takes LD.
+- Everyone left — **all arrivals and edited-in players, who by construction never played with the
+  group** — flows through the Phase 1 assignment for the remaining slots.
+
+This needs no special gating: trade Draisaitl away and his units dissolve automatically because the
+member-set check fails; his linemates fall to the assignment. It reproduces the McDavid/Draisaitl 5v5
+split because the observed data contains it (their dominant trios are *separate*; their shared-line
+minutes fall below the floor). **Power-play units are out of scope** — the seeding is 5v5 deployment
+only. The live re-evaluate path stays fast: seeding + assignment are `O(small)` with no per-edit model
+scoring, and the observed-unit lookup is cached per team.
 
 ---
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
-import { PageLayout, PageCard, StatCard, Badge, SkeletonLoader, ComponentStackBar, IdentityHeader, PlayerAvatar, PlayerValueLadder, Tabs, Select } from '../components/common'
+import { PageLayout, PageCard, StatCard, Badge, SkeletonLoader, ComponentStackBar, IdentityHeader, PlayerAvatar, PlayerValueLadder, Tabs, Select, RailProvider, Rail, Note, Ref } from '../components/common'
 import type { StackSegment, PlayerValueLadderRow } from '../components/common'
 import { COMPOSITE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
@@ -114,7 +114,7 @@ function scoutingIdentity(off?: string | null, def?: string | null): string | nu
 const PLAYER_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'context', label: 'Context' },
-  { value: 'impact', label: 'Impact & Value' },
+  { value: 'impact', label: 'Receipts' },   // §2.5: the full decomposition — renamed from "Impact & Value"
   { value: 'trends', label: 'Trends' },
   { value: 'gamelog', label: 'Game Log' },
   { value: 'shotmap', label: 'Shot Map' },
@@ -617,6 +617,9 @@ function PlayerProfile() {
     <PageLayout>
       <div className="player-profile">
         <PageCard header={headerNode} controls={controlsNode}>
+          <RailProvider>
+          <div className="dossier">
+          <div className="dossier__main">
           {errorDetail ? (
             <div className="player-profile__error">{errorDetail}</div>
           ) : playerDetail ? (
@@ -699,7 +702,7 @@ function PlayerProfile() {
                     <div className="player-ov__hero">
                       {/* left: the read */}
                       <div className="player-ov__hero-left">
-                        <div className="player-ov__eyebrow">The verdict</div>
+                        <div className="player-ov__eyebrow">The verdict <Ref n={1} /></div>
                         <div className="player-ov__pctblock">
                           <span className="player-ov__pct mono">{ovN ?? '—'}<span className="player-ov__pct-suf">{suf}</span></span>
                           <span className="player-ov__pct-sub">overall percentile<br />among {posWord}</span>
@@ -732,7 +735,7 @@ function PlayerProfile() {
                       {/* right: the shape (stacked) */}
                       <div className="player-ov__hero-right">
                         <div className="player-ov__shape-title">
-                          <span className="player-ov__eyebrow">Shape of game</span>
+                          <span className="player-ov__eyebrow">Shape of game <Ref n={2} /></span>
                           <span className="player-ov__shape-cap">percentile within {posWord}</span>
                         </div>
                         {rspokes.length > 0 && (
@@ -1419,6 +1422,18 @@ function PlayerProfile() {
 
             </div>
           ) : null}
+          </div>
+          {/* TODO-copy: verify these definitions with an editorial pass (§S1). */}
+          <Rail>
+            <Note n={1}>A verdict states the model's read in plain terms — tier, confidence, and role — composed from the multi-year assessment, not a single season.</Note>
+            <Note n={2}>Radar axes plot each skill as a percentile within position; the blue polygon is this player's shape, the rings mark the 50th and 90th percentiles.</Note>
+            <Note n={3}>WAR is wins above replacement: goals above a freely-available player divided by ~6 goals per win — the one unit comparable across positions. GAR is the same in goals.</Note>
+            <Note n={4}>xG (expected goals) scores each shot by its chance of going in given location and type — a stable read on the chances a player creates and allows.</Note>
+            <Note n={5}>GSAx is goals saved above expected: the xG on shots faced minus the goals allowed — a goalie's work beyond an average netminder.</Note>
+            <Note n={6} italic>Archetypes are playing-style families found by clustering players on their skill fingerprints; a player's archetype is the nearest family by cosine similarity.</Note>
+          </Rail>
+          </div>
+          </RailProvider>
         </PageCard>
       </div>
     </PageLayout>

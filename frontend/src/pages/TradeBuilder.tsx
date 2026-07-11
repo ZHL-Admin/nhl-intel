@@ -172,8 +172,9 @@ export default function TradeBuilder() {
     <PageLayout>
       <div className="trade-builder">
         <PageCard
-          title="Build a trade"
-          subtitle="Assemble a deal and get the verdict: talent, surplus, fit, and cap."
+          eyebrow="Studio"
+          title="Trade Builder"
+          subtitle="Assets across the center line, and the verdict: talent, surplus, fit, and cap."
           controls={
             <div className="trade-builder__toolbar">
               <span className="trade-builder__teamcount">{teams.length} teams · {items.length} assets</span>

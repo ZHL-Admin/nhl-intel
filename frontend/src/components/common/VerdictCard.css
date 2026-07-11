@@ -1,0 +1,78 @@
+.verdict-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.verdict-card__kicker {
+  font-family: var(--font-mono);
+  font-size: var(--overline-size);
+  font-weight: var(--overline-weight);
+  letter-spacing: var(--overline-spacing);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* the verdict, in words — display serif, one sentence */
+.verdict-card__verdict {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--display-sm);
+  line-height: var(--display-sm-height);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+.verdict-card__confidence {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.verdict-card__phrase { color: var(--color-text-muted); }
+.verdict-card__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.verdict-card__dot--high { background: var(--color-success); }
+.verdict-card__dot--medium { background: var(--color-warning); }
+.verdict-card__dot--low { background: var(--color-text-muted); }
+
+.verdict-card__viz { margin-top: var(--space-2); }
+
+.verdict-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.verdict-card__method {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.verdict-card__method:hover { text-decoration: underline; }
+
+.verdict-card__actions { display: inline-flex; gap: var(--space-2); }
+.verdict-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.verdict-card__action:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }

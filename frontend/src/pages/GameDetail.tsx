@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
-import type { CSSProperties } from 'react'
-import { Calendar, MapPin, Lightbulb, PlayCircle } from 'lucide-react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, PageCard, SkeletonLoader, IdentityHeader, TabNav, PodiumCards, ComparisonRow, ToggleSwitch, useAdjustedToggle, MatchupPreviewCard } from '../components/common'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { PageLayout, PageCard, SkeletonLoader, TabNav, PodiumCards, ComparisonRow, MatchupPreviewCard, RailProvider, Rail, Note, Ref } from '../components/common'
 import Badge from '../components/common/Badge'
+import GameNarrative from '../components/games/GameNarrative'
 import { usePageTitle } from '../hooks/usePageTitle'
 import GameTimelineStack from '../components/visualizations/GameTimelineStack'
 import ShotMapKDE from '../components/visualizations/ShotMapKDE'
 import PeriodBreakdownTable from '../components/visualizations/PeriodBreakdownTable'
 import RollingContextPanel from '../components/visualizations/RollingContextPanel'
-import { getGameDetail, getGamePlayerStats, getGameTeamStats, getGameGoals, getGameGoaltending, getGamePressure, getGameSpecialTeams, getGameGoalieDanger, getGameShotQuality, getGameSkaterImpact, getGameContext } from '../api/games'
+import { getGameDetail, getGamePlayerStats, getGameGoalieDanger, getGameShotQuality, getGameSkaterImpact, getGameGoals } from '../api/games'
 import { getGoalieSeason } from '../api/goalies'
-import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, TeamGameStats, TeamComparisonStats, GoalDetail, GoaltenderStat, PressurePoint, SpecialTeamsStat, GoalieDangerStat, ShotQualityRow, SkaterImpact, GameContext } from '../api/types'
-import { getTeamLogoUrl, getTeamColor, getPlayerHeadshotUrl } from '../utils/teams'
+import { GameDetail as GameDetailType, GamePlayerStats, PlayerGameStats, GoalieDangerStat, ShotQualityRow, SkaterImpact, GoalDetail } from '../api/types'
+import { getTeamLogoUrl, getTeamColor } from '../utils/teams'
 import './GameDetail.css'
 
 // NHL game ids encode the type in the 5th-6th digits: 01 preseason, 02 regular, 03 playoffs.
@@ -34,6 +33,45 @@ function seriesLabel(gameId: number): string | null {
   return Number.isNaN(game) ? round : `${round} · Game ${game}`
 }
 
+// §02 signature: the serif score masthead. Away/home names in Newsreader display-2 flank the
+// score in Newsreader 44 tabular; each name is underlined by a 3px rule in its team color (team
+// color as a line, never a fill); a mono status line sits beneath. The red rule (PageCard) closes it.
+function GameMasthead({ away, home, awayColor, homeColor, awayScore, homeScore, status, preview }: {
+  away: string; home: string; awayColor: string; homeColor: string
+  awayScore: number | null; homeScore: number | null; status: string; preview?: boolean
+}) {
+  const awayLeads = !preview && (awayScore ?? 0) >= (homeScore ?? 0)
+  const homeLeads = !preview && (homeScore ?? 0) >= (awayScore ?? 0)
+  return (
+    <div className="game-masthead">
+      <div className="game-masthead__grid">
+        <div className="game-masthead__team game-masthead__team--away">
+          <img className="game-masthead__logo" src={getTeamLogoUrl(away)} alt=""
+            onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+          <span className="game-masthead__name" style={{ borderColor: awayColor }}>{away}</span>
+        </div>
+        <div className="game-masthead__score">
+          {preview ? (
+            <span className="game-masthead__vs">vs</span>
+          ) : (
+            <span className="num">
+              <span className={awayLeads ? '' : 'game-masthead__trail'}>{awayScore ?? 0}</span>
+              <span className="game-masthead__dash">–</span>
+              <span className={homeLeads ? '' : 'game-masthead__trail'}>{homeScore ?? 0}</span>
+            </span>
+          )}
+        </div>
+        <div className="game-masthead__team game-masthead__team--home">
+          <span className="game-masthead__name" style={{ borderColor: homeColor }}>{home}</span>
+          <img className="game-masthead__logo" src={getTeamLogoUrl(home)} alt=""
+            onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+        </div>
+      </div>
+      <p className="game-masthead__status">{status}</p>
+    </div>
+  )
+}
+
 function GameDetail() {
   const { gameId } = useParams<{ gameId: string }>()
   const navigate = useNavigate()
@@ -45,7 +83,9 @@ function GameDetail() {
   const [error, setError] = useState<string | null>(null)
 
   // Tab state from URL query params (default to 'overview')
-  const activeTab = searchParams.get('tab') || 'overview'
+  // Normalize legacy tab params (overview/analytics → game, players → box) so old deep links resolve.
+  const rawTab = searchParams.get('tab')
+  const activeTab = rawTab === 'players' || rawTab === 'box' ? 'box' : 'game'
 
   usePageTitle(
     gameDetail?.away_team && gameDetail?.home_team
@@ -158,65 +198,21 @@ function GameDetail() {
       <PageLayout>
         <div className="game-detail">
           <PageCard
+            back={{ to: '/games', label: 'Games' }}
             header={
-              <IdentityHeader
-            backLink={{
-              label: `← Games`,
-              to: '/games'
-            }}
-            leftContent={
-              <div>
-                <img
-                  src={getTeamLogoUrl(away_team.team_abbrev)}
-                  alt={away_team.team_abbrev}
-                  style={{ width: 48, height: 48 }}
-                />
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                    {away_team.team_abbrev}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                    Away
-                  </div>
-                </div>
-              </div>
-            }
-            centerContent={
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 500, color: 'var(--color-text-muted)' }}>
-                  vs
-                </div>
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-2)' }}>
-                  {new Date(gameDetail.game_date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </div>
-                <Badge variant="preview" />
-              </div>
-            }
-            rightContent={
-              <div style={{ textAlign: 'right' }}>
-                <img
-                  src={getTeamLogoUrl(home_team.team_abbrev)}
-                  alt={home_team.team_abbrev}
-                  style={{ width: 48, height: 48, marginLeft: 'auto' }}
-                />
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                    {home_team.team_abbrev}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                    Home
-                  </div>
-                </div>
-              </div>
-            }
-            teamColors={{
-              away: awayTeamColor,
-              home: homeTeamColor
-            }}
+              <GameMasthead
+                away={away_team.team_abbrev}
+                home={home_team.team_abbrev}
+                awayColor={awayTeamColor}
+                homeColor={homeTeamColor}
+                awayScore={null}
+                homeScore={null}
+                preview
+                status={[
+                  new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+                  gameDetail.venue_name,
+                  'Preview',
+                ].filter(Boolean).join('  ·  ')}
               />
             }
           >
@@ -237,83 +233,32 @@ function GameDetail() {
   }
 
   // Completed games: use IdentityHeader + TabNav
+  // Blueprint 2.3: two tabs. The narrative (overview + analytics, led by the verdict) is "The game";
+  // the full player/goalie tables are "Box score".
   const tabs = [
-    { value: 'overview', label: 'Overview' },
-    { value: 'analytics', label: 'Analytics' },
-    { value: 'players', label: 'Players' }
+    { value: 'game', label: 'The game' },
+    { value: 'box', label: 'Box score' }
   ]
 
   return (
     <PageLayout>
       <div className="game-detail">
         <PageCard
+          back={{ to: '/games', label: 'Games' }}
           header={
-            <IdentityHeader
-          backLink={{
-            label: `← Games`,
-            to: '/games'
-          }}
-          absoluteBack
-          leftContent={
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}>
-              {/* Status */}
-              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-secondary)' }}>
-                Final
-              </span>
-              {/* Playoff series (under Final, above the score) */}
-              {seriesLabel(gameDetail.game_id) && (
-                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-                  {seriesLabel(gameDetail.game_id)}
-                </span>
-              )}
-
-              {/* Scoreboard row: logos, abbreviations and score all centered on one line */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-6)', flexWrap: 'wrap', marginTop: 'var(--space-1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                  <img src={getTeamLogoUrl(away_team.team_abbrev)} alt={away_team.team_abbrev} style={{ width: 46, height: 46 }} />
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>{away_team.team_abbrev}</span>
-                </div>
-
-                <div style={{ fontSize: 'var(--text-4xl)', fontWeight: 700, fontFamily: 'var(--font-mono)', lineHeight: 1, whiteSpace: 'nowrap' }}>
-                  <span style={{ color: (away_team.score ?? 0) >= (home_team.score ?? 0) ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                    {away_team.score ?? 0}
-                  </span>
-                  <span style={{ color: 'var(--color-text-muted)', margin: '0 var(--space-3)' }}>–</span>
-                  <span style={{ color: (home_team.score ?? 0) >= (away_team.score ?? 0) ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                    {home_team.score ?? 0}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>{home_team.team_abbrev}</span>
-                  <img src={getTeamLogoUrl(home_team.team_abbrev)} alt={home_team.team_abbrev} style={{ width: 46, height: 46 }} />
-                </div>
-              </div>
-
-              {/* Date · arena · (type when not a playoff series) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 'var(--space-5)', marginTop: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <Calendar size={14} />
-                  {new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-                {gameDetail.venue_name && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <MapPin size={14} />
-                    {gameDetail.venue_name}
-                  </span>
-                )}
-                {!seriesLabel(gameDetail.game_id) && gameTypeLabel(gameDetail.game_id) && (
-                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
-                    {gameTypeLabel(gameDetail.game_id)}
-                  </span>
-                )}
-              </div>
-            </div>
-          }
-          teamColors={{
-            away: awayTeamColor,
-            home: homeTeamColor
-          }}
+            <GameMasthead
+              away={away_team.team_abbrev}
+              home={home_team.team_abbrev}
+              awayColor={awayTeamColor}
+              homeColor={homeTeamColor}
+              awayScore={away_team.score}
+              homeScore={home_team.score}
+              status={[
+                seriesLabel(gameDetail.game_id) || 'Final',
+                new Date(gameDetail.game_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                gameDetail.venue_name,
+                !seriesLabel(gameDetail.game_id) ? gameTypeLabel(gameDetail.game_id) : '',
+              ].filter(Boolean).join('  ·  ')}
             />
           }
           controls={
@@ -324,6 +269,9 @@ function GameDetail() {
             />
           }
         >
+          <RailProvider>
+          <div className="dossier">
+          <div className="dossier__main">
           <CompletedGameTabContent
             activeTab={activeTab}
             gameDetail={gameDetail}
@@ -331,6 +279,15 @@ function GameDetail() {
             homeTeamColor={homeTeamColor}
             awayTeamColor={awayTeamColor}
           />
+          </div>
+          {/* TODO-copy: verify these definitions with an editorial pass (§S1). */}
+          <Rail>
+            <Note n={1}>xG (expected goals) scores each shot by its chance of going in given location and type — the model's read of who created the better chances, apart from what went in.</Note>
+            <Note n={2}>The worm traces cumulative expected-goal difference through the game: above the line the home side is out-chancing, below it the away side. Goals are marked as dots.</Note>
+            <Note n={3} italic>GSAx — goals saved above expected — is the xG on shots a goalie faced minus the goals allowed. Positive means saves beyond what an average netminder makes.</Note>
+          </Rail>
+          </div>
+          </RailProvider>
         </PageCard>
       </div>
     </PageLayout>
@@ -351,470 +308,45 @@ function CompletedGameTabContent({
   homeTeamColor: string
   awayTeamColor: string
 }) {
-  switch (activeTab) {
-    case 'overview':
-      return <OverviewTab gameDetail={gameDetail} playerStats={playerStats} />
-    case 'analytics':
-      return <AnalyticsTab gameDetail={gameDetail} playerStats={playerStats} homeTeamColor={homeTeamColor} awayTeamColor={awayTeamColor} />
-    case 'players':
-      return <PlayersTab gameDetail={gameDetail} playerStats={playerStats} homeTeamColor={homeTeamColor} awayTeamColor={awayTeamColor} />
-    default:
-      return <OverviewTab gameDetail={gameDetail} playerStats={playerStats} />
+  if (activeTab === 'box') {
+    return <PlayersTab gameDetail={gameDetail} playerStats={playerStats} homeTeamColor={homeTeamColor} awayTeamColor={awayTeamColor} />
   }
+  // "The game" (K1–K8): verdict + moments + comparison lead (GameNarrative), then the timeline,
+  // shot map, who-drove, and receipts (AnalyticsTab, deduped). The old Overview cards — insight strip,
+  // game-flow teaser, top performers, matchup context, standalone team stats, goalie duel — are gone;
+  // the scoring timeline moves to Box score.
+  return (
+    <>
+      <GameNarrative
+        game={gameDetail}
+        timeline={
+          <GameTimelineStack
+            gameId={gameDetail.game_id}
+            homeTeamId={gameDetail.home_team.team_id}
+            awayTeamId={gameDetail.away_team.team_id}
+            homeAbbrev={gameDetail.home_team.team_abbrev}
+            awayAbbrev={gameDetail.away_team.team_abbrev}
+            homeColor={homeTeamColor}
+            awayColor={awayTeamColor}
+          />
+        }
+      />
+      <div className="page-divider" />
+      <AnalyticsTab gameDetail={gameDetail} playerStats={playerStats} homeTeamColor={homeTeamColor} awayTeamColor={awayTeamColor} />
+    </>
+  )
 }
 
 // Overview Tab - Complete implementation with additional data fetching
 const lastNameOf = (name: string) => (name || '').trim().split(' ').slice(-1)[0] || name
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-      {children}
-    </h2>
-  )
-}
 
 // Weighted single-game impact score for skaters (inspired by Game Score).
-function skaterGameScore(p: PlayerGameStats): number {
-  const goals = p.goals ?? 0
-  const a1 = p.first_assists
-  const a2 = p.second_assists
-  const assistScore = (a1 != null || a2 != null) ? 0.70 * (a1 ?? 0) + 0.45 * (a2 ?? 0) : 0.55 * (p.assists ?? 0)
-  return 0.75 * goals + assistScore + 0.70 * (p.ixg ?? 0) + 0.07 * (p.shots ?? 0) + 0.05 * ((p.ihdcf ?? p.hdcf) ?? 0)
-}
 
-function OverviewTab({ gameDetail, playerStats }: { gameDetail: GameDetailType; playerStats: GamePlayerStats | null }) {
-  const { home_team, away_team, game_id } = gameDetail
-  const homeColor = getTeamColor(home_team.team_abbrev)
-  const awayColor = getTeamColor(away_team.team_abbrev)
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  const [goals, setGoals] = useState<GoalDetail[]>([])
-  const [pressure, setPressure] = useState<PressurePoint[]>([])
-  const [teamStats, setTeamStats] = useState<TeamComparisonStats | null>(null)
-  const [goaltending, setGoaltending] = useState<GoaltenderStat[]>([])
-  const [context, setContext] = useState<GameContext | null>(null)
-
-  useEffect(() => {
-    let active = true
-    getGameGoals(game_id).then(d => { if (active) setGoals(d) }).catch(() => {})
-    getGamePressure(game_id).then(d => { if (active) setPressure(d) }).catch(() => {})
-    getGameTeamStats(game_id).then(d => { if (active) setTeamStats(d) }).catch(() => {})
-    getGameGoaltending(game_id).then(d => { if (active) setGoaltending(d) }).catch(() => {})
-    getGameContext(game_id).then(d => { if (active) setContext(d) }).catch(() => {})
-    return () => { active = false }
-  }, [game_id])
-
-  // Map each goal's (period, clock) to its highlight URL so the scoring timeline
-  // rows can link out to the video when one exists.
-  const highlightByGoal = new Map<string, string>()
-  for (const gh of context?.goal_highlights ?? []) {
-    if (gh.highlight_url && gh.period != null && gh.time_in_period) {
-      highlightByGoal.set(`${gh.period}-${gh.time_in_period}`, gh.highlight_url)
-    }
-  }
-
-  const handleNavigateToAnalytics = () => {
-    searchParams.set('tab', 'analytics')
-    navigate({ search: searchParams.toString() })
-  }
-
-  return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-2) 0' }}>
-      <InsightBanner home={home_team} away={away_team} teamStats={teamStats} goaltending={goaltending} />
-
-      <div className="overview-grid">
-        <div className="overview-col">
-          <GameFlowMini
-            pressure={pressure}
-            goals={goals}
-            homeTeamId={home_team.team_id}
-            homeColor={homeColor}
-            awayColor={awayColor}
-            homeAbbrev={home_team.team_abbrev}
-            awayAbbrev={away_team.team_abbrev}
-            onNavigate={handleNavigateToAnalytics}
-          />
-          <ScoringTimeline goals={goals} homeTeamId={home_team.team_id} highlightByGoal={highlightByGoal} />
-        </div>
-
-        <div className="overview-col">
-          {playerStats && <TopPerformersList playerStats={playerStats} homeTeam={home_team} awayTeam={away_team} />}
-          <MatchupContext context={context} homeTeam={home_team} awayTeam={away_team} homeColor={homeColor} awayColor={awayColor} />
-          <TeamStatsCompact teamStats={teamStats} homeTeam={home_team} awayTeam={away_team} homeColor={homeColor} awayColor={awayColor} />
-          <GoalieDuel goaltending={goaltending} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// One-line natural-language summary of the game from the available data.
-function InsightBanner({ home, away, teamStats, goaltending }: { home: TeamGameStats; away: TeamGameStats; teamStats: TeamComparisonStats | null; goaltending: GoaltenderStat[] }) {
-  if (!teamStats) return null
-  const xgHome = home.xgf ?? 0
-  const xgAway = away.xgf ?? 0
-  const maxXg = Math.max(xgHome, xgAway)
-  const minXg = Math.min(xgHome, xgAway)
-  const xgLeader = xgAway > xgHome ? away.team_abbrev : home.team_abbrev
-  const xgTrail = xgAway > xgHome ? home.team_abbrev : away.team_abbrev
-
-  const parts: string[] = []
-  if (maxXg > 0.1) parts.push(`${xgLeader} out-chanced ${xgTrail} ${maxXg.toFixed(2)}–${minXg.toFixed(2)} xG`)
-
-  const bestG = goaltending.length
-    ? [...goaltending].sort((a, b) => (b.shots_against - b.goals_against) / Math.max(1, b.shots_against) - (a.shots_against - a.goals_against) / Math.max(1, a.shots_against))[0]
-    : null
-  const tail: string[] = []
-  if (bestG) tail.push(`${lastNameOf(bestG.goalie_name)} stopped ${bestG.shots_against - bestG.goals_against} of ${bestG.shots_against}`)
-
-  const ppMade = Math.max(teamStats.home_pp_goals, teamStats.away_pp_goals)
-  if (ppMade > 0) {
-    const homeLead = teamStats.home_pp_goals >= teamStats.away_pp_goals
-    const ppTeam = homeLead ? home.team_abbrev : away.team_abbrev
-    const ppOpp = homeLead ? teamStats.away_penalties : teamStats.home_penalties
-    tail.push(`${ppTeam} went ${ppMade}/${Math.max(ppMade, ppOpp)} on the power play`)
-  }
-
-  if (parts.length === 0 && tail.length === 0) return null
-  const text = (parts.length ? parts[0] : tail.shift() || '') + (tail.length ? ', but ' + tail.join('; ') : '') + '.'
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', background: 'var(--color-bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4) var(--space-5)', marginBottom: 'var(--space-10)' }}>
-      <Lightbulb size={18} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
-      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>{text}</span>
-    </div>
-  )
-}
-
-// Compact shot-attempt momentum line with team-colored goal dots, clickable to Analytics.
-function GameFlowMini({ pressure, goals, homeTeamId, homeColor, awayColor, homeAbbrev, awayAbbrev, onNavigate }: {
-  pressure: PressurePoint[]
-  goals: GoalDetail[]
-  homeTeamId: number
-  homeColor: string
-  awayColor: string
-  homeAbbrev: string
-  awayAbbrev: string
-  onNavigate: () => void
-}) {
-  if (pressure.length === 0) return null
-  const W = 600
-  const H = 150
-  const PAD = { top: 14, right: 12, bottom: 24, left: 12 }
-  const plotW = W - PAD.left - PAD.right
-  const plotH = H - PAD.top - PAD.bottom
-  const centerY = PAD.top + plotH / 2
-  const maxTime = Math.max(3600, ...pressure.map(p => p.game_time_seconds))
-  const mom = pressure.map(p => ({ t: p.game_time_seconds, m: p.home_rate - p.away_rate }))
-  const maxAbs = Math.max(10, ...mom.map(d => Math.abs(d.m)))
-  const xS = (t: number) => PAD.left + (t / maxTime) * plotW
-  const yS = (m: number) => centerY - (m / maxAbs) * (plotH / 2)
-  const line = mom.map((d, i) => `${i ? 'L' : 'M'} ${xS(d.t)} ${yS(d.m)}`).join(' ')
-  // Closed area from the line down to the centre line, shaded by team via clip halves.
-  const area = `M ${xS(mom[0].t)} ${centerY} ` + mom.map(d => `L ${xS(d.t)} ${yS(d.m)}`).join(' ') + ` L ${xS(mom[mom.length - 1].t)} ${centerY} Z`
-  const momAt = (t: number) => { let n = mom[0]; for (const d of mom) if (Math.abs(d.t - t) < Math.abs(n.t - t)) n = d; return n.m }
-
-  return (
-    <section className="overview-card">
-      <SectionTitle>Game flow · shot attempt momentum</SectionTitle>
-      <div onClick={onNavigate} style={{ cursor: 'pointer' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-          <defs>
-            <clipPath id="gf-home"><rect x={0} y={0} width={W} height={centerY} /></clipPath>
-            <clipPath id="gf-away"><rect x={0} y={centerY} width={W} height={H - centerY} /></clipPath>
-          </defs>
-          {/* team shading: home above the centre line, away below */}
-          <path d={area} fill={homeColor} fillOpacity={0.16} clipPath="url(#gf-home)" />
-          <path d={area} fill={awayColor} fillOpacity={0.16} clipPath="url(#gf-away)" />
-          {[1200, 2400].filter(t => t < maxTime).map(t => (
-            <line key={t} x1={xS(t)} y1={PAD.top} x2={xS(t)} y2={PAD.top + plotH} stroke="var(--color-border-subtle)" strokeWidth={1} />
-          ))}
-          <line x1={PAD.left} y1={centerY} x2={W - PAD.right} y2={centerY} stroke="var(--color-border)" strokeWidth={1} />
-          {[600, 1800, 3000].filter(t => t < maxTime).map((t, i) => (
-            <text key={i} x={xS(t)} y={H - 7} textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">P{i + 1}</text>
-          ))}
-          <path d={line} fill="none" stroke="var(--color-text-muted)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          {goals.map((g, i) => (
-            <circle key={i} cx={xS(g.game_time_seconds)} cy={yS(momAt(g.game_time_seconds))} r={4.5} fill={g.team_id === homeTeamId ? homeColor : awayColor} stroke="var(--color-bg-surface)" strokeWidth={1.5} />
-          ))}
-        </svg>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginTop: 'var(--space-1)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: awayColor }} />{awayAbbrev} goal</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: homeColor }} />{homeAbbrev} goal</span>
-        <span>· click to view full analytics</span>
-      </div>
-    </section>
-  )
-}
-
-// Condensed goal-by-goal list with running score.
-function ScoringTimeline({ goals, homeTeamId, highlightByGoal }: { goals: GoalDetail[]; homeTeamId: number; highlightByGoal?: Map<string, string> }) {
-  if (goals.length === 0) return null
-  const sorted = [...goals].sort((a, b) => a.game_time_seconds - b.game_time_seconds)
-  let hs = 0
-  let as = 0
-  return (
-    <section className="overview-card">
-      <SectionTitle>Scoring timeline</SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {sorted.map((g, i) => {
-          if (g.team_id === homeTeamId) hs++; else as++
-          const color = getTeamColor(g.team_abbrev)
-          const highlightUrl = highlightByGoal?.get(`${g.period}-${g.time_in_period}`)
-          const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-2) 0 var(--space-2) var(--space-3)', borderLeft: `3px solid ${color}`, borderBottom: i < sorted.length - 1 ? '1px solid var(--color-border-subtle)' : 'none', textDecoration: 'none', color: 'inherit' }
-          const inner = (
-            <>
-              <span style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', flexShrink: 0, width: 58 }}>P{g.period} {g.time_in_period}</span>
-              <span style={{ flex: 1, fontSize: 'var(--text-sm)', minWidth: 0 }}>
-                <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{lastNameOf(g.scorer_name || 'Goal')}</span>
-                {g.strength !== 'EV' && <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}> ({g.strength})</span>}
-                {g.assists.length > 0 && <span style={{ color: 'var(--color-text-muted)' }}> · {g.assists.map(lastNameOf).join(', ')}</span>}
-                {highlightUrl && <PlayCircle size={13} style={{ marginLeft: 'var(--space-2)', color: 'var(--color-accent)', verticalAlign: 'text-bottom' }} aria-label="Watch highlight" />}
-              </span>
-              <span style={{ fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-text-primary)', flexShrink: 0 }}>{as}–{hs}</span>
-            </>
-          )
-          return highlightUrl ? (
-            <a key={i} href={highlightUrl} target="_blank" rel="noopener noreferrer" title="Watch goal highlight" style={rowStyle}>{inner}</a>
-          ) : (
-            <div key={i} style={rowStyle}>{inner}</div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-// Pregame/postgame matchup context: season series, last-10 form, and scratches.
-// Composed from existing common components (ComparisonRow, Badge); no one-off visuals.
-function MatchupContext({ context, homeTeam, awayTeam, homeColor, awayColor }: { context: GameContext | null; homeTeam: TeamGameStats; awayTeam: TeamGameStats; homeColor: string; awayColor: string }) {
-  if (!context) return null
-  const hasSeries = (context.season_series_away_wins ?? 0) + (context.season_series_home_wins ?? 0) > 0
-  const a10 = context.away_last10
-  const h10 = context.home_last10
-  const hasLast10 = !!(a10 || h10)
-  const fmt10 = (r?: typeof a10) => r ? `${r.l10_wins ?? 0}-${r.l10_losses ?? 0}-${r.l10_ot_losses ?? 0}` : '—'
-  const hasScratches = context.away_scratches.length > 0 || context.home_scratches.length > 0
-  if (!hasSeries && !hasLast10 && !hasScratches) return null
-
-  return (
-    <section className="overview-card">
-      <SectionTitle>Matchup context</SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-        {hasSeries && (
-          <ComparisonRow
-            label="Season series"
-            awayValue={String(context.season_series_away_wins ?? 0)}
-            homeValue={String(context.season_series_home_wins ?? 0)}
-            awayRaw={context.season_series_away_wins ?? 0}
-            homeRaw={context.season_series_home_wins ?? 0}
-            awayColor={awayColor}
-            homeColor={homeColor}
-            showBar
-          />
-        )}
-        {hasLast10 && (
-          <ComparisonRow
-            label="Last 10 (W-L-OT)"
-            awayValue={fmt10(a10)}
-            homeValue={fmt10(h10)}
-            awayRaw={a10?.l10_wins ?? 0}
-            homeRaw={h10?.l10_wins ?? 0}
-            awayColor={awayColor}
-            homeColor={homeColor}
-            showBar
-          />
-        )}
-      </div>
-      {hasScratches && (
-        <div style={{ marginTop: 'var(--space-5)', display: 'flex', gap: 'var(--space-6)', flexWrap: 'wrap' }}>
-          {[{ team: awayTeam, scr: context.away_scratches }, { team: homeTeam, scr: context.home_scratches }].map(({ team, scr }) => (
-            <div key={team.team_id} style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{team.team_abbrev} scratches</span>
-                <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{scr.length}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {scr.length === 0
-                  ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>None</span>
-                  : scr.map(s => (
-                      <Link key={s.player_id} to={`/players/${s.player_id}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', textDecoration: 'none' }}>{s.player_name}</Link>
-                    ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-// A circular player headshot with a team-logo badge and initials fallback.
-function PlayerAvatar({ playerId, name, teamAbbrev, size = 44 }: { playerId: number; name: string; teamAbbrev: string; size?: number }) {
-  const [err, setErr] = useState(false)
-  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      {!err ? (
-        <img
-          src={getPlayerHeadshotUrl(playerId, teamAbbrev)}
-          alt={name}
-          onError={() => setErr(true)}
-          style={{ width: '100%', height: '100%', borderRadius: 'var(--radius-full)', objectFit: 'cover', border: '1px solid var(--color-border-subtle)', background: 'var(--color-bg-elevated)' }}
-        />
-      ) : (
-        <div style={{ width: '100%', height: '100%', borderRadius: 'var(--radius-full)', background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{initials}</div>
-      )}
-      <img src={getTeamLogoUrl(teamAbbrev)} alt="" aria-hidden="true" style={{ position: 'absolute', bottom: -3, right: -3, width: size * 0.4, height: size * 0.4, borderRadius: 'var(--radius-full)', border: '1.5px solid var(--color-bg-surface)', background: 'var(--color-bg-surface)' }} />
-    </div>
-  )
-}
-
-// Top-3 impact players as rich rows: headshot, full stat line, points pill.
-function TopPerformersList({ playerStats, homeTeam, awayTeam }: { playerStats: GamePlayerStats; homeTeam: TeamGameStats; awayTeam: TeamGameStats }) {
-  const skaters = [...playerStats.home_players, ...playerStats.away_players]
-    .filter(p => p.position !== 'G')
-    .sort((a, b) => skaterGameScore(b) - skaterGameScore(a))
-    .slice(0, 3)
-  if (skaters.length === 0) return null
-  return (
-    <section className="overview-card">
-      <SectionTitle>Top performers</SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {skaters.map((p, i) => {
-          const abbrev = p.team_id === homeTeam.team_id ? homeTeam.team_abbrev : awayTeam.team_abbrev
-          const accent = getTeamColor(abbrev)
-          const goals = p.goals ?? 0
-          const assists = p.assists ?? 0
-          const points = p.points ?? (goals + assists)
-          return (
-            <Link key={p.player_id} to={`/players/${p.player_id}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3) 0', borderBottom: i < skaters.length - 1 ? '1px solid var(--color-border-subtle)' : 'none', textDecoration: 'none' }}>
-              <span style={{ width: 14, flexShrink: 0, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textAlign: 'center' }}>{i + 1}</span>
-              <PlayerAvatar playerId={p.player_id} name={p.player_name} teamAbbrev={abbrev} />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.player_name}</span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>{p.position}</span>
-                </span>
-                <span style={{ display: 'block', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>{goals}G · {assists}A · {(p.ixg ?? 0).toFixed(2)} ixG</span>
-              </span>
-              <span style={{ flexShrink: 0, fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-inverse)', background: accent, padding: '2px var(--space-2)', borderRadius: 'var(--radius-full)', whiteSpace: 'nowrap' }}>{points} PTS</span>
-            </Link>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-// Key team comparison with an "All stats" expander.
-function TeamStatsCompact({ teamStats, homeTeam, awayTeam, homeColor, awayColor }: { teamStats: TeamComparisonStats | null; homeTeam: TeamGameStats; awayTeam: TeamGameStats; homeColor: string; awayColor: string }) {
-  const [showAll, setShowAll] = useState(false)
-  if (!teamStats) {
-    return (
-      <section className="overview-card">
-        <SectionTitle>Team stats · {awayTeam.team_abbrev} / {homeTeam.team_abbrev}</SectionTitle>
-        <SkeletonLoader height={180} />
-      </section>
-    )
-  }
-  const ts = teamStats
-  const foTotal = ts.home_faceoff_wins + ts.away_faceoff_wins
-  const awayFo = foTotal ? (ts.away_faceoff_wins / foTotal) * 100 : 0
-  const homeFo = foTotal ? (ts.home_faceoff_wins / foTotal) * 100 : 0
-  const awayPpOpp = Math.max(ts.away_pp_goals, ts.home_penalties)
-  const homePpOpp = Math.max(ts.home_pp_goals, ts.away_penalties)
-
-  const key = [
-    { label: 'Expected goals', av: (awayTeam.xgf ?? 0).toFixed(2), hv: (homeTeam.xgf ?? 0).toFixed(2), ar: awayTeam.xgf ?? 0, hr: homeTeam.xgf ?? 0, bar: true },
-    { label: 'Power play', av: `${ts.away_pp_goals}/${awayPpOpp}`, hv: `${ts.home_pp_goals}/${homePpOpp}`, ar: ts.away_pp_goals, hr: ts.home_pp_goals, bar: !(ts.away_pp_goals === 0 && ts.home_pp_goals === 0) },
-    { label: 'Faceoff %', av: awayFo.toFixed(1), hv: homeFo.toFixed(1), ar: ts.away_faceoff_wins, hr: ts.home_faceoff_wins, bar: foTotal > 0 },
-    { label: 'Hits', av: String(ts.away_hits), hv: String(ts.home_hits), ar: ts.away_hits, hr: ts.home_hits, bar: true },
-  ]
-  const rest = [
-    { label: 'Shots on goal', av: String(ts.away_sog), hv: String(ts.home_sog), ar: ts.away_sog, hr: ts.home_sog, bar: true },
-    { label: 'Blocked shots', av: String(ts.away_blocks), hv: String(ts.home_blocks), ar: ts.away_blocks, hr: ts.home_blocks, bar: true },
-    { label: 'Penalty minutes', av: String(ts.away_pim), hv: String(ts.home_pim), ar: ts.away_pim, hr: ts.home_pim, bar: !(ts.away_pim === 0 && ts.home_pim === 0) },
-    { label: 'Giveaways', av: String(ts.away_giveaways), hv: String(ts.home_giveaways), ar: ts.away_giveaways, hr: ts.home_giveaways, bar: true },
-    { label: 'Takeaways', av: String(ts.away_takeaways), hv: String(ts.home_takeaways), ar: ts.away_takeaways, hr: ts.home_takeaways, bar: true },
-  ]
-  const rows = showAll ? [...key, ...rest] : key
-
-  return (
-    <section className="overview-card">
-      <SectionTitle>Team stats · {awayTeam.team_abbrev} / {homeTeam.team_abbrev}</SectionTitle>
-      <div className="team-stats-compact" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-        {rows.map(r => (
-          <ComparisonRow key={r.label} label={r.label} awayValue={r.av} homeValue={r.hv} awayRaw={r.ar} homeRaw={r.hr} awayColor={awayColor} homeColor={homeColor} showBar={r.bar} />
-        ))}
-      </div>
-      <button
-        onClick={() => setShowAll(!showAll)}
-        style={{ marginTop: 'var(--space-5)', width: '100%', padding: 'var(--space-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', fontWeight: 500, cursor: 'pointer' }}
-      >
-        {showAll ? 'Fewer stats ↑' : 'All stats ↗'}
-      </button>
-    </section>
-  )
-}
-
-// A single labelled stat block (value over caption).
-function GoalieStat({ value, label }: { value: string; label: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 44 }}>
-      <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>{value}</span>
-      <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginTop: '2px' }}>{label}</span>
-    </div>
-  )
-}
-
-// Goaltending duel: each goalie with headshot, clean stat blocks, and GSAX.
-function GoalieDuel({ goaltending }: { goaltending: GoaltenderStat[] }) {
-  if (goaltending.length === 0) return null
-  return (
-    <section className="overview-card">
-      <SectionTitle>Goaltending duel</SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {goaltending.map((g, i) => {
-          const saves = g.shots_against - g.goals_against
-          const svpct = g.shots_against ? (saves / g.shots_against).toFixed(3).replace(/^0/, '') : '—'
-          return (
-            <div key={g.player_id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3) 0', borderBottom: i < goaltending.length - 1 ? '1px solid var(--color-border-subtle)' : 'none' }}>
-              <PlayerAvatar playerId={g.player_id} name={g.goalie_name} teamAbbrev={g.team_abbrev} size={40} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {g.goalie_name}<span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> · {g.team_abbrev}</span>
-                </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: g.gsax >= 0 ? 'var(--color-success)' : 'var(--color-danger)', marginTop: '2px' }}>
-                  {g.gsax >= 0 ? '+' : ''}{g.gsax.toFixed(2)} goals saved above expected
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 'var(--space-4)', flexShrink: 0 }}>
-                <GoalieStat value={`${saves}/${g.shots_against}`} label="SV/SA" />
-                <GoalieStat value={svpct} label="SV%" />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-// ── Analytics panel building blocks ──────────────────────────────────────────
-
-function PanelHeader({ title, subtitle, isNew }: { title: string; subtitle?: string; isNew?: boolean }) {
+function PanelHeader({ title, subtitle }: { title: string; subtitle?: string; isNew?: boolean }) {
   return (
     <div style={{ marginBottom: 'var(--space-4)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>{title}</h3>
-        {isNew && (
-          <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-accent)', background: 'var(--color-accent-subtle)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>New</span>
-        )}
-      </div>
+      <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>{title}</h3>
       {subtitle && <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: '3px 0 0' }}>{subtitle}</p>}
     </div>
   )
@@ -830,42 +362,6 @@ function impactScore(p: SkaterImpact): number {
 }
 
 // "Special teams decided it" — PP/PK detail by team.
-function SpecialTeamsPanel({ gameId }: { gameId: number }) {
-  const [rows, setRows] = useState<SpecialTeamsStat[]>([])
-  useEffect(() => { let a = true; getGameSpecialTeams(gameId).then(d => { if (a) setRows(d) }).catch(() => {}); return () => { a = false } }, [gameId])
-  if (rows.length < 2) return null
-  const ordered = [...rows].sort((x, y) => Number(x.is_home) - Number(y.is_home)) // away first
-  const lead = [...rows].sort((x, y) => y.pp_goals - x.pp_goals || (y.pp_goals - y.pp_xg) - (x.pp_goals - x.pp_xg))[0]
-  const ppDelta = lead.pp_goals - lead.pp_xg
-  return (
-    <section className="overview-card">
-      <PanelHeader title="Special teams decided it" subtitle="Power play detail by team" isNew />
-      <table className="analytics-table">
-        <thead>
-          <tr><th></th><th>PP</th><th>PP xG</th><th>PP shots</th><th>PK saves</th></tr>
-        </thead>
-        <tbody>
-          {ordered.map(t => (
-            <tr key={t.team_abbrev}>
-              <td>{t.team_abbrev}</td>
-              <td>{t.pp_goals}/{t.pp_opp}</td>
-              <td>{t.pp_xg.toFixed(2)}</td>
-              <td>{t.pp_shots}</td>
-              <td>{t.pk_saves}/{t.pk_shots}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {lead.pp_goals > 0 && (
-        <PanelCaption>
-          {lead.team_abbrev} converted {lead.pp_goals} of {lead.pp_opp} chances on {lead.pp_xg.toFixed(2)} xG, {ppDelta >= 0 ? 'scoring' : 'finishing'} {Math.abs(ppDelta).toFixed(2)} {ppDelta >= 0 ? 'above' : 'below'} expected on the power play alone.
-        </PanelCaption>
-      )}
-    </section>
-  )
-}
-
-// "<Goalie> stole one" — goals saved above expected, by shot danger.
 function GoalieDangerPanel({ gameId }: { gameId: number }) {
   const [rows, setRows] = useState<GoalieDangerStat[]>([])
   // NHL Edge second opinion (season last-10 save %) per goalie, fetched on demand (Phase 2.5)
@@ -883,7 +379,8 @@ function GoalieDangerPanel({ gameId }: { gameId: number }) {
   if (rows.length === 0) return null
   const best = [...rows].sort((x, y) => y.gsax - x.gsax)[0]
   const swing = rows.length >= 2 ? Math.abs(rows[0].gsax - rows[1].gsax) : Math.abs(best.gsax)
-  const title = best.gsax > 0.5 ? `${lastNameOf(best.goalie_name)} stole one` : 'Goaltending by danger'
+  // K7/F1: neutral title; "stole one" language only when the danger-GSAx licenses a theft (≥ 1.5).
+  const title = best.gsax >= 1.5 ? `${lastNameOf(best.goalie_name)} stole one` : 'Goaltending'
   const hasEdge = Object.values(edge).some(v => v != null)
   return (
     <section className="overview-card">
@@ -913,54 +410,6 @@ function GoalieDangerPanel({ gameId }: { gameId: number }) {
 // "Control and danger" — team rate bars, away left / home right. The Adjusted toggle
 // (Phase 2.3) swaps Corsi/xG shares for their score-state-adjusted variants and the
 // hits/giveaways/takeaways rows for their rink (scorer-bias) adjusted counts.
-function ControlDangerBars({ homeTeam, awayTeam, homeColor, awayColor }: { homeTeam: TeamGameStats; awayTeam: TeamGameStats; homeColor: string; awayColor: string }) {
-  const [adjusted, setAdjusted] = useAdjustedToggle()
-  const homeXgf = homeTeam.xgf ?? 0
-  const awayXgf = awayTeam.xgf ?? 0
-  const totalXg = homeXgf + awayXgf
-
-  // Corsi share (score-adjusted when toggled on)
-  const cfA = adjusted ? awayTeam.cf_pct_score_adj : awayTeam.cf_pct
-  const cfH = adjusted ? homeTeam.cf_pct_score_adj : homeTeam.cf_pct
-  // xG share: adjusted uses the stored score-adj share; raw derives from xgf totals
-  const xgA = adjusted ? (awayTeam.xgf_pct_score_adj ?? null) : (totalXg ? awayXgf / totalXg : null)
-  const xgH = adjusted ? (homeTeam.xgf_pct_score_adj ?? null) : (totalXg ? homeXgf / totalXg : null)
-
-  const eventRow = (label: string, rawA?: number | null, rawH?: number | null, adjA?: number | null, adjH?: number | null) => {
-    const a = adjusted ? adjA : rawA
-    const h = adjusted ? adjH : rawH
-    return { label, av: (a ?? 0).toFixed(adjusted ? 1 : 0), hv: (h ?? 0).toFixed(adjusted ? 1 : 0), ar: a ?? 0, hr: h ?? 0, bar: a != null && h != null }
-  }
-
-  const rows = [
-    { label: adjusted ? 'Corsi for % (score-adj)' : 'Corsi for %', av: ((cfA ?? 0) * 100).toFixed(1), hv: ((cfH ?? 0) * 100).toFixed(1), ar: cfA ?? 0, hr: cfH ?? 0, bar: cfA != null && cfH != null },
-    { label: adjusted ? 'Expected goals % (score-adj)' : 'Expected goals %', av: ((xgA ?? 0.5) * 100).toFixed(1), hv: ((xgH ?? 0.5) * 100).toFixed(1), ar: xgA ?? 0, hr: xgH ?? 0, bar: xgA != null && xgH != null },
-    { label: 'High-danger chances /60', av: (awayTeam.hdcf_per60 ?? 0).toFixed(1), hv: (homeTeam.hdcf_per60 ?? 0).toFixed(1), ar: awayTeam.hdcf_per60 ?? 0, hr: homeTeam.hdcf_per60 ?? 0, bar: awayTeam.hdcf_per60 != null && homeTeam.hdcf_per60 != null },
-    eventRow('Hits', awayTeam.hits, homeTeam.hits, awayTeam.hits_adj, homeTeam.hits_adj),
-    eventRow('Giveaways', awayTeam.giveaways, homeTeam.giveaways, awayTeam.giveaways_adj, homeTeam.giveaways_adj),
-    eventRow('Takeaways', awayTeam.takeaways, homeTeam.takeaways, awayTeam.takeaways_adj, homeTeam.takeaways_adj),
-  ]
-  return (
-    <section className="overview-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)' }}>
-        <PanelHeader title="Control and danger" subtitle={`Team rates, ${awayTeam.team_abbrev} left / ${homeTeam.team_abbrev} right`} />
-        <ToggleSwitch
-          checked={adjusted}
-          onChange={setAdjusted}
-          label="Adjusted"
-          title="Score-state adjusts Corsi/xG shares; rink (scorer-bias) adjusts hits/giveaways/takeaways for the arena."
-        />
-      </div>
-      <div className="team-stats-compact" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-        {rows.map(r => (
-          <ComparisonRow key={r.label} label={r.label} awayValue={r.av} homeValue={r.hv} awayRaw={r.ar} homeRaw={r.hr} awayColor={awayColor} homeColor={homeColor} showBar={r.bar} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// "Shot quality ladder" — attempts/goals by danger band per team.
 function ShotQualityLadder({ gameId }: { gameId: number }) {
   const [rows, setRows] = useState<ShotQualityRow[]>([])
   useEffect(() => { let a = true; getGameShotQuality(gameId).then(d => { if (a) setRows(d) }).catch(() => {}); return () => { a = false } }, [gameId])
@@ -1043,41 +492,11 @@ function AnalyticsTab({
 }) {
   const { home_team, away_team, game_id } = gameDetail
 
+  // Final order (K1–K8): the timeline + comparison live in GameNarrative above; here the shot map,
+  // who drove, then the receipts two-col (period breakdown, shot quality, goaltending, rolling context).
+  // Special-teams and control-and-danger folded into the comparison; goalie duel merged into one panel.
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-2) 0' }}>
-      {/* 1. Timeline stack — what happened, three synced lanes */}
-      <section style={{ marginBottom: 'var(--space-10)' }}>
-        <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>Game timeline: three synced views of the same 60 minutes</h2>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: '4px 0 var(--space-6)' }}>Goals marked once on the shared rail · hover any minute to read all three lanes</p>
-        <GameTimelineStack
-          gameId={game_id}
-          homeTeamId={home_team.team_id}
-          awayTeamId={away_team.team_id}
-          homeAbbrev={home_team.team_abbrev}
-          awayAbbrev={away_team.team_abbrev}
-          homeColor={homeTeamColor}
-          awayColor={awayTeamColor}
-        />
-      </section>
-
-      {/* 2. Why the score diverged from xG: special teams + goaltending */}
-      <div className="analytics-grid" style={{ marginBottom: 'var(--space-8)' }}>
-        <SpecialTeamsPanel gameId={game_id} />
-        <GoalieDangerPanel gameId={game_id} />
-      </div>
-
-      {/* 3. The underlying battle: control bars + shot quality */}
-      <div className="analytics-grid" style={{ marginBottom: 'var(--space-8)' }}>
-        <ControlDangerBars homeTeam={home_team} awayTeam={away_team} homeColor={homeTeamColor} awayColor={awayTeamColor} />
-        <ShotQualityLadder gameId={game_id} />
-      </div>
-
-      {/* 4. Who drove the game */}
-      <div style={{ marginBottom: 'var(--space-10)' }}>
-        <SkaterImpactTable gameId={game_id} />
-      </div>
-
-      {/* 5. Shot maps per team */}
       <div style={{ marginBottom: 'var(--space-10)' }}>
         <ShotMapKDE
           gameId={game_id}
@@ -1089,33 +508,74 @@ function AnalyticsTab({
         />
       </div>
 
-      {/* 6. Period breakdown + 10-game form context */}
-      <div className="analytics-grid">
-        <PeriodBreakdownTable
-          homeTeamAbbrev={home_team.team_abbrev}
-          awayTeamAbbrev={away_team.team_abbrev}
-          homeTeamColor={homeTeamColor}
-          awayTeamColor={awayTeamColor}
-          homeStats={home_team}
-          awayStats={away_team}
-        />
-        <RollingContextPanel
-          gameId={game_id}
-          homeTeamId={home_team.team_id}
-          awayTeamId={away_team.team_id}
-          homeTeamAbbrev={home_team.team_abbrev}
-          awayTeamAbbrev={away_team.team_abbrev}
-          homeTeamColor={homeTeamColor}
-          awayTeamColor={awayTeamColor}
-          homeGameCF={home_team.cf_pct}
-          awayGameCF={away_team.cf_pct}
-        />
+      <div style={{ marginBottom: 'var(--space-10)' }}>
+        <SkaterImpactTable gameId={game_id} />
+      </div>
+
+      <h2 className="page-region-title" style={{ marginBottom: 'var(--space-4)' }}>Receipts <Ref n={1} /></h2>
+      {/* V4: two explicit height-assigned columns so neither strands whitespace. */}
+      <div className="gd-receipts">
+        <div className="gd-receipts__col">
+          <PeriodBreakdownTable
+            homeTeamAbbrev={home_team.team_abbrev}
+            awayTeamAbbrev={away_team.team_abbrev}
+            homeTeamColor={homeTeamColor}
+            awayTeamColor={awayTeamColor}
+            homeStats={home_team}
+            awayStats={away_team}
+          />
+          <RollingContextPanel
+            gameId={game_id}
+            homeTeamId={home_team.team_id}
+            awayTeamId={away_team.team_id}
+            homeTeamAbbrev={home_team.team_abbrev}
+            awayTeamAbbrev={away_team.team_abbrev}
+            homeTeamColor={homeTeamColor}
+            awayTeamColor={awayTeamColor}
+            homeGameCF={home_team.cf_pct}
+            awayGameCF={away_team.cf_pct}
+          />
+        </div>
+        <div className="gd-receipts__col">
+          <ShotQualityLadder gameId={game_id} />
+          <GoalieDangerPanel gameId={game_id} />
+        </div>
       </div>
     </div>
   )
 }
 
 // Players Tab - Rebuilt per PART 2 specifications
+// K2: compact scoring summary — table-stakes reference at the top of Box score.
+function ScoringSummary({ gameId, homeTeamId }: { gameId: number; homeTeamId: number }) {
+  const [goals, setGoals] = useState<GoalDetail[]>([])
+  useEffect(() => { let a = true; getGameGoals(gameId).then(d => { if (a) setGoals(d) }).catch(() => {}); return () => { a = false } }, [gameId])
+  if (goals.length === 0) return null
+  let home = 0, away = 0
+  const rows = [...goals].sort((x, y) => x.game_time_seconds - y.game_time_seconds).map((g) => {
+    if (g.team_id === homeTeamId) home++; else away++
+    const period = g.game_time_seconds < 3600 ? Math.floor(g.game_time_seconds / 1200) + 1 : 4
+    return { ...g, periodLabel: period > 3 ? 'OT' : `P${period}`, scoreAfter: `${away}–${home}` }
+  })
+  return (
+    <section className="scoring-summary">
+      <h2 className="page-region-title">Scoring summary</h2>
+      <div className="scoring-summary__rows">
+        {rows.map((g, i) => (
+          <div className="scoring-summary__row" key={i}>
+            <span className="scoring-summary__per mono">{g.periodLabel}</span>
+            <span className="scoring-summary__time mono">{g.time_in_period}</span>
+            <span className="scoring-summary__team mono">{g.team_abbrev}</span>
+            <span className="scoring-summary__scorer">{g.scorer_name ?? 'Goal'}{g.assists?.length ? <span className="scoring-summary__assists"> ({g.assists.join(', ')})</span> : null}</span>
+            {g.strength && g.strength !== 'EV' && <span className="scoring-summary__strength">{g.strength}</span>}
+            <span className="scoring-summary__score mono">{g.scoreAfter}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function PlayersTab({
   gameDetail,
   playerStats,
@@ -1311,6 +771,7 @@ function PlayersTab({
 
   return (
     <div style={{ padding: 'var(--space-8) 0', maxWidth: '1280px', margin: '0 auto' }}>
+      <ScoringSummary gameId={gameDetail.game_id} homeTeamId={home_team.team_id} />
       <h2 style={{
         fontSize: 'var(--text-sm)',
         fontWeight: 600,

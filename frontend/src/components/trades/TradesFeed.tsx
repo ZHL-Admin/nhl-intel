@@ -5,7 +5,8 @@
  */
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { SkeletonLoader } from '../common'
+import { SkeletonLoader, DotChip } from '../common'
+import type { DotState } from '../common'
 import { getTeamColor, getTeamLogoUrl } from '../../utils/teams'
 import { getTradeBoard, TradeBoardItem } from '../../api/trades'
 import Tilt from './Tilt'
@@ -29,7 +30,12 @@ function FeedRow({ t, base }: { t: TradeBoardItem; base: string }) {
   const win = t.sides.find((s) => s.team_id === t.winner_team_id)
   const lose = t.sides.find((s) => s.team_id !== t.winner_team_id)
   const color = win ? getTeamColor(win.team_abbrev) : 'var(--color-text-muted)'
-  const verdictWord = t.incomplete ? 'maturing' : t.verdict === 'decisive' ? '' : t.verdict === 'edge' ? 'edge' : 'even'
+  // §S6 verdict as a faceoff dot: decisive = filled, edge = half, even/maturing = hollow ring.
+  const vd: { state: DotState; label: string; color: string } = t.incomplete
+    ? { state: 'projected', label: 'maturing', color: 'var(--color-text-muted)' }
+    : t.verdict === 'decisive' ? { state: 'filled', label: 'decisive', color }
+    : t.verdict === 'edge' ? { state: 'leaning', label: 'edge', color }
+    : { state: 'projected', label: 'even', color: 'var(--color-text-muted)' }
   // always show every team's logo + abbrev (winner first when there is one; "over" vs "·" between them)
   const ordered = win && lose ? [win, lose] : t.sides
   const sep = win ? 'over' : '·'
@@ -44,7 +50,8 @@ function FeedRow({ t, base }: { t: TradeBoardItem; base: string }) {
               <span className="mono">{s.team_abbrev}</span>
             </span>
           ))}
-          <span className="tbl-muted feed-row__meta">· {headline(t)} · {t.date.slice(0, 4)}{verdictWord ? ` · ${verdictWord}` : ''}</span>
+          <span className="tbl-muted feed-row__meta">· {headline(t)} · {t.date.slice(0, 4)} ·&nbsp;</span>
+          <DotChip label={vd.label} color={vd.color} state={vd.state} />
         </span>
         <Tilt signed={t.margin_slot} bandHw={t.band_hw_slot} color={color}
           even={t.verdict === 'even'} edge={t.verdict === 'edge' && !t.incomplete}
@@ -82,9 +89,18 @@ function FeedCard({ base, sort, title, sub }: { base: string; sort: 'recent' | '
 
 export default function TradesFeed({ base }: { base: string }) {
   return (
-    <div className="feed-two">
-      <FeedCard base={base} sort="recent" title="Most recent" sub="The 10 newest trades. Expand any row for the full breakdown." />
-      <FeedCard base={base} sort="lopsided" title="Most lopsided" sub="The 10 widest realized margins. Expand any row for the full breakdown." />
+    <div className="feed">
+      {/* §S6: one dot-chip legend for the verdict language, above the feed. */}
+      <div className="feed-legend">
+        <DotChip label="decisive" color="var(--color-text-secondary)" state="filled" />
+        <DotChip label="edge" color="var(--color-text-secondary)" state="leaning" />
+        <DotChip label="even" color="var(--color-text-muted)" state="projected" />
+        <DotChip label="maturing" color="var(--color-text-muted)" state="projected" />
+      </div>
+      <div className="feed-two">
+        <FeedCard base={base} sort="recent" title="Most recent" sub="The 10 newest trades. Expand any row for the full breakdown." />
+        <FeedCard base={base} sort="lopsided" title="Most lopsided" sub="The 10 widest realized margins. Expand any row for the full breakdown." />
+      </div>
     </div>
   )
 }

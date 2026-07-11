@@ -45,6 +45,7 @@ with pbp as (
         y_coord,
         shooting_player_id,
         scoring_player_id,
+        goalie_in_net_id,
         (period_number - 1) * 1200
             + cast(split(time_in_period, ':')[offset(0)] as int64) * 60
             + cast(split(time_in_period, ':')[offset(1)] as int64) as elapsed_seconds
@@ -55,6 +56,17 @@ with pbp as (
 boxscores as (
     select game_id, home_team_id, away_team_id
     from {{ ref('stg_boxscores') }}
+),
+
+-- ICE-DERIVED strength + goalie presence per shot (findings F3/D5): the shot's
+-- segment strength state from the rebuilt backbone, replacing the situationCode
+-- reads below. int_on_ice_events attributes each event to its stint.
+ice_state as (
+    select e.game_id, e.event_id, c.home_skaters, c.away_skaters,
+           c.home_goalies, c.away_goalies
+    from {{ ref('int_on_ice_events') }} e
+    join {{ ref('int_segment_context') }} c
+      on e.game_id = c.game_id and e.segment_index = c.segment_index
 ),
 
 shots as (
@@ -73,25 +85,25 @@ shots as (
         p.y_coord,
         p.zone_code,
         p.situation_code,
+        p.goalie_in_net_id,
         (p.type_desc_key = 'goal') as is_goal,
         (p.event_owner_team_id = b.home_team_id) as shooter_is_home,
-        -- padded situation digits
-        lpad(coalesce(p.situation_code, ''), 4, '0') as sit
+        -- ICE-derived on-ice counts (fall back to situationCode digits if the shot
+        -- didn't attribute to a segment, e.g. the 3 pbp-only games or edge cases)
+        coalesce(ice.home_skaters, cast(substr(lpad(coalesce(p.situation_code,''),4,'0'), 3, 1) as int64)) as home_sk,
+        coalesce(ice.away_skaters, cast(substr(lpad(coalesce(p.situation_code,''),4,'0'), 2, 1) as int64)) as away_sk,
+        coalesce(ice.home_goalies, if(substr(lpad(coalesce(p.situation_code,''),4,'0'),4,1)='0',0,1)) as home_g,
+        coalesce(ice.away_goalies, if(substr(lpad(coalesce(p.situation_code,''),4,'0'),1,1)='0',0,1)) as away_g
     from pbp p
     join boxscores b on p.game_id = b.game_id
+    left join ice_state ice on ice.game_id = p.game_id and ice.event_id = p.event_id
     where p.type_desc_key in ('shot-on-goal', 'missed-shot', 'goal')
       and p.x_coord is not null
       and p.y_coord is not null
 ),
 
 shots_strength as (
-    select
-        *,
-        cast(substr(sit, 2, 1) as int64) as away_sk,
-        cast(substr(sit, 3, 1) as int64) as home_sk,
-        (substr(sit, 1, 1) = '0') as away_goalie_pulled,
-        (substr(sit, 4, 1) = '0') as home_goalie_pulled
-    from shots
+    select * from shots
 ),
 
 shots_typed as (
@@ -99,21 +111,22 @@ shots_typed as (
         game_id, season, game_date, event_id, sort_order, period_number,
         elapsed_seconds, team_id, shooter_id, type_desc_key, x_coord, y_coord,
         zone_code, situation_code, is_goal,
-        -- strength relative to the shooting team
+        -- strength relative to the shooting team, from the ICE (findings F3): shift-
+        -- derived on-ice skater counts, not situationCode (whose ~4% timing lag the
+        -- Atlas quantified). 5v5 requires both goalies on the ice.
         case
-            when situation_code = '1551' then '5v5'
             when home_sk is null or away_sk is null then 'other'
+            when home_sk = 5 and away_sk = 5 and home_g > 0 and away_g > 0 then '5v5'
             when shooter_is_home and home_sk > away_sk then 'PP'
             when shooter_is_home and home_sk < away_sk then 'SH'
             when (not shooter_is_home) and away_sk > home_sk then 'PP'
             when (not shooter_is_home) and away_sk < home_sk then 'SH'
             else 'other'   -- even strength but not 5v5 (4v4, 3v3), or odd artifacts
         end as strength,
-        -- empty net = the OPPOSING goalie is pulled (shot fired at an empty cage)
-        case
-            when shooter_is_home then home_sk is not null and away_goalie_pulled
-            else home_sk is not null and home_goalie_pulled
-        end as is_empty_net,
+        -- empty net = ICE TRUTH (finding D5): the goalie actually facing the shot
+        -- (goalie_in_net_id) is absent. Replaces the situationCode-digit test, which
+        -- scored ~1867 empty-net attempts because it lagged goalie pulls.
+        (goalie_in_net_id is null) as is_empty_net,
         -- a point shot is a property of the shot itself
         (abs(x_coord) <= 40 and zone_code = 'O') as seq_point_shot
     from shots_strength

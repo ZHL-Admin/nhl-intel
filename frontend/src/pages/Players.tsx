@@ -331,8 +331,9 @@ export default function Players() {
     <PageLayout>
       <div className="players">
         <PageCard
-          title="Players"
-          subtitle="League-wide value, ranked. Filter, switch the lens, or search anyone."
+          eyebrow="Players"
+          title="Leaderboards"
+          subtitle="League-wide value, ranked. Filter, switch the lens, or press ⌘K to find anyone."
           controls={
           /* page controls live inside the header region */
           <div className="players__toolbar">
@@ -349,6 +350,7 @@ export default function Players() {
             <div className="players__search">
               <PlayerPicker placeholder="Find any player…" onSelect={handleSearchSelect} />
             </div>
+            <span className="players__cmdk-hint">Press ⌘K to find a player</span>
           </div>
 
           {view === 'leaderboard' && (

@@ -1,109 +1,72 @@
-import { Info } from 'lucide-react'
-import { Tooltip } from '../common'
 import { RosterForecastRow } from '../../api/types'
 import { getTeamLogoUrl, getTeamName } from '../../utils/teams'
-import {
-  fmtRating, fmtRank, tierForRank, isQuiet,
-  fmtPoints, fmtPointsBand, fmtPointsDelta,
-} from '../../utils/forecastFormat'
 
-/** Projected rank change vs last season's finish: ▲ = climbing, ▼ = falling, — = no move. */
-function RankMove({ delta }: { delta?: number | null }) {
-  if (delta == null || delta === 0) return <span className="oltable__move--flat">—</span>
-  return delta > 0
-    ? <span className="oltable__move--up">▲{delta}</span>
-    : <span className="oltable__move--down">▼{Math.abs(delta)}</span>
-}
+const fmtWar = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(1)
 
-/** League view: full projected standings, all 32 teams, by projected POINTS. Rating is a secondary
- * column (the underlying mechanism). Rows click through to the team view. */
+/**
+ * §S2 — the offseason as one diverging chart: 32 rosters balanced on a shared center-zero axis.
+ * Each row's net WAR change fills a 3px track from a common center — blue right for improvement,
+ * red left for decline — on a single fixed domain so the column reads top-to-bottom as one figure.
+ * A faint 1px zero line runs behind every row (the tracks are contiguous, so it reads continuous).
+ * The forecast's unsettled portion (uncertainty band → pending/unsigned spots) renders as a dashed
+ * extension beyond the solid point estimate, obeying the solid=observed / dashed=projected law.
+ */
 export default function OffseasonLeagueTable({ rows, onSelect }: {
   rows: RosterForecastRow[]; onSelect: (teamId: number) => void
 }) {
-  // Default sort: projected points (desc); fall back to projected rank when points are unavailable.
-  const ordered = [...rows].sort((a, b) => {
-    const pa = a.projected_points, pb = b.projected_points
-    if (pa != null && pb != null && pa !== pb) return pb - pa
-    return (a.projected_rank ?? 99) - (b.projected_rank ?? 99)
-  })
+  // Ordered by net change so the diverging column reads cleanly from most-improved to most-declined.
+  const ordered = [...rows].sort((a, b) => b.net_delta_war - a.net_delta_war)
+
+  // One shared, fixed domain for all 32 bars (symmetric around zero), padded for the dashed band.
+  const bandMax = Math.max(1e-6, ...rows.map((r) => r.band_goals ?? 0))
+  const domain = Math.max(0.1, ...rows.map((r) => Math.abs(r.net_delta_war))) * 1.12
+  // The dashed uncertainty whisker is a visual cue for unresolved roster spots; scale the largest
+  // band to ~16% of the half-track so it reads as an extension, not a competing bar.
+  const dashScale = (domain * 0.16) / bandMax
+
+  const pct = (v: number) => 50 + (v / domain) * 50 // 0..100 along the track
+
   return (
-    <div className="oltable">
-      <table>
-        <thead>
-          <tr>
-            <th className="oltable__rank">#</th>
-            <th>Team</th>
-            <th className="oltable__num">
-              <span className="oltable__th-tip">
-                Projected points
-                <Tooltip content="Projected next-season standings points over 82 games — a calibrated transform of the team rating, shown with its 80% band. The headline of the forecast.">
-                  <Info size={12} className="oltable__th-info" />
-                </Tooltip>
+    <div className="olb">
+      <div className="olb__rows">
+        {ordered.map((r, i) => {
+          const up = r.net_delta_war >= 0
+          const end = pct(r.net_delta_war)
+          const fillLeft = up ? 50 : end
+          const fillWidth = Math.abs(end - 50)
+          const dash = (r.band_goals ?? 0) * dashScale // half-width in track %
+          return (
+            <div
+              key={r.team_id}
+              className="olb__row"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(r.team_id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(r.team_id) } }}
+            >
+              <span className="olb__rank num">{r.projected_rank ?? i + 1}</span>
+              <img className="olb__logo" src={getTeamLogoUrl(r.team_abbrev ?? '')} alt="" aria-hidden
+                onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+              <span className="olb__name">{getTeamName(r.team_abbrev ?? '')}</span>
+              <span className="olb__track">
+                {/* dashed extension = unresolved / uncertain portion, centered on the bar end */}
+                {dash > 0.4 && (
+                  <span
+                    className={`olb__dash ${up ? 'is-up' : 'is-down'}`}
+                    style={{ left: `${Math.max(0, end - dash)}%`, width: `${Math.min(100, 2 * dash)}%` }}
+                  />
+                )}
+                <span
+                  className={`olb__fill ${up ? 'is-up' : 'is-down'}`}
+                  style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }}
+                />
               </span>
-            </th>
-            <th className="oltable__num">
-              <span className="oltable__th-tip">
-                Rating
-                <Tooltip content="The underlying team rating in goals per game vs a league-average team: +0.50 means expected to outscore an average opponent by half a goal a night. Points are derived from this.">
-                  <Info size={12} className="oltable__th-info" />
-                </Tooltip>
-              </span>
-            </th>
-            <th className="oltable__center oltable__move">
-              <span className="oltable__th-tip">
-                Move
-                <Tooltip content="Change in league rank: where the team ranks on the projection vs where it ranked last season. ▲ = projected to climb, ▼ = to fall.">
-                  <Info size={12} className="oltable__th-info" />
-                </Tooltip>
-              </span>
-            </th>
-            <th className="oltable__num">
-              <span className="oltable__th-tip">
-                Δ pts
-                <Tooltip content="Standings-points shift from this offseason's moves alone, vs last season's roster.">
-                  <Info size={12} className="oltable__th-info" />
-                </Tooltip>
-              </span>
-            </th>
-            <th className="oltable__center oltable__moves">Moves</th>
-            <th className="oltable__center oltable__tier">Tier</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map((r) => {
-            const tier = tierForRank(r.projected_rank)
-            const pdFlat = r.points_delta == null ? true : Math.abs(Math.round(r.points_delta)) === 0
-            const quiet = isQuiet({ n_moves: r.n_moves, delta: r.delta, negligible: r.negligible })
-            return (
-              <tr key={r.team_id} onClick={() => onSelect(r.team_id)} tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(r.team_id) } }}>
-                <td className="oltable__rank mono">{fmtRank(r.projected_rank)}</td>
-                <td>
-                  <span className="oltable__team">
-                    <img src={getTeamLogoUrl(r.team_abbrev ?? '')} alt="" aria-hidden className="oltable__logo" />
-                    <span className="oltable__abbr">{r.team_abbrev}</span>
-                    <span className="oltable__name">{getTeamName(r.team_abbrev ?? '')}</span>
-                    {quiet && <span className="oltable__quiet">quiet</span>}
-                  </span>
-                </td>
-                <td className="oltable__num mono oltable__points">
-                  <span className="oltable__points-val">{fmtPoints(r.projected_points)}</span>
-                  <span className="oltable__points-band">{fmtPointsBand(r.points_low, r.points_high)}</span>
-                </td>
-                <td className="oltable__num mono oltable__rating-sec">{fmtRating(r.projected_rating)}</td>
-                <td className="oltable__center oltable__move mono"><RankMove delta={r.projected_rank_delta} /></td>
-                <td className={`oltable__num mono ${pdFlat ? '' : (r.points_delta ?? 0) > 0 ? 'is-up' : 'is-down'}`}>
-                  {pdFlat ? '±0' : fmtPointsDelta(r.points_delta)}
-                </td>
-                <td className="oltable__center mono oltable__moves">{r.n_moves}</td>
-                <td className="oltable__center oltable__tier">
-                  <span className={`oltable__pill oltable__pill--${tier.toLowerCase()}`}>{tier}</span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+              <span className={`olb__val num ${up ? 'is-up' : 'is-down'}`}>{fmtWar(r.net_delta_war)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <p className="olb__legend">dashed = unresolved roster spots</p>
     </div>
   )
 }

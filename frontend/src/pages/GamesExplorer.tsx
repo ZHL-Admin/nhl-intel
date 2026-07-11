@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { PageLayout, PageCard } from '../components/common';
+import { Link } from 'react-router-dom';
+import { PageLayout, PageHeader } from '../components/common';
 import DateStrip from '../components/common/DateStrip';
-import GameOfTheNight from '../components/games/GameOfTheNight';
-import GameCard from '../components/games/GameCard';
-import GameCardSkeleton from '../components/games/GameCardSkeleton';
+import GameRow from '../components/games/GameRow';
 import { getGameDates, getGamesByDate } from '../api/games';
 import { GameDate as GameDateType, Game } from '../api/types';
 import { formatDateForAPI } from '../utils/teams';
 import { usePageTitle } from '../hooks/usePageTitle';
 import './GamesExplorer.css';
+
+// §01: status groups read as eyebrow dividers, not boxes.
+const GROUP_LABEL: Record<string, string> = { live: 'In progress', upcoming: 'Tonight', final: 'Final' };
 
 function GamesExplorer() {
   const [gameDates, setGameDates] = useState<GameDateType[]>([]);
@@ -152,68 +154,34 @@ function GamesExplorer() {
     }
   };
 
-  // Sort games: Live → Final → Upcoming
-  const sortedGames = [...games].sort((a, b) => {
-    if (a.is_live && !b.is_live) return -1;
-    if (!a.is_live && b.is_live) return 1;
-    if (!a.is_preview && b.is_preview) return -1;
-    if (a.is_preview && !b.is_preview) return 1;
-    return 0;
-  });
+  // Status-grouped sections (§01): live first, then tonight, then final.
+  const sections: { key: string; games: Game[] }[] = [
+    { key: 'live', games: games.filter(g => g.is_live) },
+    { key: 'upcoming', games: games.filter(g => g.is_preview && !g.is_live) },
+    { key: 'final', games: games.filter(g => !g.is_preview && !g.is_live) },
+  ].filter(s => s.games.length > 0);
 
-  // Select Game of the Night (for completed games)
-  const selectGameOfTheNight = (): Game | null => {
-    const completedGames = games.filter(g => !g.is_preview && !g.is_live);
-
-    // No completed games - no featured game
-    if (completedGames.length === 0) return null;
-
-    // Single game on the date - always feature it
-    if (completedGames.length === 1) return completedGames[0];
-
-    // Multiple games - select based on heuristic
-    // Priority: OT/SO games, then highest combined score
-    const hasOT = completedGames.find(g => g.period && g.period.includes('OT'));
-    if (hasOT) return hasOT;
-
-    // Return the game with the highest combined score
-    return completedGames.reduce((best, current) => {
-      const bestTotal = (best.home_score || 0) + (best.away_score || 0);
-      const currentTotal = (current.home_score || 0) + (current.away_score || 0);
-      return currentTotal > bestTotal ? current : best;
-    }, completedGames[0]);
-  };
-
-  const gameOfTheNight = selectGameOfTheNight();
-
-  // Filter out Game of the Night from the regular grid
-  const gridGames = gameOfTheNight
-    ? sortedGames.filter(g => g.game_id !== gameOfTheNight.game_id)
-    : sortedGames;
-
-  if (datesLoading) {
-    return (
-      <PageLayout>
-        <PageCard
-          title="Games"
-          subtitle="Scores, live games, and the night's headline matchup."
-        >
-          <div className="games-explorer__grid">
-            {[1, 2, 3].map((i) => (
-              <GameCardSkeleton key={i} />
-            ))}
-          </div>
-        </PageCard>
-      </PageLayout>
-    );
-  }
+  // Sheet header: the serif human date is the page title (the signature moment).
+  const humanDate = selectedDate
+    ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric',
+      })
+    : 'Games';
+  const liveCount = games.filter(g => g.is_live).length;
+  const dek = datesLoading
+    ? 'Loading the slate…'
+    : games.length === 0
+      ? 'No games on this date.'
+      : `${games.length} game${games.length > 1 ? 's' : ''}${liveCount ? ` · ${liveCount} live now` : ''}`;
 
   return (
     <PageLayout>
-      <PageCard
-        title="Games"
-        subtitle="Scores, live games, and the night's headline matchup."
-        controls={
+      <PageHeader
+        eyebrow="Games"
+        title={humanDate}
+        subtitle={dek}
+      >
+        {!datesLoading && (
           <DateStrip
             dates={gameDates}
             selectedDate={selectedDate}
@@ -221,40 +189,47 @@ function GamesExplorer() {
             onPickDate={handlePickDate}
             todayDate={todayDate}
           />
-        }
-      >
-        {error && (
-          <div className="games-explorer__error">
-            <p className="games-explorer__error-message">{error}</p>
-            <button
-              className="games-explorer__retry-button"
-              onClick={() => fetchGames(selectedDate)}
-            >
-              Retry
-            </button>
+        )}
+      </PageHeader>
+
+      {error && (
+        <div className="error-state">
+          <p className="error-state__msg">{error}</p>
+          <div className="error-state__action">
+            <button className="btn btn--secondary" onClick={() => fetchGames(selectedDate)}>Retry</button>
           </div>
-        )}
+        </div>
+      )}
 
-        {loading && !error && (
-          <div className="games-explorer__grid">
-            {[1, 2, 3].map((i) => (
-              <GameCardSkeleton key={i} />
-            ))}
+      {loading && !error && (
+        <div className="games-explorer__rows">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="game-row-skeleton skeleton" />
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && games.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__line">No games on this date. The board wakes up at puck drop.</p>
+          <div className="empty-state__action">
+            <Link to="/" className="btn btn--quiet">Back to Today →</Link>
           </div>
-        )}
+        </div>
+      )}
 
-        {!loading && !error && games.length > 0 && (
-          <>
-            {gameOfTheNight && <GameOfTheNight game={gameOfTheNight} />}
-
-            <div className="games-explorer__grid">
-              {gridGames.map((game) => (
-                <GameCard key={game.game_id} game={game} />
-              ))}
-            </div>
-          </>
-        )}
-      </PageCard>
+      {!loading && !error && games.length > 0 && (
+        <div className="games-explorer__sections">
+          {sections.map((s) => (
+            <section key={s.key} className="games-explorer__section">
+              <h2 className="games-explorer__group">{GROUP_LABEL[s.key]}</h2>
+              <div className="games-explorer__rows">
+                {s.games.map((game) => <GameRow key={game.game_id} game={game} />)}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </PageLayout>
   );
 }

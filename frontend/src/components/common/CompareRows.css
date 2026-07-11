@@ -1,0 +1,52 @@
+.cmp-rows { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.cmp-row { display: flex; flex-direction: column; gap: 3px; }
+.cmp-row__label {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--overline-size);
+  font-weight: var(--overline-weight);
+  letter-spacing: var(--overline-spacing);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.cmp-row__track {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cmp-row__val {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-row__val--a { text-align: right; }
+.cmp-row__val--b { text-align: left; }
+
+/* two halves meeting at a center line */
+.cmp-row__bars {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  height: 12px;
+}
+.cmp-row__bars::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--color-border-strong);
+}
+.cmp-row__half { display: flex; align-items: center; height: 100%; gap: 4px; min-width: 0; }
+.cmp-row__half--a { justify-content: flex-end; }
+.cmp-row__half--b { justify-content: flex-start; }
+.cmp-row__bar { height: 8px; border-radius: 2px; }
+.cmp-row__half--a .cmp-row__bar { border-radius: 2px 0 0 2px; }
+.cmp-row__half--b .cmp-row__bar { border-radius: 0 2px 2px 0; }
+.cmp-row__dot { width: 6px; height: 6px; border-radius: var(--radius-full); flex-shrink: 0; }

@@ -40,8 +40,10 @@ from models_ml import bq, config
 MODEL_VERSION = "rapm_v1"
 METHODOLOGY = Path(__file__).parent.parent / "docs" / "methodology" / "isolated-impact.md"
 
-MIN_SEGMENT_SECONDS = 4
-ALPHAS = [250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0]
+MIN_SEGMENT_SECONDS = 5   # Atlas spec: exclude stints < 5s (was 4)
+ALPHAS = list(np.logspace(2, 6, 13))   # Atlas spec: 13 log-spaced points, 1e2..1e6
+REPLACEMENT_MIN_MINUTES = 100          # Atlas spec: pool sub-100-min players by F/D
+CV_FOLDS = 5                           # Atlas spec: 5-fold game-grouped CV (was single 80/20)
 DEFAULT_BOOTSTRAP = 100
 SINGLE_SEASONS = ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"]
 WINDOW_WEIGHTS = [0.3, 0.6, 1.0]   # oldest -> newest for the 3-season rolling window
@@ -52,7 +54,7 @@ ZONE_CATS = ["O", "D", "N"]        # faceoff start zone; on-the-fly = reference
 # (game, segment) already by the join; one row per segment.
 PULL_SQL = """
 with seg as (
-  select sc.game_id, sc.segment_index, sc.season, sc.segment_duration,
+  select sc.game_id, sc.segment_index, sc.season, sc.segment_duration, sc.segment_start_seconds,
          sc.home_team_id, sc.away_team_id, sc.home_score_state, sc.zone_start_code
   from `{p}.nhl_staging.int_segment_context` sc
   where sc.strength_state in ({strengths}) and sc.segment_duration >= {minsec}
@@ -77,7 +79,7 @@ xg as (
   where s.xg is not null
   group by 1, 2
 )
-select seg.game_id, seg.season, seg.segment_duration as dur,
+select seg.game_id, seg.season, seg.segment_duration as dur, seg.segment_start_seconds,
        seg.home_team_id, seg.away_team_id, seg.home_score_state, seg.zone_start_code,
        sk.home_sk, sk.away_sk,
        coalesce(xg.home_xg, 0) as home_xg, coalesce(xg.away_xg, 0) as away_xg
@@ -129,14 +131,15 @@ def expand_rows(df: pd.DataFrame, b2b: dict, season_weights: dict | None):
         sw = 1.0 if season_weights is None else season_weights.get(r.season, 1.0)
         w = r.dur * sw
         zone = r.zone_start_code if r.zone_start_code in ZONE_CATS else None
+        gt = min(int(r.segment_start_seconds) // 1200, 3)  # game-time bucket: p1/p2/p3/OT+
         # home attacking
         rows.append((r.game_id, home_sk, away_sk, r.home_xg / r.dur * 3600.0, w,
                      r.home_score_state, zone, 1.0,
-                     b2b.get((int(r.game_id), int(r.home_team_id)), 0.0), r.season))
+                     b2b.get((int(r.game_id), int(r.home_team_id)), 0.0), r.season, gt))
         # away attacking (flip score state to the away attacker's perspective)
         rows.append((r.game_id, away_sk, home_sk, r.away_xg / r.dur * 3600.0, w,
                      flip[r.home_score_state], zone, 0.0,
-                     b2b.get((int(r.game_id), int(r.away_team_id)), 0.0), r.season))
+                     b2b.get((int(r.game_id), int(r.away_team_id)), 0.0), r.season, gt))
     return rows
 
 
@@ -159,28 +162,47 @@ def expand_special(df: pd.DataFrame, b2b: dict, season_weights: dict | None):
         zone = r.zone_start_code if r.zone_start_code in ZONE_CATS else None
         ss = r.home_score_state if home_pp else flip[r.home_score_state]
         pp_team = r.home_team_id if home_pp else r.away_team_id
+        gt = min(int(r.segment_start_seconds) // 1200, 3)
         rows.append((r.game_id, pp_sk, pk_sk, pp_xg / r.dur * 3600.0, w, ss, zone,
                      1.0 if home_pp else 0.0,
-                     b2b.get((int(r.game_id), int(pp_team)), 0.0), r.season))
+                     b2b.get((int(r.game_id), int(pp_team)), 0.0), r.season, gt))
     return rows
 
 
-def build_design(rows, two_sided: bool = True):
+REPL_F, REPL_D = -1, -2  # sentinel "player" ids for the F/D replacement pools
+
+
+def build_design(rows, two_sided: bool = True, pos: dict | None = None):
     """Build the sparse design X, target y, weights w, game ids, and the player index.
-    two_sided gives every player an offence AND a defence column (5v5; and PP-off/PK-def for
-    special teams)."""
-    players = sorted({p for row in rows for p in row[1] + row[2]})
+    two_sided gives every player an offence AND a defence column (5v5; and PP-off/PK-def).
+
+    Atlas-spec adoptions: (1) replacement pooling — players with < 100 5v5 minutes in
+    the fit window are relabelled to F/D sentinel pools (REPL_F/REPL_D) so their noisy
+    coefficients collapse into a position-group baseline; (2) a game-time bucket control
+    (p1/p2/p3/OT+). Both leave the two-sided ridge structure intact."""
+    pos = pos or {}
+    # per-player TOI over the fit window (each direction-row adds its weight once per
+    # on-ice appearance; a player appears in both directions of a segment -> /2).
+    toi = {}
+    for row in rows:
+        for p in row[1] + row[2]:
+            toi[p] = toi.get(p, 0.0) + row[4] / 2.0
+    def remap(p):
+        if toi.get(p, 0.0) / 60.0 < REPLACEMENT_MIN_MINUTES:
+            return REPL_F if pos.get(p, "F") == "F" else REPL_D
+        return p
+
+    players = sorted({remap(p) for row in rows for p in row[1] + row[2]})
     pidx = {p: i for i, p in enumerate(players)}
     n_players = len(players)
     seasons = sorted({row[9] for row in rows})
     sidx = {s: i for i, s in enumerate(seasons)}
 
-    # column layout: [off players | def players (two_sided) | controls]
     off_base = 0
     def_base = n_players
     ctrl_base = 2 * n_players if two_sided else n_players
-    # controls: score_state(2 dummies vs tied) + zone(O,D,N) + home + b2b + season dummies(-1)
-    n_ctrl = 2 + 3 + 1 + 1 + max(len(seasons) - 1, 0)
+    # controls: score_state(2) + zone(3) + home(1) + b2b(1) + game-time(3) + season(-1)
+    n_ctrl = 2 + 3 + 1 + 1 + 3 + max(len(seasons) - 1, 0)
 
     n_rows = len(rows)
     y = np.empty(n_rows)
@@ -188,14 +210,14 @@ def build_design(rows, two_sided: bool = True):
     games = np.empty(n_rows, dtype=np.int64)
     ri, ci, dv = [], [], []
     for i, row in enumerate(rows):
-        gid, off, deff, target, weight, ss, zone, home, b2b, season = row
+        gid, off, deff, target, weight, ss, zone, home, b2b, season, gt = row
         y[i] = target
         w[i] = weight
         games[i] = gid
         for p in off:
-            ri.append(i); ci.append(off_base + pidx[p]); dv.append(1.0)
+            ri.append(i); ci.append(off_base + pidx[remap(p)]); dv.append(1.0)
         for p in deff:
-            ri.append(i); ci.append((def_base if two_sided else off_base) + pidx[p]); dv.append(1.0)
+            ri.append(i); ci.append((def_base if two_sided else off_base) + pidx[remap(p)]); dv.append(1.0)
         c = ctrl_base
         if ss == "leading":
             ri.append(i); ci.append(c); dv.append(1.0)
@@ -211,6 +233,9 @@ def build_design(rows, two_sided: bool = True):
         if b2b:
             ri.append(i); ci.append(c); dv.append(1.0)
         c += 1
+        if gt >= 1:  # game-time bucket: p1 is reference
+            ri.append(i); ci.append(c + gt - 1); dv.append(1.0)
+        c += 3
         s_i = sidx[season]
         if s_i < len(seasons) - 1:  # last season is reference
             ri.append(i); ci.append(c + s_i); dv.append(1.0)
@@ -220,17 +245,21 @@ def build_design(rows, two_sided: bool = True):
 
 
 def cv_alpha(X, y, w, games):
-    """Pick alpha by game-grouped 80/20 holdout weighted MSE."""
+    """Pick alpha by CV_FOLDS-fold game-grouped weighted MSE (Atlas spec)."""
     rng = np.random.default_rng(0)
-    uniq = np.unique(games)
-    val_games = set(rng.choice(uniq, size=max(1, len(uniq) // 5), replace=False).tolist())
-    val = np.array([g in val_games for g in games])
+    uniq = np.unique(games); rng.shuffle(uniq)
+    fold_of = {g: i % CV_FOLDS for i, g in enumerate(uniq)}
+    fa = np.array([fold_of[g] for g in games])
     best, best_mse = ALPHAS[0], np.inf
     for a in ALPHAS:
-        m = Ridge(alpha=a, solver="lsqr", fit_intercept=True, max_iter=2000)
-        m.fit(X[~val], y[~val], sample_weight=w[~val])
-        pred = m.predict(X[val])
-        mse = float(np.average((pred - y[val]) ** 2, weights=w[val]))
+        errs = []
+        for f in range(CV_FOLDS):
+            val = fa == f
+            m = Ridge(alpha=a, solver="lsqr", fit_intercept=True, max_iter=2000)
+            m.fit(X[~val], y[~val], sample_weight=w[~val])
+            pred = m.predict(X[val])
+            errs.append(np.average((pred - y[val]) ** 2, weights=w[val]))
+        mse = float(np.mean(errs))
         if mse < best_mse:
             best, best_mse = a, mse
     return best, best_mse
@@ -275,6 +304,18 @@ def bootstrap_sd(X, y, w, games, alpha, players, n_players, two_sided, B):
     return off_sd, def_sd
 
 
+def positions(seasons):
+    """Modal position group (F/D) per player over the seasons — for replacement pooling."""
+    df = bq.query_df(f"""
+        select player_id,
+            if(countif(position_code = 'D') >= countif(position_code != 'D'), 'D', 'F') as pg
+        from `{bq.project()}.nhl_staging.stg_rosters`
+        where season in ({", ".join(f"'{s}'" for s in seasons)}) and position_code != 'G'
+        group by 1
+    """)
+    return dict(zip(df["player_id"], df["pg"]))
+
+
 def toi_minutes(seasons, strength_filter=None):
     """Per-player 5v5 TOI minutes over the seasons (denominator)."""
     extra = ""
@@ -296,7 +337,7 @@ def fit_ev(seasons, window_label, season_weights, b2b, bootstrap):
     df = pull(seasons, ["5v5"])
     rows = expand_rows(df, b2b, season_weights)
     print(f"[{window_label}] {len(df):,} stints -> {len(rows):,} direction-rows")
-    X, y, w, games, players, n_players, two_sided = build_design(rows, two_sided=True)
+    X, y, w, games, players, n_players, two_sided = build_design(rows, two_sided=True, pos=positions(seasons))
     alpha, mse = cv_alpha(X, y, w, games)
     print(f"[{window_label}] chosen alpha={alpha} (val wMSE={mse:.4f}); fitting ...")
     coef = fit_coefs(X, y, w, alpha)
@@ -320,7 +361,7 @@ def fit_special(seasons, window_label, season_weights, b2b, bootstrap):
     if not rows:
         return pd.DataFrame(columns=["player_id", "pp_impact", "pp_sd", "pk_impact", "pk_sd"])
     print(f"[{window_label}] special teams: {len(df):,} segs -> {len(rows):,} PP rows")
-    X, y, w, games, players, n_players, _ = build_design(rows, two_sided=True)
+    X, y, w, games, players, n_players, _ = build_design(rows, two_sided=True, pos=positions(seasons))
     alpha, _ = cv_alpha(X, y, w, games)
     coef = fit_coefs(X, y, w, alpha)
     imp = player_impacts(coef, players, n_players, True)  # off=PP, def_impact=-(PK def coef)
@@ -424,6 +465,7 @@ def _names(ids):
 
 def write(frames: list[pd.DataFrame]) -> None:
     out = pd.concat(frames, ignore_index=True)
+    out = out[out["player_id"] >= 0]  # drop REPL_F/REPL_D replacement-pool columns
     cols = ["player_id", "season_window", "off_impact", "off_sd", "def_impact", "def_sd",
             "pp_impact", "pp_sd", "pk_impact", "pk_sd", "toi_min", "alpha"]
     out = out[[c for c in cols if c in out.columns]].copy()
@@ -439,6 +481,7 @@ def write_append(frames: list[pd.DataFrame], seasons: list[str]) -> None:
     season_windows (never existing/other rows) before WRITE_APPEND, so a re-run is safe and no
     existing row is ever rewritten. Never writes the 3yr window."""
     out = pd.concat(frames, ignore_index=True)
+    out = out[out["player_id"] >= 0]  # drop REPL_F/REPL_D replacement-pool columns
     cols = ["player_id", "season_window", "off_impact", "off_sd", "def_impact", "def_sd",
             "pp_impact", "pp_sd", "pk_impact", "pk_sd", "toi_min", "alpha"]
     out = out[[c for c in cols if c in out.columns]].copy()

@@ -338,6 +338,27 @@ models:
         description: Shared 5v5 seconds for the pair across the season (>= 0)
         tests: [not_null]
 
+  - name: mart_player_toi_against
+    description: >
+      NEW (P1 rebuild). AGAINST matrix: pairwise shared 5v5 ice as OPPONENTS per
+      (season, player_id_a < player_id_b). Sibling to mart_player_toi_matrix
+      (teammates) — the AGAINST relation cannot share that (season, team_id, a, b)
+      grain because opponents span two teams, so it has no team_id. Each 5v5 segment
+      contributes its duration to every cross-team pair on the ice; stored once per
+      unordered pair. Skaters only.
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: player_id_a
+        tests: [not_null]
+      - name: player_id_b
+        tests: [not_null]
+      - name: toi_against_sec
+        description: Shared 5v5 seconds the pair spent as opponents across the season (>= 0)
+        tests: [not_null]
+      - name: games_against
+        description: Distinct games the pair faced each other at 5v5
+
   - name: mart_player_wowy
     description: >
       With-Or-Without-You per (season, team_id, focal player_id, partner_id): 5v5 on-ice

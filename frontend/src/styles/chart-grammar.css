@@ -1,0 +1,41 @@
+/* =============================================================================
+   The Sheet v2 — chart grammar (§6.8), applied to every SVG / recharts surface.
+   Site-wide law: SOLID strokes = observed, DASHED strokes = modeled / projected.
+   Diverging meaning is always blue above / red below. No chart background fills.
+   These are utility classes for SVG elements + chart annotation text.
+   ============================================================================= */
+
+/* Axis + gridlines: 1px border hairline */
+.chart-axis, .chart-grid line, .chart-grid path,
+line.chart-gridline { stroke: var(--color-border); stroke-width: 1; }
+.chart-baseline { stroke: var(--color-border-strong); stroke-width: 1; }  /* zero / league avg */
+
+/* Tick labels: Archivo 11, muted */
+.chart-tick, .chart-tick text {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  fill: var(--color-text-muted);
+}
+
+/* The editorial fingerprint: chart annotations / callouts in Newsreader italic 13 */
+.chart-annotation {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  fill: var(--color-text-secondary);
+}
+
+/* Observed vs projected — the everywhere convention */
+.stroke-observed { stroke-dasharray: none; }
+.stroke-projected { stroke-dasharray: 5 4; }
+
+/* Diverging valence */
+.stroke-positive { stroke: var(--color-data-positive); }
+.stroke-negative { stroke: var(--color-data-negative); }
+.fill-positive { fill: var(--color-data-positive); }
+.fill-negative { fill: var(--color-data-negative); }
+.fill-neutral { fill: var(--color-data-neutral); }
+
+/* Data ink default */
+.stroke-data { stroke: var(--color-data-1); }
+.fill-data { fill: var(--color-data-1); }

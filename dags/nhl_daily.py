@@ -24,7 +24,8 @@ def ingest_nhl_data(**context):
         get_game_landing, get_game_right_rail, get_standings_by_date,
         get_partner_odds, get_ppt_replay, derive_season_from_game_id,
     )
-    from ingestion.loaders import load_json_to_bigquery
+    from ingestion.loaders import load_json_to_bigquery, delete_rows_by_game_id
+    from ingestion.shift_report_parser import build_fallback_rows
 
     execution_date = context["execution_date"]
     project_id = os.getenv("GCP_PROJECT_ID")
@@ -145,6 +146,46 @@ def ingest_nhl_data(**context):
             season=season,
         )
         print(f"Loaded {len(shift_charts)} shift charts to {dataset_raw}.raw_shift_charts")
+
+    # HTML shift-report FALLBACK. The stats-REST shiftcharts feed returns an EMPTY
+    # array for many 2024-26 games; the JSON path above wrote empty rows for those.
+    # For any FINAL game whose JSON shift response was empty, recover the shifts from
+    # the NHL HTML TOI reports (home TH + visitor TV), resolve sweater# -> playerId
+    # from that game's in-memory play-by-play rosterSpots, and delete-then-insert the
+    # recovered row (idempotent per game_id). JSON stays PRIMARY; this fires ONLY when
+    # JSON is empty. Recovered elements carry "_source":"html_shift_report".
+    _FINAL_STATES = {"FINAL", "OFF"}
+    final_state_by_gid = {b["game_id"]: b.get("gameState") for b in boxscores}
+    pbp_by_gid = {p["game_id"]: p for p in play_by_plays}
+    empty_final_gids = [
+        sc["game_id"] for sc in shift_charts
+        if not sc["data"] and final_state_by_gid.get(sc["game_id"]) in _FINAL_STATES
+    ]
+    if empty_final_gids:
+        print(f"Shift fallback: {len(empty_final_gids)} FINAL game(s) with empty JSON "
+              f"shifts -> HTML reports: {empty_final_gids}")
+        try:
+            rows, warnings = build_fallback_rows(empty_final_gids, pbp_by_gid)
+            if warnings:
+                print(f"Shift fallback warnings ({len(warnings)}): {warnings[:10]}")
+            if rows:
+                recovered_gids = [r["game_id"] for r in rows]
+                # delete-then-insert per game_id (removes the empty JSON-path rows first)
+                delete_rows_by_game_id(project_id, dataset_raw, "raw_shift_charts", recovered_gids)
+                load_json_to_bigquery(
+                    project_id=project_id,
+                    dataset_id=dataset_raw,
+                    table_id="raw_shift_charts",
+                    data=rows,
+                    season=season,
+                )
+                total_shifts = sum(len(r["data"]) for r in rows)
+                print(f"Shift fallback: recovered {total_shifts} shifts across "
+                      f"{len(rows)} game(s) from HTML reports {recovered_gids}")
+            else:
+                print("Shift fallback: no rows recovered from HTML reports")
+        except Exception as e:
+            print(f"Shift fallback error (non-fatal; JSON rows retained): {e}")
 
     # ppt-replay goal tracking: enumerate each game's goal eventIds from the freshly
     # ingested pbp and fetch the sprite for each (real per-frame player/puck coords).
@@ -298,6 +339,58 @@ def refresh_weekly_aux(**context):
         print(f"Glossary already present ({n} terms); skipping.")
 
 
+def check_shift_coverage(**context):
+    """Monitor: FINAL games from the last 3 days that still have ZERO shift rows.
+
+    Runs after nightly ingestion (JSON path + HTML fallback). Counts recently-final
+    games whose latest raw_shift_charts row is still an empty array — i.e. games the
+    fallback could not recover (no HTML report, missing pbp roster, parse gap).
+
+    Failure surfacing: the DAG has no alert callback; its only mechanism is Airflow
+    task failure + `email_on_failure: True` in default_args (plus retries). So this
+    task LOGS a loud line and RAISES on any uncovered games, which marks the task
+    failed and emails via the existing mechanism. Zero uncovered games is a clean pass.
+    """
+    from google.cloud import bigquery
+
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_raw = os.getenv("GCP_DATASET_RAW", "nhl_raw")
+    execution_date = context["execution_date"]
+    as_of = execution_date.date().isoformat()
+
+    sql = f"""
+    with recent_final as (
+      select game_id from (
+        select game_id, gameState,
+          row_number() over (partition by game_id order by ingestion_date desc) as rn
+        from `{project_id}.{dataset_raw}.raw_boxscores`
+        where ingestion_date >= DATE_SUB(DATE('{as_of}'), INTERVAL 3 DAY)
+      ) where rn = 1 and gameState in ('FINAL', 'OFF')
+    ),
+    shift_latest as (
+      select game_id, array_length(json_extract_array(data)) as n_shifts from (
+        select game_id, data,
+          row_number() over (partition by game_id order by ingestion_date desc) as rn
+        from `{project_id}.{dataset_raw}.raw_shift_charts`
+      ) where rn = 1
+    )
+    select f.game_id
+    from recent_final f
+    left join shift_latest s using (game_id)
+    where coalesce(s.n_shifts, 0) = 0
+    order by f.game_id
+    """
+    client = bigquery.Client(project=project_id)
+    missing = [r["game_id"] for r in client.query(sql).result()]
+
+    if missing:
+        msg = (f"SHIFT COVERAGE ALERT: {len(missing)} FINAL game(s) in the last 3 days "
+               f"still have ZERO shift rows after JSON + HTML fallback: {missing}")
+        print(msg)
+        raise RuntimeError(msg)
+    print("Shift coverage OK: 0 recently-final games with empty shift rows.")
+
+
 def generate_daily_report(**context):
     """Generate HTML report from mart data and LLM summary.
 
@@ -406,6 +499,14 @@ with DAG(
     weekly_aux_task = PythonOperator(
         task_id="refresh_weekly_aux",
         python_callable=refresh_weekly_aux,
+        provide_context=True,
+    )
+
+    # Monitor: recently-final games still missing shift rows after JSON + HTML fallback.
+    # Raises (task-fail -> email_on_failure) if any remain; see check_shift_coverage docstring.
+    check_shift_coverage_task = PythonOperator(
+        task_id="check_shift_coverage",
+        python_callable=check_shift_coverage,
         provide_context=True,
     )
 
@@ -786,6 +887,10 @@ with DAG(
     # Live roster snapshot lands after raw ingestion and gates the dbt staging pass, so
     # stg_roster_current / int_player_current_team build off the fresh raw_rosters.
     ingest_task >> roster_refresh >> run_dbt_pre_xg
+
+    # Shift-coverage monitor runs right after ingestion (JSON + HTML fallback). It is a
+    # leaf so a shift gap surfaces (email_on_failure) without blocking the nightly report.
+    ingest_task >> check_shift_coverage_task
 
     # deserved standings + streak cards branch off ratings; style map off the marts; the
     # report waits on them all

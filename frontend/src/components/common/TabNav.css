@@ -1,50 +1,41 @@
+/* Sheet tabs (§00 6.5): plain text on a shared hairline baseline; active = blue underline. */
 .tab-nav {
   position: sticky;
-  top: 56px;
+  top: var(--nav-height);
   z-index: 40;
-  background: var(--color-bg-surface);
+  background: var(--color-bg-base);
   border-bottom: 1px solid var(--color-border);
-  height: 44px;
 }
 
 .tab-nav__tabs {
   position: relative;
   display: flex;
-  gap: var(--space-8);
-  padding: 0 var(--space-8);
-  height: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
+  gap: var(--space-5);
+  height: 40px;
 }
 
 .tab-nav__tab {
   background: none;
   border: none;
   padding: 0;
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 400;
+  letter-spacing: 0;
+  font-weight: 500;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: color 100ms ease;
+  transition: color var(--dur-fast) var(--ease-out);
   position: relative;
 }
 
-.tab-nav__tab:hover {
-  color: var(--color-text-primary);
-}
-
-.tab-nav__tab--active {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
+.tab-nav__tab:hover { color: var(--color-text-primary); }
+.tab-nav__tab--active { color: var(--color-text-primary); }
 
 .tab-nav__indicator {
   position: absolute;
   bottom: 0;
   left: 0;
   height: 2px;
-  background: var(--color-accent);
-  transition: transform 200ms ease, width 200ms ease;
+  background: var(--line-blue);
+  transition: transform var(--dur-med) var(--ease-out), width var(--dur-med) var(--ease-out);
 }

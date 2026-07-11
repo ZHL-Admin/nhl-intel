@@ -96,6 +96,15 @@ import so a WAR delta and the team rating share one goals scale.
    `no_track_record`: replacement level + a deliberately wide band (`NO_TRACK_RECORD_WAR_SD = 1.2`).
    Never a fabricated value.
 
+   **Effective position (display).** A forward's *listed* position is overridden with the position he
+   actually plays, from `nhl_models.player_effective_position` (faceoff volume — see
+   *Effective position* in `roster-builder.md`): J.T. Compher, listed LW, shows and lines up at C.
+   `load_effective_position` / `apply_effective_position` apply the override only for a concrete C/L/R
+   (an F_FLEX or a player with no faceoff evidence keeps his listed position — never a guess). Position
+   is **not** a value input, so this changes the displayed lineup, ledger positions, and line
+   composition, never the projected WAR, the ledger reconciliation, or the delta. PP units are out of
+   scope; the split logic is 5v5 deployment only.
+
 3. **Project each player forward one season (value).** Skater: regress toward the repeatable lens,
    then age. **Reliability shrink** — each `player_gar` component is shrunk toward its position mean
    by its MEASURED year-over-year reliability (`config.GAR_STABILITY_YOY`, referenced not re-derived:
@@ -113,13 +122,18 @@ import so a WAR delta and the team rating share one goals scale.
    never reads as confident.
 
 4. **Project the lineup at the slot level.** Not "all arrivals minus all departures" — a team ices a
-   fixed lineup (`N_FWD=12`, `N_DEF=6`, `N_GOALIE=1`). Take the best players by projected WAR per
-   position; any unfilled or vacated slot is filled at `REPLACEMENT_WAR` (0.0 — WAR is above
-   replacement by definition; the slot still EXISTS, a departure is never a free hole and never a
-   dropped slot). **Both** the base and updated lineups are built and summed by projected WAR, so a
-   returning player cancels (his aging shows in the per-player ledger, not twice in the team delta)
-   and a no-move roster nets to exactly zero. `net_delta_war = Σ updated slots − Σ base slots`, and
-   the per-player `delta_contribution` partitions it exactly (the consistency discipline, unit-tested).
+   fixed lineup (`N_FWD=12`, `N_DEF=6`, `N_GOALIE=1`). The lineup is built **deployment-aware** (the
+   same engine as the Roster Builder — see `roster-builder.md` → *Line seeding* + *Line assignment*):
+   observed base-season 5v5 units (`int_line_seasons`) are **seeded** among holdovers, then the
+   remaining slots are filled by the position-aware assignment over effective positions; any unfilled
+   or vacated slot is filled at `REPLACEMENT_WAR` (0.0 — WAR is above replacement by definition; the
+   slot still EXISTS, a departure is never a free hole and never a dropped slot). **Both** the base and
+   updated lineups are built the same way and summed by projected WAR, so a returning player cancels
+   (his aging shows in the per-player ledger, not twice in the team delta) and a no-move roster nets to
+   exactly zero. Both lineups use the SAME base-season units, so a departed player's unit dissolves in
+   the updated lineup (member-set check) — arrivals, who never played with the group, flow through the
+   assignment. `net_delta_war = Σ updated slots − Σ base slots`, and the per-player `delta_contribution`
+   partitions it exactly (the consistency discipline, unit-tested). Power-play units are out of scope.
 
 5. **Chemistry + style overlay.** For the projected top two forward trios and top defense pair,
    `score_line` gives each unit's projected xGF share; the updated-minus-base mean share delta becomes

@@ -10,10 +10,12 @@
 
 /* ---- reference key (the fully-labeled radar shown once atop the gallery) ----
    A subtle inset inside the page card — no card border/shadow of its own. */
+/* §18: the reference key gets this page's reserved --radius-rink frame. */
 .arch-key {
-  display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: var(--space-5);
-  padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5);
-  border-radius: var(--radius-lg);
+  display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: var(--space-6);
+  padding: var(--space-6); margin-bottom: var(--space-8);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-rink);
   background: var(--color-bg-elevated);
 }
 .arch-key__radar { display: flex; justify-content: center; }
@@ -26,17 +28,17 @@
 /* ---- gallery ---- */
 .arch-gallery { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-4); }
 
-/* gallery tiles — subtle insets inside the page card, not cards of their own */
+/* §18 specimen entries — editorial, not tiles: hairline top border, no background/shadow. */
 .arch-card {
   display: flex; flex-direction: column;
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-elevated); overflow: hidden;
-  transition: box-shadow 160ms ease, background 160ms ease;
+  border-top: 1px solid var(--color-border-subtle);
+  background: none; overflow: hidden;
 }
-.arch-card:hover { background: var(--color-bg-base); box-shadow: inset 0 0 0 1px var(--color-border); }
-.arch-card__main { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); background: none; text-align: left; cursor: pointer; }
+.arch-card:hover { background: none; box-shadow: none; }
+.arch-card:hover .arch-card__name { color: var(--line-blue); }
+.arch-card__main { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-2); background: none; text-align: left; cursor: pointer; }
 .arch-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.arch-card__name { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
+.arch-card__name { font-family: var(--font-display); font-size: var(--text-title); font-weight: 500; color: var(--color-text-primary); transition: color var(--dur-fast) var(--ease-out); }
 .arch-card__count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
 .arch-card__radar { display: flex; justify-content: center; }
 .arch-card__desc { font-size: var(--text-xs); color: var(--color-text-secondary); line-height: 1.5; margin: 0; }

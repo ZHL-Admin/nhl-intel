@@ -1,0 +1,64 @@
+.div-standings { display: flex; flex-direction: column; gap: var(--space-8); }
+.div-standings__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6) var(--space-8); }
+.div-standings__wildcards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6) var(--space-8); }
+
+.div-standings__table { display: flex; flex-direction: column; gap: var(--space-2); }
+.div-standings__rows { display: flex; flex-direction: column; }
+
+.div-standings__row {
+  display: grid;
+  grid-template-columns: 26px 22px 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+  text-decoration: none;
+  color: var(--color-text-primary);
+  position: relative;
+  transition: background 120ms ease;
+}
+.div-standings__row:first-child { border-top: none; }
+.div-standings__row:hover { background: var(--crease); }
+
+/* §05 signature: the playoff cut as a real blue threshold line, after the 3rd team,
+   labelled "playoff line" in an eyebrow at its right end. Blue literally marks who's in. */
+.div-standings__row.is-cut::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  border-top: 1px dashed var(--line-blue);
+}
+.div-standings__row.is-cut::before {
+  content: 'playoff line';
+  position: absolute;
+  right: 0; bottom: -8px;
+  z-index: 1;
+  padding: 0 4px;
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 550; font-stretch: 110%;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--line-blue);
+  background: var(--color-bg-base);
+}
+
+/* Division subheads as Newsreader title, no boxes (§05). */
+.div-standings .page-region-title {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-primary);
+}
+
+.div-standings__rank { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.div-standings__logo { width: 20px; height: 20px; object-fit: contain; }
+.div-standings__abbrev { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; }
+.div-standings__record { font-size: var(--text-xs); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.div-standings__pts { font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.div-standings__empty { padding: var(--space-8) 0; color: var(--color-text-muted); }
+
+@media (max-width: 767px) {
+  .div-standings__grid, .div-standings__wildcards { grid-template-columns: 1fr; }
+}

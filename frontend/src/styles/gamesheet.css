@@ -1,0 +1,74 @@
+/* =============================================================================
+   The Sheet v2 — Gamesheet: the site's workhorse table system (§6.4)
+   Hairlines, not row cards. Eyebrow header with a strong rule beneath; 44px rows (36px
+   dense); numerics right-aligned tabular; crease hover; selected row carries a 2px blue
+   left edge (crossing the blue line). No zebra striping.
+   ============================================================================= */
+
+.gamesheet {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.gamesheet thead th {
+  position: sticky;
+  top: var(--nav-height);
+  z-index: 1;
+  background: var(--color-bg-base);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-strong);
+  /* eyebrow style */
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.gamesheet tbody td {
+  height: 44px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+/* Numerics: right-aligned, tabular (add .num on th/td or use [data-num]) */
+.gamesheet .num,
+.gamesheet [data-num],
+.gamesheet td.num,
+.gamesheet th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Row states */
+.gamesheet tbody tr { transition: background var(--dur-fast) var(--ease-out); }
+.gamesheet tbody tr:hover { background: var(--crease); }
+.gamesheet__row--selected,
+.gamesheet tbody tr[aria-selected="true"] {
+  background: var(--crease);
+  box-shadow: inset 2px 0 0 0 var(--line-blue);   /* blue left edge */
+}
+
+/* Dense variant: 36px rows, Archivo wdth 92 at 13px */
+.gamesheet--dense { font-stretch: 92%; }
+.gamesheet--dense tbody td { height: 36px; }
+
+/* First-column pin on horizontal overflow (opt-in via .gamesheet--pin-first) */
+.gamesheet--pin-first tbody td:first-child,
+.gamesheet--pin-first thead th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-bg-surface);
+  z-index: 2;
+}
+.gamesheet--pin-first thead th:first-child { z-index: 3; }
+
+/* Rank movement: ▲ blue, ▼ red, tabular (§6.4) */
+.rank-move { font-variant-numeric: tabular-nums; font-size: var(--text-xs); }
+.rank-up { color: var(--line-blue); }
+.rank-down { color: var(--line-red); }
+.rank-flat { color: var(--color-text-muted); }

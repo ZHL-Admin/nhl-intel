@@ -239,6 +239,73 @@ def build_player_situation_toi(p: str) -> pd.DataFrame:
     return bq.query_df(sql)
 
 
+def build_player_effective_position(p: str) -> pd.DataFrame:
+    """One row per player: the position he ACTUALLY plays, from faceoff volume (not the listed feed).
+
+    The NHL roster feed lists a nominal position (J.T. Compher as LW) that is often not where a player
+    lines up. Faceoff volume is the cleanest C/W deployment signal — a center takes draws every shift,
+    a winger almost never. Over the last EFFECTIVE_POSITION['FO_WINDOW_SEASONS'] seasons (regular +
+    playoffs, GP-weighted), classify each forward by faceoffs-per-game into C / L / R / F_FLEX and mark
+    `locked` when the evidence is strong. Defensemen pass through unchanged (effective = listed, locked).
+    Skaters with no faceoff rows are simply ABSENT (the builder then falls back to the listed position).
+
+    Reads nhl_staging.stg_statsrest_faceoffs (season-level splits) + stg_player_bio (shoots, for the
+    listed-C winger side rule). Built in BigQuery compute mode, exported to DuckDB nightly.
+    """
+    ep = config.EFFECTIVE_POSITION
+    n_win = int(ep["FO_WINDOW_SEASONS"])
+    center, winger, min_gp = float(ep["FO_CENTER_PER_GP"]), float(ep["FO_WINGER_PER_GP"]), int(ep["FO_MIN_GP"])
+    sql = f"""
+    WITH win AS (  -- the last N seasons present in the faceoff source (GP-weighted window)
+        SELECT DISTINCT season_id FROM `{p}.nhl_staging.stg_statsrest_faceoffs`
+        ORDER BY season_id DESC LIMIT {n_win}
+    ),
+    agg AS (
+        SELECT f.player_id,
+               ANY_VALUE(f.player_name) AS player_name,
+               -- latest listed position across the window (regular season preferred within a season)
+               ARRAY_AGG(f.position_code ORDER BY f.season_id DESC, f.game_type ASC LIMIT 1)[OFFSET(0)]
+                   AS listed_position,
+               SUM(f.total_faceoffs) AS total_faceoffs,
+               SUM(f.games_played) AS gp_window
+        FROM `{p}.nhl_staging.stg_statsrest_faceoffs` f
+        JOIN win USING (season_id)
+        WHERE f.game_type IN (2, 3) AND f.player_id IS NOT NULL
+        GROUP BY f.player_id
+    ),
+    bio AS (SELECT player_id, shoots FROM `{p}.nhl_staging.stg_player_bio`),
+    c AS (
+        SELECT a.player_id, a.player_name, a.listed_position, a.gp_window,
+               SAFE_DIVIDE(a.total_faceoffs, NULLIF(a.gp_window, 0)) AS fo_per_gp,
+               b.shoots
+        FROM agg a LEFT JOIN bio b USING (player_id)
+    )
+    SELECT
+        player_id, player_name, listed_position, gp_window,
+        ROUND(fo_per_gp, 3) AS fo_per_gp,
+        CASE
+            WHEN listed_position = 'D' THEN 'D'
+            WHEN listed_position = 'G' THEN 'G'
+            WHEN gp_window >= {min_gp} AND fo_per_gp >= {center} THEN 'C'
+            WHEN gp_window >= {min_gp} AND fo_per_gp <= {winger} THEN
+                CASE WHEN listed_position IN ('L', 'R') THEN listed_position
+                     WHEN shoots = 'L' THEN 'L'
+                     WHEN shoots = 'R' THEN 'R'
+                     ELSE 'F_FLEX' END
+            ELSE 'F_FLEX'
+        END AS effective_position,
+        CASE
+            WHEN listed_position IN ('D', 'G') THEN TRUE
+            WHEN gp_window >= {min_gp} AND fo_per_gp >= {center} THEN TRUE
+            WHEN gp_window >= {min_gp} AND fo_per_gp <= {winger}
+                 AND (listed_position IN ('L', 'R') OR shoots IN ('L', 'R')) THEN TRUE
+            ELSE FALSE
+        END AS locked
+    FROM c
+    """
+    return bq.query_df(sql)
+
+
 def build_line_member_features(p: str) -> pd.DataFrame:
     """One row per (player_id, season) of line-fit model features for recent seasons."""
     seasons = _recent_seasons(p)
@@ -254,6 +321,7 @@ BUILDERS = {
     "team_current_lines": (build_team_current_lines, "nhl_models"),
     "serving_game_skater_box": (build_serving_game_skater_box, "nhl_models"),
     "player_situation_toi": (build_player_situation_toi, "nhl_models"),
+    "player_effective_position": (build_player_effective_position, "nhl_models"),
 }
 
 

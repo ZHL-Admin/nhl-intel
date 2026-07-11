@@ -14,11 +14,11 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Zap, RotateCcw, Share2, Check, Sparkles } from 'lucide-react'
-import { PageLayout, PageCard, Tabs, PlayerCard, PlayerExplorer, LineProjection, SkeletonLoader } from '../components/common'
-import { PlayerCardData } from '../components/common/PlayerCard'
+import { PageLayout, PageCard, Tabs, PlayerExplorer, LineProjection, SkeletonLoader } from '../components/common'
 import { lineFit, lineFitSuggestions } from '../api/tools'
 import { getPlayerHeadshotUrl, getTeamLogoUrl } from '../utils/teams'
 import { LineFitProjection, PlayerSearchResult, LineMemberOut, LineSuggestions, BetterFitSwap } from '../api/types'
+import { BRAND_NAME } from '../config/brand'
 import './LineupLab.css'
 
 type LineType = 'F3' | 'D2' | 'UNIT5'
@@ -67,9 +67,9 @@ const collectMembers = (proj: LineFitProjection): Record<number, LineMemberOut> 
 function ShareButton({ url, grade, xgf }: { url: string; grade: string; xgf: number }) {
   const [copied, setCopied] = useState(false)
   const onShare = async () => {
-    const text = `My projected line grades ${grade} — ${xgf}% expected-goals share. Build yours in NHL Intel’s Lineup Lab:`
+    const text = `My projected line grades ${grade} — ${xgf}% expected-goals share. Build yours in ${BRAND_NAME}’s Lineup Lab:`
     if (typeof navigator !== 'undefined' && (navigator as any).share) {
-      try { await (navigator as any).share({ title: 'NHL Intel · Lineup Lab', text, url }) } catch { /* dismissed */ }
+      try { await (navigator as any).share({ title: `${BRAND_NAME} · Lineup Lab`, text, url }) } catch { /* dismissed */ }
       return
     }
     try {
@@ -305,37 +305,49 @@ export default function LineupLab() {
   const fwdSlots = slots.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'F')
   const defSlots = slots.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'D')
 
-  const renderSlot = ({ s, i }: { s: Slot; i: number }) => (
-    <div key={i} className={`lab-slot-wrap${s.pos === 'C' ? ' lab-slot-wrap--center' : ''}`}>
-      <span className="lab-slot__pos" title={FULL[s.pos]}>{SHORT[s.pos]}</span>
-      <div
-        className={[
-          'lab-slot',
-          s.player ? 'lab-slot--filled' : 'lab-slot--empty',
-          armed === i ? 'lab-slot--armed' : '',
-        ].join(' ').trim()}
-        onClick={() => !s.player && armSlot(i)}
-        onDragOver={(e) => { e.preventDefault() }}
-        onDrop={(e) => { e.preventDefault(); onDropSlot(i) }}
-      >
-        {s.player ? (
-          <PlayerCard player={s.player as PlayerCardData} size="lg" onRemove={() => removeAt(i)} />
-        ) : (
-          <button className="lab-slot__placeholder" onClick={(e) => { e.stopPropagation(); armSlot(i) }}>
-            <span className="lab-slot__plus"><Plus size={20} /></span>
-            <span className="lab-slot__hint">{armed === i ? 'Pick a player →' : `Add ${FULL[s.pos].toLowerCase()}`}</span>
-          </button>
-        )}
+  const renderSlot = ({ s, i }: { s: Slot; i: number }) => {
+    const p = s.player
+    const head = p ? (p.headshot_url || (p.team_abbrev ? getPlayerHeadshotUrl(p.player_id, p.team_abbrev) : '')) : ''
+    const lastName = p ? (p.name ?? '').split(' ').slice(-1)[0] : ''
+    return (
+      <div key={i} className={`lab-slot-wrap${s.pos === 'C' ? ' lab-slot-wrap--center' : ''}`}>
+        <span className="lab-slot__pos" title={FULL[s.pos]}>{SHORT[s.pos]}</span>
+        <div
+          className={[
+            'lab-slot',
+            p ? 'lab-slot--filled' : 'lab-slot--empty',
+            armed === i ? 'lab-slot--armed' : '',
+          ].join(' ').trim()}
+          onClick={() => !p && armSlot(i)}
+          onDragOver={(e) => { e.preventDefault() }}
+          onDrop={(e) => { e.preventDefault(); onDropSlot(i) }}
+          title={p ? (p.name ?? '') : FULL[s.pos]}
+        >
+          {p ? (
+            <>
+              <img className="lab-slot__headshot" src={head} alt=""
+                onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+              <button className="lab-slot__remove" onClick={(e) => { e.stopPropagation(); removeAt(i) }} aria-label="Remove">×</button>
+            </>
+          ) : (
+            <button className="lab-slot__placeholder" onClick={(e) => { e.stopPropagation(); armSlot(i) }}
+              aria-label={armed === i ? 'Pick a player' : `Add ${FULL[s.pos]}`}>
+              <Plus size={18} />
+            </button>
+          )}
+        </div>
+        <span className="lab-slot__name">{lastName}</span>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <PageLayout>
       <div className="lab">
         <PageCard
-          title="Line chemistry"
-          subtitle="Project any combination’s expected results before it plays a shift."
+          eyebrow="Studio"
+          title="Lineup Lab"
+          subtitle="Place five skaters on the sheet and project the line before it takes a shift."
           controls={!showResult && !loading ? (
             <div className="lab__build-bar">
               <Tabs
@@ -378,7 +390,7 @@ export default function LineupLab() {
           <div className="lab__grid">
               {/* ---- build surface ---- */}
               <section className="lab__build">
-                <div className="lab-rink">
+                <div className={`lab-rink${slots.some((s) => s.player) ? '' : ' lab-rink--empty'}`}>
                   <div className="lab-rink__lines" aria-hidden="true" />
                   {fwdSlots.length > 0 && (
                     <div className="lab-rink__zone lab-rink__zone--off">
@@ -393,6 +405,10 @@ export default function LineupLab() {
                     </div>
                   )}
                 </div>
+
+                {!slots.some((s) => s.player) && (
+                  <p className="lab-rink__prompt">Fill five slots to project a line.</p>
+                )}
 
                 {error && <div className="lab__error">{error}</div>}
 

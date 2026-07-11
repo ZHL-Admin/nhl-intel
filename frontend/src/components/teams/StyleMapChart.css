@@ -1,5 +1,10 @@
+/* §05 signature: the league's postcard — a rink-cornered frame (the one --radius-rink use here). */
 .stylemap {
   width: 100%;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-rink);
+  padding: var(--space-6);
 }
 .stylemap__svg {
   width: 100%;
@@ -7,13 +12,16 @@
   display: block;
 }
 .stylemap__axis {
-  stroke: var(--color-border, rgba(127, 127, 127, 0.4));
+  stroke: var(--color-border);
   stroke-width: 1;
   stroke-dasharray: 4 4;
 }
+/* Axis end-labels in Newsreader italic (the editorial fingerprint on the graphic). */
 .stylemap__axis-label {
-  fill: var(--color-text-secondary, #888);
-  font-size: 11px;
+  fill: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
 }
 .stylemap__logo {
   cursor: pointer;

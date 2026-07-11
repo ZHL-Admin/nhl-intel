@@ -8,3 +8,5 @@ tenacity
 google-cloud-bigquery>=3.20
 google-generativeai
 google-cloud-storage
+beautifulsoup4
+lxml

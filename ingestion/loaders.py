@@ -164,6 +164,30 @@ def load_json_to_bigquery(
         )
 
 
+def delete_rows_by_game_id(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    game_ids: List[int],
+) -> int:
+    """Delete every row for the given game_ids from a raw table (idempotency helper).
+
+    Used by the shift-charts HTML fallback to implement delete-then-insert per
+    game_id (matching the historical-backfill convention): the empty JSON-path
+    rows for these games are removed first, then the recovered HTML rows are
+    appended, so a re-run converges to exactly one row per game_id.
+
+    Returns the number of game_ids targeted (no-op returns 0).
+    """
+    if not game_ids:
+        return 0
+    client = bigquery.Client(project=project_id)
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    ids = ",".join(str(int(g)) for g in game_ids)
+    client.query(f"DELETE FROM `{table_ref}` WHERE game_id IN ({ids})").result()
+    return len(game_ids)
+
+
 # Historical draft RESULTS — an EXPLICIT schema (not autodetect), because this table is the
 # evaluation universe for the Draft Value tool and the never-NHL=0 denominator must be exact.
 # Distinct from raw_draft_picks (future ownership). The source carries no player_id and no

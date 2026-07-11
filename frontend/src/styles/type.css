@@ -6,20 +6,26 @@
    ============================================================================= */
 
 :root {
-  /* --- Families: one per role --- */
-  --font-display: 'Source Serif 4 Variable', Georgia, 'Times New Roman', serif;
-  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
+  /* --- Families: one per role (v2 §3) --- */
+  --font-display: 'Newsreader Variable', Georgia, 'Times New Roman', serif;  /* editorial voice, opsz */
+  --font-sans: 'Archivo Variable', system-ui, -apple-system, sans-serif;     /* the machine, wdth 92/100/110 */
+  --font-mono: 'Spline Sans Mono', ui-monospace, monospace;                  /* micro-labels only */
 
-  /* --- Type scale (px sizes kept; 3xl/4xl reduced per §3.2) --- */
-  --text-xs: 11px;
+  /* --- v2 type scale (new names; §3). Old --text-* kept below during migration. --- */
+  --text-display-1: 44px;  /* Newsreader 500, lh 1.05, ls -0.01em — page/Sheet titles */
+  --text-display-2: 30px;  /* Newsreader 500, lh 1.1,  ls -0.005em */
+  --text-title:     21px;  /* Newsreader 500, lh 1.2 — section titles */
+  --text-eyebrow:   11px;  /* Archivo, uppercase, 0.08em, wdth 110, weight 550 */
+
+  /* --- Legacy type scale (kept so component CSS keeps working during migration) --- */
+  --text-xs: 11.5px;
   --text-sm: 13px;
   --text-base: 15px;
   --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
-  --text-3xl: 34px;   /* was 40 */
-  --text-4xl: 44px;   /* was 52 */
+  --text-xl: 21px;
+  --text-2xl: 30px;
+  --text-3xl: 34px;
+  --text-4xl: 44px;
 
   /* Line-height companions (previously referenced but undefined → normal) */
   --text-xs-height: 16px;
@@ -39,11 +45,33 @@
   /* --- Hero numerals (sans, tabular) --- */
   --stat-lg: 28px;      --stat-lg-height: 32px;
 
-  /* --- The overline: the ONE uppercase element (§3.3) --- */
+  /* --- The overline / eyebrow: the ONE uppercase element (§3.3, v2 §3) --- */
   --overline-size: 11px;
-  --overline-weight: 500;
+  --overline-weight: 550;
   --overline-spacing: 0.08em;
 }
 
 /* Every numeral, everywhere, is tabular (§3.2). */
 td, .num, [data-num] { font-variant-numeric: tabular-nums; }
+
+/* Eyebrow: uppercase Archivo, wdth 110, 0.08em tracking, weight 550 (v2 §3). */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+/* Dense-data width: Archivo wdth 92 for packed tables (v2 §3). */
+.u-dense { font-stretch: 92%; }
+
+/* Micro-mono: timestamps, data-as-of, model tags, clocks (v2 §3). */
+.u-mono-micro {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

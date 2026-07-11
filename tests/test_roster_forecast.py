@@ -96,6 +96,35 @@ def test_goalie_band_wider_than_skater_band():
     assert forecast_band(with_goalie_move, 1) > forecast_band(skater_move[:len(base)], 1)
 
 
+# ---------------------------------------------------------------- goalie tandem is workload-weighted
+def test_goalie_tandem_workload_weighted_not_summed():
+    starter = PlayerProj(200, "Starter", "G", "G", True, 2.0, 2.0, 1.2, False)
+    backup = PlayerProj(201, "Backup", "G", "G", True, 1.0, 1.0, 0.9, False)
+    slots, total = J.build_goalie_tandem([starter, backup], 2, "projected_war", [0.65, 0.35], CFG)
+    # Weighted, NOT summed: 0.65*2.0 + 0.35*1.0 = 1.65. A naive sum (3.0) would double-count goaltending.
+    assert abs(total - (0.65 * 2.0 + 0.35 * 1.0)) < 1e-9
+    assert [s.slot for s in slots] == ["G1", "G2"]              # best goalie is the starter
+    assert abs(slots[0].projected_war - 0.65 * 2.0) < 1e-9      # each scaled by his own share
+    assert abs(slots[1].projected_war - 0.35 * 1.0) < 1e-9
+
+
+def test_goalie_tandem_shares_renormalize_and_backfill_replacement():
+    lone = PlayerProj(200, "Starter", "G", "G", True, 2.0, 2.0, 1.2, False)
+    # One goalie on the roster -> the backup slot is replacement * its share; shares still sum to 1.
+    slots, total = J.build_goalie_tandem([lone], 2, "projected_war", [0.7, 0.3], CFG)
+    assert slots[1].replacement and slots[1].player_id is None
+    assert abs(total - (0.7 * 2.0 + 0.3 * CFG["REPLACEMENT_WAR"])) < 1e-9
+
+
+def test_goalie_tandem_does_not_mutate_source():
+    # forecast_team builds the lineup twice for teams with moves; the shared PlayerProj must be intact
+    # (in-place scaling would compound to share^2 on the second pass).
+    g = PlayerProj(200, "G", "G", "G", True, 2.0, 2.0, 1.2, False)
+    J.build_goalie_tandem([g], 2, "projected_war", [0.65, 0.35], CFG)
+    J.build_goalie_tandem([g], 2, "projected_war", [0.65, 0.35], CFG)
+    assert g.projected_war == 2.0 and g.base_war == 2.0
+
+
 # ---------------------------------------------------------------- multi-season blend (Tier 0)
 def test_blend_anchors_projection_to_track_record():
     # a player with a consistent ~0.2 WAR across three full seasons must project NEAR 0.2, not collapse
@@ -163,3 +192,121 @@ def test_no_rankings_endpoint_reads_forecast_tables():
         if "roster_forecast" in txt or "roster_moves" in txt:
             offenders.append(f.name)
     assert not offenders, f"/rankings must not read the forecast tables: {offenders}"
+
+
+# ============================================================================================
+# Position-aware assignment + deployment seeding (Phase 1 + Phase 2). Pure core over synthetic
+# PlayerProj + effpos/units, so the disciplines hold: effective position drives placement, the
+# off-position penalty shapes the ASSIGNMENT ONLY (never value), observed units are reproduced.
+# ============================================================================================
+
+def _fwd(i, war):
+    return PlayerProj(i, f"F{i}", "C", "F", False, war, war, 0.4, False)
+
+
+def _dman(i, war):
+    return PlayerProj(i, f"D{i}", "D", "D", False, war, war, 0.4, False)
+
+
+def _C(fo=15.0, locked=True):
+    return {"effective": "C", "locked": locked, "fo_per_gp": fo}
+
+
+def _W(side, locked=True):
+    return {"effective": side, "locked": locked, "fo_per_gp": 0.1}
+
+
+def _line_members(by_side, k):
+    return {by_side[s][k].player_id for s in ("L", "C", "R") if k < len(by_side[s])}
+
+
+def test_effective_position_override():
+    eff = {1: _C(13.0), 2: {"effective": "F_FLEX", "locked": False, "fo_per_gp": 3.0}}
+    assert J.effective_fwd_pos(1, "L", eff) == "C"        # listed LW, plays center
+    assert J.effective_fwd_pos(2, "R", eff) == "F_FLEX"
+    assert J.effective_fwd_pos(9, "L", eff) == "L"        # absent -> listed
+    assert J.apply_effective_position("L", 1, eff) == "C"
+    assert J.apply_effective_position("R", 2, eff) == "R"  # F_FLEX keeps listed
+    assert J.apply_effective_position("D", 1, eff) == "D"  # D passes through
+
+
+def test_fwd_slot_penalty_semantics():
+    cw, ws = CFG["OFF_POSITION_PENALTY_CW"], CFG["WING_SIDE_PENALTY"]
+    assert J.fwd_slot_penalty(("C", None, True), "C", CFG) == 0.0
+    assert J.fwd_slot_penalty(("C", None, True), "L", CFG) == cw     # locked C at wing
+    assert J.fwd_slot_penalty(("C", None, False), "L", CFG) == 0.0   # unlocked -> no C<->W cost
+    assert J.fwd_slot_penalty(("W", "L", True), "C", CFG) == cw      # locked W at C
+    assert J.fwd_slot_penalty(("W", "L", True), "R", CFG) == ws      # wrong side
+    assert J.fwd_slot_penalty(("W", "L", True), "L", CFG) == 0.0     # right side
+    assert J.fwd_slot_penalty(("FLEX", None, False), "C", CFG) == 0.0
+
+
+def test_center_sticks_at_c_and_overflows_to_wing():
+    eff = {i: _C() for i in range(1, 6)}                  # 5 locked centers, only 4 C slots
+    fwds = [_fwd(i, 3.0 - 0.1 * i) for i in range(1, 6)]  # p1 best .. p5 worst
+    by_side = J.assign_forward_sides(fwds, eff, CFG)
+    assert len(by_side["C"]) == 4
+    assert [p.player_id for p in by_side["L"] + by_side["R"]] == [5]  # weakest overflows
+
+
+def test_off_position_penalty_does_not_change_iced_value():
+    # 5 equal-value locked centers: 4 at C, 1 at wing; the iced total is the RAW WAR sum (no penalty).
+    eff = {i: _C() for i in range(1, 6)}
+    fwds = [_fwd(i, 2.0) for i in range(1, 6)]
+    by_side = J.assign_forward_sides(fwds, eff, CFG)
+    total = sum(p.projected_war for side in by_side.values() for p in side)
+    assert abs(total - 5 * 2.0) < 1e-9
+
+
+def test_assignment_is_deterministic():
+    eff = {i: _C() for i in (1, 2)} | {3: _W("L"), 4: _W("R")}
+    fwds = [_fwd(i, 2.0) for i in (1, 2, 3, 4)]           # all equal -> ties
+    a = J.assign_forward_sides(list(fwds), eff, CFG)
+    b = J.assign_forward_sides(list(reversed(fwds)), eff, CFG)
+    key = lambda bs: {s: [p.player_id for p in bs[s]] for s in bs}  # noqa: E731
+    assert key(a) == key(b)
+
+
+def test_seed_reproduces_trio_and_splits_stars():
+    # Two stars each anchor a distinct observed trio; a WAR-greedy build would stack them on line 1.
+    eff = {1: _C(15.0), 2: _C(16.0), 3: _W("L"), 4: _W("R"), 5: _W("L"), 6: _W("R")}
+    fwds = [_fwd(i, 2.0) for i in range(1, 7)]
+    units = [(frozenset({1, 3, 4}), 200.0), (frozenset({2, 5, 6}), 150.0)]
+    by_side = J.seed_and_assign_forwards(fwds, units, eff, {}, CFG)
+    lines = [_line_members(by_side, 0), _line_members(by_side, 1)]
+    assert {1, 3, 4} in lines and {2, 5, 6} in lines            # both trios reproduced intact
+    l1 = next(k for k in (0, 1) if 1 in _line_members(by_side, k))
+    l2 = next(k for k in (0, 1) if 2 in _line_members(by_side, k))
+    assert l1 != l2                                             # stars split across lines
+
+
+def test_seed_dissolves_when_a_member_is_absent():
+    # Trade a member away -> the unit's full-member-set check fails -> nobody is seeded from it.
+    eff = {1: _C(15.0), 3: _W("L")}
+    fwds = [_fwd(1, 2.0), _fwd(3, 2.0)]                         # member 4 is gone
+    units = [(frozenset({1, 3, 4}), 200.0)]
+    by_side = J.seed_and_assign_forwards(fwds, units, eff, {}, CFG)
+    # both flow through the assignment: the center to C, the winger to L
+    assert [p.player_id for p in by_side["C"]] == [1]
+    assert [p.player_id for p in by_side["L"]] == [3]
+
+
+def test_seed_below_floor_is_not_used():
+    # A below-floor unit of two centers + a winger. Seeded, it would force one center onto a wing (a
+    # single line); NOT seeded, the assignment keeps both centers at C (separate lines). Below the floor
+    # -> not seeded -> both centers stay at C.
+    eff = {1: _C(15.0), 2: _C(15.0), 3: _W("L")}
+    fwds = [_fwd(1, 3.0), _fwd(2, 2.0), _fwd(3, 1.0)]
+    thin = [(frozenset({1, 2, 3}), CFG["LINE_SEED_MIN_5V5_MINUTES"] - 1.0)]  # below the floor
+    by_side = J.seed_and_assign_forwards(fwds, thin, eff, {}, CFG)
+    assert [p.player_id for p in by_side["C"]] == [1, 2]        # both centers stay at C (not seeded)
+
+
+def test_seed_defense_pair_and_offside_flex_overflow():
+    hand = {1: "L", 2: "R", 3: "L", 4: "L", 5: "L", 6: "R"}     # four left-shots, only 3 LD slots
+    defs = [_dman(i, 1.0) for i in range(1, 7)]
+    units = [(frozenset({1, 2}), 150.0)]
+    by_side = J.seed_and_assign_defense(defs, units, hand, CFG, n_pairs=3)
+    assert by_side["L"][0].player_id == 1 and by_side["R"][0].player_id == 2  # seeded pair intact
+    iced = [p.player_id for p in by_side["L"] + by_side["R"]]
+    assert len(iced) == 6 and len(by_side["L"]) <= 3 and len(by_side["R"]) <= 3  # overflow flex-filled

@@ -5,63 +5,85 @@
    chrome — they use the .page-* helpers below (dividers, region titles,
    subtle insets). One page = one card.
    ========================================================================= */
+/* v2 (§00): the page is the Sheet, not a card — no border, bg, shadow, or radius.
+   The header→body divider becomes the site's one red rule. */
 .page-card {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--space-5);
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
-/* ---- header region (back · title + subtitle · controls) ---- */
+/* ---- header region (back · eyebrow · title · dek · controls) ---- */
 .page-card__back {
   display: inline-block;
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-2);
-  transition: color 140ms ease;
+  color: var(--line-blue);
+  margin-bottom: var(--space-3);
+  transition: color var(--dur-fast) var(--ease-out);
 }
-.page-card__back:hover { color: var(--color-text-primary); }
+.page-card__back:hover { color: var(--line-blue-hover); }
 
+/* Stack the header like the Sheet: eyebrow, then display title, then dek. */
 .page-card__row {
   display: flex;
-  flex-direction: row;
-  align-items: end;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-2);
 }
-/* §3.1: page H1 masthead — display serif (display-md 34/40, weight 600). */
+.page-card__eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
 .page-card__title {
   font-family: var(--font-display);
-  font-size: var(--display-md);
-  line-height: var(--display-md-height);
-  font-weight: 600;
+  font-size: var(--text-display-1);
+  line-height: 1.05;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--color-text-primary);
-  flex-shrink: 0;            /* keep the title intact; the subtitle takes the remaining width */
   margin: 0;
 }
 .page-card__sub {
-  flex: 1;                   /* sit beside the title — the subtitle's TEXT wraps within this column */
-  min-width: 0;
-  font-size: var(--text-sm);
+  max-width: 68ch;
+  font-size: var(--text-base);
   color: var(--color-text-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 .page-card__controls {
-  margin-top: var(--space-4);
+  margin-top: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
-/* ---- divider between header and body (and the reusable section divider) ---- */
-.page-card__divider,
+/* ---- the one red rule (header → body) ---- */
+.page-card__divider {
+  height: 1px;
+  background: var(--line-red);
+  border: none;
+  margin: var(--space-5) 0 var(--space-8);
+  transform-origin: left center;
+  animation: sheet-draw var(--dur-draw) var(--ease-out) 120ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-card__divider { animation: none; }
+}
+
+/* ---- reusable in-body section divider (subtle, grey — never red) ---- */
 .page-divider {
   height: 1px;
   background: var(--color-border-subtle);
   border: none;
-  margin: var(--space-5) 0;
+  margin: var(--space-8) 0;
 }
 
 /* =========================================================================
@@ -96,9 +118,7 @@
   gap: var(--space-4);
 }
 
-/* stack the title/subtitle on narrow screens so a long subtitle never crushes the title */
 @media (max-width: 640px) {
-  .page-card__row { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
-  .page-card__title { flex-shrink: 1; }
-  .page-card__sub { flex: none; }
+  .page-card__title { font-size: var(--text-display-2); }
+  .page-card__divider { margin: var(--space-4) 0 var(--space-6); }
 }

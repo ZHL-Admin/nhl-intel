@@ -68,63 +68,61 @@ def _membership_open(bq, season: str) -> dict:
     return out
 
 
-# Position-aware icing, IDENTICAL to backend/services/tools._ice_from_pool: forwards fill their
-# natural C/L/R column (<=4 each), defensemen their handedness side (<=3 each), surplus / short
-# positions flex-fill the rest. This is what the live tool actually ices, so LEAGUE_AVG_LINEUP_WAR
-# must be calibrated on THIS basis (a pure top-by-WAR lineup overstates it — you cannot ice 7 centers).
-FWD_CAP = {"L": 4, "C": 4, "R": 4}
-DEF_CAP = {"L": 3, "R": 3}
+# Deployment-aware icing, IDENTICAL to backend/services/tools._ice_from_pool via the SHARED engine
+# (project_roster_forecast.seed_and_assign_forwards / seed_and_assign_defense): seed observed 5v5 units,
+# then seat the rest by the soft-penalty assignment over EFFECTIVE positions (forwards) / handedness
+# (defense, <=3 per side, off-side flex-fill). This is what the live tool actually ices, so
+# LEAGUE_AVG_LINEUP_WAR must be calibrated on THIS basis (a pure top-by-WAR lineup overstates it).
 
 
 def _handedness(bq) -> dict:
     out = {}
-    for _, r in bq.query_df("select player_id, shoots from stg_player_bio where shoots is not null").iterrows():
+    for _, r in bq.query_df(f"select player_id, shoots from {bq.staging('stg_player_bio')} where shoots is not null").iterrows():
         out[int(r.player_id)] = str(r.shoots)
     return out
 
 
-def _iced_total(players, hand) -> float:
-    """Sum of projected WAR over the position-valid iced 12F/6D/1G (unfilled slots = 0)."""
+def _iced_total(players, hand, effpos, tunits) -> float:
+    """Sum of projected WAR over the position-valid iced 12F/6D/1G (unfilled slots = 0). Forwards AND
+    defensemen are iced by the SAME shared seed+assign the live tool uses (seed observed 5v5 units, then
+    the position-aware assignment), so LEAGUE_AVG_LINEUP_WAR matches what absolute_rating actually sums.
+    tunits = {'F3':[...], 'D2':[...]} observed units for this team (None -> pure Phase-1 assignment)."""
     war = lambda p: p.projected_war  # noqa: E731
-    fwd_by = {"L": [], "C": [], "R": []}
-    for p in sorted((p for p in players if p.pos_group == "F"), key=war, reverse=True):
-        fwd_by[p.position if p.position in ("L", "C", "R") else "C"].append(p)
-    iced, leftover = [], []
-    for pos, cap in FWD_CAP.items():
-        iced += fwd_by[pos][:cap]; leftover += fwd_by[pos][cap:]
-    iced += sorted(leftover, key=war, reverse=True)[:max(0, 12 - len(iced))]
+    units = tunits or {}
+    fbs = J.seed_and_assign_forwards([p for p in players if p.pos_group == "F"],
+                                     units.get("F3", []), effpos, hand, CFG)
+    iced = [p for side in fbs.values() for p in side]   # the iced forwards (<= 12)
 
-    def_by = {"L": [], "R": []}
-    for p in sorted((p for p in players if p.pos_group == "D"), key=war, reverse=True):
-        s = hand.get(p.player_id)
-        if s in ("L", "R"):
-            def_by[s].append(p)
-        else:
-            def_by["L" if len(def_by["L"]) <= len(def_by["R"]) else "R"].append(p)
-    iced_d, left_d = [], []
-    for side, cap in DEF_CAP.items():
-        iced_d += def_by[side][:cap]; left_d += def_by[side][cap:]
-    iced_d += sorted(left_d, key=war, reverse=True)[:max(0, 6 - len(iced_d))]
+    dbs = J.seed_and_assign_defense([p for p in players if p.pos_group == "D"],
+                                    units.get("D2", []), hand, CFG, n_pairs=3)
+    iced_d = dbs["L"] + dbs["R"]   # shared engine already caps at 3/side + flex-fills overflow (<= 6)
 
-    g = sorted((p for p in players if p.pos_group == "G"), key=war, reverse=True)[:1]
-    return float(sum(war(p) for p in iced + iced_d + g))
+    # Goalie: the SERVING lineup (project_roster_forecast._full_lineup) ices a workload-weighted TANDEM
+    # (WAR is a per-82 rate, so summing two goalies double-counts). Weight identically here — with the
+    # league-default split — so this calibration constant matches what absolute_rating actually sums.
+    goalies = sorted((p for p in players if p.pos_group == "G"), key=war, reverse=True)
+    _gs, gt = J.build_goalie_tandem(goalies, CFG["N_GOALIE"], "projected_war", None, CFG)
+    return float(sum(war(p) for p in iced + iced_d) + gt)
 
 
-def _team_total_wars(bq, base_season: str, target_season: str, hand: dict) -> dict:
+def _team_total_wars(bq, base_season: str, target_season: str, hand: dict, effpos: dict) -> dict:
     """team_id -> total projected iced-lineup WAR for the target season's opening roster, built with
-    the EXACT engine + POSITION-AWARE icing the live endpoint uses (value windows keyed to base_season)."""
+    the EXACT engine + POSITION-AWARE icing the live endpoint uses (value windows keyed to base_season).
+    Players keep their LISTED position on the PlayerProj (as _ice_from_pool does); effpos drives the
+    forward assignment, so this matches the tool regardless of the display override."""
     skater_data = J.load_skater_war_multi(bq, base_season, N_BACK)
     goalie_data = J.load_goalie_war_multi(bq, base_season, N_BACK)
     archetypes = J.load_archetypes(bq, base_season)
     aging = J.load_aging(bq)
     ages = J.load_ages(bq, base_season)
     mem = _membership_open(bq, target_season)
+    seed_units = J.load_seed_units(bq, base_season)   # base-season observed units, matching the tool
 
     out = {}
     for tid in mem:
         players = J._projected_players(tid, mem, skater_data, goalie_data, aging, ages,
                                        archetypes, project_value=True)
-        out[int(tid)] = _iced_total(players, hand)
+        out[int(tid)] = _iced_total(players, hand, effpos, seed_units.get(int(tid)))
     return out
 
 
@@ -145,7 +143,7 @@ def _actual_points(bq, season: str) -> dict:
                                               and s.standings_date = mx.d
     """)
     amap = {str(r.team_abbrev): int(r.team_id) for _, r in
-            bq.query_df("select distinct team_id, team_abbrev from dim_current_roster").iterrows()}
+            bq.query_df(f"select distinct team_id, team_abbrev from {bq.models('dim_current_roster')}").iterrows()}
     return {amap[str(r.team_abbrev)]: float(r.points) for _, r in df.iterrows()
             if str(r.team_abbrev) in amap}
 
@@ -155,9 +153,10 @@ def main() -> None:
     from models_ml import bq
 
     hand = _handedness(bq)
+    effpos = J.load_effective_position(bq)   # forward effective-position map driving the assignment
     rows = []  # (season, team_id, total_war, measured_rating, actual_points)
     for base, target in TRANSITIONS:
-        totals = _team_total_wars(bq, base, target, hand)
+        totals = _team_total_wars(bq, base, target, hand, effpos)
         measured = {t: r["rating"] for t, r in J.load_team_ratings(bq, target).items()}
         points = _actual_points(bq, target)
         for tid, tw in totals.items():

@@ -1,8 +1,13 @@
 -- One row per player on a team's CURRENT live roster (membership feed; NOT game-derived).
 -- Source: nhl_raw.raw_rosters — forwards/defensemen/goalies stored as serialized JSON strings,
--- one row per (team_abbrev, ingestion_date). Daily snapshot appends stack, so we keep only the
--- NEWEST ingestion per player: a trade between runs resolves to the latest snapshot, and a player
--- can never resolve to two teams. team_id is resolved from team_abbrev via the canonical map.
+-- one row per (team_abbrev, ingestion_date). Daily snapshot appends stack.
+--
+-- A team's CURRENT roster is its MOST RECENT snapshot. We scope to each team's latest ingestion
+-- BEFORE ranking, which is what makes DEPARTURES visible: a player dropped from a club simply stops
+-- appearing in its snapshots — he generates no "removal" row — so newest-ingestion-PER-PLAYER ranking
+-- would pin him to his last snapshot on that team forever (a released UFA would look rostered all
+-- offseason). Keeping only rows from each team's latest snapshot turns that absence into a real
+-- removal. team_id is resolved from team_abbrev via the canonical map.
 --
 -- TRADE-DAY TIE-BREAK: mid-trade, BOTH clubs may list a player on the SAME ingestion day (the
 -- acquiring team has added him before the former team has dropped him). ingestion_date then ties, so
@@ -48,34 +53,57 @@ parsed as (
     from players
 ),
 
+-- Each team's CURRENT roster = its most recent snapshot. Scoping here (before per-player ranking)
+-- is what lets a dropped player fall off: if he is absent from his team's latest snapshot he is gone,
+-- even though no row ever says so explicitly.
+team_latest as (
+    select team_abbrev, max(ingestion_date) as latest_ingestion
+    from parsed group by team_abbrev
+),
+
+current_snapshots as (
+    select p.*
+    from parsed p
+    join team_latest tl
+      on p.team_abbrev = tl.team_abbrev and p.ingestion_date = tl.latest_ingestion
+),
+
 -- When each player FIRST appeared on each team, to break a same-day two-team tie toward the acquirer.
 joined as (
     select player_id, team_abbrev, min(ingestion_date) as team_joined_date
     from parsed group by player_id, team_abbrev
 ),
 
--- Newest snapshot per player wins; a same-day tie resolves to the team he most recently joined.
+-- Within the set of current-snapshot rows, a player can still sit on TWO teams mid-trade (both clubs'
+-- latest snapshots list him). Keep the acquiring team: newest snapshot, then most-recently-joined.
 ranked as (
     select p.*,
         row_number() over (
             partition by p.player_id
             order by p.ingestion_date desc, j.team_joined_date desc, p.team_abbrev
         ) as rn
-    from parsed p
+    from current_snapshots p
     join joined j using (player_id, team_abbrev)
 ),
 
--- Canonical team_abbrev -> team_id map (abbrev is unique per current franchise). Sourced from
--- stg_games (a STAGING model) rather than a mart, so this staging model has no mart dependency.
+-- Canonical team_abbrev -> team_id map, sourced from stg_games (a STAGING model, so no mart dependency).
+-- A single franchise can carry MORE THAN ONE team_id over time under the SAME abbrev — e.g. Utah:
+-- id 59 ("Utah Hockey Club", 2024-25) then id 68 ("Utah Mammoth", 2025-26). The live roster MUST resolve
+-- to the CURRENT id or it won't line up with the base roster / team_ratings / forecast (all keyed to the
+-- latest id), which would make an entire returning roster read as departed. So we take each abbrev's id
+-- from its MOST RECENT game (any_value here was non-deterministic and could pin the stale id).
 team_map as (
-    select team_abbrev, any_value(team_id) as team_id
-    from (
-        select home_team_id as team_id, home_team_abbrev as team_abbrev from {{ ref('stg_games') }}
-        union all
-        select away_team_id as team_id, away_team_abbrev as team_abbrev from {{ ref('stg_games') }}
+    select team_abbrev, team_id from (
+        select team_abbrev, team_id,
+               row_number() over (partition by team_abbrev order by game_id desc) as rn
+        from (
+            select home_team_id as team_id, home_team_abbrev as team_abbrev, game_id from {{ ref('stg_games') }}
+            union all
+            select away_team_id as team_id, away_team_abbrev as team_abbrev, game_id from {{ ref('stg_games') }}
+        )
+        where team_abbrev is not null and team_id is not null
     )
-    where team_abbrev is not null and team_id is not null
-    group by team_abbrev
+    where rn = 1
 ),
 
 final as (

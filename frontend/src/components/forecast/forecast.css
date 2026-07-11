@@ -1,8 +1,8 @@
 /* Offseason Forecast feature styles. Everything is token-driven, so both themes work.
-   Status colors: success = good, danger = bad (NOT the DESIGN diverging chart palette). */
+   §10 data law: improvement = blue (--color-data-positive), decline = red (--color-data-negative). */
 
-.off .is-up { color: var(--color-success); }
-.off .is-down { color: var(--color-danger); }
+.off .is-up { color: var(--color-data-positive); }
+.off .is-down { color: var(--color-data-negative); }
 .off .is-flat { color: var(--color-text-muted); }
 
 /* --- de-carded section header (editorial number) --- */
@@ -23,7 +23,7 @@
 .fhero__sub { font-size: var(--text-xs); color: var(--color-text-secondary); margin-top: var(--space-1); }
 /* the demoted underlying rating, shown beneath the projected-points headline */
 .fhero__sub--quiet { color: var(--color-text-muted); }
-.fhero__change.is-up { color: var(--color-success); }
+.fhero__change.is-up { color: var(--color-data-positive); }
 .fhero__change.is-down { color: var(--color-danger); }
 .fhero__change.is-flat { color: var(--color-text-muted); }
 
@@ -44,59 +44,68 @@
 .lrail__rating { font-size: var(--text-sm); color: var(--color-text-primary); }
 .lrail__delta { font-size: 9px; }
 
-/* --- 4.3 move ledger --- */
-.mledger__cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); }
-.mledger__coltag { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: var(--space-2); margin-bottom: var(--space-2); border-bottom: 1px solid var(--color-border-subtle); }
+/* --- 4.3 move ledger — one dense line per move (avatar · name · pos · band · value) --- */
+.mledger__cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); align-items: start; }
+.mledger__coltag { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: var(--space-2); margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-border-subtle); }
 .mledger__coltag--out { color: var(--color-danger); }
 .mledger__coltag--in { color: var(--color-success); }
-.mledger__none { font-size: var(--text-sm); color: var(--color-text-muted); }
-.mrow { display: grid; grid-template-columns: 28px 1fr auto auto; grid-template-areas: "av name pos war" "band band band band" "fit fit fit fit"; align-items: center; gap: 2px var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border-subtle); }
+.mledger__none { font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-2) 0; }
+.mrow { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 108px 52px; align-items: center; gap: var(--space-2); height: 38px; border-bottom: 1px solid var(--color-border-subtle); }
 .mrow:last-child { border-bottom: none; }
-.mrow__av { grid-area: av; width: 26px; height: 26px; border-radius: 50%; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-.mrow__name { grid-area: name; font-size: var(--text-sm); font-weight: 500; color: var(--color-text-primary); }
-.mrow__pos { grid-area: pos; font-size: var(--text-xs); color: var(--color-text-muted); }
-.mrow__war { grid-area: war; text-align: right; font-size: var(--text-sm); font-weight: 600; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
-.mrow__warlabel { font-size: 9px; color: var(--color-text-muted); font-weight: 400; }
-.mrow__band { grid-area: band; display: flex; align-items: center; gap: var(--space-2); margin-top: 4px; }
-.mrow__bandtext { font-size: 10px; color: var(--color-text-muted); white-space: nowrap; }
-.mrow__fit { grid-area: fit; margin: 6px 0 0; font-size: var(--text-xs); color: var(--color-text-secondary); border-left: 2px solid var(--color-team-primary); padding-left: var(--space-2); }
-.mledger__net { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.mrow__av { width: 22px; height: 22px; border-radius: 50%; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.mrow__name { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow__pos { font-size: 10px; color: var(--color-text-muted); border: 1px solid var(--color-border-subtle); border-radius: 3px; padding: 0 4px; }
+.mrow__band { display: flex; align-items: center; cursor: help; }
+.mrow__war { text-align: right; font-size: var(--text-sm); font-weight: 600; cursor: help; }
+.mledger__net { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .mledger__net-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); margin-right: auto; }
 .mledger__net-val, .mledger__net-goals { font-size: var(--text-sm); font-weight: 600; }
 
-/* --- 4.4 component diverging bars --- */
-.cbars__list { display: flex; flex-direction: column; gap: var(--space-4); max-width: 680px; }
-.cbar { display: grid; grid-template-columns: 130px 1fr 64px; align-items: center; gap: var(--space-4); }
+/* --- 4.4 component diverging bars — compact rows on a shared axis (rendered once, below) --- */
+.cbars__list { display: flex; flex-direction: column; gap: 0; max-width: 620px; }
+.cbar { display: grid; grid-template-columns: 116px 1fr 56px; align-items: center; gap: var(--space-3); height: 28px; }
 .cbar__label { font-size: var(--text-sm); color: var(--color-text-secondary); cursor: help; }
-.cbar__track { position: relative; height: 18px; background: var(--color-bg-elevated); border-radius: var(--radius-sm); }
+.cbar__track { position: relative; height: 14px; background: var(--color-bg-elevated); border-radius: var(--radius-sm); }
 .cbar__zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--color-border-strong); }
-.cbar__fill { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; }
-.cbar__fill.is-up { background: color-mix(in srgb, var(--color-success) 70%, transparent); }
-.cbar__fill.is-down { background: color-mix(in srgb, var(--color-danger) 70%, transparent); }
+.cbar__fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; }
+.cbar__fill.is-up { background: var(--color-data-positive); }
+.cbar__fill.is-down { background: var(--color-data-negative); }
 .cbar__val { font-size: var(--text-sm); text-align: right; font-weight: 600; }
+.cbar--axis { height: auto; margin-top: 2px; }
 .cbar--axis .cbar__axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono); }
 
-/* --- 4.5 projected lineup --- */
-.plineup__group { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-6); }
+/* --- 4.5 projected lineup — a depth chart (rows = lines/pairs, columns = LW/C/RW · LD/RD) --- */
+.plineup__group { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
 .plineup__gtitle { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); }
-.plineup__grid { display: grid; gap: var(--space-3); }
-.plineup__grid--fwd { grid-template-columns: repeat(4, 1fr); }
-.plineup__grid--def { grid-template-columns: repeat(3, 1fr); }
-.plineup__grid--goalie { grid-template-columns: repeat(2, 1fr); max-width: 560px; }
-/* inset panel (the section is the card; these are sub-units, not nested cards) */
-.lcard { background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); padding: var(--space-3); }
-.lcard__head { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
-.lslot { padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
-.lslot:last-child { border-bottom: none; }
-.lslot--empty { color: var(--color-text-muted); font-size: var(--text-sm); font-style: italic; }
-.lslot__avatar { display: flex; justify-content: center; margin-bottom: 4px; }
-.lslot__top { display: flex; align-items: center; gap: var(--space-2); }
-.lslot__pos { font-size: 10px; color: var(--color-text-muted); border: 1px solid var(--color-border-subtle); border-radius: 3px; padding: 0 4px; }
-.lslot__name { font-size: var(--text-sm); color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lslot__in { font-size: 9px; font-weight: 700; color: var(--color-success); border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent); border-radius: 3px; padding: 0 4px; }
-.lslot__val { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); }
-.lslot__band { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
-.lslot__sd { font-size: 10px; color: var(--color-text-muted); white-space: nowrap; }
+.dc { display: flex; flex-direction: column; gap: var(--space-1); }
+.dc__head, .dc__row { display: grid; gap: var(--space-2); align-items: stretch; }
+.dc--fwd .dc__head, .dc--fwd .dc__row { grid-template-columns: 52px repeat(3, minmax(0, 1fr)) 34px; }
+.dc--def .dc__head, .dc--def .dc__row { grid-template-columns: 52px repeat(2, minmax(0, 1fr)) 34px; max-width: 720px; }
+.dc--goalie .dc__row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: var(--space-2); align-items: stretch; max-width: 420px; }
+.dc__head { margin-bottom: 2px; }
+.dc__colhead { font-size: 10px; letter-spacing: 0.04em; color: var(--color-text-muted); text-align: center; }
+.dc__rowlabel { font-size: var(--text-xs); color: var(--color-text-muted); align-self: center; }
+.dc__fithead, .dc__fit { align-self: center; justify-self: center; }
+/* one slot = a subtle inset (the section is the card; slots are sub-units, not nested cards) */
+.dcslot { display: flex; flex-direction: column; gap: 3px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); padding: 6px var(--space-2); min-width: 0; }
+.dcslot--empty { justify-content: center; gap: 6px; border-style: dashed; }
+.dcslot__ph { font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; }
+.dcslot__id { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.dcslot__name { flex: 1; min-width: 0; font-size: var(--text-sm); font-weight: 500; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.dcslot__in { font-size: 8px; font-weight: 700; color: var(--color-success); border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent); border-radius: 3px; padding: 0 3px; flex-shrink: 0; }
+/* muted second row — the last-season context (position · age · GP · G-A-P), full slot width */
+.dcslot__meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dcslot__pos { border: 1px solid var(--color-border-subtle); border-radius: 3px; padding: 0 3px; flex-shrink: 0; }
+.dcslot__count { overflow: hidden; text-overflow: ellipsis; }
+.dcslot__war { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); flex-shrink: 0; }
+/* line-fit letter badge */
+.dc__fit { font-size: var(--text-xs); font-weight: 700; width: 22px; height: 22px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; }
+.dc__fit--none { background: none; }
+.dc__fit--a { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 14%, transparent); }
+.dc__fit--b { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 9%, transparent); }
+.dc__fit--c { color: var(--color-text-secondary); background: var(--color-bg-elevated); }
+.dc__fit--d { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
+.dc__fit--f { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
 
 /* --- 4.7 league table --- */
 .oltable { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; }
@@ -123,13 +132,14 @@
 .oltable__name { color: var(--color-text-secondary); }
 .oltable__quiet { font-size: 9px; text-transform: uppercase; color: var(--color-text-muted); border: 1px solid var(--color-border-subtle); border-radius: 3px; padding: 0 3px; }
 .oltable__move { width: 80px; font-weight: 600; }
-.oltable__move--up { color: var(--color-success); }
-.oltable__move--down { color: var(--color-danger); }
+.oltable__move--up { color: var(--color-data-positive); }
+.oltable__move--down { color: var(--color-data-negative); }
 .oltable__move--flat { color: var(--color-text-muted); }
-.oltable__pill { font-size: var(--text-xs); font-weight: 600; padding: 2px 8px; border-radius: 999px; }
-.oltable__pill--contender { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 14%, transparent); }
-.oltable__pill--middle { color: var(--color-text-secondary); background: var(--color-bg-elevated); }
-.oltable__pill--rebuild { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
+/* de-pilled tier tags (§10 remove list) */
+.oltable__pill { font-family: var(--font-sans); font-size: var(--text-eyebrow); font-weight: 550; font-stretch: 110%; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 0; }
+.oltable__pill--contender { color: var(--color-data-positive); }
+.oltable__pill--middle { color: var(--color-text-muted); }
+.oltable__pill--rebuild { color: var(--boards-yellow); }
 
 /* --- quiet state --- */
 .qstate { display: flex; gap: var(--space-4); align-items: flex-start; background: var(--color-bg-elevated); border-radius: var(--radius-md); padding: var(--space-4); }
@@ -142,10 +152,86 @@
   .fhero { grid-template-columns: 1fr 1fr; row-gap: var(--space-5); }
   .fhero__cell { border-left: none; align-items: flex-start; text-align: left; padding: 0; }
   .mledger__cols { grid-template-columns: 1fr; gap: var(--space-4); }
-  .plineup__grid--fwd, .plineup__grid--def { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 640px) {
   .fhero { grid-template-columns: 1fr; }
-  .plineup__grid--fwd, .plineup__grid--def, .plineup__grid--goalie { grid-template-columns: 1fr; }
   .oltable__moves, .oltable__tier { display: none; }
+  /* depth chart -> stacked slots: hide the column-header row, drop each row to a labelled block of
+     full-width slots (no space-around regression — slots are just stacked). */
+  .dc__head { display: none; }
+  .dc--fwd .dc__row, .dc--def .dc__row, .dc--goalie .dc__row { grid-template-columns: 1fr; gap: var(--space-1); }
+  .dc__rowlabel { justify-self: start; padding-top: var(--space-1); }
+  .dc__fit { justify-self: start; }
+}
+
+/* ============================================================================
+   §S2 — Offseason center-zero diverging board (league view)
+   ============================================================================ */
+.olb { display: flex; flex-direction: column; gap: var(--space-3); }
+.olb__rows { display: flex; flex-direction: column; }
+.olb__row {
+  display: grid;
+  grid-template-columns: 28px 20px minmax(110px, 190px) minmax(160px, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-3);
+  height: 34px;
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.olb__row:hover { background: var(--crease); }
+.olb__rank { font-size: var(--text-xs); color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.olb__logo { width: 20px; height: 20px; object-fit: contain; }
+.olb__name { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The track carries the shared zero line (center) — contiguous rows read as one line. */
+.olb__track { position: relative; height: 100%; }
+.olb__track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+}
+.olb__fill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius: var(--radius-full);
+}
+.olb__fill.is-up { background: var(--color-data-positive); }
+.olb__fill.is-down { background: var(--color-data-negative); }
+.olb__dash {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0;
+  border-top: 2px dashed;
+}
+.olb__dash.is-up { border-color: var(--color-data-positive); }
+.olb__dash.is-down { border-color: var(--color-data-negative); }
+.olb__val { font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+.olb__val.is-up { color: var(--color-data-positive); }
+.olb__val.is-down { color: var(--color-data-negative); }
+
+.olb__legend {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .olb__row { grid-template-columns: 24px 18px minmax(80px, 1fr) minmax(120px, 1.4fr) 46px; gap: var(--space-2); }
 }

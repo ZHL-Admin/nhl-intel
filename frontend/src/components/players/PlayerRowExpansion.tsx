@@ -7,8 +7,10 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, GitCompare } from 'lucide-react'
 // (headshot/logo helpers now live in the shared PlayerAvatar)
+import EntityPicker from '../common/EntityPicker'
+import type { PlayerSearchResult } from '../../api/types'
 import SkillRadar from '../visualizations/SkillRadar'
 import { familyRadar } from '../../utils/radar'
 import OverallSummary from '../common/OverallSummary'
@@ -82,6 +84,9 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
   const navigate = useNavigate()
   const [payload, setPayload] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const goCompare = (b: PlayerSearchResult) =>
+    navigate(`/players/compare?a=${target.id}&b=${b.player_id}`)
   const cacheKey = `${target.entityKind}:${target.id}:${season}`
   const mounted = useRef(true)
 
@@ -207,10 +212,17 @@ export default function PlayerRowExpansion({ target, season }: { target: Expansi
           {stats.length > 0 ? <StatTable stats={stats} /> : <p className="pxe__empty">No stats this season.</p>}
         </div>
 
-        <button className="pxe__profile" onClick={goProfile}>
-          View full profile <ArrowRight size={15} />
-        </button>
+        <div className="pxe__actions">
+          <button className="pxe__profile" onClick={goProfile}>
+            View full profile <ArrowRight size={15} />
+          </button>
+          <button className="pxe__compare" onClick={() => setPickerOpen(true)}>
+            <GitCompare size={15} /> Compare with…
+          </button>
+        </div>
       </div>
+      <EntityPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={goCompare}
+        title={`Compare ${target.name ?? 'player'} with…`} season={season} />
 
       {/* RIGHT — the value-vs-impact verdict, then the large radar (legend + caption beneath it) */}
       <div className="pxe__right">

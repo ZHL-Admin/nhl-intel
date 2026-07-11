@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getGameXGWorm, getGamePressure, getGameGoals, getGameWinProb } from '../../api/games'
 import { XGWormPoint, PressurePoint, GoalDetail, WinProbPoint } from '../../api/types'
+import GoalPopup, { type GoalInfo, buildGoalInfoMap } from '../games/GoalPopup'
 import './GameTimelineStack.css'
 
 interface Props {
@@ -42,6 +43,8 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
   const [goals, setGoals] = useState<GoalDetail[]>([])
   const [wpSeries, setWpSeries] = useState<WinProbPoint[]>([])
   const [hoverT, setHoverT] = useState<number | null>(null)
+  const [popup, setPopup] = useState<{ goal: GoalInfo; anchor: { x: number; y: number } } | null>(null)
+  const goalMap = useMemo(() => buildGoalInfoMap(goals, homeAbbrev), [goals, homeAbbrev])
 
   useEffect(() => {
     let active = true
@@ -114,6 +117,17 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
     return { ...g, label: `${as}-${hs}`, isHome: g.team_id === homeTeamId, x: xS(g.game_time_seconds) }
   })
 
+  // V5: stagger score labels into two rows; suppress any label within 28px of a placed one in its row
+  // (the dot always renders; its tooltip carries time/scorer/score). Deterministic, no overlap possible.
+  const labelRows: number[][] = [[], []]
+  const labelPlace = railGoals.map(g => {
+    for (let row = 0; row < 2; row++) {
+      const last = labelRows[row][labelRows[row].length - 1]
+      if (last === undefined || Math.abs(g.x - last) >= 28) { labelRows[row].push(g.x); return { show: true, row } }
+    }
+    return { show: false, row: 0 }
+  })
+
   const periodTicks = [600, 1800, 3000].filter(t => t < end)
   const periodLines = [1200, 2400].filter(t => t < end)
 
@@ -147,7 +161,7 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
   return (
     <div className="timeline-stack">
       <svg
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`0 -18 ${W} ${H + 18}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverT(null)}
@@ -160,15 +174,31 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
         {/* dashed goal guide lines dropping through every lane */}
         {railGoals.map((g, i) => (
           <line key={`gl-${i}`} x1={g.x} y1={RAIL_H} x2={g.x} y2={LANE3_TOP + LANE_H}
-            stroke={g.isHome ? homeColor : awayColor} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
+            stroke={g.isHome ? homeColor : awayColor} strokeOpacity={0.175} strokeWidth={1} strokeDasharray="3 3" />
         ))}
 
         {/* goal rail */}
         <line x1={PAD_L} y1={RAIL_H - 12} x2={W - PAD_R} y2={RAIL_H - 12} stroke="var(--color-border)" strokeWidth={1} />
         {railGoals.map((g, i) => (
           <g key={`gd-${i}`}>
-            <text x={g.x} y={RAIL_H - 20} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--color-text-muted)">{g.label}</text>
-            <circle cx={g.x} cy={RAIL_H - 12} r={4.5} fill={g.isHome ? homeColor : awayColor} stroke="var(--color-bg-surface)" strokeWidth={1.5} />
+            {labelPlace[i].show && (
+              <text x={Math.max(PAD_L + 14, Math.min(W - PAD_R - 14, g.x))} y={RAIL_H - 20 - (labelPlace[i].row === 1 ? 12 : 0)} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--color-text-muted)">{g.label}</text>
+            )}
+            <circle
+              cx={g.x} cy={RAIL_H - 12} r={4.5}
+              fill={g.isHome ? homeColor : awayColor} stroke="var(--color-bg-surface)" strokeWidth={1.5}
+              style={{ cursor: 'pointer' }}
+              onClick={(e) => setPopup({
+                anchor: { x: e.clientX, y: e.clientY },
+                goal: goalMap.get(`${g.scorer_id}:${g.time_in_period}`) ?? {
+                  scorerId: g.scorer_id, scorerName: g.scorer_name, teamAbbrev: g.team_abbrev,
+                  periodLabel: g.period != null ? (g.period > 3 ? 'OT' : `P${g.period}`) : '',
+                  timeInPeriod: g.time_in_period, assists: g.assists, strength: g.strength, scoreAfter: g.label,
+                },
+              })}
+            >
+              <title>{`${g.scorer_name ?? 'Goal'} · ${g.label}`}</title>
+            </circle>
           </g>
         ))}
 
@@ -232,9 +262,10 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
             {hPres && <span>pressure <strong style={{ color: homeColor }}>{hPres.home_rate.toFixed(0)}</strong> / <strong style={{ color: awayColor }}>{hPres.away_rate.toFixed(0)}</strong></span>}
           </>
         ) : (
-          <span className="timeline-stack__hint">Hover any minute to read all three lanes</span>
+          <span className="timeline-stack__hint">Hover any minute to read all three lanes · click a goal for detail</span>
         )}
       </div>
+      {popup && <GoalPopup goal={popup.goal} anchor={popup.anchor} onClose={() => setPopup(null)} />}
     </div>
   )
 }

@@ -327,6 +327,22 @@ def get_roster_seasons(team_abbrev: str) -> list[int]:
     return [int(s) for s in response.json()]
 
 
+def _try_roster_for_season8(team_abbrev: str, season8: int) -> dict | None:
+    """Probe one season's roster endpoint cheaply. Returns the payload only if it 200s with a
+    NON-EMPTY roster; otherwise None. No retry: a 404 just means that season isn't published yet,
+    and the caller falls back — so we don't want tenacity to back off three times on a plain 404.
+    """
+    url = f"{BASE_URL}/v1/roster/{team_abbrev}/{season8}"
+    try:
+        resp = httpx.get(url, timeout=30.0)
+    except httpx.RequestError:
+        return None
+    if resp.status_code != 200:
+        return None
+    payload = resp.json()
+    return payload if payload.get("forwards") else None
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_roster_for_season8(team_abbrev: str, season8: str | int) -> dict:
     """Fetch a team's roster for an 8-digit season (the endpoint that actually serves data).
@@ -352,10 +368,16 @@ def get_roster(team_abbrev: str) -> dict:
 
     ENDPOINT DEVIATION (the API wins over the plan): the planned /roster/{TEAM}/current
     is a 307 redirect (empty body; httpx won't follow it by default and it can land on an
-    unpublished season in the offseason). We instead resolve "current" deterministically
-    as max(/roster-season/{TEAM}) and fetch that season's roster — both confirmed-200,
-    fully-seen schemas. max(roster-season) becomes the new season the instant NHL
-    publishes it, which is exactly the semantics /current points to.
+    unpublished season in the offseason). We resolve "current" off /roster-season/{TEAM}
+    instead — both confirmed-200, fully-seen schemas.
+
+    INDEX-LAG FIX: the /roster-season INDEX lags the roster endpoint. In the offseason the
+    NEXT season's /roster/{TEAM}/{season8} is already populated with signings and trades
+    (verified league-wide 2026-07: all 32 teams served a full 2026-27 roster) BEFORE that
+    season is added to /roster-season, which still maxed at 2025-26. Trusting max(index)
+    alone therefore pulls a stale, stripped-down prior-season roster all offseason. So we
+    probe the next season directly first and prefer it whenever it returns a real (non-empty)
+    roster; only if that season isn't live yet do we fall back to the indexed max.
 
     Returns the {forwards, defensemen, goalies} payload with two convenience keys added:
     "team_abbrev" (the team requested) and "season8" (the resolved season), so the
@@ -369,8 +391,16 @@ def get_roster(team_abbrev: str) -> dict:
     seasons = get_roster_seasons(team_abbrev)
     if not seasons:
         raise ValueError(f"no published roster seasons for team {team_abbrev}")
-    season8 = max(seasons)
-    payload = get_roster_for_season8(team_abbrev, season8)
+    indexed_max = max(seasons)
+    # Prefer the next season's roster if it is already live (the index lags — see docstring).
+    start = indexed_max // 10000
+    next8 = (start + 1) * 10000 + (start + 2)
+    payload = _try_roster_for_season8(team_abbrev, next8)
+    if payload is not None:
+        season8 = next8
+    else:
+        season8 = indexed_max
+        payload = get_roster_for_season8(team_abbrev, season8)
     payload["team_abbrev"] = team_abbrev
     payload["season8"] = season8
     return payload

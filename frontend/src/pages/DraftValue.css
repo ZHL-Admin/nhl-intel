@@ -78,3 +78,22 @@
   max-width: 80ch;
 }
 .dv-footnote a { color: var(--color-text-secondary); }
+
+/* §S7: Fig. 1 caption — Archivo 13 secondary, "Fig. 1" in eyebrow style. */
+.dv-figcap {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: 72ch;
+}
+.dv-figcap__n {
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-right: var(--space-2);
+}

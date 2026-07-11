@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -116,8 +116,260 @@ def build_lineup(players: list[PlayerProj], n_slots: int, value_attr: str,
     return slots, total
 
 
+def _norm_goalie_shares(shares, n_slots: int, cfg: dict) -> list[float]:
+    """A length-n_slots workload split summing to 1. Falls back to the league default (then a flat
+    split if that is also short), and renormalizes defensively so the tandem always ices exactly one
+    season of goaltending regardless of what the caller supplies."""
+    s = list(shares) if shares else list(cfg["GOALIE_WORKLOAD_FALLBACK"])
+    s = (s + [0.0] * n_slots)[:n_slots]
+    tot = sum(s)
+    if tot <= 0:
+        return [1.0 / n_slots] * n_slots
+    return [x / tot for x in s]
+
+
+def build_goalie_tandem(goalies: list[PlayerProj], n_slots: int, value_attr: str,
+                        shares, cfg: dict = CFG) -> tuple[list[PlayerProj], float]:
+    """Ice a goalie TANDEM, workload-weighted. Unlike skaters (build_lineup, summed at full value), the
+    top-n_slots goalies each carry a full-season per-82 WAR rate, so we weight each by his expected share
+    of starts (shares sum to 1) — the tandem then contributes exactly ONE season of goaltending. Each
+    iced goalie's value fields (base_war, projected_war, war_sd) are scaled IN PLACE by his share so the
+    weighting flows through the ledger delta and the band unchanged; the displayed value is thus his
+    role-adjusted contribution, not his full-82 rate. An empty backup slot is replacement * its share.
+    """
+    w = _norm_goalie_shares(shares, n_slots, cfg)
+    ranked = sorted(goalies, key=lambda p: getattr(p, value_attr), reverse=True)[:n_slots]
+    slots: list[PlayerProj] = []
+    total = 0.0
+    for i in range(n_slots):
+        share = w[i]
+        if i < len(ranked):
+            # A SCALED COPY (not in-place): forecast_team runs twice for teams with moves, so mutating
+            # the shared PlayerProj would compound the share on the second pass (share^2).
+            src = ranked[i]
+            p = replace(src, slot=f"G{i + 1}", base_war=src.base_war * share,
+                        projected_war=src.projected_war * share, war_sd=src.war_sd * share)
+        else:
+            p = PlayerProj(player_id=None, name=None, position="G", pos_group="G", is_goalie=True,
+                           base_war=cfg["REPLACEMENT_WAR"] * share, projected_war=cfg["REPLACEMENT_WAR"] * share,
+                           war_sd=0.0, no_track_record=False, replacement=True, slot=f"G{i + 1}")
+        slots.append(p)
+        total += getattr(p, value_attr)
+    return slots, total
+
+
 def lineup_value(slots: list[PlayerProj], value_attr: str) -> float:
     return sum(getattr(p, value_attr) for p in slots)
+
+
+# ── Position-aware forward assignment (SHARED: Roster Builder tool + its calibration) ─────────────
+# The Roster Builder ices forwards by their EFFECTIVE position (what they actually play, from faceoff
+# volume) and prefers to keep a center at C, a winger on his side — solved as an assignment over
+# (forward, forward-slot). This pure core is shared by backend.services.tools._ice_from_pool AND
+# models_ml.calibrate_roster_builder so LEAGUE_AVG_LINEUP_WAR is fit on the exact rule the tool ices.
+FWD_SIDE_SLOTS = 4   # 4 forward lines -> 4 slots per L / C / R side (12 forwards)
+
+
+def effective_fwd_pos(pid, listed: str, effpos: dict) -> str:
+    """A forward's effective position code (C/L/R/F_FLEX): the faceoff-derived override from effpos when
+    present, else his listed position (F_FLEX if that is not a concrete C/L/R). effpos: player_id ->
+    {'effective','locked',...} (load_effective_position); absent -> listed."""
+    e = effpos.get(int(pid)) if pid is not None else None
+    if e is not None and e.get("effective") in ("C", "L", "R", "F_FLEX"):
+        return e["effective"]
+    return listed if listed in ("C", "L", "R") else "F_FLEX"
+
+
+def _fwd_role(p: PlayerProj, effpos: dict) -> tuple:
+    """(kind, side, locked) for a forward — kind in {'C','W','FLEX'}, side in {'L','R',None}. `locked`
+    is the faceoff-evidence strength that gates the off-position C<->W penalty (a listed-only fallback
+    is never locked). Used only to SHAPE the assignment, never to change a player's value."""
+    e = effpos.get(int(p.player_id)) if p.player_id is not None else None
+    ep = effective_fwd_pos(p.player_id, p.position, effpos)
+    locked = bool(e["locked"]) if e is not None else False
+    if ep == "C":
+        return ("C", None, locked)
+    if ep in ("L", "R"):
+        return ("W", ep, locked)
+    return ("FLEX", None, False)
+
+
+def fwd_slot_penalty(role: tuple, slot_side: str, cfg: dict = CFG) -> float:
+    """Off-position penalty (WAR units) for placing a forward with `role` at a slot on `slot_side`
+    ('L'/'C'/'R'). ASSIGNMENT-SHAPING ONLY — subtracted from value when deciding who-sits-where, NEVER
+    from lineup_value or the team WAR total (a player's value does not shrink because he is off his
+    natural spot; the optimizer just avoids it). F_FLEX pays nothing anywhere; a LOCKED C at a wing (or
+    LOCKED W at C) pays OFF_POSITION_PENALTY_CW; a winger on his off side pays WING_SIDE_PENALTY. An
+    unlocked, listed-only guess pays no C<->W cost (no evidence to enforce it)."""
+    kind, side, locked = role
+    if kind == "FLEX":
+        return 0.0
+    if kind == "C":
+        return cfg["OFF_POSITION_PENALTY_CW"] if (slot_side != "C" and locked) else 0.0
+    # winger
+    if slot_side == "C":
+        return cfg["OFF_POSITION_PENALTY_CW"] if locked else 0.0
+    return 0.0 if slot_side == side else cfg["WING_SIDE_PENALTY"]
+
+
+def assign_forward_sides(fwds: list[PlayerProj], effpos: dict, cfg: dict = CFG,
+                         slots_per_side: int = FWD_SIDE_SLOTS) -> dict:
+    """Seat forwards by solving the (forward, forward-slot) assignment that maximizes
+    sum(projected_war - off_position_penalty). Returns {'L':[...], 'C':[...], 'R':[...]} of the ICED
+    forwards per side, each ranked best-first (<= slots_per_side per side; 4 for a full 12-forward
+    lineup, fewer when seeded lines have already taken slots). The penalty biases a locked center to C
+    and a winger to his side WITHOUT altering value (callers sum RAW projected_war over the returned
+    players). Deterministic: forwards are pre-sorted by (-projected_war, player_id) so equal-value ties
+    resolve stably. A pool larger than the open slots scratches the surplus; a smaller pool leaves side
+    slots short (the caller fills those with replacement — a hole is never dropped)."""
+    from scipy.optimize import linear_sum_assignment
+    import numpy as np
+
+    by_side: dict = {"L": [], "C": [], "R": []}
+    if slots_per_side <= 0:
+        return by_side
+    fwds = sorted(fwds, key=lambda p: (-p.projected_war, p.player_id or 0))
+    if not fwds:
+        return by_side
+    roles = [_fwd_role(p, effpos) for p in fwds]
+    col_side = [s for s in ("L", "C", "R") for _ in range(slots_per_side)]
+    val = np.empty((len(fwds), len(col_side)), dtype=float)
+    for i, p in enumerate(fwds):
+        for j, side in enumerate(col_side):
+            val[i][j] = p.projected_war - fwd_slot_penalty(roles[i], side, cfg)
+    rows, cidx = linear_sum_assignment(val, maximize=True)
+    for i, j in zip(rows, cidx):
+        by_side[col_side[j]].append(fwds[i])
+    for side in by_side:   # best-first within each side (value is identical across a side's slots)
+        by_side[side].sort(key=lambda x: (-x.projected_war, x.player_id or 0))
+    return by_side
+
+
+# ── Deployment-aware line seeding (Phase 2, SHARED) ───────────────────────────────────────────────
+# Before the assignment, seed OBSERVED units — real trios/pairs that shared enough 5v5 ice — so the
+# builder reproduces how a team actually deploys (Edmonton splits McDavid & Draisaitl at 5v5) instead
+# of WAR-stacking a superline. A unit seeds only when its FULL member set is present and unplaced in the
+# pool, so a trade dissolves it automatically (the member-set check fails) and arrivals — who never
+# played with the new group — flow through the assignment. PP units are out of scope (5v5 only).
+
+def _fo_per_gp(p: PlayerProj, effpos: dict) -> float:
+    e = effpos.get(int(p.player_id)) if p.player_id is not None else None
+    return e["fo_per_gp"] if e else -1.0
+
+
+def _order_trio(trio: list[PlayerProj], effpos: dict, hand: dict) -> dict:
+    """Order a 3-forward observed unit into {'C','L','R'}: the C slot goes to the member with the
+    highest faceoffs/game (the most center-like), the other two take wings by effective side
+    (handedness as tiebreak), forced to distinct sides. Deterministic."""
+    c = max(trio, key=lambda p: (_fo_per_gp(p, effpos), -(p.player_id or 0)))
+    wings = [p for p in trio if p is not c]
+
+    def side_pref(p):
+        ep = effective_fwd_pos(p.player_id, p.position, effpos)
+        if ep in ("L", "R"):
+            return ep
+        h = hand.get(int(p.player_id)) if p.player_id is not None else None
+        return h if h in ("L", "R") else None
+
+    w0, w1 = wings
+    s0, s1 = side_pref(w0), side_pref(w1)
+    if s0 == "L" and s1 != "L":
+        left, right = w0, w1
+    elif s1 == "L" and s0 != "L":
+        left, right = w1, w0
+    elif s0 == "R" and s1 != "R":
+        left, right = w1, w0
+    elif s1 == "R" and s0 != "R":
+        left, right = w0, w1
+    else:   # both same/ambiguous side — deterministic by player_id
+        left, right = sorted(wings, key=lambda p: p.player_id or 0)
+    return {"C": c, "L": left, "R": right}
+
+
+def seed_and_assign_forwards(fwds: list[PlayerProj], units_f3, effpos: dict, hand: dict,
+                             cfg: dict = CFG) -> dict:
+    """Seat forwards: SEED observed trios first, then ASSIGN the rest. `units_f3` is an iterable of
+    (frozenset(member_ids), shared_5v5_minutes), highest-minutes first. A trio seeds when all three are
+    in the pool, none already placed, and it clears cfg['LINE_SEED_MIN_5V5_MINUTES']. Accepted trios are
+    ranked into line order by combined projected WAR (best trio = line 1) and each occupies one L/C/R
+    across a line; the remaining forwards fill the remaining lines via assign_forward_sides. Returns the
+    same {'L','C','R'} shape (best-first within a side), so seeded top lines lead and depth lines follow.
+    No unit -> pure assignment (Phase 1 behaviour)."""
+    by_side: dict = {"L": [], "C": [], "R": []}
+    pool = {p.player_id: p for p in fwds if p.player_id is not None}
+    placed: set = set()
+    floor = cfg["LINE_SEED_MIN_5V5_MINUTES"]
+    seeded_lines: list = []
+    for members, minutes in (units_f3 or []):
+        if len(seeded_lines) >= FWD_SIDE_SLOTS:
+            break
+        if len(members) != 3 or minutes < floor:
+            continue
+        if any(m not in pool for m in members) or any(m in placed for m in members):
+            continue
+        seeded_lines.append(_order_trio([pool[m] for m in members], effpos, hand))
+        placed.update(members)
+    # rank accepted trios into line ranks by combined projected WAR (best trio = line 1)
+    seeded_lines.sort(key=lambda ln: -sum(p.projected_war for p in ln.values()))
+    for ln in seeded_lines:
+        for side in ("L", "C", "R"):
+            by_side[side].append(ln[side])
+    # remaining forwards -> the remaining lines via the Phase 1 assignment
+    remaining = [p for p in fwds if p.player_id not in placed]
+    rest = assign_forward_sides(remaining, effpos, cfg, slots_per_side=FWD_SIDE_SLOTS - len(seeded_lines))
+    for side in ("L", "C", "R"):
+        by_side[side].extend(rest[side])
+    return by_side
+
+
+def seed_and_assign_defense(defs: list[PlayerProj], units_d2, hand: dict, cfg: dict = CFG,
+                            n_pairs: int = 3) -> dict:
+    """Seat defensemen: SEED observed pairs first, then fill the rest by handedness side. `units_d2` is
+    an iterable of (frozenset(member_ids), shared_5v5_minutes), highest-minutes first. A pair seeds when
+    both are in the pool, unplaced, and clears the minutes floor; accepted pairs rank into pair order by
+    combined projected WAR; within a pair the left-shot takes LD, right-shot RD (forced distinct). The
+    remaining D fill the remaining side slots best-first (unknown hand balances the sides). Returns
+    {'L':[...],'R':[...]} (<= n_pairs each)."""
+    by_side: dict = {"L": [], "R": []}
+    pool = {p.player_id: p for p in defs if p.player_id is not None}
+    placed: set = set()
+    floor = cfg["LINE_SEED_MIN_5V5_MINUTES"]
+    seeded_pairs: list = []
+    for members, minutes in (units_d2 or []):
+        if len(seeded_pairs) >= n_pairs:
+            break
+        if len(members) != 2 or minutes < floor:
+            continue
+        if any(m not in pool for m in members) or any(m in placed for m in members):
+            continue
+        a, b = (pool[m] for m in members)
+        ha = hand.get(int(a.player_id)); hb = hand.get(int(b.player_id))
+        if ha == "R" or hb == "L":       # put the right-shot on the right
+            left, right = b, a
+        else:
+            left, right = a, b
+        seeded_pairs.append({"L": left, "R": right})
+        placed.update(members)
+    seeded_pairs.sort(key=lambda pr: -(pr["L"].projected_war + pr["R"].projected_war))
+    for pr in seeded_pairs:
+        by_side["L"].append(pr["L"]); by_side["R"].append(pr["R"])
+    # remaining D by handedness (the Phase 1 rule), best-first, CAPPED at n_pairs per side; a side that
+    # is full overflows to the other side's open slots (a 5th lefty plays his off side). Beyond 2*n_pairs
+    # the surplus is scratch. Self-contained so the tool, offseason and calibration all ice identically.
+    war = lambda p: p.projected_war  # noqa: E731
+    overflow: list = []
+    for p in sorted((p for p in defs if p.player_id not in placed), key=war, reverse=True):
+        s = hand.get(int(p.player_id)) if p.player_id is not None else None
+        if s not in ("L", "R"):
+            s = "L" if len(by_side["L"]) <= len(by_side["R"]) else "R"
+        (by_side[s] if len(by_side[s]) < n_pairs else overflow).append(p)
+    for p in overflow:   # off-side flex-fill, best-first (already WAR-sorted)
+        if len(by_side["L"]) < n_pairs and len(by_side["L"]) <= len(by_side["R"]):
+            by_side["L"].append(p)
+        elif len(by_side["R"]) < n_pairs:
+            by_side["R"].append(p)
+        # else: both sides full -> scratch (never a dropped slot; the 6 iced D are set)
+    return by_side
 
 
 @dataclass
@@ -276,7 +528,8 @@ def absolute_rating(total_lineup_war: float, chemistry_adj: float = 0.0, cfg: di
 
 def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerProj],
                   base_rating: float, base_components: dict, n_moves: int | None = None,
-                  xgf_share_delta: float | None = None, cfg: dict = CFG) -> dict:
+                  xgf_share_delta: float | None = None, cfg: dict = CFG,
+                  goalie_shares=None, seed_units=None, hand=None, effpos=None) -> dict:
     """Assemble one team's forecast from its two projected rosters. Pure: callers supply already
     projected PlayerProj lists (base_war + projected_war filled), the base rating + components, and
     the line-fit xGF share delta. Returns the roster_forecast row payload + ledger.
@@ -285,6 +538,13 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     the projected lineups), NOT the symmetric difference of full-season rosters — a season's worth of
     call-ups and injury fills are not offseason moves and must not inflate the band. A caller-supplied
     n_moves is ignored in favor of the ledger count (kept in the signature for back-compat).
+
+    seed_units / hand / effpos (all optional) make the lineup DEPLOYMENT-AWARE: observed 5v5 units
+    (base-season trios/pairs) are seeded among holdovers, the rest seated by the position-aware
+    assignment (see _full_lineup). Both lineups use the SAME base-season units, so a departed player's
+    unit dissolves in the updated lineup (member-set check fails) while the ledger + delta math are
+    unchanged. None -> the flat top-by-WAR lineup (pre-Phase-2 behaviour), so the pure-core tests and
+    any caller that does not supply deployment inputs are untouched.
     """
     fwd_b = [p for p in base_players if p.pos_group == "F"]
     def_b = [p for p in base_players if p.pos_group == "D"]
@@ -295,8 +555,11 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
 
     # Both lineups ranked + summed by projected (next-season) value, so the delta is purely the
     # effect of the MOVES (returning players cancel; aging shows in the per-player ledger).
-    base_lineup, _ = _full_lineup(fwd_b, def_b, g_b, "projected_war", cfg)
-    upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg)
+    # Same team both sides -> same goalie workload split, so a returning tandem cancels in the delta.
+    base_lineup, _ = _full_lineup(fwd_b, def_b, g_b, "projected_war", cfg, goalie_shares,
+                                  seed_units, hand, effpos)
+    upd_lineup, _ = _full_lineup(fwd_u, def_u, g_u, "projected_war", cfg, goalie_shares,
+                                 seed_units, hand, effpos)
 
     # Roster membership sets classify a move as a real join/leave (vs a lineup promotion/demotion).
     base_roster_ids = {p.player_id for p in base_players if p.player_id is not None}
@@ -339,11 +602,48 @@ def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerPr
     }
 
 
-def _full_lineup(fwd, dmen, goalies, value_attr, cfg):
-    """Build F/D/G slots and concatenate into one lineup; return (slots, total)."""
-    fs, ft = build_lineup(fwd, cfg["N_FWD"], value_attr, "F", cfg)
-    ds, dt = build_lineup(dmen, cfg["N_DEF"], value_attr, "D", cfg)
-    gs, gt = build_lineup(goalies, cfg["N_GOALIE"], value_attr, "G", cfg)
+def _seeded_group_lineup(by_side: dict, sides: tuple, n_slots: int, prefix: str,
+                         cfg: dict) -> tuple[list[PlayerProj], float]:
+    """Flatten a seed+assign {side: [ranked players]} into a flat, line-grouped lineup with `prefix`
+    slot names (F1..F12 / D1..D6) and pad to n_slots with replacement holes. Line-grouped order (line 1
+    across its sides, then line 2, ...) so _top_units picks the real top units. Returns (slots, total)."""
+    ordered: list[PlayerProj] = []
+    n_lines = n_slots // len(sides)
+    for line_idx in range(n_lines):
+        for side in sides:
+            if line_idx < len(by_side[side]):
+                ordered.append(by_side[side][line_idx])
+    iced: list[PlayerProj] = []
+    total = 0.0
+    for i, p in enumerate(ordered[:n_slots]):
+        p.slot = f"{prefix}{i + 1}"
+        iced.append(p)
+        total += p.projected_war
+    for j in range(len(iced), n_slots):
+        iced.append(PlayerProj(player_id=None, name=None, position=prefix, pos_group=prefix,
+                               is_goalie=False, base_war=cfg["REPLACEMENT_WAR"],
+                               projected_war=cfg["REPLACEMENT_WAR"], war_sd=0.0, no_track_record=False,
+                               replacement=True, slot=f"{prefix}{j + 1}"))
+        total += cfg["REPLACEMENT_WAR"]
+    return iced, total
+
+
+def _full_lineup(fwd, dmen, goalies, value_attr, cfg, goalie_shares=None,
+                 seed_units=None, hand=None, effpos=None):
+    """Build F/D/G slots and concatenate into one lineup; return (slots, total). The goalie tandem is
+    workload-weighted (goalie_shares). When seed_units is provided the skaters are seated
+    DEPLOYMENT-AWARE (seed observed trios/pairs, then the position-aware assignment); otherwise they are
+    the flat top-N by value (the pre-Phase-2 rule). value_attr is projected_war on the seeded path."""
+    if seed_units is not None:
+        fbs = seed_and_assign_forwards(fwd, seed_units.get("F3", []), effpos or {}, hand or {}, cfg)
+        fs, ft = _seeded_group_lineup(fbs, ("L", "C", "R"), cfg["N_FWD"], "F", cfg)
+        dbs = seed_and_assign_defense(dmen, seed_units.get("D2", []), hand or {}, cfg,
+                                      n_pairs=cfg["N_DEF"] // 2)
+        ds, dt = _seeded_group_lineup(dbs, ("L", "R"), cfg["N_DEF"], "D", cfg)
+    else:
+        fs, ft = build_lineup(fwd, cfg["N_FWD"], value_attr, "F", cfg)
+        ds, dt = build_lineup(dmen, cfg["N_DEF"], value_attr, "D", cfg)
+    gs, gt = build_goalie_tandem(goalies, cfg["N_GOALIE"], value_attr, goalie_shares, cfg)
     return fs + ds + gs, ft + dt + gt
 
 
@@ -518,6 +818,73 @@ def load_ages(bq, season: str) -> dict:
             if x.birth_year is not None}
 
 
+def load_effective_position(bq) -> dict:
+    """player_id -> {'effective','locked','fo_per_gp'} from nhl_models.player_effective_position: the
+    position a forward ACTUALLY plays (from faceoff volume), the strength of that evidence (`locked`),
+    and his faceoffs/game. The SINGLE canonical loader — it both overrides a forward's displayed
+    position (apply_effective_position) and drives the position-aware assignment (assign_forward_sides),
+    so the tool and its calibration ice identically. Empty dict if the table is missing (older serving
+    file) -> listed positions + pure top-by-WAR icing (the pre-effective-position behavior)."""
+    try:
+        df = bq.query_df(
+            f"SELECT player_id, effective_position, locked, fo_per_gp "
+            f"FROM {bq.models('player_effective_position')}")
+    except Exception:  # noqa: BLE001 — table absent (not yet precomputed/exported) -> listed positions
+        return {}
+    out: dict = {}
+    for _, x in df.iterrows():
+        out[int(x.player_id)] = {
+            "effective": str(x.effective_position),
+            "locked": bool(x.locked),
+            "fo_per_gp": float(x.fo_per_gp) if x.fo_per_gp is not None else 0.0,
+        }
+    return out
+
+
+def apply_effective_position(position: str, pid, effpos: dict) -> str:
+    """Override a FORWARD's listed position with his effective (faceoff-derived) one when it is a
+    concrete C/L/R. Defensemen and goalies pass through unchanged; a forward with no override, or an
+    F_FLEX (no strong faceoff signal), keeps his listed position — no forward is pushed off a real
+    position without evidence."""
+    if not effpos or position in ("D", "G"):
+        return position
+    e = effpos.get(int(pid))
+    ep = e["effective"] if e else None
+    return ep if ep in ("C", "L", "R") else position
+
+
+def load_handedness(bq) -> dict:
+    """player_id -> shoots ('L'/'R') from stg_player_bio — seats a defenseman on his natural side and
+    breaks winger-side ties in the line seeding."""
+    df = bq.query_df(f"SELECT player_id, shoots FROM {bq.staging('stg_player_bio')} WHERE shoots IS NOT NULL")
+    return {int(x.player_id): str(x.shoots) for _, x in df.iterrows()}
+
+
+def load_seed_units(bq, season: str) -> dict:
+    """team_id -> {'F3': [(frozenset(ids), minutes)...], 'D2': [...]} of observed 5v5 units from
+    int_line_seasons for `season`, sorted by shared minutes desc — the deployment-seeding source for the
+    offseason lineups (base-season units among holdovers). The minutes floor
+    (LINE_SEED_MIN_5V5_MINUTES) is applied downstream in seed_and_assign_*. Empty dict if the table is
+    missing (older serving file) -> the flat top-by-WAR lineup."""
+    try:
+        df = bq.query_df(
+            f"SELECT team_id, line_type, line_key, minutes "
+            f"FROM {bq.staging('int_line_seasons')} WHERE season = '{season}'")
+    except Exception:  # noqa: BLE001 — table absent -> no seeding
+        return {}
+    out: dict = {}
+    for _, x in df.iterrows():
+        lt = str(x.line_type)
+        if lt not in ("F3", "D2"):
+            continue
+        members = frozenset(int(v) for v in str(x.line_key).split("-"))
+        out.setdefault(int(x.team_id), {"F3": [], "D2": []})[lt].append((members, float(x.minutes)))
+    for t in out.values():
+        for lt in t:
+            t[lt].sort(key=lambda mm: -mm[1])
+    return out
+
+
 def load_player_names(bq) -> dict:
     """player_id -> 'First Last' from the latest game a player dressed (covers base-roster departures
     and updated players resolved via the game fallback, who carry no live-snapshot name)."""
@@ -617,7 +984,14 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
     prior season (NHL rolls the season label later), so we read team membership from it directly rather
     than gating on its label. Universe = live-roster players UNION the base-season robust roster, which
     excludes stale fallback-only players (retired/in-Europe) that would otherwise be phantom arrivals.
-    A player only counts as MOVED when he is actively on a different club's live roster.
+
+    PUBLISHED ROSTER IS AUTHORITATIVE: the base-season team is only a fallback for a club that has NO
+    current published roster. Once a team's live roster is published (all 32 are, in the offseason), it
+    is the complete statement of that club's membership — so a base-season holdover who is absent from
+    his old team's published roster has DEPARTED (released/unsigned UFA), not merely "not yet re-listed".
+    Keeping him would leave released players (e.g. a bought-out veteran) phantom-rostered all summer and
+    crowd real signings out of the projected lineup. He is dropped here; his vacated slot fills at
+    replacement. A player still counts as MOVED only when he is actively on a different club's live roster.
     """
     sql = f"""
     WITH base AS (
@@ -635,12 +1009,17 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
         SELECT player_id, team_id, COALESCE(position_code, '') AS position_code,
                COALESCE(full_name, '') AS name
         FROM {bq.staging('stg_roster_current')} WHERE team_id IS NOT NULL
-    )
+    ),
+    teams_with_live AS (SELECT DISTINCT team_id FROM live)
     SELECT player_id,
            COALESCE(l.team_id, b.team_id) AS team_id,
            COALESCE(NULLIF(l.position_code, ''), b.position_code) AS position_code,
            COALESCE(NULLIF(l.name, ''), b.name) AS name
     FROM live l FULL OUTER JOIN base b USING (player_id)
+    -- Keep a player iff he is on a live roster, OR his base team has no published roster at all
+    -- (early offseason / a team we could not pull). Otherwise he is a real departure and is dropped.
+    WHERE l.team_id IS NOT NULL
+       OR b.team_id NOT IN (SELECT team_id FROM teams_with_live)
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
@@ -649,6 +1028,33 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
         out.setdefault(int(x.team_id), []).append({"player_id": int(x.player_id),
                                                     "position": str(x.position_code) or "F",
                                                     "name": x["name"] or None})
+    return out
+
+
+def load_goalie_workload(bq, base_season: str) -> dict:
+    """team_id -> [starter_share, backup_share] from the team's PRIOR-SEASON goalie usage: its top-2
+    goalies by games played, normalized to sum to 1. This is the expected start distribution we weight
+    next season's projected tandem by — a workhorse-starter club and an even-timeshare club weight their
+    backup differently. A team with fewer than two goalies (or no goalie games) is omitted, so the caller
+    falls back to GOALIE_WORKLOAD_FALLBACK. Reads stg_rosters (per-game appearances), goalies only."""
+    sql = f"""
+    WITH g AS (
+        SELECT team_id, player_id, COUNT(*) AS gp
+        FROM {bq.staging('stg_rosters')}
+        WHERE season = '{base_season}' AND position_code = 'G' AND {GAME_TYPE_FILTER}
+        GROUP BY team_id, player_id
+    ), ranked AS (
+        SELECT team_id, gp, ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY gp DESC) AS rn FROM g
+    )
+    SELECT team_id, MAX(IF(rn = 1, gp, 0)) AS g1, MAX(IF(rn = 2, gp, 0)) AS g2
+    FROM ranked WHERE rn <= 2 GROUP BY team_id
+    """
+    out: dict = {}
+    for _, x in bq.query_df(sql).iterrows():
+        g1, g2 = float(x.g1), float(x.g2)
+        if g2 <= 0 or (g1 + g2) <= 0:
+            continue  # only one goalie logged -> league-default split
+        out[int(x.team_id)] = [g1 / (g1 + g2), g2 / (g1 + g2)]
     return out
 
 
@@ -750,12 +1156,18 @@ def main() -> None:
     ratings = load_team_ratings(bq, base_season)
     skater_data = load_skater_war_multi(bq, base_season, n_back)
     goalie_data = load_goalie_war_multi(bq, base_season, n_back)
+    goalie_workload = load_goalie_workload(bq, base_season)   # team_id -> [starter, backup] start shares
     archetypes = load_archetypes(bq, base_season)
     aging = load_aging(bq)
     ages = load_ages(bq, base_season)
+    effpos = load_effective_position(bq)   # forward listed-position -> effective (faceoff-derived) override
+    hand = load_handedness(bq)             # shoots, for D side + winger-side tiebreak in seeding
+    seed_units = load_seed_units(bq, base_season)   # team -> observed base-season 5v5 units (deployment seeding)
 
     forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
-                                    aging, ages, archetypes, trans, run_id, sample=args.sample)
+                                    aging, ages, archetypes, trans, run_id, sample=args.sample,
+                                    goalie_workload=goalie_workload, effpos=effpos, hand=hand,
+                                    seed_units=seed_units)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
     print(f"report -> {report}")
@@ -767,10 +1179,17 @@ def main() -> None:
     _write_tables(bq, forecasts, move_rows)
 
 
-def _projected_players(team_id, mem, skater_data, goalie_data, aging, ages, archetypes, project_value):
+def _projected_players(team_id, mem, skater_data, goalie_data, aging, ages, archetypes, project_value,
+                       effpos=None):
+    """Project a team's roster forward. effpos (player_id -> effective C/L/R) overrides a forward's
+    listed position with the position he actually plays, so the displayed lineup + ledger + line
+    composition reflect real deployment. The projected-WAR math is untouched (position is not a value
+    input), so the ledger still reconciles and returning players still cancel in the delta."""
+    effpos = effpos or {}
     out = []
     for m in mem.get(team_id, []):
-        out.append(make_player_proj(m["player_id"], m.get("name"), m["position"], skater_data,
+        pos = apply_effective_position(m["position"], m["player_id"], effpos)
+        out.append(make_player_proj(m["player_id"], m.get("name"), pos, skater_data,
                                     goalie_data, aging, ages, archetypes, project_value))
     return out
 
@@ -833,7 +1252,11 @@ def _style_note(bq, team_id, upd_lineup, season):
 
 
 def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ages, archetypes,
-             trans, run_id, sample=None):
+             trans, run_id, sample=None, goalie_workload=None, effpos=None, hand=None, seed_units=None):
+    goalie_workload = goalie_workload or {}
+    effpos = effpos or {}
+    hand = hand or {}
+    seed_units = seed_units or {}
     scored_at = datetime.now(timezone.utc).isoformat()
     names = load_player_names(bq)
     team_ids = sorted(set(base_mem) | set(upd_mem))
@@ -846,21 +1269,25 @@ def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ag
         if tid not in ratings:
             continue
         base_players = _projected_players(tid, base_mem, skater_data, goalie_data, aging, ages,
-                                          archetypes, project_value=True)
+                                          archetypes, project_value=True, effpos=effpos)
         upd_players = _projected_players(tid, upd_mem, skater_data, goalie_data, aging, ages,
-                                         archetypes, project_value=True)
+                                         archetypes, project_value=True, effpos=effpos)
         rc = ratings[tid]
+        gshares = goalie_workload.get(tid)   # None -> forecast_team uses the league-default split
+        tunits = seed_units.get(tid)         # observed base-season 5v5 units (deployment seeding)
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
         # full-roster symmetric difference (a season's call-ups are not offseason moves).
         f = forecast_team(base_players, upd_players, rc["rating"], rc,
-                          xgf_share_delta=None)  # chemistry filled next (needs the built lineups)
+                          xgf_share_delta=None, goalie_shares=gshares,
+                          seed_units=tunits, hand=hand, effpos=effpos)  # chemistry filled next
         # The line-fit / style overlays are only meaningful when the roster actually changed. Skip
         # them for a no-move team (e.g. the whole league before next-season rosters are published),
         # which keeps that run fast and avoids pointless score_line/score_team_fit round-trips.
         has_moves = any(m["move_type"] in ("arrival", "departure") for m in f["ledger"])
         if has_moves:
             chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
-            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta)
+            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta,
+                              goalie_shares=gshares, seed_units=tunits, hand=hand, effpos=effpos)
             f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
         else:
             chem_delta = None

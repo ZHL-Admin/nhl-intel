@@ -533,10 +533,11 @@
 
 /* Inside the page card, each overview/analytics section is a subtle inset —
    no border or shadow, just an elevated fill so it never reads as a card-on-card. */
+/* §02 remove: no colored panel backgrounds behind charts/tables — flat sections. */
 .overview-card {
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5) var(--space-6);
+  background: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 /* Analytics tab: two-column panel grid */
@@ -610,4 +611,83 @@
 .team-stats-compact .comparison-row__away-value,
 .team-stats-compact .comparison-row__home-value {
   font-size: var(--text-2xl);
+}
+
+.analytics-grid--receipts { align-items: start; }
+
+/* V4: receipts as two explicit flex columns, height-assigned panels */
+.gd-receipts { display: flex; gap: var(--space-6); align-items: flex-start; }
+.gd-receipts__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-6); }
+@media (max-width: 767px) { .gd-receipts { flex-direction: column; } }
+
+/* V1: center the completed-game header stack (the identity-header left region must fill + center) */
+.game-detail .identity-header__main { width: 100%; justify-content: center; }
+.game-detail .identity-header__left { flex: 1 1 100%; width: 100%; align-items: center; text-align: center; }
+
+/* K2: scoring summary in Box score */
+.scoring-summary { margin-bottom: var(--space-8); }
+.scoring-summary__rows { display: flex; flex-direction: column; }
+.scoring-summary__row { display: grid; grid-template-columns: 34px 48px 40px 1fr auto auto; align-items: center; gap: var(--space-3); padding: 6px var(--space-1); border-top: 1px solid var(--color-border-subtle); font-size: var(--text-sm); }
+.scoring-summary__row:first-child { border-top: none; }
+.scoring-summary__per, .scoring-summary__time { font-size: var(--text-xs); color: var(--color-text-muted); }
+.scoring-summary__team { font-size: var(--text-xs); color: var(--color-text-secondary); font-weight: 600; }
+.scoring-summary__scorer { color: var(--color-text-primary); }
+.scoring-summary__assists { color: var(--color-text-muted); }
+.scoring-summary__strength { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--color-warning); }
+.scoring-summary__score { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Item 6: drop the redundant header divider (the tabs underline is the separator); space the tabs. */
+.game-detail .page-card__divider { display: none; }
+.game-detail .page-card__controls { margin-bottom: var(--space-5); }
+
+/* ============================================================================
+   §02 signature: the serif score masthead. Team color appears only as a 3px
+   rule under each name (never a fill). Closed by the PageCard red rule.
+   ============================================================================ */
+.game-masthead { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.game-masthead__grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: 760px;
+}
+.game-masthead__team { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.game-masthead__team--away { justify-content: flex-end; }
+.game-masthead__team--home { justify-content: flex-start; }
+.game-masthead__logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
+.game-masthead__name {
+  font-family: var(--font-display);
+  font-size: var(--text-display-2);
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+  border-bottom: 3px solid;           /* team color set inline */
+  padding-bottom: 4px;
+  white-space: nowrap;
+}
+.game-masthead__score {
+  font-family: var(--font-display);
+  font-size: 44px;
+  line-height: 1;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.game-masthead__trail { color: var(--color-text-muted); }
+.game-masthead__dash { color: var(--color-text-muted); margin: 0 var(--space-3); }
+.game-masthead__vs { font-style: italic; color: var(--color-text-muted); font-size: var(--text-display-1); }
+.game-masthead__status {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .game-masthead__grid { gap: var(--space-4); }
+  .game-masthead__name { font-size: var(--text-title); }
+  .game-masthead__score { font-size: 32px; }
+  .game-masthead__logo { width: 28px; height: 28px; }
 }

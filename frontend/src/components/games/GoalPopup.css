@@ -1,0 +1,20 @@
+.goal-popup__scrim { position: fixed; inset: 0; z-index: 400; }
+
+.goal-popup {
+  position: fixed;
+  z-index: 401;
+  min-width: 220px;
+  max-width: 300px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.goal-popup__head { display: flex; align-items: center; gap: var(--space-3); }
+.goal-popup__id { display: flex; flex-direction: column; min-width: 0; }
+.goal-popup__name { font-size: var(--text-base); font-weight: 600; color: var(--color-text-primary); }
+.goal-popup__meta { font-size: var(--text-xs); color: var(--color-text-muted); }
+.goal-popup__score { margin-left: auto; font-size: var(--text-lg); font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.goal-popup__assists { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-text-secondary); }

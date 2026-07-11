@@ -4,10 +4,10 @@
  * standings) sits in the PageCard controls; the power and deserved views are the old Rankings lists,
  * rendered verbatim from components/teams/RatingsViews. Standings is the original Teams body, unchanged.
  */
-import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageLayout, PageCard, Tabs } from '../components/common'
 import StyleMapChart from '../components/teams/StyleMapChart'
+import DivisionStandings from '../components/teams/DivisionStandings'
 import { PowerRatingsView, DeservedStandingsView } from '../components/teams/RatingsViews'
 import { usePageTitle } from '../hooks/usePageTitle'
 import './Teams.css'
@@ -16,7 +16,6 @@ type View = 'standings' | 'power' | 'deserved'
 const VIEWS: View[] = ['standings', 'power', 'deserved']
 
 function StandingsView() {
-  const [grouping, setGrouping] = useState<'division' | 'conference' | 'league'>('division')
   return (
     <>
       {/* League style map (Phase 3.2) */}
@@ -27,31 +26,10 @@ function StandingsView() {
 
       <div className="page-divider" />
 
-      {/* League Table */}
+      {/* Division standings (Blueprint 2.6) — by division, against the playoff cut. */}
       <section className="teams__table">
-        <div className="teams__table-header">
-          <h2 className="teams__section-title">League table</h2>
-          <div className="teams__grouping-toggle">
-            {(['division', 'conference', 'league'] as const).map((g) => (
-              <button
-                key={g}
-                className={`teams__grouping-button ${grouping === g ? 'teams__grouping-button--active' : ''}`}
-                onClick={() => setGrouping(g)}
-              >
-                {g[0].toUpperCase() + g.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="teams__table-placeholder">
-          <p className="teams__placeholder-text">
-            League table with all 32 teams - data not yet available
-          </p>
-          <p className="teams__placeholder-subtext">
-            Columns: Rank · Team · GP · Record · PTS · Last 10 · GF/GP · GA/GP · CF% · xGF% · PDO
-          </p>
-        </div>
+        <h2 className="teams__section-title">Standings, by division</h2>
+        <DivisionStandings />
       </section>
     </>
   )
@@ -74,8 +52,9 @@ function Teams() {
     <PageLayout>
       <div className="teams">
         <PageCard
-          title="Teams"
-          subtitle="Standings, strength, and luck."
+          eyebrow="Teams"
+          title="The league"
+          subtitle="Look up a team, or browse the league's shape — every club plotted by how it plays, then the standings against the playoff line."
           controls={
             <div className="teams__viewbar">
               <Tabs

@@ -44,3 +44,9 @@
 
 .lib__empty { color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6) 0; }
 .lib__notfound { color: var(--color-text-secondary); font-size: var(--text-base); padding: var(--space-6) 0; }
+
+/* B5: "Used on" footer on methodology docs */
+.method-usedon { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--color-border-subtle); }
+.method-usedon__label { font-family: var(--font-mono); font-size: var(--overline-size); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-muted); }
+.method-usedon__link { font-size: var(--text-sm); color: var(--color-accent); text-decoration: none; }
+.method-usedon__link:hover { text-decoration: underline; }

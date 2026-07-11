@@ -1,0 +1,36 @@
+.game-narrative { display: flex; flex-direction: column; gap: var(--space-6); }
+
+/* the verdict — display serif, one sentence */
+.game-narrative__verdict {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--display-sm);
+  line-height: var(--display-sm-height);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+.game-narrative__moments { display: flex; flex-direction: column; gap: var(--space-1); }
+.game-narrative__moment {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.game-narrative__moment:first-of-type { border-top: none; }
+.game-narrative__moment-time { font-size: var(--text-xs); color: var(--color-text-muted); }
+.game-narrative__moment-text { font-size: var(--text-sm); color: var(--color-text-primary); }
+.game-narrative__moment-delta { font-size: var(--text-sm); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+.game-narrative__compare { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.game-narrative__compare-dek { margin: 0; font-size: var(--text-sm); color: var(--color-text-secondary); }
+
+.game-narrative__timeline { display: flex; flex-direction: column; gap: var(--space-2); }
+.game-narrative__compare-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+
+.game-narrative__timeline { display: flex; flex-direction: column; gap: var(--space-2); }
+.game-narrative__compare-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }

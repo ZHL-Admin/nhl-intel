@@ -2,15 +2,15 @@
 .skill-radar__svg { width: 100%; max-width: 460px; height: auto; overflow: visible; }
 .skill-radar__empty { font-size: 0.85rem; color: var(--color-text-secondary); padding: 16px 0; }
 
-/* §6 R5: rings 1px border-subtle */
-.skill-radar__ring { fill: none; stroke: var(--color-border-subtle); stroke-width: 1; }
+/* §S1: 1px hairline web in --color-border */
+.skill-radar__ring { fill: none; stroke: var(--color-border); stroke-width: 1; }
 /* league-median (50th-percentile) reference ring */
 .skill-radar__ring--median { stroke: var(--color-text-muted); stroke-width: 1.25; opacity: 0.9; stroke-dasharray: 3 3; }
 .skill-radar__ring-label { font-size: 8px; fill: var(--color-text-muted, var(--color-text-secondary)); }
-.skill-radar__axis { stroke: var(--color-border); stroke-width: 1; opacity: 0.4; }
-/* polygon: 2px stroke, 12% fill (§6 R5). Data ink = ice, never accent/ink (law 2). */
-.skill-radar__poly { fill: color-mix(in srgb, var(--color-ice-600) 12%, transparent);
-  stroke: var(--color-ice-600); stroke-width: 2; }
+.skill-radar__axis { stroke: var(--color-border); stroke-width: 1; }
+/* §S1 polygon: --line-blue 12% fill, 1.5px blue stroke. */
+.skill-radar__poly { fill: color-mix(in srgb, var(--line-blue) 12%, transparent);
+  stroke: var(--line-blue); stroke-width: 1.5; }
 /* compact small-multiple: the silhouette is the visual — heavier translucent fill + thick outline */
 .skill-radar__poly--solid { fill: color-mix(in srgb, var(--color-ice-600) 30%, transparent);
   stroke-width: 2.6; stroke-linejoin: round; }
@@ -23,9 +23,9 @@
 }
 /* Shape-only radar (Player Overview §6) */
 .skill-radar--shape .skill-radar__svg { max-width: 460px; }
-.skill-radar__ring--guide { fill: none; stroke: var(--color-border-subtle); stroke-width: 0.5; }
-.skill-radar__ring--med { fill: none; stroke: var(--color-border); stroke-width: 0.5; stroke-dasharray: 3 3; }
-.skill-radar__poly--shape { fill: color-mix(in srgb, var(--color-ice-600) 12%, transparent); stroke: var(--color-ice-600); stroke-width: 2; }
+.skill-radar__ring--guide { fill: none; stroke: var(--color-border); stroke-width: 1; }
+.skill-radar__ring--med { fill: none; stroke: var(--color-border); stroke-width: 1; stroke-dasharray: 3 3; }
+.skill-radar__poly--shape { fill: color-mix(in srgb, var(--line-blue) 12%, transparent); stroke: var(--line-blue); stroke-width: 1.5; }
 .skill-radar__node { stroke: var(--color-bg-surface); stroke-width: 1; transition: r 120ms; }
 .skill-radar--shape .skill-radar__arc {
   font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: none;
@@ -37,8 +37,13 @@
 
 .skill-radar__whisker { stroke: var(--color-text-secondary); stroke-width: 2; opacity: 0.35; stroke-linecap: round; }
 .skill-radar__dot { stroke: var(--color-bg-surface, #fff); stroke-width: 1.5; transition: r 120ms; }
-/* §6 R5: axis labels sans 12, text-secondary */
-.skill-radar__spoke-label { font-size: 12px; font-weight: 500; fill: var(--color-text-secondary); }
+/* §S1: axis labels in eyebrow style (uppercase Archivo, wide, tracked). */
+.skill-radar__spoke-label {
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 550; font-stretch: 110%;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  fill: var(--color-text-muted);
+}
 /* inboard percentile number: halo (stroke under fill) so it reads over the polygon */
 .skill-radar__spoke-pctl {
   font-size: 9px; font-weight: 700; fill: var(--color-text-secondary);

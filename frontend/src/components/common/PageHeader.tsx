@@ -1,27 +1,35 @@
 /**
- * Shared page header CARD: an optional back link, the title + subtitle side-by-side, and an optional
- * controls slot (children) — page tabs, filters, a toolbar — rendered inside the SAME card, below a
- * subtle divider. Lets every tool/index page keep its title and its initial controls in one card.
+ * The Sheet (§6.2): every page opens with this same uncarded header block —
+ *   eyebrow (section name) · title (Newsreader display) · optional dek · controls row ·
+ *   then the site's constant: a single 1px red rule spanning the container width.
+ * The red rule appears exactly once per page and is the brand's handshake; nothing else
+ * on a page may be a red horizontal rule. Component API is unchanged (title/subtitle/back/
+ * children); `eyebrow` is the one addition. On route change the rule draws in left→right and
+ * the header text fades up (stilled under prefers-reduced-motion).
  */
 import { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import './PageHeader.css'
 
-export default function PageHeader({ title, subtitle, back, children }: {
+export default function PageHeader({ eyebrow, title, subtitle, back, children }: {
+  /** Section eyebrow, e.g. "Studio" — matches the live nav labels. */
+  eyebrow?: string
   title: string
   subtitle?: ReactNode
   back?: { to: string; label: string }
-  /** Page controls (tabs / filters / toolbar) rendered inside the header card, under a divider. */
+  /** Page controls (tabs / filters / toolbar) rendered under the head, above the red rule. */
   children?: ReactNode
 }) {
   return (
-    <header className="page-header">
-      {back && <Link to={back.to} className="page-header__back">← {back.label}</Link>}
-      <div className="page-header__row">
-        <h1 className="page-header__title">{title}</h1>
-        {subtitle && <p className="page-header__sub">{subtitle}</p>}
+    <header className="sheet">
+      {back && <Link to={back.to} className="sheet__back">← {back.label}</Link>}
+      {eyebrow && <p className="sheet__eyebrow">{eyebrow}</p>}
+      <div className="sheet__head">
+        <h1 className="sheet__title">{title}</h1>
+        {subtitle && <p className="sheet__dek">{subtitle}</p>}
       </div>
-      {children && <div className="page-header__controls">{children}</div>}
+      {children && <div className="sheet__controls">{children}</div>}
+      <div className="sheet__rule" aria-hidden="true" />
     </header>
   )
 }

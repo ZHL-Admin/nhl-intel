@@ -1,0 +1,51 @@
+/* =============================================================================
+   The Sheet v2 — states (§6.9): skeletons, empty, error, live.
+   Skeletons are flat (no shimmer). Empty states are one editorial line + a quiet action.
+   Live is the goal light: a 7px red dot with a slow 2s pulse, stilled under reduced motion.
+   ============================================================================= */
+
+/* Skeleton: flat elevated block, no shimmer */
+.skeleton {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+/* Empty state: one Newsreader italic line + a quiet action, never an illustration */
+.empty-state {
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.empty-state__line {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-title);
+  color: var(--color-text-secondary);
+}
+.empty-state__action { margin-top: var(--space-4); }
+
+/* Error: plain statement + retry, no drama */
+.error-state {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.error-state__msg { font-size: var(--text-base); color: var(--color-text-primary); }
+.error-state__action { margin-top: var(--space-3); }
+
+/* Live: the goal light */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--line-red);
+  animation: rt-goal-light 2s var(--ease-out) infinite;
+}
+@keyframes rt-goal-light {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--line-red) 55%, transparent); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px color-mix(in srgb, var(--line-red) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}

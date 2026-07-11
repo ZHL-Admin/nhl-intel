@@ -10,6 +10,54 @@ e25b7ed (radar data layer), b7c9226 (archetypes v2 A3), 3afd20f (v2 A1/A2). Read
 
 ---
 
+## ===== POSITION- & DEPLOYMENT-AWARE LINEUP BUILDERS (Phase 1 + Phase 2 COMPLETE) =====
+
+**Why:** the lineup builders (Roster Builder auto-optimize, offseason-forecast lineups, roster
+suggestions) seated forwards by the *listed* NHL position and stacked lines WAR-greedily. Two failures:
+listed position is often wrong (J.T. Compher lists at LW but plays C), and best-C+best-LW+best-RW is
+not how teams actually deploy (Edmonton splits McDavid & Draisaitl at 5v5).
+
+**Phase 1 — effective position (DONE):**
+- New nightly precompute `nhl_models.player_effective_position`
+  (`models_ml/precompute_serving.build_player_effective_position`, registered in `serving_tables.yml`,
+  built by the DAG `precompute_serving --all` step, exported to DuckDB): per player, the position he
+  ACTUALLY plays (`C`/`L`/`R`/`F_FLEX`) from last-2-seasons faceoffs-per-game (`stg_statsrest_faceoffs`,
+  GP-weighted), plus `locked`. Thresholds in `config.EFFECTIVE_POSITION` (C ≥ 7 fo/gp, W ≤ 2.5, ≥ 10 GP
+  to lock). Validated on the disagreement list: Compher + 13 two-way centers flip to C; pure wingers
+  (Kucherov, Marchand, Rantanen, Nylander) stay; real centers stay C.
+- Consumed via `_load_effective_position` (tools.py, in `_forecast_inputs`) and
+  `project_roster_forecast.load_effective_position` (offseason). Forward display position = effective
+  (Compher shows C); `roster_suggest._pos_ok` matches on effective (F_FLEX matches any forward slot).
+- **Soft-penalty assignment** replaces the greedy column-fill in `_ice_from_pool`: forwards are seated
+  by `scipy.optimize.linear_sum_assignment` maximizing `projected_war − off_position_penalty` over
+  (forward, slot). Penalties in `config.ROSTER_FORECAST` (`OFF_POSITION_PENALTY_CW=0.35`,
+  `WING_SIDE_PENALTY=0.05`, F_FLEX=0). **The penalty shapes the ASSIGNMENT ONLY** — team WAR / points
+  sum RAW `projected_war`, never net of penalties. The pure engine
+  `project_roster_forecast.assign_forward_sides` is SHARED by the live tool AND
+  `calibrate_roster_builder` so the calibration ices the exact rule. Deterministic (tie-break by
+  player_id); a pool < 12 leaves replacement holes.
+- **Recalibrated (Phase 1):** `LEAGUE_AVG_LINEUP_WAR 12.68`, `WAR_TO_RATING 0.03289`; projected-points
+  MAE 10.52, verdict SHIP. Committed on branch `position-aware-lineups` (commit e3487b1).
+
+**Phase 2 — deployment-aware line seeding (DONE):**
+- Shared engine `project_roster_forecast.seed_and_assign_forwards` / `seed_and_assign_defense`: SEED
+  observed 5v5 units (full member set present + unplaced, shared minutes ≥ floor), rank into line/pair
+  order by combined projected WAR, then ASSIGN the rest via the Phase-1 assignment. Source = the team's
+  `int_line_seasons` (base season, floor `LINE_SEED_MIN_5V5_MINUTES=100`) MERGED with `team_current_lines`
+  (last-10, floor `..._CURRENT=30`) — a documented deviation from strict prefer-current/fall-back
+  (10-game minutes never clear a season floor, so a strict rule seeds nothing in the offseason; season
+  units dominate by minutes so recent-form units only fill gaps). Both tables already exported to DuckDB.
+- Applied in `_ice_from_pool` (Roster Builder baseline + optimize, via `_seed_units` loader, cached) and
+  the offseason forecast (`_full_lineup` seeded path, `load_seed_units`/`load_handedness` in main;
+  ledger + delta math unchanged, flat build_lineup kept as the None fallback so pure-core tests pass).
+  No per-edit model scoring — live edit path stays fast.
+- **McDavid & Draisaitl split verified** (EDM optimize): McDavid F1C with his 250-min trio, Draisaitl
+  F2C with his own trio (their together-trio is 88 min, below the floor). Compher still C. Deterministic.
+- **Recalibrated (Phase 2):** `LEAGUE_AVG_LINEUP_WAR 12.09`, `WAR_TO_RATING 0.03540`; projected-points
+  MAE **10.51** (~= 10.5), corr **0.465** (up from 0.427 — seeding helps), verdict SHIP.
+- Docs: `roster-builder.md` (Effective position, Line assignment, Line seeding), `offseason-forecast.md`
+  (steps 2 + 4).
+
 ## ===== LIVE ROSTER MEMBERSHIP — current team comes from a live feed, not just games =====
 
 **Why:** a player's "current team" used to be derived only from the team_id on his most recent NHL

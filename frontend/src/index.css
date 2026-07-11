@@ -6,9 +6,21 @@
 @import './styles/primitives.css';
 @import './styles/semantic.css';
 @import './styles/type.css';
+@import './styles/controls.css';
+@import './styles/gamesheet.css';
+@import './styles/chart-grammar.css';
+@import './styles/states.css';
 
 :root {
   transition: background-color 200ms ease, color 200ms ease;
+}
+
+/* Position-group dot colors (§07): the single site-wide mapping for F/D/G dot-chips,
+   drawn from the data palette. Use these wherever a position group appears. */
+:root {
+  --pos-forward: var(--color-data-1);  /* blue */
+  --pos-defense: var(--color-data-3);  /* teal */
+  --pos-goalie:  var(--color-data-5);  /* gold */
 }
 
 /* ============================================================================
@@ -24,24 +36,10 @@ body {
   position: relative;
 }
 
-/* Subtle grid overlay (accent ink at 0.02) */
-main::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-image:
-    linear-gradient(to right, var(--color-accent) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-accent) 1px, transparent 1px);
-  background-size: 32px 32px;
-  opacity: .02;
-  z-index: -1;
-  pointer-events: none;
-}
+/* v2: structure comes from whitespace + hairlines, not a blueprint grid. The old
+   full-page grid overlay is retired; the pale paper grain (below) is the only texture. */
 
-/* Paper noise (self-hosted; §2.6) */
+/* Paper noise (self-hosted; the "printed on ice" grain) */
 body::before {
   content: "";
   position: absolute;
@@ -117,14 +115,14 @@ img {
   font-family: var(--font-mono);
 }
 
-/* Grid system for page layout */
+/* Grid system for page layout — 12 columns inside the container (§5) */
 .page-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: var(--space-6);
-  max-width: 1280px;
+  max-width: var(--container-max);
   margin: 0 auto;
-  padding: 0 var(--space-8);
+  padding: 0 var(--container-gutter);
 }
 
 .col-full { grid-column: span 12; }
@@ -132,10 +130,24 @@ img {
 .col-6 { grid-column: span 6; }
 .col-4 { grid-column: span 4; }
 
-/* Section title pattern (NOT inside a card) */
+/* Dossier layout (§00 template): main column + annotation Rail; the rail collapses below
+   1200px (Rail.css hides it and Refs open their notes as popovers). */
+.dossier {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-width);
+  gap: var(--space-8);
+  align-items: start;
+}
+.dossier__main { min-width: 0; }
+@media (max-width: 1199px) {
+  .dossier { grid-template-columns: 1fr; }
+}
+
+/* Section title pattern (NOT inside a card) — Newsreader per v2 §3 */
 .section-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: 500;
   color: var(--color-text-primary);
   margin-bottom: var(--space-2);
 }

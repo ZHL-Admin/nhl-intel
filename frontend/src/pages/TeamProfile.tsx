@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { PageLayout, PageCard, SkeletonLoader, StatCard, Badge, IdentityHeader, PlayerAvatar, StreakDoctorCard, StandingsLadder, InsightCard } from '../components/common'
+import { PageLayout, PageCard, SkeletonLoader, StatCard, Badge, IdentityHeader, PlayerAvatar, StreakDoctorCard, StandingsLadder, InsightCard, RailProvider, Rail, Note, Ref } from '../components/common'
 import type { StandingsLadderTeam } from '../components/common'
 import { Flame, Shield, Gauge, Crosshair, Zap, ShieldCheck, Sparkles, Hand, Lightbulb } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -10,6 +10,7 @@ import TeamIdentityTab from '../components/teams/TeamIdentityTab'
 import TeamFormTab from '../components/teams/TeamFormTab'
 import TeamRadar from '../components/teams/TeamRadar'
 import LineBoard from '../components/teams/LineBoard'
+import DepthChart from '../components/teams/DepthChart'
 import { LineSwapWidget } from '../components/common'
 import { getTeamDetail, getTeamTrends, getTeamRoster, getTeamStreak, getStandings, getTeamInsights } from '../api/teams'
 import { getPowerRankings } from '../api/rankings'
@@ -401,7 +402,7 @@ function TeamProfile() {
                 { value: 'identity', label: 'Identity' },
                 { value: 'performance', label: 'Performance / Trends' },
                 { value: 'lines', label: 'Lines' },
-                { value: 'roster', label: 'Roster' },
+                { value: 'roster', label: 'Depth chart' },
                 // Matchups hidden until its vs-opponent content is built (no empty tab).
               ]}
               value={currentTab}
@@ -409,6 +410,9 @@ function TeamProfile() {
             />
           }
         >
+          <RailProvider>
+          <div className="dossier">
+          <div className="dossier__main">
           {/* Upcoming Game Strip (conditional) — a subtle inset, not its own card */}
           {upcomingGame && (
             <button
@@ -470,7 +474,7 @@ function TeamProfile() {
           {currentTab === 'lines' && teamId && (
             <div className="team-profile__content">
               <div className="team-profile__section">
-                <h2 className="team-profile__section-title">Lines</h2>
+                <h2 className="team-profile__section-title">Lines <Ref n={3} /></h2>
                 <LineBoard teamId={parseInt(teamId)} />
               </div>
               <div className="page-divider" />
@@ -482,18 +486,34 @@ function TeamProfile() {
             </div>
           )}
 
-          {currentTab === 'roster' && (
-            <RosterTab
-              teamRoster={teamRoster}
-              teamAbbrev={teamDetail?.team_abbrev}
-              rosterError={rosterError}
-              handleRetryRoster={handleRetryRoster}
-              sortConfig={sortConfig}
-              handleSort={handleSort}
-              sortPlayers={sortPlayers}
-              navigate={navigate}
-            />
+          {currentTab === 'roster' && teamId && (
+            <>
+              {/* Blueprint 2.7: the depth chart — roster arranged as lines/pairs — leads; the full
+                  sortable table stays below as the receipt. */}
+              <DepthChart teamId={parseInt(teamId)} teamAbbrev={teamDetail?.team_abbrev ?? ''} />
+              <div className="page-divider" />
+              <RosterTab
+                teamRoster={teamRoster}
+                teamAbbrev={teamDetail?.team_abbrev}
+                rosterError={rosterError}
+                handleRetryRoster={handleRetryRoster}
+                sortConfig={sortConfig}
+                handleSort={handleSort}
+                sortPlayers={sortPlayers}
+                navigate={navigate}
+              />
+            </>
           )}
+          </div>
+          {/* TODO-copy: verify these definitions with an editorial pass (§S1). */}
+          <Rail>
+            <Note n={1}>The identity fingerprint plots the team's style as percentiles on each axis — how much it leans on rush vs. in-zone offense, forecheck pressure, and shot quality for and against.</Note>
+            <Note n={2}>Rolling xG is the team's expected goals for and against over a moving window of games — a smoothed read of process, less noisy than results.</Note>
+            <Note n={3} italic>Line chemistry projects a unit's expected xGF% from how its members have driven play together and apart — swapping a player re-projects the line.</Note>
+            <Note n={4}>The power rating is the team's strength in goals per game vs. a league-average opponent, adjusted for score state and schedule.</Note>
+          </Rail>
+          </div>
+          </RailProvider>
         </PageCard>
       </div>
     </PageLayout>
@@ -653,7 +673,7 @@ function OverviewTab({ teamDetail, teamColor, streakCard, power, insights, teamI
         </div>
 
         <div className="tov-rail">
-          <h2 className="team-profile__section-title">Rating &amp; profile</h2>
+          <h2 className="team-profile__section-title">Rating &amp; profile <Ref n={1} /></h2>
           <PowerRatingCard power={power} />
           <div className="tov-card tov-radar">
             <div className="tov-card__title">How they're built</div>

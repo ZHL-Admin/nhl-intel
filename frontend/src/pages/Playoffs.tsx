@@ -87,7 +87,7 @@ export default function Playoffs() {
   if (error) {
     return (
       <PageLayout>
-        <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
+        <PageCard eyebrow="Playoffs" title="Stanley Cup Playoffs" subtitle={PLAYOFFS_SUB}>
           <p className="pl-error">{error}</p>
         </PageCard>
       </PageLayout>
@@ -96,7 +96,7 @@ export default function Playoffs() {
   if (!bracket) {
     return (
       <PageLayout>
-        <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
+        <PageCard eyebrow="Playoffs" title="Stanley Cup Playoffs" subtitle={PLAYOFFS_SUB}>
           <SkeletonLoader height={80} />
           <div style={{ marginTop: 24 }}><SkeletonLoader height={420} /></div>
         </PageCard>
@@ -170,8 +170,8 @@ export default function Playoffs() {
 
   return (
     <PageLayout>
-      <PageCard title="Playoffs" subtitle={PLAYOFFS_SUB}>
-        <div className="pl-hero" style={{ ['--pl-team' as any]: getTeamColor(champ) }}>
+      <PageCard eyebrow="Playoffs" title="Stanley Cup Playoffs" subtitle={PLAYOFFS_SUB}>
+        <div className="pl-hero">
           <div className="pl-champion">
             <div className="pl-champion__head">
               <span className="pl-champion__label">

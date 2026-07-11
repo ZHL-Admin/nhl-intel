@@ -1,0 +1,133 @@
+/* Rink Theory animated logo.
+   Colors fall back to near-black on white; wire them to your theme
+   via --color-text-primary (ink) and --color-bg-surface (cutouts). */
+
+.rt-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  cursor: pointer;
+  user-select: none;
+  outline-offset: 4px;
+}
+
+.rt-logo__disc {
+  fill: var(--color-text-primary, #0e0e10);
+}
+
+.rt-logo__cut {
+  stroke: var(--color-bg-surface, #ffffff);
+}
+
+.rt-logo__puck {
+  fill: var(--color-bg-surface, #ffffff);
+  opacity: 0; /* resting state: no puck, faceoff circle only */
+}
+
+.rt-logo__trail {
+  opacity: 0;
+}
+
+.rt-logo__puck,
+.rt-logo__ring {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.rt-logo__wordmark {
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary, #0e0e10);
+}
+
+/* ---- sequence: puck drop -> beat -> shot out -> reset ---- */
+
+.rt-logo--play .rt-logo__puck {
+  animation: rt-faceoff-shot 2.1s ease forwards;
+}
+
+.rt-logo--play .rt-logo__trail {
+  animation: rt-trail 2.1s linear forwards;
+}
+
+.rt-logo--play .rt-logo__ring {
+  animation: rt-ring-pulse 2.1s ease forwards;
+}
+
+@keyframes rt-faceoff-shot {
+  0% {
+    transform: translate(0, -38px);
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  24% {
+    transform: translate(0, 2px); /* lands, slight squash-past */
+  }
+  32% {
+    transform: translate(0, -3px); /* small bounce */
+  }
+  38% {
+    transform: translate(0, 0); /* settled on the dot */
+  }
+  50% {
+    transform: translate(-3px, 0); /* wind-up */
+  }
+  74% {
+    transform: translate(54px, 0); /* fired; exits the clipped disc */
+    opacity: 1;
+  }
+  75% {
+    opacity: 0;
+  }
+  100% {
+    transform: translate(54px, 0);
+    opacity: 0; /* back to resting state */
+  }
+}
+
+@keyframes rt-trail {
+  0%,
+  46% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+  54% {
+    opacity: 1;
+  }
+  76% {
+    opacity: 1;
+    stroke-dashoffset: -24;
+  }
+  90% {
+    opacity: 0;
+    stroke-dashoffset: -30;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rt-ring-pulse {
+  0%,
+  36% {
+    transform: scale(1);
+  }
+  44% {
+    transform: scale(1.16); /* reacts to the puck landing */
+  }
+  54%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-logo--play .rt-logo__puck,
+  .rt-logo--play .rt-logo__trail,
+  .rt-logo--play .rt-logo__ring {
+    animation: none;
+  }
+}

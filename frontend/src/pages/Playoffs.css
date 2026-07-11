@@ -7,40 +7,40 @@
   margin: var(--space-2) 0 0; max-width: 78ch;
 }
 
-/* Hero group: champion banner + bracket together, accented with the champion's color.
-   No card chrome (it lives inside the page card) — a rounded, tinted inset, no border/shadow. */
-.pl-hero {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
+.pl-hero { display: flex; flex-direction: column; }
 
-/* Champion banner — the hero card's header (team-tinted), divided from the bracket below */
+/* §04 signature: the championship slot is the page's reserved --radius-rink frame. */
 .pl-champion {
-  background: color-mix(in srgb, var(--pl-team, var(--color-accent)) 8%, var(--color-bg-surface));
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-5) var(--space-6);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-rink);
+  padding: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-6);
 }
 .pl-champion__label {
-    font-family: var(--font-mono);
-    font-size: var(--text-xl);
-    font-weight: 600;
-    color: var(--color-text-primary);
-    margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0;
 }
 .pl-champion__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .pl-reset {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-full); padding: 4px 12px;
-  font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary);
-  cursor: pointer; transition: all 120ms ease;
+  background: none; border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm); padding: 4px 12px;
+  font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 500; color: var(--color-text-secondary);
+  cursor: pointer; transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.pl-reset:hover { border-color: var(--color-border-strong); color: var(--color-text-primary); }
+.pl-reset:hover { border-color: var(--line-blue); color: var(--color-text-primary); }
 .pl-champion__hint { font-size: var(--text-xs); color: var(--color-text-muted); margin: var(--space-3) 0 0; }
-.pl-champion__team { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
-.pl-champion__logo { width: 52px; height: 52px; object-fit: contain; }
-.pl-champion__name { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); line-height: 1.1; }
-.pl-champion__odds { font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: 2px; }
+.pl-champion__team { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-4); }
+.pl-champion__logo { width: 56px; height: 56px; object-fit: contain; }
+.pl-champion__name { font-family: var(--font-display); font-size: var(--text-title); font-weight: 500; color: var(--color-text-primary); line-height: 1.1; }
+.pl-champion__odds { font-family: var(--font-sans); font-size: var(--text-display-2); font-weight: 500; color: var(--color-text-primary); font-variant-numeric: tabular-nums; margin-top: 2px; }
 
 /* Bracket — sits inside the hero card below the champion header. Fits the page card width (no
    horizontal scroll); cells shrink via the per-column --s scale and the fluid fr columns. */
@@ -54,7 +54,9 @@
 }
 .pl-col { display: flex; flex-direction: column; min-width: 0; }
 .pl-col__label {
-  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow); font-weight: 550; font-stretch: 110%;
+  text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--color-text-muted); text-align: center; margin-bottom: var(--space-3);
 }
 .pl-col__body {
@@ -65,11 +67,13 @@
   gap: var(--space-3);
 }
 
-/* Bracket matchup cells: flat inset boxes (outlined, no shadow) — not raised cards. */
+/* §04/§S8 series tiles: flat, 2px radius, ice surface. Simulated series (a bracket
+   prediction, not yet played) carry a DASHED border per the solid/dashed law. */
 .pl-series {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
+  position: relative;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
   overflow: hidden;
 }
 .pl-series--lg { border-color: var(--color-border-strong); }
@@ -88,19 +92,20 @@
   cursor: pointer;
   transition: background-color 120ms ease;
 }
-.pl-series__team:hover:not(.is-winner) { background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg-elevated)); }
-.pl-series__team:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.pl-series__team:hover:not(.is-winner) { background: var(--crease); }
+.pl-series__team:focus-visible { outline: 2px solid var(--line-blue); outline-offset: -2px; }
 .pl-series__team + .pl-series__team { border-top: 1px solid var(--color-border-subtle); }
+/* Advancing team: the blue threshold on the left edge (crossing the line), no team fill. */
 .pl-series__team.is-winner {
-  background: color-mix(in srgb, var(--pl-team, var(--color-accent)) 12%, var(--color-bg-elevated));
-  box-shadow: inset 3px 0 0 var(--pl-team, var(--color-accent));
+  background: var(--crease);
+  box-shadow: inset 2px 0 0 var(--line-blue);
 }
 .pl-series__logo { width: calc(20px * var(--s, 1)); height: calc(20px * var(--s, 1)); object-fit: contain; }
 .pl-series__name { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.pl-series__abbr { font-size: calc(var(--text-sm) * var(--s, 1)); font-weight: 600; color: var(--color-text-primary); }
-.pl-series__team.is-winner .pl-series__abbr { font-weight: 700; }
-.pl-series__upset { font-size: 9px; color: var(--color-warning); flex-shrink: 0; line-height: 1; }
-.pl-series__prob { font-size: calc(var(--text-sm) * var(--s, 1)); font-weight: 600; color: var(--color-text-secondary); }
+.pl-series__abbr { font-family: var(--font-sans); font-size: calc(var(--text-sm) * var(--s, 1)); font-weight: 500; color: var(--color-text-secondary); }
+.pl-series__team.is-winner .pl-series__abbr { color: var(--color-text-primary); }
+.pl-series__upset { font-size: 9px; color: var(--boards-yellow); flex-shrink: 0; line-height: 1; }
+.pl-series__prob { font-family: var(--font-sans); font-size: calc(var(--text-sm) * var(--s, 1)); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .pl-series__team.is-winner .pl-series__prob { color: var(--color-text-primary); }
 .pl-series__band {
   font-size: 10px;
@@ -120,14 +125,15 @@
   display: flex; justify-content: space-between;
   max-width: 100%; 
   margin: var(--space-3) 0 0;
-  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow); font-weight: 550; font-stretch: 110%; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--color-text-muted);
 }
 .pl-bracket__conf span:last-child { margin-left: auto; }
 
 /* Odds table — a plain section inside the page card (no card chrome; a divider sits above it) */
 .pl-odds-section { margin: 0; }
-.pl-odds-section__title { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); margin: 0; }
+.pl-odds-section__title { font-family: var(--font-display); font-size: var(--text-title); font-weight: 500; color: var(--color-text-primary); margin: 0; }
 .pl-odds-section__sub { font-size: var(--text-sm); color: var(--color-text-secondary); margin: var(--space-1) 0 var(--space-5); }
 .pl-odds { width: 100%; border-collapse: collapse; }
 .pl-odds thead th {
@@ -143,3 +149,43 @@
 .pl-odds__cup { position: relative; min-width: 120px; }
 .pl-odds__bar { position: absolute; left: var(--space-16); top: 50%; transform: translateY(-50%); height: 8px; border-radius: var(--radius-full); opacity: 0.85; }
 .pl-odds__cupval { position: relative; font-weight: 700; color: var(--color-text-primary); }
+
+/* ============================================================================
+   §S8 — bracket connectors, elimination, mobile accordion
+   ============================================================================ */
+/* Eliminated team (the projected loser of a series): 45% opacity + grayscale logo. */
+.pl-series__team:not(.is-winner) { opacity: 0.55; }
+.pl-series__team:not(.is-winner) .pl-series__logo { filter: grayscale(1); opacity: 0.45; }
+
+/* Connector stubs: 1px --color-border-strong elbows reaching toward the center.
+   West columns (1–3) reach right; East columns (5–7) reach left; the advancing
+   (winner) row's stub crosses the blue line at 2px. */
+.pl-col__body { position: relative; }
+.pl-series::before,
+.pl-series::after { content: none; }
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series::after,
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--space-3);
+  height: 0;
+  border-top: 1px solid var(--color-border-strong);
+  transform: translateY(-50%);
+}
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series::after { right: calc(-1 * var(--space-3)); }
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series::before { left: calc(-1 * var(--space-3)); }
+/* the advancing path crosses the blue line */
+.pl-bracket > .pl-col:nth-child(-n+3) .pl-series:has(.is-winner)::after,
+.pl-bracket > .pl-col:nth-child(n+5) .pl-series:has(.is-winner)::before {
+  border-top-width: 2px;
+  border-top-color: var(--line-blue);
+}
+
+/* Below 900px the bracket becomes a vertical accordion per round; tiles keep their anatomy. */
+@media (max-width: 900px) {
+  .pl-bracket { grid-template-columns: 1fr; gap: var(--space-5); }
+  .pl-col__body { justify-content: flex-start; gap: var(--space-3); }
+  .pl-series::after, .pl-series::before { content: none !important; }
+  .pl-bracket__conf { display: none; }
+}

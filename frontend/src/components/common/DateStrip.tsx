@@ -88,15 +88,16 @@ export default function DateStrip({
           <button
             key={date.date}
             ref={selectedDate === date.date ? selectedDateRef : null}
-            className={`date-strip__pill ${selectedDate === date.date ? 'date-strip__pill--selected' : ''}`}
+            className={`date-strip__item ${selectedDate === date.date ? 'date-strip__item--selected' : ''}`}
             onClick={() => onDateChange(date.date)}
           >
-            <span className="date-strip__pill-label">{formatDateLabel(date.date)}</span>
+            {date.date === todayDate && <span className="date-strip__today-dot" aria-label="today" />}
+            <span className="date-strip__item-label">{formatDateLabel(date.date)}</span>
             {date.gameCount > 1 && (
-              <span className="date-strip__pill-count">{date.gameCount}</span>
+              <span className="date-strip__item-count">{date.gameCount}</span>
             )}
             {date.label && (
-              <span className="date-strip__pill-badge">{date.label}</span>
+              <span className="date-strip__item-badge">{date.label}</span>
             )}
           </button>
         ))}

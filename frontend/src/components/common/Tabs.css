@@ -1,33 +1,36 @@
-/* §7.3 segmented control: bg-elevated container, active segment is bg-surface + border-strong. */
+/* Sheet tabs (§00 6.5): plain text on a shared hairline baseline; active = 2px blue underline.
+   No pill, no segmented container. */
 .tabs {
   display: inline-flex;
-  gap: 2px;
-  background: var(--color-bg-elevated);
-  padding: 3px;
-  border-radius: var(--radius-md);
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .tabs__option {
+  position: relative;
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 500;
-  padding: var(--space-1) var(--space-3);
-  border-radius: 6px;
-  background: transparent;
+  padding: var(--space-2) 0;
+  background: none;
   color: var(--color-text-secondary);
-  border: 1px solid transparent;   /* reserve space so the selected border adds no shift */
+  border: none;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: color var(--dur-fast) var(--ease-out);
   white-space: nowrap;
 }
 
-.tabs__option:hover:not(.tabs__option--selected) {
-  color: var(--color-text-primary);
-}
+.tabs__option:hover:not(.tabs__option--selected) { color: var(--color-text-primary); }
 
-.tabs__option--selected {
-  background: var(--color-bg-surface);
-  border-color: var(--color-border-strong);
-  color: var(--color-text-primary);
+.tabs__option--selected { color: var(--color-text-primary); }
+.tabs__option--selected::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--line-blue);
 }
 
 /* concept-first label with a small method/unit tag underneath */
@@ -35,14 +38,11 @@
 .tabs__option-tag {
   display: block;
   font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 550;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  opacity: 0.7;
+  color: var(--color-text-muted);
   margin-top: 1px;
 }
-.tabs__option--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.tabs__option--disabled { opacity: 0.4; cursor: not-allowed; }
 .tabs__option--disabled:hover { color: var(--color-text-secondary); }

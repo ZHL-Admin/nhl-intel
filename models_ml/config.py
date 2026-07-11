@@ -511,10 +511,17 @@ ROSTER_FORECAST = {
     "RANDOM_SEED": 7,                 # deterministic tie-breaks only; the job does no sampling
 
     # The dressed lineup a team ices. The talent total is summed over FILLED slots, never "all
-    # arrivals minus all departures" — a team plays a fixed lineup. 12 F + 6 D + 1 starter.
+    # arrivals minus all departures" — a team plays a fixed lineup. 12 F + 6 D + a goalie TANDEM.
     "N_FWD": 12,
     "N_DEF": 6,
-    "N_GOALIE": 1,
+    "N_GOALIE": 2,                    # starter + backup. UNLIKE skaters, the two goalies are NOT
+    # summed at full value: WAR is a per-82 rate (models_ml.compute_contract_value.blended_war_rate),
+    # so two goalies each carry a full-season rate. Summing them would double-count goaltending (a team
+    # plays ONE season split between them). The goalie slots are therefore WORKLOAD-WEIGHTED by expected
+    # starts (shares sum to 1), so the tandem contributes exactly one season of goaltending, distributed.
+    # Shares come from each team's PRIOR-YEAR goalie usage (load_goalie_workload); this league default is
+    # the fallback for a team with too-thin prior data and for the roster builder's arbitrary rosters.
+    "GOALIE_WORKLOAD_FALLBACK": [0.65, 0.35],   # starter ~53 starts / backup ~29 — typical modern tandem
     "GAMES_PER_SEASON": 82,           # season WAR (wins) -> per-game goals scaling
 
     # Robust end-of-season roster: a player is a roster member of his LATEST-game team that season
@@ -570,8 +577,11 @@ ROSTER_FORECAST = {
     # Recalibrated in Handoff 12 for the component projection model (project_roster_player), whose WAR
     # scale differs from the old project_skater_war these were first fit on. Roster-Builder-only
     # (absolute_rating is not used by the offseason tool).
-    "LEAGUE_AVG_LINEUP_WAR": 11.28,   # league-mean projected POSITION-VALID iced-lineup WAR (above replacement)
-    "WAR_TO_RATING": 0.03353,         # goals/game of team rating per 1 WAR of centered lineup value
+    "LEAGUE_AVG_LINEUP_WAR": 12.09,   # league-mean projected iced-lineup WAR (above replacement); goalie
+    #                                   tandem workload-weighted, skaters iced DEPLOYMENT-AWARE (seed observed
+    #                                   5v5 units, then the position-aware assignment). Recalibrated via
+    #                                   calibrate_roster_builder (Phase 2: 63 team-seasons, MAE 10.51, corr 0.465).
+    "WAR_TO_RATING": 0.03540,         # goals/game of team rating per 1 WAR of centered lineup value
 
     # Roster Builder band calibration (Handoff 12 — used ONLY by roster-evaluate, not the offseason
     # tool). The ABSOLUTE points band is sqrt((kappa * talent_quad_pts)^2 + luck_floor^2): the iced
@@ -652,11 +662,57 @@ ROSTER_FORECAST = {
     # explicitly instead of rendering a confident near-zero forecast (no-zeroed-empty-states).
     "NEGLIGIBLE_NET_WAR": 0.5,        # |net lineup WAR delta| at/below this AND ...
     "NEGLIGIBLE_MOVES": 2,            # ... arrivals+departures at/below this -> "no material moves"
+
+    # ── Position-aware line assignment (Roster Builder auto-optimize + calibration) ──────────────
+    # _ice_from_pool seats forwards by solving an ASSIGNMENT problem over (forward, forward-slot):
+    #   value(player, slot) = projected_war - off_position_penalty(player, slot)
+    # The penalty SHAPES THE ASSIGNMENT ONLY — it decides who sits where, biasing a locked center to a
+    # C slot and a winger to his side. lineup_value and the team WAR total still sum RAW projected_war,
+    # never net of penalties (a player's value does not shrink because he is off-position; the tool just
+    # prefers not to place him there). Effective position (C/L/R/F_FLEX, from player_effective_position)
+    # drives the bins; a locked C at a wing (or a locked W at C) pays OFF_POSITION_PENALTY_CW, a winger
+    # on his off side pays WING_SIDE_PENALTY, an F_FLEX pays nothing. WAR units, tune-friendly.
+    "OFF_POSITION_PENALTY_CW": 0.35,  # locked C iced at a wing slot, or locked W iced at C
+    "WING_SIDE_PENALTY": 0.05,        # winger iced on the wrong side (L on RW, R on LW)
+
+    # ── Deployment-aware line seeding (Phase 2) ──────────────────────────────────────────────────
+    # Before the assignment, the builder SEEDS observed units: an int_line_seasons trio/pair (or a
+    # team_current_lines unit in-season) whose full member set is present + unplaced in the pool and
+    # shared >= this many 5v5 minutes is placed intact, in descending shared minutes. This reproduces
+    # real deployment (e.g. a team that splits its two stars at 5v5) instead of WAR-stacking. The
+    # table's own floor is 30 minutes; we require a higher bar so only genuinely established units seed.
+    # Sources are MERGED (a small, documented deviation from strict prefer-current/fall-back-to-season):
+    # int_line_seasons full-season units (floor below) plus team_current_lines last-10-games units at the
+    # proportional CURRENT floor. Sorted by shared minutes, season units (larger) seed first, so recent
+    # deployment only fills gaps a season unit does not — a strict "prefer current" rule would seed almost
+    # nothing in the offseason (10-game shared minutes never clear a season-scale floor).
+    "LINE_SEED_MIN_5V5_MINUTES": 100.0,          # int_line_seasons (full season)
+    "LINE_SEED_MIN_5V5_MINUTES_CURRENT": 30.0,   # team_current_lines (last 10 games)
 }
 
 assert ROSTER_FORECAST["GOALS_PER_WIN"] == GAR_CONFIG["GOALS_PER_WIN"], (
     "ROSTER_FORECAST GOALS_PER_WIN must match GAR_CONFIG so a projected WAR delta and the team "
     "rating share one goals scale.")
+
+
+# ── Effective position (player_effective_position precompute) ────────────────────────────────────
+# The NHL roster feed lists a player's NOMINAL position (e.g. J.T. Compher as LW), which is often not
+# the position he actually plays. Faceoff VOLUME is the cleanest deployment signal for the C/W split:
+# a center takes draws every shift, a winger almost never. player_effective_position classifies each
+# forward from his last-two-seasons faceoffs-per-game (regular season + playoffs, GP-weighted):
+#   fo_per_gp >= FO_CENTER_PER_GP  (>= FO_MIN_GP games) -> effective C, locked
+#   fo_per_gp <= FO_WINGER_PER_GP  (>= FO_MIN_GP games) -> effective winger, locked (side: listed side
+#                                     if listed L/R, else by handedness — L shot -> L, R shot -> R)
+#   otherwise / thin sample / rookie -> F_FLEX (fills any forward slot, no off-position penalty)
+#   no faceoff rows at all -> absent from the table; the builder falls back to the listed position.
+# Defensemen/goalies pass through unchanged (effective = listed, locked). These are STARTING points —
+# validate the disagreement list (calibrate/precompute prints it) and tune if a known winger flips.
+EFFECTIVE_POSITION = {
+    "FO_WINDOW_SEASONS": 2,     # last N seasons of faceoff data, GP-weighted
+    "FO_CENTER_PER_GP": 7.0,    # >= this faceoffs/game -> effective center
+    "FO_WINGER_PER_GP": 2.5,    # <= this faceoffs/game -> effective winger
+    "FO_MIN_GP": 10,            # games in the window required to LOCK a C/W classification
+}
 
 
 # ── Deployment efficiency (Divergence Board rework) ──────────────────────────────────────────

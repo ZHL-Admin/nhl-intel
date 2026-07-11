@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useSearchParams } from 'react-router-dom'
-import { PageLayout, PageCard, Tabs, Select, SkeletonLoader } from '../components/common'
+import { PageLayout, PageCard, Tabs, Select, SkeletonLoader, ShareActions } from '../components/common'
 import { getOffseasonBoard, getTeamOffseason } from '../api/offseason'
 import { RosterForecastRow, OffseasonTeamDetail } from '../api/types'
 import {
   getTeamLogoUrl, getTeamName, getTeamColor, setTeamPrimaryColor, clearTeamPrimaryColor, DIVISIONS,
 } from '../utils/teams'
 import { nextSeasonOf } from '../utils/forecastFormat'
+import { drawOffseasonCard } from '../utils/offseasonShareCard'
 import ForecastHeroStats from '../components/forecast/ForecastHeroStats'
 import LeagueRail from '../components/forecast/LeagueRail'
 import MoveLedger from '../components/forecast/MoveLedger'
@@ -19,6 +20,9 @@ import '../components/forecast/forecast.css'
 import './Offseason.css'
 
 const ALL_TEAMS = DIVISIONS.flatMap((d) => d.teams) // { id, abbrev }
+
+/** Verdict-kicker date stamp, e.g. "JUL 6" (browser-local; the share card echoes it). */
+const shareStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 
 function SectionHead({ n, title }: { n: string; title: string }) {
   return (
@@ -48,7 +52,18 @@ function TeamDetail({ detail, loading, error, onRetry }: {
   return (
     <div className="off-detail">
       <section className="sec">
-        <SectionHead n="01" title="The verdict" />
+        <div className="off-verdict__head">
+          <SectionHead n="01" title="The verdict" />
+          <div className="off-verdict__share">
+            <span className="off-verdict__kicker mono">OFFSEASON FORECAST · {shareStamp()}</span>
+            <ShareActions kicker={`OFFSEASON FORECAST · ${shareStamp()}`} verdict={detail.verdict}
+              shareName={`openice-offseason-${detail.forecast.team_abbrev?.toLowerCase() ?? 'team'}-${nextSeasonOf(detail.forecast.transition)}`}
+              renderCard={() => drawOffseasonCard({
+                row: detail.forecast, moves: detail.moves,
+                nextSeason: nextSeasonOf(detail.forecast.transition), dateStamp: shareStamp(),
+              })} />
+          </div>
+        </div>
         <p className="verdict__lead">{detail.verdict}</p>
       </section>
 
@@ -67,7 +82,8 @@ function TeamDetail({ detail, loading, error, onRetry }: {
 
       <section className="sec">
         <SectionHead n="04" title="Projected lineup" />
-        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals} team={detail.forecast.team_abbrev} />
+        <ProjectedLineup lineup={detail.projected_lineup} arrivals={arrivals}
+          team={detail.forecast.team_abbrev} fits={detail.line_fits} />
       </section>
     </div>
   )
@@ -140,6 +156,7 @@ export default function Offseason() {
     <PageLayout>
       <div className="off">
         <PageCard
+          eyebrow="Studio"
           title="Offseason forecast"
           subtitle="Projected WAR change for every roster, updated daily."
           controls={
