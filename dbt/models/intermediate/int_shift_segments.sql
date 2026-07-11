@@ -23,12 +23,29 @@ rosters as (
     from {{ ref('stg_rosters') }}
 ),
 
+-- Goal cut-points (Atlas Amendment A): a goal is a segment boundary so the score
+-- state is CONSTANT within every segment. Shootout goals have no shifts and are
+-- excluded. Event seconds use the same (period-1)*1200 offset as shifts.
+goals as (
+    select
+        game_id,
+        (period_number - 1) * 1200
+            + cast(split(time_in_period, ':')[offset(0)] as int64) * 60
+            + cast(split(time_in_period, ':')[offset(1)] as int64) as t
+    from {{ ref('stg_play_by_play') }}
+    where type_desc_key = 'goal'
+      and period_type != 'SO'
+      and time_in_period is not null
+),
+
 boundaries as (
     select distinct game_id, t
     from (
         select game_id, shift_start_seconds as t from shifts
         union distinct
         select game_id, shift_end_seconds as t from shifts
+        union distinct
+        select game_id, t from goals
     )
 ),
 

@@ -75,3 +75,16 @@ where player_id is not null
     -- concentrated in 2019-20) or corrupt over-length shifts (up to ~44 min, a handful
     -- in 2021-22/2023-24). Neither represents a real on-ice interval.
     and duration_seconds between 1 and 1200
+    -- Corrupt period-5+ rows in REGULAR-season games only (game_type 02): period 5 is
+    -- the shootout, which has no on-ice shifts. A handful of games carry on-ice shifts
+    -- mislabelled period >=5 (raw-feed corruption, ledger D7). Playoff multi-OT
+    -- (period 5/6/... in game_type 03) is legitimate and untouched.
+    and not (period >= 5 and substr(cast(game_id as string), 5, 2) = '02')
+-- Exact-duplicate drop (matches the Atlas dedup rule): the raw NHL shift array
+-- repeats some identical (player, period, start, end) rows verbatim (~0.1% of rows,
+-- concentrated 2020-25). A player cannot have two identical shifts; collapse to one.
+-- Fixes phantom personnel/overlaps + inflated TOI in every downstream on-ice model.
+qualify row_number() over (
+    partition by game_id, player_id, period, shift_start_seconds, shift_end_seconds
+    order by shift_number
+) = 1
