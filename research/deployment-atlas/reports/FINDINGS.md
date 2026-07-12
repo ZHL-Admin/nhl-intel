@@ -73,3 +73,8 @@ pre-registration** — new cohorts/targets, decided before results are seen.
   several targets jointly (xG, goals, WAR); widen the mover cohort (lower the minutes
   bar, or use multi-season windows) to shrink the CI — all candidates for the next
   pre-registered attempt.
+
+---
+*This report is frozen. Follow-on and cross-project findings (incl. the System Effects project,
+which answers "The System Tax" above) live in the growing program ledger:
+[`research/PROGRAM-FINDINGS.md`](../../PROGRAM-FINDINGS.md).*

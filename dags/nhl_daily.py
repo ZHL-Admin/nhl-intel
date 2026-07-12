@@ -227,6 +227,12 @@ def ingest_nhl_data(**context):
             rr = get_game_right_rail(game_id)
             rr["id"] = game_id          # right-rail payload has no id; inject it
             rr["game_id"] = game_id
+            # Provenance marking (System Effects Phase 7), same convention as the shift fallback.
+            # The right-rail gameInfo carries the coach-of-record, referees, linesmen, and
+            # scratches; it is settled once the game is FINAL. Tag the source and final state so
+            # the regime ledger (stg_syseff_game_coaches) consumes only settled coach rows.
+            rr["_source"] = "right_rail_daily"
+            rr["_game_final"] = final_state_by_gid.get(game_id) in _FINAL_STATES
             rails.append(rr)
         except Exception as e:
             print(f"Error fetching right-rail for game {game_id}: {e}")
@@ -234,8 +240,15 @@ def ingest_nhl_data(**context):
         load_json_to_bigquery(project_id, dataset_raw, "raw_game_landing", landings, season)
         print(f"Loaded {len(landings)} landing records to {dataset_raw}.raw_game_landing")
     if rails:
+        # For FINAL games, capture the settled coach-of-record idempotently (one row per game):
+        # delete-then-insert per game_id, matching the shift-fallback convention. Non-final games
+        # still append (they are re-captured, and settled, once FINAL).
+        final_rail_gids = [r["game_id"] for r in rails if r.get("_game_final")]
+        if final_rail_gids:
+            delete_rows_by_game_id(project_id, dataset_raw, "raw_game_right_rail", final_rail_gids)
         load_json_to_bigquery(project_id, dataset_raw, "raw_game_right_rail", rails, season)
-        print(f"Loaded {len(rails)} right-rail records to {dataset_raw}.raw_game_right_rail")
+        print(f"Loaded {len(rails)} right-rail records to {dataset_raw}.raw_game_right_rail "
+              f"({len(final_rail_gids)} FINAL, idempotent delete-then-insert)")
 
     # Standings for each date that had games.
     standings_rows = []

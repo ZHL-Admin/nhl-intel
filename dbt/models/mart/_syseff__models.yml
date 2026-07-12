@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: mart_syseff_regime_ledger
+    description: >
+      System Effects RAW regime ledger — one row per (team, head coach, contiguous game span),
+      derived live from stg_syseff_game_coaches (gaps-and-islands on game_id, UL-1-immune).
+      Reconciles exactly to the frozen research table (235 rows). DESCRIPTIVE.
+    columns:
+      - name: start_game_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: coach_name
+        tests: [not_null]
+
+  - name: mart_syseff_regime_ledger_consolidated
+    description: >
+      System Effects CONSOLIDATED regime ledger (K=4 transient fill-in absorption). Frozen research
+      values (201 rows), refreshed daily by the consolidation step. DESCRIPTIVE. Anything stating a
+      coaching finding must carry the F12-extended nuance (see the claims dossier).
+    columns:
+      - name: start_game_id
+        tests: [not_null]
+
+  - name: mart_syseff_fingerprints_v2
+    description: >
+      System Effects system fingerprints v2, one row per (team, consolidated regime). Deployment +
+      style + PK metrics, score-close where applicable. FROZEN research values (re-derivation from
+      production diverges — backbone). MUST be read with mart_syseff_fingerprint_metric_status:
+      only zone_start_polarization and top6_fwd_toi_share are coaching-sensitive (top6 caveated);
+      style and PK are roster properties / descriptive context, NOT coaching claims.
+    columns:
+      - name: team_id
+        tests: [not_null]
+
+  - name: mart_syseff_fingerprint_metric_status
+    description: >
+      Per-metric validation status for fingerprints_v2: split_half_reliability_r, coaching_sensitive
+      (Phase 2 discontinuity), and caveat language. Gate for any claim built on a fingerprint metric.
+    columns:
+      - name: metric
+        tests: [not_null, unique]
+
+  - name: mart_syseff_schedule_adjustment
+    description: >
+      Opponent-STRENGTH schedule adjustment per (player, season, team) — xG-share points shifted by
+      opponent-set difficulty. Style-matchup killed (F15). DESCRIPTIVE ACCOUNTING ONLY: no predictive
+      claim, no validation bar. Typical |adjustment| ~0.003, p90 ~0.0065.
+    columns:
+      - name: player_id
+        tests: [not_null]
+
+seeds:
+  - name: syseff_regime_ledger_consolidated
+    description: Frozen research consolidated regime ledger (201 rows), source of record.
+  - name: syseff_fingerprints_v2
+    description: Frozen research per-regime system fingerprints v2 (201 rows), source of record.
+  - name: syseff_fingerprint_metric_status
+    description: Frozen per-metric reliability + coaching-sensitivity status + caveats.
+  - name: syseff_schedule_adjustment
+    description: Frozen research strength-only schedule adjustment (11,397 rows).

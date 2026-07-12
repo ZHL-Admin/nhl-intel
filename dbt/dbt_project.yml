@@ -72,3 +72,14 @@ models:
     mart:
       +materialized: table
       +schema: mart
+
+# System Effects (Phase 7) promoted descriptive tables. The fingerprints_v2, consolidated regime
+# ledger, metric status, and schedule adjustment are frozen research values (re-derivation from
+# production sources fails reconciliation — backbone divergence); seeded here as the source of
+# record and refreshed on research re-run (regime consolidation is refreshed daily; see
+# docs/rebuild-reports/syseff-p7.md).
+seeds:
+  nhl_intel:
+    syseff:
+      +schema: mart
+      +quote_columns: false

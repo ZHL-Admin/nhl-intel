@@ -1,0 +1,18 @@
+metric,family,split_half_reliability_r,coaching_sensitive,caveat
+pace,style,0.848,false,""
+rush_share_for,style,0.653,false,""
+cycle_share_for,style,0.749,false,""
+forecheck_share_for,style,0.616,false,""
+point_shot_share_for,style,0.631,false,""
+rush_share_against,style,0.614,false,""
+cycle_share_against,style,0.779,false,""
+loc_inner_against,style,0.638,false,""
+loc_outer_against,style,0.614,false,""
+loc_point_against,style,0.665,false,""
+forecheck_pressure_per60,style,0.905,false,""
+top6_fwd_toi_share,deployment,0.994,true,STABILITY CAVEAT: no YoY within-regime persistence (Phase 3.5); zone_start_polarization is the primary deployment axis.
+zone_start_polarization,deployment,0.91,true,""
+pk_loc_inner_against,pk,0.565,false,""
+pk_loc_outer_against,pk,0.717,false,""
+pk_loc_point_against,pk,0.807,false,""
+home_away_strictness,deployment,,false,FAILED VALIDATION (Atlas Phase 5.6): descriptive only; NOT carried in fingerprints_v2.
