@@ -6,6 +6,13 @@ positional breakdowns, and an honest band. It is a *what-if projection* tool, di
 offseason forecast (which evaluates the moves a team actually made) and the Trade Builder (cap-aware
 movements between teams). No cap or salary anywhere — explicitly out of scope.
 
+**Current-roster baseline.** The pre-loaded roster (`_team_current_members`) is the team's real current
+roster: every player on the published active roster **plus** signed non-roster/AHL players still under a
+contract covering the upcoming season. It deliberately drops the "phantom" latest-game UFAs that
+`dim_current_roster` keeps on a club via its game fallback (an unsigned/retired veteran resolves to his
+last team) — those players are no longer on the team. This is the **same current-roster rule the
+offseason forecast uses**, so the two tools open from the same roster.
+
 It reuses the offseason forecast engine end to end: every player projects to the same WAR he does in
 the offseason tool and the contract grader (`project_skater_war` / `project_goalie_war` →
 `blended_war_rate` + aging), lineups are built with `build_lineup` (an unfilled slot is a
@@ -126,11 +133,10 @@ builder stacks them on line 1. So **before** the assignment, the builder *seeds*
 (`project_roster_forecast.seed_and_assign_forwards` / `seed_and_assign_defense`):
 
 - **Candidate units** are the team's `int_line_seasons` forward trios and defense pairs for the base
-  season, merged with its `team_current_lines` last-10-games units (a small documented deviation from
-  a strict prefer-current/fall-back rule — 10-game shared minutes never clear a season-scale floor, so
-  a strict rule would seed nothing in the offseason). A unit qualifies only when its **full member set
-  is present and unplaced** in the pool and it clears the shared-5v5 floor
-  (`LINE_SEED_MIN_5V5_MINUTES = 100` for season units, `..._CURRENT = 30` for the 10-game units).
+  season — loaded by the **same** `project_roster_forecast.load_seed_units` the offseason forecast uses,
+  so both tools seed from the identical units and ice the identical lineup from the same roster. A unit
+  qualifies only when its **full member set is present and unplaced** in the pool and it clears the
+  shared-5v5 floor (`LINE_SEED_MIN_5V5_MINUTES = 100`).
 - Units are accepted greedily in descending shared minutes, skipping any that conflict with an
   already-placed player. Accepted units are ranked into line/pair order by combined projected WAR
   (best unit = line 1). Within a trio the C slot goes to the member with the highest faceoffs/game;
@@ -174,15 +180,30 @@ only the swapped value matters — which is the engine's core competency and far
 the summed absolute level. This mirrors how the offseason tool leads with its move-delta anchored on a
 measured base.
 
-### Cross-tool consistency
+### Cross-tool consistency — identical by construction
 
-For a team's current roster with no changes, the Roster Builder's pure-projection baseline agrees with
-the offseason tool's measured-rating-anchored projection with **no systematic bias**: mean gap
-**−0.6 points**, MAE 7.8, sd 10.0 across 32 teams. The per-team spread is exactly the expected
-projection-vs-measured difference — a team whose measured rating exceeds its roster's projected talent
-(e.g. on the back of hot goaltending or finishing) reads lower here, because a forward projection will
-not assume that outperformance repeats. That offset is a feature of the distinction, not a
-miscalibration.
+For a team's current roster with **no edits**, the Roster Builder reproduces the offseason forecast's
+projected points **exactly** (within integer rounding), with `points_delta = 0`. This is not a
+coincidence to be measured — it is guaranteed by construction: the unedited baseline anchors on
+**R_current**, the offseason forecast's own projected rating for the team's current transition (read
+from the `roster_forecast` serving row; `tools._forecast_current_rating`). The hybrid
+`projected_rating = R_bottomup(built) + w·(R_current − R_bottomup(current actual))` collapses to
+`R_current` at `w = 1` (nothing changed), so `baseline_points = rating_to_points(R_current)` = the
+forecast's number. Both tools also share ONE **measured anchor** — the 2-year regressed
+`predictive_base` (§ *A single measured anchor* / `project_roster_forecast.predictive_base`) — and ONE
+current-roster membership, so nothing upstream can make them disagree.
+
+A hard gate enforces it: `make baseline-consistency`
+(`scripts/validate_baseline_consistency.py`) fails if any of the 32 teams' unedited baseline drifts more
+than ±1 point from the forecast or has a non-zero `points_delta`. If the `roster_forecast` row is
+missing for a team, `baseline_source` flips to `measured_anchor` (the shared `predictive_base`) and a
+log line records it — never a fabricated number.
+
+Edits then delta off this shared baseline exactly as before (the retained-value share `w` fades
+`R_current` toward the pure bottom-up rating as the roster turns over). **NOTE:** the two tools still
+project individual *players* differently (component model vs the shared `blended_war_rate`) — that
+per-player divergence is documented in `roster-projection.md` and is out of scope here; it does not
+affect the shared *team* baseline, which is one number.
 
 ---
 

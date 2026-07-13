@@ -310,3 +310,47 @@ def test_seed_defense_pair_and_offside_flex_overflow():
     assert by_side["L"][0].player_id == 1 and by_side["R"][0].player_id == 2  # seeded pair intact
     iced = [p.player_id for p in by_side["L"] + by_side["R"]]
     assert len(iced) == 6 and len(by_side["L"]) <= 3 and len(by_side["R"]) <= 3  # overflow flex-filled
+
+
+# ============================================================================================
+# Shared measured anchor (predictive_base) — the ONE current-team anchor for both the offseason
+# forecast and the Roster Builder. Pure; 2-year recency-weighted, league-mean-regressed.
+# ============================================================================================
+
+def test_predictive_base_matches_hand_computation():
+    # weights [1.0, 0.5], K=1.0: base = (1*r0 + 0.5*r1)/1.5, then *1.5/(1.5+1)
+    r = J.predictive_base([0.6, 0.4])          # most recent first
+    assert abs(r - ((0.6 + 0.5 * 0.4) / 1.5) * 1.5 / 2.5) < 1e-9
+
+
+def test_predictive_base_empty_is_none_and_regresses_toward_zero():
+    assert J.predictive_base([]) is None
+    assert J.predictive_base(None) is None
+    # a single season regresses halfway to the league mean (K == sum of weights used == 1.0)
+    assert abs(J.predictive_base([0.6]) - 0.3) < 1e-9
+    # a positive history stays positive but shrunk; a negative one stays negative
+    assert 0 < J.predictive_base([0.5, 0.5]) < 0.5
+    assert -0.5 < J.predictive_base([-0.5, -0.5]) < 0
+
+
+def test_predictive_base_for_target_uses_only_prior_seasons_recent_first():
+    series = [(2023, 0.1), (2024, 0.4), (2025, 0.6)]     # ascending years
+    # target 2026 -> blend 2025 (0.6) then 2024 (0.4), ignore nothing; 2023 out of the 2-year window
+    assert abs(J.predictive_base_for_target(series, 2026) - J.predictive_base([0.6, 0.4])) < 1e-9
+    # target 2025 -> only seasons < 2025 (2024, 2023)
+    assert abs(J.predictive_base_for_target(series, 2025) - J.predictive_base([0.4, 0.1])) < 1e-9
+    # no prior seasons -> None
+    assert J.predictive_base_for_target(series, 2023) is None
+
+
+def test_hybrid_projected_rating_composition():
+    # w=1 with built==actual (unedited) -> collapses to R_current (points_delta 0 by construction)
+    assert abs(J.hybrid_projected_rating(0.20, 1.0, 0.35, 0.20) - 0.35) < 1e-9
+    # w=0 (full rebuild) -> pure bottom-up, ignoring R_current
+    assert abs(J.hybrid_projected_rating(0.55, 0.0, 0.35, 0.20) - 0.55) < 1e-9
+    # partial retention interpolates: built + w*(R_current - actual)
+    assert abs(J.hybrid_projected_rating(0.30, 0.5, 0.40, 0.20) - (0.30 + 0.5 * 0.20)) < 1e-9
+    # an UPGRADE (built > actual) never lowers the projection vs the unedited baseline at the same w
+    unedited = J.hybrid_projected_rating(0.20, 1.0, 0.35, 0.20)     # == R_current
+    upgraded = J.hybrid_projected_rating(0.30, 1.0, 0.35, 0.20)     # built bottom-up rose
+    assert upgraded >= unedited

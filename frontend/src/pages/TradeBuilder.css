@@ -37,8 +37,8 @@
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   position: relative;
 }
-/* §S4: the two-side ledger is symmetric and divided by the trade's center line —
-   a vertical 1px --line-red rule (this page's only permitted second red line). */
+/* §S4: the two-side ledger is symmetric and divided by a 1px hairline. (00c: the former red
+   "center line" is retired — no element exists purely to evoke a rink; this is a neutral divider.) */
 .trade-builder__panels[data-count="2"] { grid-template-columns: 1fr 1fr; }
 .trade-builder__panels[data-count="2"]::before {
   content: '';
@@ -47,7 +47,7 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--line-red);
+  background: var(--color-border-subtle);
   transform: translateX(-50%);
 }
 /* Below 900px the columns stack and the rule becomes a horizontal divider. */

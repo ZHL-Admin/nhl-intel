@@ -42,6 +42,9 @@ tables:
   - {name: stg_game_context,    dataset: staging, kind: source, cap: full,   indexes: [game_id]}
   - {name: stg_standings,       dataset: staging, kind: source, cap: full,   indexes: [team_abbrev, standings_date]}
   - {name: stg_player_bio,      dataset: staging, kind: source, cap: full,   indexes: [player_id]}
+  # live published active roster — lets the Roster Builder baseline keep only players actually on the
+  # team now (active roster OR under contract), dropping phantom latest-game UFAs from dim_current_roster.
+  - {name: stg_roster_current,  dataset: staging, kind: source, cap: full,   indexes: [player_id, team_id]}
   - {name: int_shot_types,      dataset: staging, kind: source, cap: recent, indexes: [game_id, shooting_player_id]}
   - {name: int_shot_attempts_all, dataset: staging, kind: source, cap: recent, indexes: [game_id]}
   - {name: int_line_seasons,    dataset: staging, kind: source, cap: full,   indexes: [[season, line_key]]}

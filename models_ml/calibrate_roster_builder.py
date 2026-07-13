@@ -148,6 +148,42 @@ def _actual_points(bq, season: str) -> dict:
             if str(r.team_abbrev) in amap}
 
 
+def recalibrate_strength_anchor(bq) -> dict:
+    """Refit ROSTER_BUILDER_STRENGTH_ANCHOR for the UNIFIED baseline R_current (the offseason forecast's
+    projected rating = shared predictive_base anchor + move delta + chemistry), replacing the earlier fit
+    for the bare R_measured anchor. Runs the offseason pipeline over both completed transitions and finds
+    the anchor strength SD such that the w=1 absolute band sqrt(ANCHOR^2 + luck^2) covers ~68% of
+    |projected_points - actual_points|. Reads only."""
+    import numpy as np
+    luck = CFG["SEASON_LUCK_FLOOR_PTS"]
+    resid = []
+    series = J.load_team_rating_series(bq)
+    for base, target in TRANSITIONS:
+        ratings = J.load_team_ratings(bq, base)
+        skater = J.load_skater_war_multi(bq, base, N_BACK); goalie = J.load_goalie_war_multi(bq, base, N_BACK)
+        arch = J.load_archetypes(bq, base); aging = J.load_aging(bq); ages = J.load_ages(bq, base)
+        effpos = J.load_effective_position(bq); hand = J.load_handedness(bq); seed = J.load_seed_units(bq, base)
+        anchors = {t: J.predictive_base_for_target(series.get(t, []), int(target[:4])) for t in ratings}
+        base_mem = J.robust_roster_membership(bq, base, FLOOR, "end")
+        upd_mem = J.robust_roster_membership(bq, target, FLOOR, "open")
+        forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, skater, goalie, aging, ages, arch,
+                                  f"{base}->{target}", "cal", anchors=anchors, effpos=effpos, hand=hand,
+                                  seed_units=seed)
+        actual = _actual_points(bq, target)
+        for f in forecasts:
+            if f["team_id"] in actual:
+                resid.append(abs(f["projected_points"] - actual[f["team_id"]]))
+    resid = np.array(resid, float)
+    # find the smallest strength SD whose band (with luck in quadrature) covers >= 68% of the residuals
+    anchor = 0.0
+    for a in np.arange(0.0, 25.0, 0.05):
+        if np.mean(resid <= np.sqrt(a ** 2 + luck ** 2)) >= 0.68:
+            anchor = float(a); break
+    cov = float(np.mean(resid <= np.sqrt(anchor ** 2 + luck ** 2)))
+    return {"anchor": anchor, "coverage": cov, "n": len(resid),
+            "resid_p68": float(np.percentile(resid, 68)), "resid_mae": float(resid.mean())}
+
+
 def main() -> None:
     import numpy as np
     from models_ml import bq
@@ -217,6 +253,13 @@ def main() -> None:
           f"irreducible luck floor (that residual is the band).")
     print(f"\n  -> config.ROSTER_FORECAST['LEAGUE_AVG_LINEUP_WAR'] = {league_avg:.2f}")
     print(f"  -> config.ROSTER_FORECAST['WAR_TO_RATING']        = {war_to_rating:.5f}")
+
+    # Absolute-band anchor for the UNIFIED baseline R_current (the offseason forecast's projected rating).
+    sa = recalibrate_strength_anchor(bq)
+    print(f"\n  UNIFIED-BASELINE ABSOLUTE BAND ({sa['n']} team-seasons): |forecast points - actual| "
+          f"p68={sa['resid_p68']:.2f}, MAE={sa['resid_mae']:.2f}")
+    print(f"    band sqrt(ANCHOR^2 + luck^2) coverage = {sa['coverage']*100:.0f}% (target ~68%)")
+    print(f"  -> config.ROSTER_FORECAST['ROSTER_BUILDER_STRENGTH_ANCHOR'] = {sa['anchor']:.2f}")
 
 
 if __name__ == "__main__":

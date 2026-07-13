@@ -1,10 +1,17 @@
 /**
  * Today's Lead selection + headline templates (Blueprint 2.1 / P7). Deterministic: rules are evaluated
  * in order, first match wins. Each headline is filled from the SAME payload the visual renders
- * (consistency rule). Live/upcoming rules (1–2) fire only when today's games are present.
+ * (consistency rule).
+ *
+ * Phase-aware (doc 19 §3): in-season the game/mover/luck rules apply; in the offseason the Lead is
+ * (a) yesterday's largest graded move, else (b) the team with the largest "from moves" swing in the
+ * forecast. The offseason Lead links to the Offseason Forecast with ?team={abbr} so the dossier
+ * auto-expands (doc 10). TODO(data): source the Lead from a served daily-lead feed when one exists;
+ * the feed should inherit this same phase-aware rule so the visual and the copy stay consistent.
  */
-import type { PowerRatingRow, DeservedStandingRow, RosterForecastRow, Game } from '../api/types'
+import type { PowerRatingRow, DeservedStandingRow, RosterForecastRow, Game, MoveRow } from '../api/types'
 import { TRAJECTORY_MEANINGFUL_MOVE } from './metrics'
+import { getTeamName } from '../utils/teams'
 
 export type LeadKind = 'live' | 'upset' | 'mover' | 'luck' | 'offseason'
 
@@ -17,17 +24,123 @@ export interface Lead {
 }
 
 interface Inputs {
+  phase: 'season' | 'offseason'
   slate: Game[]
   lastNight: Game[]
   power: PowerRatingRow[]
   deserved: DeservedStandingRow[]
   offseason: RosterForecastRow[]
+  moves?: MoveRow[]
 }
 
 const abbr = (t?: string | null, id?: number) => t ?? `#${id ?? ''}`
 
+const isoYesterday = () => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const ORDINAL = ['zeroth', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
+const ordinal = (n?: number | null) => (n != null && n < ORDINAL.length ? ORDINAL[n] : n != null ? `${n}th` : '')
+const GRADE_MAG: Record<string, number> = { 'A+': 5, A: 4.5, 'A-': 4, 'B+': 3.5, B: 3, 'B-': 2.5, C: 1, D: 3.5, F: 4.5 }
+const moveWeight = (m: MoveRow) => (m.type === 'trade' ? Math.abs(m.verdict?.margin ?? 0) : (GRADE_MAG[m.verdict?.grade ?? ''] ?? 0))
+const swingVal = (r: RosterForecastRow) => (r.points_delta ?? r.net_delta_war ?? 0)
+
 /** First matching rule wins. Returns null only if nothing qualifies (caller falls back). */
-export function selectLead({ slate, lastNight, power, deserved, offseason }: Inputs): Lead | null {
+export function selectLead(inputs: Inputs): Lead | null {
+  return inputs.phase === 'offseason' ? offseasonLead(inputs) : seasonLead(inputs)
+}
+
+// ── Offseason branch ─────────────────────────────────────────────────────────
+function offseasonLead({ offseason, moves }: Inputs): Lead | null {
+  // (a) yesterday's largest graded move — the headline names the move and its verdict.
+  const graded = (moves ?? [])
+    .filter((m) => m.date === isoYesterday() && (m.verdict?.grade || m.verdict?.edge))
+    .sort((a, b) => moveWeight(b) - moveWeight(a))
+  const pick = graded[0]
+  if (pick) return moveLead(pick)
+
+  // (b) the largest absolute "from moves" swing in the forecast — written as an editorial hook,
+  //     not a stat readout. Headline carries the tension (how far the moves actually move them);
+  //     the dek grounds it in the real numbers and opens a curiosity gap toward the forecast.
+  const swing = [...offseason]
+    .filter((r) => !r.negligible)
+    .sort((a, b) => Math.abs(swingVal(b)) - Math.abs(swingVal(a)))[0]
+  if (swing) return forecastSwingLead(swing)
+  return null
+}
+
+const teamName = (abbrev?: string | null, id?: number) => getTeamName(abbrev ?? '') || abbr(abbrev, id)
+const mag = (n: number) => Math.abs(Math.round(n))
+
+// The biggest projected mover of the summer, framed by where the moves actually leave them.
+function forecastSwingLead(swing: RosterForecastRow): Lead {
+  const name = teamName(swing.team_abbrev, swing.team_id)
+  const pts = swingVal(swing)
+  const P = mag(pts)
+  const rank = swing.projected_rank ?? null
+  const to = `/studio/offseason?team=${swing.team_abbrev ?? ''}`
+  const base = { kind: 'offseason' as const, kicker: 'THE OFFSEASON', link: { to, label: 'See what changed →' } }
+
+  if (pts >= 0) {
+    // Most improved. The story is how much that improvement is actually worth in the standings.
+    if (rank != null && rank <= 8) {
+      return { ...base, headline: `${name} built the summer's biggest upgrade — and now they're built to contend`,
+        dek: `A league-best ${P}-point projected jump has them ${ordinal(rank)} before a puck drops. See the moves behind it.` }
+    }
+    if (rank != null && rank <= 20) {
+      return { ...base, headline: `The NHL's most improved team is still chasing the pack`,
+        dek: `${name} added more than anyone this summer — a projected ${P} points — and the model still slots them ${ordinal(rank)}.` }
+    }
+    return { ...base, headline: `The NHL's most improved team still has a long climb ahead`,
+      dek: `${name} spent the summer better than any other roster, and the projection barely lifted them off the floor. The case for patience.` }
+  }
+
+  // Most eroded. The story is a team that got worse while it slept.
+  if (rank != null && rank <= 12) {
+    return { ...base, headline: `${name} took the summer's biggest step back`,
+      dek: `A league-worst ${P}-point projected erosion this offseason. What they let walk — and whether it sinks them.` }
+  }
+  return { ...base, headline: `No roster lost more this summer than ${name}`,
+    dek: `A projected ${P} points gone, the most in the league, and the model sees the fall. The moves that did the damage.` }
+}
+
+// Verdict word for a graded contract — mirrors the Contract Grader's word-first framing.
+const GRADE_VERDICT: Record<string, string> = {
+  'A+': 'a steal', A: 'a steal', 'A-': 'a bargain', 'B+': 'a bargain',
+  B: 'a fair deal', 'B-': 'a fair deal', C: 'a slight overpay', D: 'an overpay', F: 'an albatross',
+}
+const gradeHook = (grade?: string | null) =>
+  !grade ? 'See how it grades.' : ['A', 'B'].includes(grade[0]) ? 'Why the number works.' : 'Why it could bite.'
+
+function moveLead(m: MoveRow): Lead {
+  const p = m.players[0]
+  if (m.type === 'trade') {
+    const edge = m.verdict?.edge ?? m.teams[0]
+    return {
+      kind: 'offseason', kicker: 'THE LEDGER',
+      headline: `${teamName(edge)} came out ahead in the ${p ? `${p.name} ` : ''}trade`,
+      dek: m.verdict?.margin != null
+        ? `The scoreboard tilts ${m.verdict.margin.toFixed(1)} their way. See how the assets stack up.`
+        : 'A fresh deal hits the board. See how it grades.',
+      link: { to: `/studio/offseason?team=${edge ?? ''}`, label: 'See the deal →' },
+    }
+  }
+  const grade = m.verdict?.grade
+  const verdict = GRADE_VERDICT[grade ?? ''] ?? 'a notable deal'
+  const verb = m.type === 'extension' ? 're-signed' : 'signed'
+  const terms = m.terms ? `${m.terms.years} years at $${(m.terms.aav / 1e6).toFixed(1)}M` : ''
+  return {
+    kind: 'offseason', kicker: 'THE LEDGER',
+    headline: `${teamName(m.teams[0])} ${verb} ${p?.name ?? 'a new face'} — the model calls it ${verdict}`,
+    dek: terms ? `${terms}, graded ${grade}. ${gradeHook(grade)}` : `Graded ${grade}. ${gradeHook(grade)}`,
+    link: { to: `/studio/offseason?team=${m.teams[0] ?? ''}`, label: 'See the grade →' },
+  }
+}
+
+// ── In-season branch ─────────────────────────────────────────────────────────
+function seasonLead({ slate, lastNight, power, deserved }: Inputs): Lead | null {
   // Rule 1: a live game (the site can't know the swing without the worm; a live game leads regardless).
   const live = slate.find((g) => g.is_live)
   if (live) {
@@ -76,7 +189,7 @@ export function selectLead({ slate, lastNight, power, deserved, offseason }: Inp
     }
   }
 
-  // Rule 4: the largest luck gap (actual vs deserved points).
+  // Rule 4: the largest luck gap (actual vs deserved points) — in-season only.
   const luck = [...deserved].sort((a, b) => Math.abs(b.luck_delta) - Math.abs(a.luck_delta))[0]
   if (luck && Math.abs(luck.luck_delta) >= 3) {
     const lucky = luck.luck_delta > 0
@@ -85,17 +198,6 @@ export function selectLead({ slate, lastNight, power, deserved, offseason }: Inp
       headline: `${abbr(luck.team_abbrev, luck.team_id)} has been ${lucky ? 'riding its luck' : 'snakebitten'}`,
       dek: `${Math.round(luck.actual_points)} actual points vs ${Math.round(luck.deserved_points)} deserved.`,
       link: { to: '/teams?view=deserved', label: 'Deserved standings →' },
-    }
-  }
-
-  // Rule 5 (offseason fallback): the biggest projected offseason WAR change.
-  const gainer = [...offseason].sort((a, b) => b.net_delta_war - a.net_delta_war)[0]
-  if (gainer) {
-    return {
-      kind: 'offseason', kicker: 'OFFSEASON BOARD',
-      headline: `${abbr(gainer.team_abbrev, gainer.team_id)} got the most better this summer`,
-      dek: `Projected ${gainer.net_delta_war >= 0 ? '+' : '−'}${Math.abs(gainer.net_delta_war).toFixed(1)} WAR from the moves they made.`,
-      link: { to: '/studio/offseason', label: 'Offseason forecast →' },
     }
   }
 

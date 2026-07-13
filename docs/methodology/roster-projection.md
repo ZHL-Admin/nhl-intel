@@ -57,24 +57,30 @@ multi-year-regressed results — so the Roster Builder now anchors on it, exactl
 does. All on the goals/game rating scale:
 
 ```
-projected_rating = R_bottomup(built) + w · ( R_measured − R_bottomup(actual) )
+projected_rating = R_bottomup(built) + w · ( R_current − R_bottomup(current actual) )
 projected_points = rating_to_points(projected_rating)
 ```
 
-- **R_measured** — the team's predictive rating: a **2-year recency-weighted, league-mean-regressed**
-  measured `team_ratings`. It predicts next-year strength far better than the parts-sum (corr **0.58 vs
-  0.44** on a 16-season holdout; RMSE 0.230 vs 0.255 vs single-season).
-- **R_bottomup** — the existing absolute bottom-up rating, computed for both the built and the actual
-  roster with the *same* player projection, so projection bias cancels in their difference.
+- **R_current** — the **offseason forecast's projected rating** for the team's current transition,
+  read from the `roster_forecast` serving row (`tools._forecast_current_rating`). It is the shared
+  measured anchor **plus** the summer's move delta and chemistry — the ONE "current team" number, so an
+  unedited roster reproduces the offseason forecast *exactly* (see roster-builder.md → *Cross-tool
+  consistency*). If the row is missing, R_current falls back to the bare shared anchor with a
+  `baseline_source` flag (never fabricated).
+- **The shared measured anchor** — a **2-year recency-weighted, league-mean-regressed** measured
+  `team_ratings` (`project_roster_forecast.predictive_base`, ONE definition used by BOTH tools). It
+  predicts next-year strength far better than the latest single season (the offseason forecast now
+  anchors on it too; the rank-delta backtest is within noise, points MAE unchanged at 4.50).
+- **R_bottomup** — the existing absolute bottom-up rating, computed for both the built and the current
+  actual roster with the *same* player projection, so projection bias cancels in their difference.
 - **w** — the **minutes-weighted** retained-value share: the fraction of the actual roster's projected
   ice time still iced in the build. No changes → w=1; fully hypothetical → w→0.
 
-The offset `R_measured − R_bottomup(actual)` is the coaching/system/integration/goalie-workload the
-parts-sum can't see. It **fades automatically** with roster turnover — no special-casing:
+The offset `R_current − R_bottomup(current actual)` carries the measured level + the summer's moves +
+the coaching/system the parts-sum can't see. It **fades automatically** with roster turnover:
 
-- **No changes (w=1):** `projected_rating = R_measured` — the baseline is the team's *measured* level
-  ("we're a 105-point team; this move makes us 106"), not a parts-reconstruction that can diverge from
-  the real record.
+- **No changes (w=1):** `projected_rating = R_current` — identical to the offseason forecast's number,
+  by construction (`points_delta = 0`).
 - **Fully hypothetical (w=0):** `projected_rating = R_bottomup(built)` — pure bottom-up, correct since
   there's no measured team to anchor to.
 - **In between:** the offset fades smoothly as the minutes turn over.
@@ -87,7 +93,7 @@ usage (and value) toward replacement (his rate already uses TOI-weighted healthy
 
 ### The two bands, under the hybrid
 
-- **Delta band (the headline, tight).** `points_delta = projected_points(built) − rating_to_points(R_measured)`.
+- **Delta band (the headline, tight).** `points_delta = projected_points(built) − rating_to_points(R_current)`.
   The unchanged players cancel **exactly** and the common season-ahead error cancels, so the band is the
   raw quadrature of **only the changed players'** calibrated sds, plus a small term from the offset fading
   as w drops — **no luck floor** (a talent comparison, not a realized-season bet). A single swap is **≈ ±1

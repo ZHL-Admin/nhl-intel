@@ -75,7 +75,7 @@
   background: var(--line-blue);
 }
 
-/* Today marker: a 7px red faceoff dot. */
+/* Today marker: a 7px red dot — red in its functional "now" role (00c). */
 .date-strip__today-dot {
   width: 7px;
   height: 7px;

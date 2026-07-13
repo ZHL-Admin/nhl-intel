@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { ErrorBoundary, SkeletonLoader } from './components/common'
+import { GAMES_ENABLED } from './config/features'
 import BottomTabBar from './components/common/BottomTabBar'
 import Today from './pages/Today'
 import GamesExplorer from './pages/GamesExplorer'
@@ -53,10 +54,12 @@ function App() {
           <Routes>
             {/* P1 flip: / is now Today; the games list lives at /games. */}
             <Route path="/" element={<Today />} />
-            <Route path="/games" element={<GamesExplorer />} />
+            {/* Games section gated by GAMES_ENABLED — routes stay registered (components + imports
+                intact) but redirect home while disabled, so bookmarked game URLs land on Today. */}
+            <Route path="/games" element={GAMES_ENABLED ? <GamesExplorer /> : <Navigate replace to="/" />} />
             <Route path="/demo/assessment" element={<AssessmentBandDemo />} />
             <Route path="/demo/index" element={<PlayersIndexDemo />} />
-            <Route path="/games/:gameId" element={<GameDetail />} />
+            <Route path="/games/:gameId" element={GAMES_ENABLED ? <GameDetail /> : <Navigate replace to="/" />} />
             {/* P2: Rankings absorbed into Teams. Preserve deep links. */}
             <Route path="/rankings" element={<Navigate replace to="/teams?view=power" />} />
             <Route path="/playoffs" element={<Playoffs />} />

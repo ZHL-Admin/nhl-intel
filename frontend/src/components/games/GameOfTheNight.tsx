@@ -4,6 +4,7 @@ import { Game } from '../../api/types';
 import MiniWorm from '../common/MiniWorm';
 import { getGameXGWorm } from '../../api/games';
 import { getTeamLogoUrl, getTeamColor } from '../../utils/teams';
+import { GAMES_ENABLED } from '../../config/features';
 import './GameOfTheNight.css';
 
 interface GameOfTheNightProps {
@@ -38,7 +39,7 @@ export default function GameOfTheNight({ game }: GameOfTheNightProps) {
   }, [game.game_id]);
 
   const handleClick = () => {
-    navigate(`/games/${game.game_id}`);
+    if (GAMES_ENABLED) navigate(`/games/${game.game_id}`);
   };
 
   const renderTeamLogo = (abbrev: string, hasError: boolean, onError: () => void) => {

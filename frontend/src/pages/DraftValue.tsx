@@ -1,295 +1,464 @@
 /**
- * Draft Value (Handoff 5) — the empirical pick-value curve, the "85%" theory test, and the
- * steal/bust board. Every number is realized 7-year-window pWAR (same WAR units as the value stack),
- * an explicit wide-band estimate before 2021. Reuses ChartPanel, PlayerAvatar, Tabs, Tooltip.
+ * Draft Value v2 (doc 16) — the TOOL page: a live pick lookup (figures + mini curve) and the
+ * steals-and-busts board. The research (headline curve, bust-rate table, methodology) moved to the
+ * Writing essay "What a draft pick is really worth"; this page cross-links to it but carries no
+ * research content. Every value is realized 7-year-window pWAR — a wide-band estimate before 2021.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Copy, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip as RTooltip, ReferenceDot, Label,
+  ReferenceDot, Label,
 } from 'recharts'
 import {
-  PageLayout, PageCard, ChartPanel, PlayerAvatar, Tabs, Tooltip, SkeletonLoader,
+  PageLayout, PageCard, Panel, Tabs, Tooltip, Select, PlayerAvatar, SkeletonLoader,
 } from '../components/common'
-import { useChartPanelHeight } from '../components/common/ChartPanel'
+import type { SelectOption } from '../components/common'
 import {
-  getPickValueCurve, getDraftTheorySummary, getDraftBoard,
-  PickValueCurveRow, DraftTheorySummaryRow, DraftBoardRow,
+  getPickValueCurve, getDraftBoard, PickValueCurveRow, DraftBoardRow,
 } from '../api/draft'
+import { getPlayerContract } from '../api/assets'
 import './DraftValue.css'
 
+const ESSAY_TO = '/learn/writing/what-a-draft-pick-is-really-worth'
+const TRADE_TO = '/studio/trades/build'
+const ROUND_SIZE = 32
+const STEP_MAX = 224
 const pct0 = (v: number) => `${Math.round(v * 100)}%`
-const RANGE_LABEL: Record<string, string> = {
-  '1-10': 'Top 10', '11-31': 'Rest of Rd 1', 'R2': 'Round 2', 'R3-7': 'Rounds 3–7', 'POOLED': 'All picks',
+const roundOf = (pick: number) => Math.max(1, Math.ceil(pick / ROUND_SIZE))
+const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(dp)}`
+
+// ---------------------------------------------------------------- curve helpers
+/** Nearest curve row to an arbitrary pick (the stepper runs 1–224; the served curve stops earlier). */
+function nearestRow(curve: PickValueCurveRow[], pick: number): PickValueCurveRow {
+  let best = curve[0]
+  let bd = Infinity
+  for (const r of curve) {
+    const d = Math.abs(r.overall_pick - pick)
+    if (d < bd) { bd = d; best = r }
+  }
+  return best
+}
+const evAt = (curve: PickValueCurveRow[], pick: number) => nearestRow(curve, pick).ev_mean_smooth
+
+/** Inverse lookup: the slot whose expected value most nearly matches a realized value. */
+function inversePick(curve: PickValueCurveRow[], realized: number): number {
+  let best = curve[0].overall_pick
+  let bd = Infinity
+  for (const r of curve) {
+    const d = Math.abs(r.ev_mean_smooth - realized)
+    if (d < bd) { bd = d; best = r.overall_pick }
+  }
+  return best
 }
 
-// ---------------------------------------------------------------- curve chart
-function CurveChartTip({ active, payload }: any) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
-  return (
-    <div className="dv-charttip">
-      <div className="dv-charttip__head">Pick #{d.overall_pick} · {d.n} drafted</div>
-      <div className="dv-charttip__row"><span>Expected (mean)</span><span className="mono">{d.ev_mean_smooth.toFixed(1)} WAR</span></div>
-      <div className="dv-charttip__row"><span>Median outcome</span><span className="mono">{d.ev_median.toFixed(1)} WAR</span></div>
-      <div className="dv-charttip__row dv-charttip__row--muted"><span>Middle 80% (p10–p90)</span><span className="mono">{d.p10.toFixed(1)}–{d.p90.toFixed(1)}</span></div>
-      <div className="dv-charttip__row dv-charttip__row--muted"><span>Never play NHL</span><span className="mono">{pct0(d.share_never_nhl)}</span></div>
-    </div>
-  )
+/** Equivalence solver: the pair of later slots (a<b) whose expected values sum closest to `target`. */
+function equivalentPair(curve: PickValueCurveRow[], pick: number, target: number): [number, number] | null {
+  const pool = curve.filter((r) => r.overall_pick > pick && r.ev_mean_smooth > 0.05)
+  if (pool.length < 2) return null
+  let best: [number, number] | null = null
+  let bd = Infinity
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const d = Math.abs(pool[i].ev_mean_smooth + pool[j].ev_mean_smooth - target)
+      if (d < bd) { bd = d; best = [pool[i].overall_pick, pool[j].overall_pick] }
+    }
+  }
+  // Only surface the line when the pair is a genuine match (within ~0.35 WAR of the slot's value).
+  return best && bd <= 0.35 ? best : null
 }
 
-// Bounds-aware line label: recharts' position="right" anchors at the line's right end (overall pick
-// ~217, where the curves converge near 0) and clips past the chart's right edge. Instead anchor at the
-// line's high/left end, just inside the plot, where the two lines are well separated.
-function lineLabel(text: string, fill: string, fontSize: number, fontWeight: number) {
+/** Verdict-sentence phrase for a realized-into-slot inverse lookup. */
+function slotPhrase(n: number): string {
+  if (n <= 3) return 'a top-three pick'
+  if (n <= 5) return 'a top-five pick'
+  if (n <= 10) return 'a top-ten pick'
+  if (n <= ROUND_SIZE) return 'a first-round pick'
+  if (n <= ROUND_SIZE * 2) return 'a second-round pick'
+  if (n <= ROUND_SIZE * 4) return 'a mid-round pick'
+  return `pick #${n}`
+}
+
+// ---------------------------------------------------------------- mini curve
+function selectedDotLabel(row: PickValueCurveRow) {
   return ({ viewBox }: any) => {
     if (!viewBox) return null
+    const x = (viewBox.x ?? 0)
+    const y = (viewBox.y ?? 0)
+    const left = row.overall_pick > 40 // late picks sit near the right edge — flip the label inward
     return (
-      <text x={viewBox.x + 6} y={viewBox.y + 12} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="start">
-        {text}
+      <text x={x + (left ? -8 : 8)} y={y - 8} textAnchor={left ? 'end' : 'start'}
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fill: 'var(--line-blue)', fontWeight: 600 }}>
+        {row.ev_mean_smooth.toFixed(1)} WAR
       </text>
     )
   }
 }
 
-// Bounds-aware annotation label: sits above the dot (below when the dot is already high), and clamps its
-// text anchor to the side the dot is on so a name near an edge stays inside the plot.
-function annotationLabel(a: Annotation, yMax: number, fill: string) {
-  return ({ viewBox }: any) => {
-    if (!viewBox) return null
-    const cx = (viewBox.x ?? 0) + (viewBox.width ?? 0) / 2
-    const cy = (viewBox.y ?? 0) + (viewBox.height ?? 0) / 2
-    const dy = a.realized_value <= yMax * 0.85 ? -8 : 16
-    const anchor = a.overall_pick <= 4 ? 'start' : a.overall_pick >= 140 ? 'end' : 'middle'
-    const dx = anchor === 'start' ? 6 : anchor === 'end' ? -6 : 0
-    return (
-      <text x={cx + dx} y={cy + dy} fill={fill} fontSize={10} fontWeight={600} textAnchor={anchor}>
-        {a.label}
-      </text>
-    )
-  }
-}
-
-// §S7: a curve landmark — a small ink dot with a 1px leader line and a Newsreader-italic callout.
-// Leader lines drop below 900px (narrow), where only the dot stays.
-function landmarkLabel(text: string, narrow: boolean, up = true) {
-  return ({ viewBox }: any) => {
-    if (!viewBox) return null
-    const x = viewBox.x ?? 0
-    const y = viewBox.y ?? 0
-    const len = 22
-    const ty = up ? y - len - 4 : y + len + 12
-    return (
-      <g>
-        {!narrow && <line x1={x} y1={y} x2={x} y2={up ? y - len : y + len} stroke="var(--color-border-strong)" strokeWidth={1} />}
-        <circle cx={x} cy={y} r={3} fill="var(--color-text-primary)" opacity={0.5} />
-        {!narrow && (
-          <text x={x} y={ty} textAnchor="middle"
-            style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 13, fill: 'var(--color-text-secondary)' }}>
-            {text}
-          </text>
-        )}
-      </g>
-    )
-  }
-}
-
-function CurveChart({ curve, annotations }: { curve: PickValueCurveRow[]; annotations: Annotation[] }) {
-  const height = useChartPanelHeight()
-  const narrow = typeof window !== 'undefined' && window.innerWidth < 900
-  // Split the expected curve: solid where the sample is dense (fitted), dashed in the sparse tail.
-  const boundaryPick = [...curve].reverse().find((r) => r.n >= 30)?.overall_pick ?? curve[curve.length - 1]?.overall_pick ?? 217
+function MiniCurve({ curve, selected }: { curve: PickValueCurveRow[]; selected: PickValueCurveRow }) {
+  const boundaryPick = [...curve].reverse().find((r) => r.n >= 30)?.overall_pick
+    ?? curve[curve.length - 1]?.overall_pick ?? 217
   const data = curve.map((r) => ({
-    ...r,
+    overall_pick: r.overall_pick,
     bandLo: r.p10_smooth,
     bandSpan: Math.max(0, r.p90_smooth - r.p10_smooth),
     evFit: r.overall_pick <= boundaryPick ? r.ev_mean_smooth : null,
     evExtrap: r.overall_pick >= boundaryPick ? r.ev_mean_smooth : null,
   }))
-  const yMax = Math.max(
-    ...data.map((d) => d.p90_smooth),
-    ...annotations.map((a) => a.realized_value),
-    ...data.map((d) => d.ev_mean_smooth),
-  )
-  // Three structural landmarks: 1st-overall value, the early-pick cliff, round-2 flattening.
-  const at = (pick: number) => curve.find((c) => c.overall_pick === pick)
-  const firstOverall = curve[0]
-  let cliffPick = 3, cliffDrop = 0
-  for (let i = 1; i < Math.min(curve.length, 15); i++) {
-    const d = curve[i - 1].ev_mean_smooth - curve[i].ev_mean_smooth
-    if (d > cliffDrop) { cliffDrop = d; cliffPick = curve[i].overall_pick }
-  }
-  const landmarks = [
-    firstOverall && { x: firstOverall.overall_pick, y: firstOverall.ev_mean_smooth, text: `1st overall ≈ ${firstOverall.ev_mean_smooth.toFixed(1)} WAR`, up: true },
-    at(cliffPick) && { x: cliffPick, y: at(cliffPick)!.ev_mean_smooth, text: 'the cliff after the top picks', up: true },
-    at(45) && { x: 45, y: at(45)!.ev_mean_smooth, text: 'round 2 flattens', up: false },
-  ].filter(Boolean) as { x: number; y: number; text: string; up: boolean }[]
+  const yMax = Math.ceil(Math.max(...curve.map((r) => r.p90_smooth)))
+  const tick = { fontSize: 10, fill: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: 16, right: 16, bottom: 18, left: 4 }}>
+    <ResponsiveContainer width="100%" height={320}>
+      <ComposedChart data={data} margin={{ top: 16, right: 16, bottom: 14, left: 2 }}>
         <CartesianGrid vertical={false} stroke="var(--color-border-subtle)" />
-        {/* log x so the steep top of the draft (picks 1–30) gets the room it deserves */}
+        {/* log x so the steep top of the draft gets the room it deserves */}
         <XAxis dataKey="overall_pick" type="number" scale="log" domain={[1, 217]} allowDataOverflow
-          stroke="var(--color-border)" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
-          ticks={[1, 2, 5, 10, 31, 62, 124, 217]} tickFormatter={(v: number) => `${v}`} height={34}>
-          <Label value="Overall pick (log scale)" position="insideBottom" dy={12}
-            style={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
-        </XAxis>
-        <YAxis domain={[0, Math.ceil(yMax)]} stroke="var(--color-border)"
-          tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
-          tickFormatter={(v: number) => `${v}`} width={36}>
-          <Label value="Realized WAR (7yr)" angle={-90} position="insideLeft" dy={56}
-            style={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
-        </YAxis>
-        <RTooltip content={<CurveChartTip />} />
-        {/* p10–p90 band */}
-        <Area dataKey="bandLo" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
-        <Area dataKey="bandSpan" stackId="band" stroke="none" fill="var(--color-data-1)" fillOpacity={0.12} isAnimationActive={false} />
-        <Line type="monotone" dataKey="ev_median" stroke="var(--color-text-muted)" strokeWidth={1.5}
-          strokeDasharray="5 4" dot={false} isAnimationActive={false}>
-          {/* anchor at the line's high (left) end, inside the plot — the right end converges to ~0 and
-              would clip past the chart's right edge */}
-          <Label content={lineLabel('median', 'var(--color-text-muted)', 10, 400)} />
-        </Line>
-        {/* §S7: fitted region solid 2px --line-blue; sparse extrapolated tail dashed. */}
-        <Line type="monotone" dataKey="evFit" stroke="var(--line-blue)" strokeWidth={2}
-          dot={false} connectNulls={false} animationDuration={400}>
-          <Label content={lineLabel('expected', 'var(--line-blue)', 11, 600)} />
-        </Line>
-        <Line type="monotone" dataKey="evExtrap" stroke="var(--line-blue)" strokeWidth={2}
-          strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={false} />
-        {landmarks.map((m) => (
-          <ReferenceDot key={m.text} x={m.x} y={m.y} r={0} fill="none" stroke="none">
-            <Label content={landmarkLabel(m.text, narrow, m.up)} />
-          </ReferenceDot>
-        ))}
-        {annotations.map((a) => {
-          const color = a.tone === 'steal' ? 'var(--color-data-positive)' : 'var(--color-data-negative)'
-          return (
-            <ReferenceDot key={a.label} x={a.overall_pick} y={a.realized_value} r={4}
-              fill={color} stroke="var(--color-bg-surface)" strokeWidth={1.5}>
-              <Label content={annotationLabel(a, yMax, color)} />
-            </ReferenceDot>
-          )
-        })}
+          stroke="var(--color-border)" tick={tick} height={22}
+          ticks={[1, 2, 5, 10, 31, 62, 124, 217]} tickFormatter={(v: number) => `${v}`} />
+        <YAxis domain={[0, yMax]} stroke="var(--color-border)" width={26} tick={tick}
+          tickFormatter={(v: number) => `${v}`} />
+        {/* middle-80% band (uncertainty is a data element; kept faint) */}
+        <Area dataKey="bandLo" stackId="b" stroke="none" fill="transparent" isAnimationActive={false} />
+        <Area dataKey="bandSpan" stackId="b" stroke="none" fill="var(--color-data-1)" fillOpacity={0.12} isAnimationActive={false} />
+        {/* fitted region solid; sparse-sample tail dashed (solid = observed, dashed = projected) */}
+        <Line type="monotone" dataKey="evFit" stroke="var(--line-blue)" strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
+        <Line type="monotone" dataKey="evExtrap" stroke="var(--line-blue)" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={false} />
+        <ReferenceDot x={selected.overall_pick} y={selected.ev_mean_smooth} r={5}
+          fill="var(--line-blue)" stroke="var(--color-bg-surface)" strokeWidth={2}>
+          <Label content={selectedDotLabel(selected)} />
+        </ReferenceDot>
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
-interface Annotation { overall_pick: number; realized_value: number; label: string; tone: 'steal' | 'bust' }
-
-// ---------------------------------------------------------------- theory table
-function TheoryTable({ rows }: { rows: DraftTheorySummaryRow[] }) {
+// ---------------------------------------------------------------- pick lookup
+function Figure({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
-    <table className="dv-table dv-theory">
-      <thead>
-        <tr>
-          <th>Pick range</th><th className="num">Picks</th>
-          <th className="num"><Tooltip content="Share of picks whose 7-year realized value came in below the average value of picks at that slot. With a right-skewed distribution, most picks fall below the mean by construction.">Below slot avg</Tooltip></th>
-          <th className="num"><Tooltip content="Share below the MEDIAN pick at that slot — the more honest 'worse than a coin-flip pick' rate.">Below median</Tooltip></th>
-          <th className="num"><Tooltip content="Share who never played a single NHL game (realized value 0).">Never NHL</Tooltip></th>
-          <th className="num"><Tooltip content="Share who reached ~200 career games — the literature's 'became a regular' bar.">Became regular</Tooltip></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.pick_range} className={r.pick_range === 'POOLED' ? 'dv-theory__pooled' : ''}>
-            <td>{RANGE_LABEL[r.pick_range] ?? r.pick_range}</td>
-            <td className="num mono">{r.picks}</td>
-            <td className="num mono">{pct0(r.share_below_mean)}</td>
-            <td className="num mono">{pct0(r.share_below_median)}</td>
-            <td className="num mono">{pct0(r.share_never_nhl)}</td>
-            <td className="num mono">{pct0(r.share_became_regular)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="dv-fig">
+      <div className="dv-fig__label">{tip ? <Tooltip content={tip}>{label}</Tooltip> : label}</div>
+      <div className="dv-fig__value mono">{value}</div>
+    </div>
+  )
+}
+
+function PickLookup({ curve }: { curve: PickValueCurveRow[] }) {
+  const [params, setParams] = useSearchParams()
+  const pick = Math.min(STEP_MAX, Math.max(1, Number(params.get('pick')) || 14))
+  const setPick = (p: number) => {
+    const next = new URLSearchParams(params)
+    next.set('pick', String(Math.min(STEP_MAX, Math.max(1, p))))
+    setParams(next, { replace: true })
+  }
+  const row = nearestRow(curve, pick)
+  const round = roundOf(pick)
+  const target = row.ev_mean_smooth
+  const pair = equivalentPair(curve, pick, target)
+  const nextMarker = Math.min(STEP_MAX, round * ROUND_SIZE + 1)
+  const dropCost = target - evAt(curve, nextMarker)
+
+  return (
+    <Panel className="dv-lookup">
+      <div className="dv-lookup__grid">
+        <div className="dv-lookup__left">
+          {/* stepper */}
+          <div className="dv-stepper">
+            <button className="dv-stepper__btn" onClick={() => setPick(pick - 1)} disabled={pick <= 1} aria-label="Previous pick">
+              <ChevronLeft size={16} />
+            </button>
+            <div className="dv-stepper__label">
+              <span className="dv-stepper__pick mono">Pick #{pick}</span>
+              <span className="dv-stepper__round">Round {round}</span>
+            </div>
+            <button className="dv-stepper__btn" onClick={() => setPick(pick + 1)} disabled={pick >= STEP_MAX} aria-label="Next pick">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* figures — judged-figures anatomy */}
+          <div className="dv-figs">
+            <Figure label="Expected WAR" value={`${target.toFixed(1)}`}
+              tip="Seven-year realized value expected at this slot — a LOESS-smoothed fit across draft history, extrapolated in the sparse late-pick tail." />
+            <Figure label="Middle 80%" value={`${row.p10_smooth.toFixed(1)} to ${row.p90_smooth.toFixed(1)}`} />
+            <Figure label="Never plays" value={pct0(row.share_never_nhl)} />
+            <Figure label="Becomes a regular" value={pct0(row.share_regular)} />
+          </div>
+
+          {/* equivalence lines (two max, template fallbacks) */}
+          <div className="dv-equiv">
+            {pair
+              ? <p className="dv-equiv__line">Worth about <span className="mono">#{pair[0]}</span> and <span className="mono">#{pair[1]}</span> combined.</p>
+              : <p className="dv-equiv__line">Worth about <span className="mono">{target.toFixed(1)}</span> WAR at this slot.</p>}
+            {nextMarker > pick && (
+              <p className="dv-equiv__line">The drop to <span className="mono">#{nextMarker}</span> costs <span className="mono dv-neg">{signed(-Math.abs(dropCost))}</span> WAR.</p>
+            )}
+          </div>
+
+          <p className="dv-lookup__foot">
+            This curve prices every draft-pick asset in the <Link to={TRADE_TO}>Trade Builder</Link>.
+          </p>
+        </div>
+
+        <div className="dv-lookup__chart">
+          <MiniCurve curve={curve} selected={row} />
+        </div>
+      </div>
+    </Panel>
   )
 }
 
 // ---------------------------------------------------------------- board
-function Board({ rows }: { rows: DraftBoardRow[] }) {
-  const navigate = useNavigate()
+/** 64px diverging micro-band on a fixed ±20 domain with a center tick. Blue above slot, red below. */
+function VsBand({ value }: { value: number }) {
+  const dom = 20
+  const clamped = Math.max(-dom, Math.min(dom, value))
+  const half = (clamped / dom) * 50 // −50…50, percent from center
+  const pos = value >= 0
   return (
-    <table className="dv-table dv-board">
-      <thead>
-        <tr>
-          <th>Player</th><th className="num">Pick</th>
-          <th className="num">Realized</th><th className="num">Slot exp.</th><th className="num">vs slot</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const to = r.resolved_player_id ? `/players/${r.resolved_player_id}` : null
-          return (
-            <tr key={r.overall_pick + '-' + r.draft_year}
-              className={`dv-board__row${to ? ' dv-board__row--link' : ''}`}
-              onClick={to ? () => navigate(to) : undefined}
-              tabIndex={to ? 0 : undefined}
-              onKeyDown={to ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to) } } : undefined}>
-              <td className="dv-board__player">
-                {r.resolved_player_id
-                  ? <PlayerAvatar id={r.resolved_player_id} team={r.draft_team_abbrev} name={r.full_name} size={28} />
-                  : <span className="dv-board__noavatar" aria-hidden />}
-                <div className="dv-board__name">
-                  <span>{r.full_name ?? '—'}</span>
-                  <span className="dv-board__meta">{r.draft_year} · {r.draft_team_abbrev ?? ''} · {r.pos_group ?? ''}</span>
-                </div>
-              </td>
-              <td className="num mono">#{r.overall_pick}</td>
-              <td className="num mono">{r.realized_value.toFixed(1)}</td>
-              <td className="num mono dv-muted">{r.expected_mean.toFixed(1)}</td>
-              <td className={`num mono ${r.value_above_slot >= 0 ? 'dv-pos' : 'dv-neg'}`}>
-                {r.value_above_slot >= 0 ? '+' : '−'}{Math.abs(r.value_above_slot).toFixed(1)}
-              </td>
+    <span className="dv-vsband" aria-hidden>
+      <span className="dv-vsband__tick" />
+      <span className={`dv-vsband__fill ${pos ? 'is-pos' : 'is-neg'}`}
+        style={{ left: pos ? '50%' : `${50 + half}%`, width: `${Math.abs(half)}%` }} />
+    </span>
+  )
+}
+
+/** Slot expectation vs realized on one shared scale, in the expanded row. */
+function PairedBand({ expected, realized }: { expected: number; realized: number }) {
+  const max = Math.max(expected, realized, 1)
+  const w = (v: number) => `${(Math.max(0, v) / max) * 100}%`
+  return (
+    <div className="dv-paired">
+      <div className="dv-paired__row">
+        <span className="dv-paired__key">Slot exp.</span>
+        <span className="dv-paired__track"><span className="dv-paired__bar is-exp" style={{ width: w(expected) }} /></span>
+        <span className="dv-paired__val mono">{expected.toFixed(1)}</span>
+      </div>
+      <div className="dv-paired__row">
+        <span className="dv-paired__key">Realized</span>
+        <span className="dv-paired__track"><span className="dv-paired__bar is-real" style={{ width: w(realized) }} /></span>
+        <span className="dv-paired__val mono">{realized.toFixed(1)}</span>
+      </div>
+    </div>
+  )
+}
+
+function ExpandedRow({ row, curve }: { row: DraftBoardRow; curve: PickValueCurveRow[] }) {
+  const invPick = inversePick(curve, row.realized_value)
+  const beat = row.value_above_slot >= 0
+  const verdict = beat
+    ? `Went #${row.overall_pick} in ${row.draft_year}; produced like ${slotPhrase(invPick)}.`
+    : `Went #${row.overall_pick} in ${row.draft_year}; produced like ${slotPhrase(invPick)} — below its slot.`
+  const isGoalie = row.pos_group === 'G'
+  const [hasDeal, setHasDeal] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let active = true
+    if (!row.resolved_player_id) { setHasDeal(false); return }
+    getPlayerContract(row.resolved_player_id)
+      .then((c) => { if (active) setHasDeal(!!(c?.cap_hit && c?.remaining_years && c.contract_status !== 'rfa_projected')) })
+      .catch(() => { if (active) setHasDeal(false) })
+    return () => { active = false }
+  }, [row.resolved_player_id])
+
+  return (
+    <div className="dv-expand">
+      <p className="dv-expand__verdict">
+        {verdict}
+        {isGoalie && <span className="dv-expand__caveat"> Goalie value is cruder.</span>}
+      </p>
+      <div className="dv-expand__figrow">
+        <div className="dv-expand__inv">
+          <span className="dv-expand__inv-label">Performed like pick</span>
+          <span className="dv-expand__inv-value mono">#{invPick}</span>
+        </div>
+        <PairedBand expected={row.expected_mean} realized={row.realized_value} />
+      </div>
+      <div className="dv-expand__actions">
+        {row.resolved_player_id && (
+          <Link to={`/players/${row.resolved_player_id}`} className="dv-action dv-action--primary">
+            Player profile <ArrowRight size={14} />
+          </Link>
+        )}
+        {hasDeal && row.resolved_player_id && (
+          <Link to={`/studio/contracts?player=${row.resolved_player_id}&name=${encodeURIComponent(row.full_name ?? '')}`}
+            className="dv-action">
+            Grade his deal <ArrowRight size={14} />
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const POS_TABS = [
+  { value: 'all', label: 'All' }, { value: 'F', label: 'F' },
+  { value: 'D', label: 'D' }, { value: 'G', label: 'G' },
+]
+const VIEW_TABS = [
+  { value: 'steals', label: 'Steals' }, { value: 'busts', label: 'Busts' }, { value: 'all', label: 'All' },
+]
+
+function Board({ curve }: { curve: PickValueCurveRow[] }) {
+  const [params, setParams] = useSearchParams()
+  const view = (params.get('view') as 'steals' | 'busts' | 'all') || 'steals'
+  const cls = params.get('cls') || 'all'
+  const pos = params.get('pos') || 'all'
+  const team = params.get('team') || 'all'
+  const q = params.get('q') || ''
+  const setParam = (k: string, v: string, def: string) => {
+    const next = new URLSearchParams(params)
+    if (v === def) next.delete(k); else next.set(k, v)
+    setParams(next, { replace: true })
+  }
+
+  // The board endpoint only serves the two tails (steals/busts) by pos; fetch both wide and filter
+  // class/team/search client-side. TODO(data): server-side class/team/search + a true "all" slice.
+  const [steals, setSteals] = useState<DraftBoardRow[] | null>(null)
+  const [busts, setBusts] = useState<DraftBoardRow[] | null>(null)
+  const [shown, setShown] = useState(25)
+  const [open, setOpen] = useState<string | null>(null)
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+
+  useEffect(() => {
+    Promise.all([getDraftBoard('steals', undefined, 250), getDraftBoard('busts', undefined, 250)])
+      .then(([s, b]) => { setSteals(s); setBusts(b) })
+      .catch(() => { setSteals([]); setBusts([]) })
+  }, [])
+
+  // Busts default to ascending emphasis; steals/all descending. Reset on view change.
+  useEffect(() => { setDir(view === 'busts' ? 'asc' : 'desc'); setShown(25); setOpen(null) }, [view])
+  useEffect(() => { setShown(25); setOpen(null) }, [cls, pos, team, q])
+
+  const teamOptions = useMemo<SelectOption[]>(() => {
+    const set = new Set<string>()
+    for (const r of [...(steals ?? []), ...(busts ?? [])]) if (r.draft_team_abbrev) set.add(r.draft_team_abbrev)
+    return [{ value: 'all', label: 'All teams' }, ...[...set].sort().map((t) => ({ value: t, label: t }))]
+  }, [steals, busts])
+
+  const classOptions = useMemo<SelectOption[]>(() => {
+    const years: SelectOption[] = []
+    for (let y = 2010; y <= 2018; y++) years.push({ value: String(y), label: `Class of ${y}` })
+    return [{ value: 'all', label: 'Classes 2010–2018' }, ...years]
+  }, [])
+
+  const rows = useMemo(() => {
+    let base: DraftBoardRow[]
+    if (view === 'steals') base = steals ?? []
+    else if (view === 'busts') base = busts ?? []
+    else {
+      const seen = new Set<string>()
+      base = [...(steals ?? []), ...(busts ?? [])].filter((r) => {
+        const k = `${r.overall_pick}-${r.draft_year}`
+        if (seen.has(k)) return false
+        seen.add(k); return true
+      })
+    }
+    const filtered = base.filter((r) =>
+      (pos === 'all' || r.pos_group === pos) &&
+      (cls === 'all' || String(r.draft_year) === cls) &&
+      (team === 'all' || r.draft_team_abbrev === team) &&
+      (!q || (r.full_name ?? '').toLowerCase().includes(q.toLowerCase())))
+    return [...filtered].sort((a, b) =>
+      dir === 'asc' ? a.value_above_slot - b.value_above_slot : b.value_above_slot - a.value_above_slot)
+  }, [view, steals, busts, pos, cls, team, q, dir])
+
+  const loading = steals === null || busts === null
+  const visible = rows.slice(0, shown)
+
+  return (
+    <section className="dv-boardwrap">
+      <div className="dv-boardhead">
+        <Tabs options={VIEW_TABS} value={view} onChange={(v) => setParam('view', v, 'steals')} />
+      </div>
+      <div className="dv-filters">
+        <Tabs options={POS_TABS} value={pos} onChange={(v) => setParam('pos', v, 'all')} />
+        <Select value={cls} options={classOptions} onChange={(v) => setParam('cls', v, 'all')} ariaLabel="Draft class" />
+        <Select value={team} options={teamOptions} onChange={(v) => setParam('team', v, 'all')} ariaLabel="Drafting team" />
+        <input className="dv-search" type="search" placeholder="Search player" value={q}
+          onChange={(e) => setParam('q', e.target.value, '')} aria-label="Search player" />
+      </div>
+
+      {loading ? (
+        <SkeletonLoader height={400} />
+      ) : (
+        <table className="dv-table dv-board">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th className="num">Pick</th>
+              <th className="num">Realized</th>
+              <th className="num dv-slotcol">
+                <Tooltip content="Expected 7-year WAR for this draft slot, from the fitted curve.">Slot exp.</Tooltip>
+              </th>
+              <th className="num dv-vscol">
+                <button className="dv-sortbtn" onClick={() => setDir((d) => (d === 'asc' ? 'desc' : 'asc'))}>
+                  vs slot {dir === 'asc' ? '▲' : '▼'}
+                </button>
+              </th>
             </tr>
-          )
-        })}
-      </tbody>
-    </table>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr><td colSpan={5} className="dv-empty">No picks match these filters.</td></tr>
+            )}
+            {visible.map((r) => {
+              const key = `${r.overall_pick}-${r.draft_year}`
+              const isOpen = open === key
+              const beat = r.value_above_slot >= 0
+              return (
+                <Fragment key={key}>
+                  <tr className={`dv-board__row${isOpen ? ' dv-board__row--open' : ''}`}
+                    onClick={() => setOpen(isOpen ? null : key)} tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(isOpen ? null : key) } }}>
+                    <td className="dv-board__player">
+                      {r.resolved_player_id
+                        ? <PlayerAvatar id={r.resolved_player_id} team={r.draft_team_abbrev ?? undefined} name={r.full_name ?? ''} size={28} />
+                        : <span className="dv-board__noavatar" aria-hidden />}
+                      <div className="dv-board__name">
+                        <span>{r.full_name ?? '—'}</span>
+                        <span className="dv-board__meta">{r.draft_year} · {r.draft_team_abbrev ?? ''} · {r.pos_group ?? ''}</span>
+                      </div>
+                    </td>
+                    <td className="num mono">#{r.overall_pick}</td>
+                    <td className="num mono">{r.realized_value.toFixed(1)}</td>
+                    <td className="num mono dv-muted dv-slotcol">{r.expected_mean.toFixed(1)}</td>
+                    <td className="num dv-vscol">
+                      <div className="dv-vscell">
+                        <span className={`mono ${beat ? 'dv-pos' : 'dv-neg'}`}>{signed(r.value_above_slot)}</span>
+                        <VsBand value={r.value_above_slot} />
+                      </div>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="dv-board__xrow">
+                      <td colSpan={5}><ExpandedRow row={r} curve={curve} /></td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {!loading && rows.length > shown && (
+        <button className="dv-showmore" onClick={() => setShown((s) => s + 25)}>Show more</button>
+      )}
+    </section>
   )
 }
 
 // ---------------------------------------------------------------- page
-const POS_TABS = [
-  { value: 'all', label: 'All' }, { value: 'F', label: 'Forwards' },
-  { value: 'D', label: 'Defense' }, { value: 'G', label: 'Goalies' },
-]
-
 export default function DraftValue() {
   usePageTitle('Draft value')
   const [curve, setCurve] = useState<PickValueCurveRow[] | null>(null)
-  const [summary, setSummary] = useState<DraftTheorySummaryRow[] | null>(null)
-  const [boardType, setBoardType] = useState<'steals' | 'busts'>('steals')
-  const [pos, setPos] = useState('all')
-  const [board, setBoard] = useState<DraftBoardRow[] | null>(null)
-  const [annotations, setAnnotations] = useState<Annotation[]>([])
 
-  useEffect(() => {
-    getPickValueCurve().then(setCurve).catch(() => setCurve([]))
-    getDraftTheorySummary().then(setSummary).catch(() => setSummary([]))
-    // chart annotations: a famous late steal (fits the scale) + a famous early bust
-    Promise.all([getDraftBoard('steals', undefined, 50), getDraftBoard('busts', undefined, 50)])
-      .then(([steals, busts]) => {
-        const steal = steals.find((s) => s.overall_pick >= 60)
-        const bust = busts.find((b) => b.overall_pick <= 10)
-        const ann: Annotation[] = []
-        if (steal) ann.push({ overall_pick: steal.overall_pick, realized_value: steal.realized_value, label: lastName(steal.full_name), tone: 'steal' })
-        if (bust) ann.push({ overall_pick: bust.overall_pick, realized_value: bust.realized_value, label: lastName(bust.full_name), tone: 'bust' })
-        setAnnotations(ann)
-      })
-      .catch(() => setAnnotations([]))
-  }, [])
+  useEffect(() => { getPickValueCurve().then(setCurve).catch(() => setCurve([])) }, [])
 
-  useEffect(() => {
-    setBoard(null)
-    getDraftBoard(boardType, pos === 'all' ? undefined : pos, 25).then(setBoard).catch(() => setBoard([]))
-  }, [boardType, pos])
-
-  const pooled = useMemo(() => summary?.find((s) => s.pick_range === 'POOLED'), [summary])
+  const copyLink = () => { navigator.clipboard?.writeText(window.location.href).catch(() => {}) }
 
   return (
     <PageLayout>
@@ -297,71 +466,30 @@ export default function DraftValue() {
         <PageCard
           eyebrow="Studio"
           title="Draft value"
-          subtitle="What a draft slot is actually worth, measured from draft history."
-        >
-        {/* curve */}
-        <section className="dv-section">
-          <h2 className="dv-section__title">
-            {curve && curve.length
-              ? `A top-five pick is worth roughly ${curve.find((c) => c.overall_pick === 5)?.ev_mean_smooth.toFixed(1)} WAR; by the third round, essentially replacement level`
-              : 'The empirical pick-value curve'}
-          </h2>
-          <p className="dv-section__sub">Expected and median realized value by overall pick, with the middle 80% of outcomes shaded. The curve falls steeply — the gap between the first pick and the tenth dwarfs the gap across entire later rounds.</p>
-          <ChartPanel title="Realized value by pick" subtitle="Smoothed across pick number; later picks never worth more in expectation">
-            {curve ? <CurveChart curve={curve} annotations={annotations} /> : <SkeletonLoader height={280} />}
-          </ChartPanel>
-          {/* §S7: this is a real figure sequence — earned figure numbering. */}
-          <p className="dv-figcap">
-            <span className="dv-figcap__n">Fig. 1</span>
-            Realized 7-year WAR by draft slot: a fitted expected-value curve (solid) with its
-            sparse-sample tail extrapolated (dashed) and the middle 80% of outcomes shaded.
-          </p>
-        </section>
-
-        <div className="page-divider" />
-
-        {/* theory test */}
-        <section className="dv-section">
-          <h2 className="dv-section__title">
-            {pooled
-              ? `${pct0(pooled.share_never_nhl)} of all picks never play an NHL game — and ${pct0(pooled.share_below_mean)} return below their slot's average`
-              : 'Do most picks "bust"?'}
-          </h2>
-          <p className="dv-section__sub">
-            The folk claim that the vast majority of picks bust is roughly true — but how you count matters. Most picks fall below their slot's <em>mean</em> because a few stars pull the average up; the <em>median</em> tells a gentler story. Both are shown, with the never-play rate, so the number is read honestly.
-          </p>
-          <div className="dv-card">
-            {summary ? <TheoryTable rows={summary} /> : <SkeletonLoader height={220} />}
-          </div>
-        </section>
-
-        <div className="page-divider" />
-
-        {/* board */}
-        <section className="dv-section">
-          <h2 className="dv-section__title">Steals and busts</h2>
-          <p className="dv-section__sub">Evaluable picks (classes 2010–2018) ranked by how far their realized value beat or trailed the expectation for their slot.</p>
-          <div className="dv-card">
-            <div className="dv-card__controls">
-              <Tabs options={[{ value: 'steals', label: 'Steals' }, { value: 'busts', label: 'Busts' }]}
-                value={boardType} onChange={(v) => setBoardType(v as 'steals' | 'busts')} />
-              <Tabs options={POS_TABS} value={pos} onChange={setPos} />
+          subtitle="What a pick is worth, and who beat their slot."
+          controls={
+            <div className="dv-toolbar">
+              <Link to={ESSAY_TO} className="dv-toolbar__link">Read the research <ArrowRight size={14} /></Link>
+              <button type="button" className="dv-toolbar__btn" onClick={copyLink}><Copy size={14} /> Copy link</button>
             </div>
-            {board ? <Board rows={board} /> : <SkeletonLoader height={400} />}
-          </div>
-        </section>
+          }
+        >
+          <section className="dv-section">
+            {curve && curve.length ? <PickLookup curve={curve} /> : <SkeletonLoader height={340} />}
+          </section>
 
-        <p className="dv-footnote">
-          This is a <strong>performance</strong> curve — what slots have <em>returned</em> — not a market curve of what teams <em>pay</em> in trades, and not a grade of any pick at the time it was made. Value before 2021-22 is estimated from box production and carries a wide band; goalie value is cruder still. Read the <Link to="/learn/archetypes">methodology</Link> for the full method and its limits.
-        </p>
+          <div className="page-divider" />
+
+          <section className="dv-section">
+            <h2 className="dv-section__title">Steals and busts</h2>
+            <p className="dv-section__sub">
+              Evaluable picks (classes 2010–2018) ranked by how far their realized value beat or trailed
+              the expectation for their slot.
+            </p>
+            {curve && curve.length ? <Board curve={curve} /> : <SkeletonLoader height={400} />}
+          </section>
         </PageCard>
       </div>
     </PageLayout>
   )
-}
-
-function lastName(full: string | null): string {
-  if (!full) return ''
-  const parts = full.trim().split(/\s+/)
-  return parts[parts.length - 1]
 }

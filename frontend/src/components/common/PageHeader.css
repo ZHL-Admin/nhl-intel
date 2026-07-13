@@ -53,11 +53,14 @@
   gap: var(--space-4);
 }
 
-/* The red rule: the site's constant. Draws in left→right on mount. */
+/* The Sheet's closing divider. Draws in left→right on mount.
+   00c: the red rule is retired; this is now a neutral hairline.
+   00b: spans the full Well width — negative side margins reach the Well's inner padding
+   (--space-8, --space-5 below 640). */
 .sheet__rule {
-  margin-top: var(--space-5);
+  margin: var(--space-5) calc(-1 * var(--space-8)) 0;
   height: 1px;
-  background: var(--line-red);
+  background: var(--color-border-subtle);
   transform-origin: left center;
   animation: sheet-draw var(--dur-draw) var(--ease-out) 120ms both;
 }
@@ -78,4 +81,5 @@
 @media (max-width: 640px) {
   .sheet { margin-bottom: var(--space-6); }
   .sheet__title { font-size: var(--text-display-2); }
+  .sheet__rule { margin: var(--space-5) calc(-1 * var(--space-5)) 0; }
 }

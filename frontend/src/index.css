@@ -27,7 +27,7 @@
    Global Styles
    ============================================================================ */
 body {
-  background-color: var(--color-bg-base);
+  background-color: var(--color-accent-light);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   margin: 0;

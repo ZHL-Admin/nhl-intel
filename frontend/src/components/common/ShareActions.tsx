@@ -19,9 +19,12 @@ interface ShareActionsProps {
   /** Download filename stem. */
   shareName?: string
   className?: string
+  /** Optional bespoke card renderer (e.g. the offseason forecast card). When provided it replaces the
+   * generic text verdict card for THIS instance only; every other tool keeps drawShareCard untouched. */
+  renderCard?: () => Promise<Blob | null>
 }
 
-export default function ShareActions({ kicker, verdict, confidence, shareName = 'open-ice-verdict', className }: ShareActionsProps) {
+export default function ShareActions({ kicker, verdict, confidence, shareName = 'open-ice-verdict', className, renderCard }: ShareActionsProps) {
   const copyLink = () => { navigator.clipboard?.writeText(window.location.href).catch(() => {}) }
 
   const busy = useRef(false)
@@ -29,7 +32,7 @@ export default function ShareActions({ kicker, verdict, confidence, shareName = 
     if (busy.current) return
     busy.current = true
     try {
-      const blob = await drawShareCard({ kicker, verdict, confidence })
+      const blob = renderCard ? await renderCard() : await drawShareCard({ kicker, verdict, confidence })
       if (blob) {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -49,7 +52,7 @@ export default function ShareActions({ kicker, verdict, confidence, shareName = 
         <Copy size={14} /> Copy link
       </button>
       <button type="button" className="share-actions__btn" onClick={shareCard}>
-        <Download size={14} /> Card
+        <Download size={14} /> Share card
       </button>
     </div>
   )

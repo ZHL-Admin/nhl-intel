@@ -1,0 +1,20 @@
+[project]
+name = "composition-probe"
+version = "0.1.0"
+description = "Last pre-registered swing at fit: does trio RECIPE (fine style composition / complementarity) beat recipe holding talent+style fixed, and repeat across an era split? Reuses Chemistry trios + role-fit two-way axes + the additive-plus-curvature null. Frozen-corpus; isolated; nothing promoted."
+requires-python = ">=3.11"
+dependencies = ["polars>=1.0", "duckdb>=1.0", "pyarrow>=16", "scikit-learn>=1.3", "httpx>=0.27"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

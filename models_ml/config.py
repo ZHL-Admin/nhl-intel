@@ -602,9 +602,18 @@ ROSTER_FORECAST = {
     # absolute band interpolates the anchor/bottom-up strength error by w, in quadrature with the luck
     # floor (~68% coverage); the delta band is the changed players' projection sds plus a small
     # offset-fade term (no luck floor — a talent comparison). See docs/methodology/roster-projection.md.
-    "ROSTER_BUILDER_BASE_W": [1.0, 0.5],   # R_measured recency weights (2-year)
-    "ROSTER_BUILDER_BASE_K": 1.0,          # R_measured regression-to-league-mean strength
-    "ROSTER_BUILDER_STRENGTH_ANCHOR": 11.45,  # anchor strength-prediction SD, points (w=1 band term)
+    # predictive_base (the SHARED measured anchor, used by BOTH the offseason forecast and the Roster
+    # Builder — project_roster_forecast.predictive_base): a 2-year recency-weighted, league-mean-regressed
+    # team rating. The Roster Builder's unedited baseline then seeds from R_current = the offseason
+    # forecast's projected rating (this anchor + the move delta + chemistry), so the two tools share one
+    # "current team" number (gate: make baseline-consistency).
+    "ROSTER_BUILDER_BASE_W": [1.0, 0.5],   # predictive_base recency weights (2-year)
+    "ROSTER_BUILDER_BASE_K": 1.0,          # predictive_base regression-to-league-mean strength
+    # w=1 absolute-band strength SD, refit for the UNIFIED baseline R_current: the smallest strength SD
+    # whose band sqrt(ANCHOR^2 + luck^2) covers >= 68% of |forecast points - actual| on the 62 backtest
+    # team-seasons (lands at 73% coverage — integer points are lumpy — so it is mildly conservative).
+    # Recalibrated by calibrate_roster_builder.recalibrate_strength_anchor.
+    "ROSTER_BUILDER_STRENGTH_ANCHOR": 10.35,  # anchor strength-prediction SD, points (w=1 band term)
     "ROSTER_BUILDER_STRENGTH_BU": 11.34,      # bottom-up strength SD, points (w=0 band term)
     "ROSTER_BUILDER_DELTA_OFFSET_W": 0.30,    # offset-fade uncertainty fraction in the delta band
 

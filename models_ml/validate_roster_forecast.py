@@ -108,8 +108,11 @@ def main() -> None:
     base_mem = J.robust_roster_membership(bq, base_season, floor, "end")   # 2024-25 season-end
     upd_mem = J.robust_roster_membership(bq, next_s, floor, "open")        # 2025-26 opening night
     trans = f"{base_season}->{next_s}"
+    # Shared predictive_base anchor for the target season (2-year regressed, seasons < target year).
+    series = J.load_team_rating_series(bq)
+    anchors = {tid: J.predictive_base_for_target(series.get(tid, []), int(next_s[:4])) for tid in ratings}
     forecasts, _ = J._run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
-                              aging, ages, archetypes, trans, "backtest")
+                              aging, ages, archetypes, trans, "backtest", anchors=anchors)
     J._rank_and_finalize(forecasts)
 
     # Actual: rank delta from real end-of-season team_ratings (2024-25 -> 2025-26).

@@ -5,6 +5,7 @@ import ThemeToggle from './ThemeToggle'
 import RinkTheoryLogo from './RinkTheoryLogo'
 import { PALETTE_OPEN_EVENT } from './CommandPalette'
 import { BRAND_NAME } from '../../config/brand'
+import { GAMES_ENABLED } from '../../config/features'
 import { inPlayoffWindow } from '../../utils/seasonal'
 import { DIVISIONS, getTeamLogoUrl, getTeamName } from '../../utils/teams'
 import './NavBar.css'
@@ -64,13 +65,13 @@ function NavBar() {
       <div className="navbar__container">
         <div className="navbar__logo">
           <NavLink to="/" aria-label={BRAND_NAME}>
-            <RinkTheoryLogo size={26} interactive={false} />
+            <RinkTheoryLogo size={32} interactive={false} />
           </NavLink>
         </div>
 
         <div className="navbar__links">
           <NavLink to="/" end className={linkClass}>Today</NavLink>
-          <NavLink to="/games" className={linkClass}>Games</NavLink>
+          {GAMES_ENABLED && <NavLink to="/games" className={linkClass}>Games</NavLink>}
           <NavLink to="/players" className={linkClass}>Players</NavLink>
 
           <div

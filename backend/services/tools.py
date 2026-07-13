@@ -15,6 +15,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import logging
 import math
 from functools import lru_cache
 
@@ -22,6 +23,7 @@ from google.cloud import bigquery
 
 from services.bigquery import bq_service
 
+_log = logging.getLogger(__name__)
 FWD_POS = ("C", "L", "R")
 
 
@@ -590,7 +592,6 @@ def _team_predictive_base(team_id: int, base_season: str) -> Optional[float]:
     single predictor of next-season strength (Handoff 13). Anchors the hybrid. None if the team has no
     rating history (then the tool degrades to pure bottom-up). Uses seasons <= base_season."""
     from models_ml import project_roster_forecast as J
-    CFG = J.CFG
     rows = bq_service.query(
         "SELECT season, total_rating FROM ("
         "  SELECT season, total_rating, ROW_NUMBER() OVER ("
@@ -599,14 +600,8 @@ def _team_predictive_base(team_id: int, base_season: str) -> Optional[float]:
         "ORDER BY season DESC",
         params=[bigquery.ScalarQueryParameter("t", "INT64", int(team_id)),
                 bigquery.ScalarQueryParameter("s", "STRING", base_season)])
-    ratings = [float(r["total_rating"]) for r in rows]
-    if not ratings:
-        return None
-    W = CFG["ROSTER_BUILDER_BASE_W"]; K = CFG["ROSTER_BUILDER_BASE_K"]
-    m = min(len(ratings), len(W))
-    num = sum(W[j] * ratings[j] for j in range(m)); wt = sum(W[j] for j in range(m))
-    base = num / wt
-    return (wt * base) / (wt + K)   # regress toward league mean (0)
+    # seasons <= base, most recent first == the shared anchor's hist_desc (one definition, no duplication)
+    return J.predictive_base([float(r["total_rating"]) for r in rows])
 
 
 @lru_cache(maxsize=1)
@@ -665,46 +660,23 @@ def _effective_fwd_pos(pid, listed, effpos) -> str:
     return J.effective_fwd_pos(pid, listed, effpos)
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=2)
+def _all_seed_units(base_season: str) -> dict:
+    """team_id -> {'F3': [(frozenset(ids), minutes)...], 'D2': [...]} observed base-season 5v5 units, from
+    the offseason forecast's OWN loader (project_roster_forecast.load_seed_units) via the DuckDB serving
+    path. Using the identical loader — the same int_line_seasons units the offseason seeds with — means
+    the Roster Builder and the offseason forecast seed the SAME lines, so they ice the identical lineup
+    from the same roster. Cached per base season (the live tool re-evaluates on every edit)."""
+    from models_ml import bq, project_roster_forecast as J
+    return J.load_seed_units(bq, base_season)
+
+
 def _seed_units(team_id: int, base_season: str) -> dict:
-    """Observed 5v5 units for deployment-aware line seeding, keyed by a team + base season. MERGES the
-    team's full-season int_line_seasons units (floor LINE_SEED_MIN_5V5_MINUTES) with its last-10-games
-    team_current_lines units (proportional LINE_SEED_MIN_5V5_MINUTES_CURRENT floor). Returns
-    {'F3': [(frozenset(ids), minutes)...], 'D2': [...]} sorted by shared minutes desc — so established
-    season units seed first and recent-form units only fill gaps. Cached (the live tool re-evaluates on
-    every edit; this must not re-query per keystroke). Both source tables are already exported to DuckDB."""
-    from models_ml import project_roster_forecast as J
-    CFG = J.CFG
-    out: dict = {"F3": [], "D2": []}
-    season_floor = CFG["LINE_SEED_MIN_5V5_MINUTES"]
-    current_floor = CFG["LINE_SEED_MIN_5V5_MINUTES_CURRENT"]
-
-    def _add(rows, floor):
-        for r in rows:
-            lt = r.get("line_type")
-            if lt not in out:
-                continue
-            mins = float(r["minutes"])
-            if mins < floor:
-                continue
-            members = frozenset(int(x) for x in str(r["line_key"]).split("-"))
-            out[lt].append((members, mins))
-
+    """The team's observed 5v5 seeding units (see _all_seed_units) — the same source the offseason uses."""
     try:
-        _add(bq_service.query(
-            "SELECT line_type, line_key, minutes FROM int_line_seasons "
-            f"WHERE team_id = {int(team_id)} AND season = '{base_season}'"), season_floor)
-    except Exception:  # noqa: BLE001 — table absent -> no season units (still try current)
-        pass
-    try:
-        _add(bq_service.query(
-            "SELECT line_type, line_key, minutes FROM team_current_lines "
-            f"WHERE team_id = {int(team_id)}"), current_floor)
-    except Exception:  # noqa: BLE001 — table absent -> season units only
-        pass
-    for lt in out:
-        out[lt].sort(key=lambda mm: -mm[1])
-    return out
+        return _all_seed_units(base_season).get(int(team_id), {"F3": [], "D2": []})
+    except Exception:  # noqa: BLE001 — loader unavailable -> no seeding (pure position-aware assignment)
+        return {"F3": [], "D2": []}
 
 
 @lru_cache(maxsize=2)
@@ -742,23 +714,47 @@ def _league_player_index(season: str) -> dict:
     return out
 
 
+@lru_cache(maxsize=2)
+def _offseason_membership(base_season: str) -> dict:
+    """team_id -> [{player_id, position, name}] the team's CURRENT roster, computed by the offseason
+    forecast's OWN membership function (project_roster_forecast.offseason_updated_membership) via the
+    DuckDB serving path. Using the identical function — not a parallel query — GUARANTEES the Roster
+    Builder opens from the exact roster the offseason forecast projects as the opening roster (active
+    roster ∪ signed non-roster players, minus phantom latest-game UFAs). Cached per base season."""
+    from models_ml import bq, project_roster_forecast as J
+    return J.offseason_updated_membership(bq, base_season, J.CFG["MIN_GAMES_ROSTER"])
+
+
 def _team_current_members(team_id: int, season: str) -> list[dict]:
-    """The team's CURRENT roster (dim_current_roster) — the baseline the canvas pre-loads and the
-    delta is measured against. Matches GET /teams/{id}/roster's membership source."""
-    rows = bq_service.query(
+    """The team's CURRENT roster — the baseline the canvas pre-loads and the delta is measured against.
+    It is EXACTLY the offseason forecast's projected opening roster (same function, see
+    _offseason_membership), so the two tools never disagree on who is on the team. Falls back to the raw
+    dim_current_roster membership only if that path is unavailable (older serving file)."""
+    try:
+        mem = _offseason_membership(season)
+        rows = mem.get(int(team_id), [])
+        if rows:
+            return [{"player_id": int(m["player_id"]), "name": m.get("name"),
+                     "position": m.get("position") or "F"} for m in rows]
+    except Exception:  # noqa: BLE001 — membership query unavailable -> dim_current_roster fallback
+        pass
+    fb = bq_service.query(
         "SELECT player_id, full_name, position_code FROM dim_current_roster "
         "WHERE team_id = @t AND season = @s",
         params=[bigquery.ScalarQueryParameter("t", "INT64", int(team_id)),
                 bigquery.ScalarQueryParameter("s", "STRING", season)])
     return [{"player_id": int(r["player_id"]), "name": r.get("full_name"),
-             "position": r.get("position_code") or "F"} for r in rows]
+             "position": r.get("position_code") or "F"} for r in fb]
 
 
 def _proj(pid, position, inp):
-    """Project one placed player. Identity/base_war/pos come from make_player_proj; the projected WAR
-    and its (calibrated, heteroscedastic) sd are OVERRIDDEN by the Handoff-12 component model when the
-    player has a projection row. A player absent from the table (no GAR history) keeps the make_player_proj
-    no-track replacement + wide fallback band."""
+    """Project one placed player via make_player_proj (the SHARED blended-WAR projection — the same one
+    the offseason forecast, the Contract Grader, and this tool's OWN calibration use). This deliberately
+    does NOT override with the roster_player_projection component model: that override made the live tool
+    disagree with both its calibration (fit on make_player_proj) and the offseason forecast, so the
+    Roster Builder and the offseason would ice DIFFERENT lineups from the same roster. One projection ->
+    the two tools now ice the identical lineup. (inp['proj'] is still loaded, but only for its projected
+    TOI, which feeds the retained-value-share weight in roster_evaluate — not the WAR value.)"""
     from models_ml import project_roster_forecast as J
     name = (inp["index"].get(int(pid), {}) or {}).get("name") or inp["names"].get(int(pid))
     p = J.make_player_proj(int(pid), name, position, inp["skater"], inp["goalie"],
@@ -767,11 +763,6 @@ def _proj(pid, position, inp):
     # (Compher) shows as C. Value is untouched (position is not a value input); F_FLEX / no-evidence
     # forwards keep their listed position. The assignment reads effpos directly, so this is display-only.
     p.position = J.apply_effective_position(p.position, int(pid), inp.get("effpos", {}))
-    pr = inp["proj"].get(int(pid))
-    if pr is not None:
-        p.projected_war = pr["war"]
-        p.war_sd = pr["sd"]
-        p.no_track_record = False
     return p
 
 
@@ -1173,6 +1164,24 @@ def J_latest_completed() -> str:
     return J.latest_completed_season(bq)
 
 
+def _forecast_current_rating(team_id: int, transition: str):
+    """R_current — the offseason forecast's projected rating for the team's CURRENT transition, read from
+    the precomputed nhl_models.roster_forecast serving table. This is the ONE 'current team' number the
+    Roster Builder shares with the offseason tool (measured predictive_base anchor + the summer's move
+    delta + chemistry), so an unedited roster reproduces the offseason forecast exactly. Returns
+    (rating, 'forecast') or (None, None) when there is no row (caller falls back, never fabricates)."""
+    try:
+        rows = bq_service.query(
+            "SELECT projected_rating FROM roster_forecast WHERE team_id = @t AND transition = @tr LIMIT 1",
+            params=[bigquery.ScalarQueryParameter("t", "INT64", int(team_id)),
+                    bigquery.ScalarQueryParameter("tr", "STRING", transition)])
+    except Exception:  # noqa: BLE001 — table/row unavailable -> caller falls back to the measured anchor
+        return None, None
+    if rows and rows[0].get("projected_rating") is not None:
+        return float(rows[0]["projected_rating"]), "forecast"
+    return None, None
+
+
 def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize: bool = False,
                     season: Optional[str] = None) -> dict:
     """Evaluate a user-built roster for `team_id`. roster = [{player_id, slot}] (slot in the F/D/G
@@ -1214,17 +1223,26 @@ def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize:
     built_iced = payload.pop("_iced")
     SLOPE = CFG["FORECAST_POINTS"]["slope"]; W2R = CFG["WAR_TO_RATING"]
 
-    # HYBRID (Handoff 13): anchor on the team's MEASURED predictive rating, use player projections only
-    # for the change vs the real roster, and fade to pure bottom-up as the roster turns over.
-    #   projected_rating = R_bottomup(built) + w * (R_measured - R_bottomup(actual))
-    # base_rating here is R_bottomup(actual). The offset is the coaching/system/integration the parts-sum
-    # can't see; w (retained value share) fades it as players are swapped out. No changes -> w=1 ->
-    # projected_rating == R_measured (the baseline IS the team's measured level). Fully hypothetical ->
-    # w=0 -> pure bottom-up. The math degrades automatically; no special-casing.
-    r_measured = _team_predictive_base(team_id, base_season)
-    if r_measured is None:
-        r_measured = base_rating   # no rating history -> pure bottom-up (offset 0)
-    offset = r_measured - base_rating
+    # HYBRID (Handoff 13, unified baseline): anchor on R_CURRENT — the offseason forecast's projected
+    # rating for the team's current transition (shared predictive_base anchor + move delta + chemistry) —
+    # use player projections only for the change vs the real roster, and fade to pure bottom-up as the
+    # roster turns over.
+    #   projected_rating = R_bottomup(built) + w * (R_current - R_bottomup(current actual))
+    # base_rating here is R_bottomup(actual). No edits -> w=1 -> projected_rating == R_current and
+    # points_delta == 0 (the Roster Builder reproduces the offseason forecast's number by construction).
+    # Fully hypothetical -> w=0 -> pure bottom-up. R_current comes from the precomputed roster_forecast
+    # row; absent that, fall back to the shared measured anchor (predictive_base) with an explicit flag.
+    transition = f"{base_season}->{J.next_season(base_season)}"
+    r_current, baseline_source = _forecast_current_rating(team_id, transition)
+    if r_current is None:
+        r_current = _team_predictive_base(team_id, base_season)
+        baseline_source = "measured_anchor"
+        _log.info("roster_evaluate: no roster_forecast row for team %s (%s); baseline = predictive_base",
+                  team_id, transition)
+    if r_current is None:
+        r_current = base_rating   # no rating history at all -> pure bottom-up (offset 0)
+        baseline_source = "bottom_up"
+    offset = r_current - base_rating
 
     # w is MINUTES-weighted (projected ice time), so the team-system offset fades with how much of the
     # roster's ICE TIME turns over, not its value — a single swap keeps ~95% of minutes (system intact),
@@ -1235,10 +1253,10 @@ def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize:
     denom = sum(base_min.values()) or 1.0
     w = max(0.0, min(1.0, sum(m for pid, m in base_min.items() if pid in built_ids) / denom))
 
-    projected_rating = built_R_bu + w * offset
+    projected_rating = J.hybrid_projected_rating(built_R_bu, w, r_current, base_rating)
     projected_points = J.rating_to_points(projected_rating, CFG)
-    baseline_points = J.rating_to_points(r_measured, CFG)   # the w=1 baseline = team's measured level
-    points_delta = round(SLOPE * (projected_rating - r_measured), 1)
+    baseline_points = J.rating_to_points(r_current, CFG)   # the w=1 baseline = the forecast's current-team number
+    points_delta = round(SLOPE * (projected_rating - r_current), 1)
 
     # ABSOLUTE band (context, wide): strength uncertainty interpolated anchor<->bottom-up by w, in
     # quadrature with the irreducible luck floor. Calibrated to ~68% coverage on real team-seasons (w=1).
@@ -1267,11 +1285,12 @@ def roster_evaluate(team_id: int, roster: Optional[list[dict]] = None, optimize:
     payload["delta_low"] = round(points_delta - delta_band, 1)
     payload["delta_high"] = round(points_delta + delta_band, 1)
     payload["baseline_points"] = baseline_points
-    payload["baseline_rating"] = round(r_measured, 4)
+    payload["baseline_rating"] = round(r_current, 4)
+    payload["baseline_source"] = baseline_source   # 'forecast' | 'measured_anchor' | 'bottom_up'
     payload["r_bottomup"] = round(built_R_bu, 4)
     payload["retained_share"] = round(w, 3)
     payload["base_season"] = base_season
     payload["team_id"] = team_id
     payload["scratches"] = [_player_out(p, base_ids, inp["ages"], inp["hand"]) for p in scratch]
-    payload["negligible"] = abs(projected_rating - r_measured) < 1e-6 and not (roster and not optimize)
+    payload["negligible"] = abs(projected_rating - r_current) < 1e-6 and not (roster and not optimize)
     return payload

@@ -65,12 +65,15 @@
   gap: var(--space-4);
 }
 
-/* ---- the one red rule (header → body) ---- */
+/* ---- the header → body divider ---- */
+/* 00c: the red rule is retired as a concept; this is now a neutral hairline.
+   00b: it spans the full Well width, edge to edge — negative side margins reach the
+   Well's inner padding (--space-8, --space-5 below 640). PageCard has no padding of its own. */
 .page-card__divider {
   height: 1px;
-  background: var(--line-red);
+  background: var(--color-border-subtle);
   border: none;
-  margin: var(--space-5) 0 var(--space-8);
+  margin: var(--space-5) calc(-1 * var(--space-8)) var(--space-8);
   transform-origin: left center;
   animation: sheet-draw var(--dur-draw) var(--ease-out) 120ms both;
 }
@@ -120,5 +123,5 @@
 
 @media (max-width: 640px) {
   .page-card__title { font-size: var(--text-display-2); }
-  .page-card__divider { margin: var(--space-4) 0 var(--space-6); }
+  .page-card__divider { margin: var(--space-4) calc(-1 * var(--space-5)) var(--space-6); }
 }

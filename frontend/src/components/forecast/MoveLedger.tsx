@@ -10,23 +10,21 @@ function initials(name: string | null | undefined): string {
   return ((p[0]?.[0] ?? '') + (p[p.length - 1]?.[0] ?? '')).toUpperCase()
 }
 
-function MoveRow({ m, dir }: { m: RosterMove; dir: 'in' | 'out'; fitNote?: string | null }) {
+function MoveRow({ m, dir }: { m: RosterMove; dir: 'in' | 'out' }) {
   const v = m.delta_contribution
   const lo = v - m.war_sd
   const hi = v + m.war_sd
+  // Range lives in the band's title (hover) — never its own line — keeping every move to one dense row.
+  const rangeTip = `Projected-WAR range: ${fmtBand(lo, hi, 1)}`
   return (
     <div className="mrow">
       <span className="mrow__av" aria-hidden>{initials(m.name)}</span>
       <span className="mrow__name">{m.name ?? `#${m.player_id}`}</span>
       <span className="mrow__pos mono">{m.position}</span>
-      <span className={`mrow__war mono ${dir === 'in' ? 'is-up' : 'is-down'}`}>
-        {fmtWar(v)}
-        <span className="mrow__warlabel">proj. WAR</span>
+      <span className="mrow__band" title={rangeTip}>
+        <UncertaintyBand value={v} lo={lo} hi={hi} domainMin={WAR_DOMAIN[0]} domainMax={WAR_DOMAIN[1]} size="sm" />
       </span>
-      <span className="mrow__band">
-        <UncertaintyBand value={v} lo={lo} hi={hi} domainMin={WAR_DOMAIN[0]} domainMax={WAR_DOMAIN[1]} />
-        <span className="mrow__bandtext mono">{fmtBand(lo, hi, 1)}</span>
-      </span>
+      <span className={`mrow__war mono ${dir === 'in' ? 'is-up' : 'is-down'}`} title={rangeTip}>{fmtWar(v)}</span>
     </div>
   )
 }
@@ -41,7 +39,7 @@ export default function MoveLedger({ moves, netWar, netGoals }: {
 
   return (
     <div className="mledger">
-      <p className="sec__subtitle">The bar shows the player's projected-WAR effect; the lighter span behind it is uncertainty.</p>
+      <p className="sec__subtitle">Each move's projected-WAR effect, with its uncertainty band (range on hover).</p>
       <div className="mledger__cols">
         <div className="mledger__col">
           <div className="mledger__coltag mledger__coltag--out">OUT <span className="mono">{outs.length}</span></div>

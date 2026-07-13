@@ -7,49 +7,67 @@
    ============================================================================= */
 
 :root {
-  /* --- Page surfaces (light "day sheet"): ice, not cream --- */
-  --color-bg-base: #F6F9FA;
+  /* --- Page surfaces (light "day sheet"): paper, not ice --- */
+  /* Canvas keeps its one-step depth so the white Well still reads as a sheet
+     on the desk; the tint is now a whisper of warmth instead of blue. */
+  --color-bg-base: #F2F0ED;
   --color-bg-surface: #FFFFFF;
-  --color-bg-elevated: #EDF3F5;
+  --color-bg-elevated: #F5F3F0;
   --color-bg-overlay: #FFFFFF;
+  /* Panel primitive — between surface and elevated, warm. */
+  --color-bg-panel: #FAF8F6;
 
   /* --- Borders / hairlines (light) --- */
-  --color-border: #D8E2E6;
-  --color-border-subtle: #E7EEF1;
-  --color-border-strong: #B9C7CD;
+  --color-border: #DDD9D2;
+  --color-border-subtle: #EAE6DF;
+  --color-border-strong: #C2BCB2;
 
-  /* --- Text (light) --- */
-  --color-text-primary: #101820;
-  --color-text-secondary: #46545E;
-  --color-text-muted: #8A99A3;
-  --color-text-inverse: #F6F9FA;
+  /* --- Text (light): warm ink on warm paper --- */
+  --color-text-primary: #1A1712;
+  --color-text-secondary: #55504A;
+  --color-text-muted: #8C877E;
+  --color-text-inverse: #FAF8F4;
   --color-text-on-accent: #FFFFFF;
 
-  /* --- Rink lines (v2 brand) --- */
-  --line-blue: #0033A0;          /* threshold: links, active, selected, focus */
+  /* --- Rink lines (v2 brand, unchanged): blue is MEANING, never ambience --- */
+  --line-blue: #0033A0;
+  /* threshold: links, active, selected, focus */
   --line-blue-hover: #00287D;
-  --line-red: #C8102E;           /* center/now: the page rule, live, negative */
+  --line-red: #C8102E;
+  /* center/now: the page rule, live, negative */
   --line-red-hover: #A00D24;
-  --crease: #E3F1F9;             /* selection + hover wash */
-  --boards-yellow: #B77E00;      /* caution text */
-  --boards-yellow-bg: #FFF4D6;
+  --crease: #E9EFF8;
+  /* selection + hover wash — deliberately blue:
+                                    selected IS blue; retuned neutral-blue so it
+                                    sits on warm paper without the cyan cast */
+  --boards-yellow: #B77E00;
+  /* caution text */
+  --boards-yellow-bg: #FBF2DC;
+  /* warmed to match the paper family */
 
   /* --- Accent: ink (primary buttons stay ink) --- */
-  --color-accent: #101820;
-  --color-accent-hover: #22303A;
+  --color-accent: #1A1712;
+  --color-accent-hover: #2E2A24;
   --color-accent-subtle: var(--crease);
+  --color-accent-light: #FCFCFC;
 
   /* --- Status + valence (light) --- */
-  --color-success: #177245;
-  --color-success-bg: #E6F3EC;
+  /* Green is retired from the product (system amendment, 11 v2 §0 lineage);
+     success maps to the rink blue. If success tokens serve any non-product
+     chrome that must stay green, split a --color-success-legacy instead. */
+  --color-success: var(--line-blue);
+  --color-success-bg: #E9EFF8;
   --color-danger: #C8102E;
-  --color-danger-bg: #FBE9EC;
+  --color-danger-bg: #FAEAE6;
   --color-warning: #B77E00;
-  --color-warning-bg: #FFF4D6;
+  --color-warning-bg: #FBF2DC;
   --color-live: #C8102E;
   --color-live-text: #FFFFFF;
 
   /* --- Dataviz (family primitives; theme-aware via --oi-*) --- */
+  /* NOTE: the --oi-ice-* ramp is defined in the primitives file and still
+     carries the cool cast; it needs a matching neutral re-derivation there
+     (same lightness steps, hue moved to the paper family). Names can stay. */
   --color-ice-100: var(--oi-ice-100);
   --color-ice-200: var(--oi-ice-200);
   --color-ice-300: var(--oi-ice-300);
@@ -58,13 +76,19 @@
   --color-ice-600: var(--oi-ice-600);
   --color-ice-700: var(--oi-ice-700);
 
-  --color-data-1: var(--oi-cat-1);   /* blue */
-  --color-data-2: var(--oi-cat-2);   /* red */
-  --color-data-3: var(--oi-cat-3);   /* teal */
-  --color-data-4: var(--oi-cat-4);   /* purple */
-  --color-data-5: var(--oi-cat-5);   /* gold */
-  --color-data-6: var(--oi-cat-6);   /* stone */
-  --color-data-neutral: #9AA7AE;
+  --color-data-1: var(--oi-cat-1);
+  /* blue */
+  --color-data-2: var(--oi-cat-2);
+  /* red */
+  --color-data-3: var(--oi-cat-3);
+  /* teal */
+  --color-data-4: var(--oi-cat-4);
+  /* purple */
+  --color-data-5: var(--oi-cat-5);
+  /* gold */
+  --color-data-6: var(--oi-cat-6);
+  /* stone */
+  --color-data-neutral: #9B958B;
   /* Above / below expected = blue / red, tied to the rink lines (theme-aware). */
   --color-data-positive: var(--line-blue);
   --color-data-negative: var(--line-red);
@@ -94,7 +118,7 @@
   --bg-accent: var(--oi-ice-200);
 
   /* Team primary — set dynamically on team/player pages (identity chrome only). */
-  --color-team-primary: #101820;
+  --color-team-primary: #1A1712;
 
   /* Focus treatment (universal) — crossing the blue line */
   --focus-ring: var(--line-blue);
@@ -112,33 +136,91 @@
   --space-16: 64px;
   --space-20: 80px;
 
-  /* --- Radius: crisp by default, one reserved signature (v2 §5) --- */
-  --radius-sm: 2px;      /* buttons, inputs, tags, table cells */
-  --radius-md: 6px;      /* menus, popovers, tooltips */
-  --radius-lg: 10px;     /* dialogs, command palette */
-  --radius-xl: 10px;     /* legacy alias → lg (no more 16px sheets) */
-  --radius-rink: 24px;   /* RESERVED: rink-cornered frames only (shot maps, style maps,
-                            the Lineup Lab board, the archetype key). Never on buttons/cards. */
-  --radius-full: 9999px; /* dots, avatars, jersey-number circles only */
+  /* --- Radius: crisp by default, one reserved signature (v2 §5, unchanged) --- */
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --radius-rink: 24px;
+  --radius-full: 9999px;
 
-  /* --- Elevation: overlays only (v2 §5). Unmigrated components go flat immediately. --- */
-  --shadow-overlay: 0 12px 32px rgba(16, 24, 32, 0.14);
+  /* --- Elevation: overlays only (v2 §5); shadow ink warmed to match --- */
+  --shadow-overlay: 0 12px 32px rgba(26, 23, 18, 0.14);
   --shadow-sm: none;
   --shadow-md: none;
   --shadow-lg: var(--shadow-overlay);
   --shadow-xl: var(--shadow-overlay);
 
-  /* --- Layout (v2 §5) --- */
+  /* --- Layout (v2 §5, unchanged) --- */
   --container-max: 1120px;
   --container-gutter: var(--space-6);
   --nav-height: 56px;
   --rail-width: 280px;
 
-  /* --- Motion (v2 §5) --- */
+  /* --- Motion (v2 §5, unchanged) --- */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-fast: 120ms;
   --dur-med: 200ms;
   --dur-draw: 260ms;
+}
+
+html[data-theme="dark"] {
+  /* --- Page surfaces (dark "night sheet"): the same paper after dark ---
+     De-blued to match the light theme's neutrality: warm-neutral grays,
+     never brown. If you prefer to keep the old blue night as "night game"
+     atmosphere, this block is the only thing to revert. */
+  --color-bg-base: #131211;
+  --color-bg-surface: #1A1816;
+  --color-bg-elevated: #23211E;
+  --color-bg-overlay: #23211E;
+  --color-bg-panel: var(--color-bg-elevated);
+
+  /* --- Borders (dark) --- */
+  --color-border: #2C2925;
+  --color-border-subtle: #201E1B;
+  --color-border-strong: #413D36;
+
+  /* --- Text (dark) --- */
+  --color-text-primary: #EDEAE4;
+  --color-text-secondary: #A9A399;
+  --color-text-muted: #726C61;
+  --color-text-inverse: #131211;
+  --color-text-on-accent: #131211;
+
+  /* --- Rink lines (dark, unchanged hues) --- */
+  --line-blue: #5B8CFF;
+  --line-blue-hover: #7DA4FF;
+  --line-red: #E5455A;
+  --line-red-hover: #F06B7C;
+  --crease: #1D2735;
+  /* selection stays blue at night too */
+  --boards-yellow: #E0A61E;
+  --boards-yellow-bg: #2A2410;
+
+  /* --- Accent (dark) --- */
+  --color-accent: #EDEAE4;
+  --color-accent-hover: #FFFFFF;
+  --color-accent-subtle: var(--crease);
+  --color-accent-light: #F4F0ED;
+
+  /* --- Status + valence (dark): success follows the blue mapping --- */
+  --color-success: var(--line-blue);
+  --color-success-bg: #17233A;
+  --color-danger: #E5455A;
+  --color-danger-bg: #2E1614;
+  --color-warning: #E0A61E;
+  --color-warning-bg: #2A2410;
+  --color-live: #E5455A;
+
+  /* Valence data ink follows the rink lines */
+  --color-data-neutral: #726C61;
+
+  /* Data-ink hooks (dark) */
+  --fill-accent: var(--oi-ice-500);
+  --bg-accent: var(--oi-ice-200);
+
+  /* Team primary (dark default) */
+  --color-team-primary: #EDEAE4;
 }
 
 html[data-theme="dark"] {
@@ -147,6 +229,8 @@ html[data-theme="dark"] {
   --color-bg-surface: #121A22;
   --color-bg-elevated: #1A242E;
   --color-bg-overlay: #1A242E;
+  /* 00c: Panel surface reuses elevated in the night theme (surface/base already separate). */
+  --color-bg-panel: var(--color-bg-elevated);
 
   /* --- Borders (dark) --- */
   --color-border: #223039;
@@ -173,6 +257,7 @@ html[data-theme="dark"] {
   --color-accent: #EAF2F6;
   --color-accent-hover: #FFFFFF;
   --color-accent-subtle: var(--crease);
+  --color-accent-light: #F4F0ED;
 
   /* --- Status + valence (dark) --- */
   --color-success: #46C286;

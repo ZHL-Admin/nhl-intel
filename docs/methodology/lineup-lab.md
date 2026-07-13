@@ -12,8 +12,8 @@ never shared the ice — is scorable.
 ## Training data
 
 `int_shift_segments` -> `int_line_seasons`: every forward trio / defense pair sharing
->= 30 min of 5v5 ice in a season (16119 line-seasons,
-2015-16..2025-26). Rows weighted by shared 5v5 minutes. Validation is
+>= 30 min of 5v5 ice in a season (23669 line-seasons,
+2010-11..2025-26). Rows weighted by shared 5v5 minutes. Validation is
 GroupKFold by season (a line never appears in both train and validation).
 
 ## Features
@@ -28,17 +28,17 @@ burst-rate spread (pace compatibility), combined o-zone-tilt mean.
 
 | head | R2 | MAE | residual sd |
 |---|---|---|---|
-| xgf_pct | +0.242 | 0.0471 | 0.0640 |
-| xgf_per60 | +0.355 | 0.3299 | 0.4469 |
-| xga_per60 | +0.223 | 0.3289 | 0.4492 |
+| xgf_pct | +0.201 | 0.0488 | 0.0666 |
+| xgf_per60 | +0.337 | 0.3309 | 0.4503 |
+| xga_per60 | +0.212 | 0.3330 | 0.4544 |
 
 ## Baselines (xGF% MAE, lower is better)
 
 | method | MAE |
 |---|---|
-| **model** | **0.0471** |
-| mean of members' on-ice xGF% | 0.0527 |
-| team-season 5v5 xGF% | 0.0485 |
+| **model** | **0.0488** |
+| mean of members' on-ice xGF% | 0.0533 |
+| team-season 5v5 xGF% | 0.0491 |
 
 Model beats both baselines: **True**. Per blueprint 6.2 the model ships only if it does.
 

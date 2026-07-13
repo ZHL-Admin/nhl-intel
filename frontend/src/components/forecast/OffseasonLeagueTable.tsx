@@ -1,72 +1,166 @@
+import { Fragment, ReactNode } from 'react'
+import { Tooltip } from '../common'
 import { RosterForecastRow } from '../../api/types'
 import { getTeamLogoUrl, getTeamName } from '../../utils/teams'
+import {
+  fmtPoints, fmtPointsDelta, fmtWar, fmtRank, tierForRank, isQuiet,
+} from '../../utils/forecastFormat'
 
-const fmtWar = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(1)
+export type OffseasonSortKey = 'rank' | 'points' | 'from_moves' | 'moves' | 'war'
+export type SortDir = 'asc' | 'desc'
+
+/** Default sort direction for a column when it is first selected (07 v3 players-board rule). */
+export const DEFAULT_DIR: Record<OffseasonSortKey, SortDir> = {
+  rank: 'asc', points: 'desc', from_moves: 'desc', moves: 'desc', war: 'desc',
+}
+
+const ACCESS: Record<OffseasonSortKey, (r: RosterForecastRow) => number> = {
+  rank: (r) => r.projected_rank ?? 99,
+  points: (r) => r.projected_points ?? r.projected_rating,
+  from_moves: (r) => r.points_delta ?? r.delta,
+  moves: (r) => r.n_moves,
+  war: (r) => r.net_delta_war,
+}
+
+/** Sign class for a signed, colored value; near-zero stays secondary. */
+const signClass = (v: number, eps = 0.5) => (Math.abs(v) < eps ? 'is-flat' : v > 0 ? 'is-up' : 'is-down')
+
+/** Last-season rank color follows the team-rank rule (contender blue / rebuild caution / middle muted). */
+const rankTierClass = (rank: number | null | undefined) => {
+  const t = tierForRank(rank)
+  return t === 'Contender' ? 'is-good' : t === 'Rebuild' ? 'is-warn' : 'is-mid'
+}
+
+function SortHead({ label, col, sortKey, sortDir, onSort, num, tip, className }: {
+  label: string; col: OffseasonSortKey; sortKey: OffseasonSortKey; sortDir: SortDir
+  onSort: (k: OffseasonSortKey) => void; num?: boolean; tip?: string; className?: string
+}) {
+  const active = sortKey === col
+  const inner = (
+    <button type="button" className={`olt__sort${active ? ' is-active' : ''}`} onClick={() => onSort(col)}
+      aria-label={`Sort by ${label}`}>
+      {label}
+      {active && <span className="olt__arrow" aria-hidden>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+    </button>
+  )
+  return (
+    <th className={`${num ? 'num' : ''}${className ? ` ${className}` : ''}`}
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      {tip ? <span className="olt__th-tip"><Tooltip content={tip}>{inner}</Tooltip></span> : inner}
+    </th>
+  )
+}
 
 /**
- * §S2 — the offseason as one diverging chart: 32 rosters balanced on a shared center-zero axis.
- * Each row's net WAR change fills a 3px track from a common center — blue right for improvement,
- * red left for decline — on a single fixed domain so the column reads top-to-bottom as one figure.
- * A faint 1px zero line runs behind every row (the tracks are contiguous, so it reads continuous).
- * The forecast's unsettled portion (uncertainty band → pending/unsigned spots) renders as a dashed
- * extension beyond the solid point estimate, obeying the solid=observed / dashed=projected law.
+ * §1 — the offseason league table (07 v3 players-board rules): sortable columns, emphasis follows the
+ * sort, all 32 rows with a 16-row cap and Show all. Each team row expands one dossier at a time; the
+ * expanded row carries the blue left edge (aria-selected) and mounts the dossier full width beneath it.
  */
-export default function OffseasonLeagueTable({ rows, onSelect }: {
-  rows: RosterForecastRow[]; onSelect: (teamId: number) => void
+export default function OffseasonLeagueTable({
+  rows, sortKey, sortDir, onSort, expandedTeamId, onToggle, showAll, onShowAll, dossier,
+}: {
+  rows: RosterForecastRow[]
+  sortKey: OffseasonSortKey
+  sortDir: SortDir
+  onSort: (k: OffseasonSortKey) => void
+  expandedTeamId: number | null
+  onToggle: (teamId: number) => void
+  showAll: boolean
+  onShowAll: () => void
+  /** Render prop for the expanded team's dossier (page owns the detail fetch). */
+  dossier: (row: RosterForecastRow) => ReactNode
 }) {
-  // Ordered by net change so the diverging column reads cleanly from most-improved to most-declined.
-  const ordered = [...rows].sort((a, b) => b.net_delta_war - a.net_delta_war)
+  const sorted = [...rows].sort((a, b) => {
+    const d = ACCESS[sortKey](a) - ACCESS[sortKey](b)
+    return sortDir === 'asc' ? d : -d
+  })
+  const visible = showAll ? sorted : sorted.slice(0, 16)
+  const hidden = sorted.length - visible.length
 
-  // One shared, fixed domain for all 32 bars (symmetric around zero), padded for the dashed band.
-  const bandMax = Math.max(1e-6, ...rows.map((r) => r.band_goals ?? 0))
-  const domain = Math.max(0.1, ...rows.map((r) => Math.abs(r.net_delta_war))) * 1.12
-  // The dashed uncertainty whisker is a visual cue for unresolved roster spots; scale the largest
-  // band to ~16% of the half-track so it reads as an extension, not a competing bar.
-  const dashScale = (domain * 0.16) / bandMax
-
-  const pct = (v: number) => 50 + (v / domain) * 50 // 0..100 along the track
+  const em = (col: OffseasonSortKey) => (sortKey === col ? ' is-sorted' : '')
 
   return (
-    <div className="olb">
-      <div className="olb__rows">
-        {ordered.map((r, i) => {
-          const up = r.net_delta_war >= 0
-          const end = pct(r.net_delta_war)
-          const fillLeft = up ? 50 : end
-          const fillWidth = Math.abs(end - 50)
-          const dash = (r.band_goals ?? 0) * dashScale // half-width in track %
-          return (
-            <div
-              key={r.team_id}
-              className="olb__row"
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(r.team_id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(r.team_id) } }}
-            >
-              <span className="olb__rank num">{r.projected_rank ?? i + 1}</span>
-              <img className="olb__logo" src={getTeamLogoUrl(r.team_abbrev ?? '')} alt="" aria-hidden
-                onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
-              <span className="olb__name">{getTeamName(r.team_abbrev ?? '')}</span>
-              <span className="olb__track">
-                {/* dashed extension = unresolved / uncertain portion, centered on the bar end */}
-                {dash > 0.4 && (
-                  <span
-                    className={`olb__dash ${up ? 'is-up' : 'is-down'}`}
-                    style={{ left: `${Math.max(0, end - dash)}%`, width: `${Math.min(100, 2 * dash)}%` }}
-                  />
-                )}
-                <span
-                  className={`olb__fill ${up ? 'is-up' : 'is-down'}`}
-                  style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }}
-                />
+    <div className="olt">
+      <table className="gamesheet olt__table">
+        <thead>
+          <tr>
+            <th className="num olt__rankh" aria-hidden>#</th>
+            <th>Team</th>
+            <SortHead label="Proj points" col="points" sortKey={sortKey} sortDir={sortDir} onSort={onSort} num
+              tip="Projected next-season standings points over 82 games — a calibrated transform of the team rating, carried with its 80% band." />
+            <SortHead label="From moves" col="from_moves" sortKey={sortKey} sortDir={sortDir} onSort={onSort} num
+              tip="Standings-points shift from this offseason's moves alone, vs last season's roster." />
+            <SortHead label="Moves" col="moves" sortKey={sortKey} sortDir={sortDir} onSort={onSort} num
+              className="olt__hide-sm" tip="Lineup-relevant arrivals and departures logged (depth churn excluded)." />
+            <SortHead label="Net WAR" col="war" sortKey={sortKey} sortDir={sortDir} onSort={onSort} num
+              className="olt__hide-sm" tip="Sum of every logged move's projected-WAR effect." />
+            <th className="num" aria-sort="none">
+              <span className="olt__th-tip">
+                <Tooltip content="Cap space after projected RFA awards and league-minimum fills.">
+                  <span className="olt__nosort">Eff. space</span>
+                </Tooltip>
               </span>
-              <span className={`olb__val num ${up ? 'is-up' : 'is-down'}`}>{fmtWar(r.net_delta_war)}</span>
-            </div>
-          )
-        })}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((r) => {
+            const open = expandedTeamId === r.team_id
+            const quiet = isQuiet({ n_moves: r.n_moves, delta: r.delta, negligible: r.negligible })
+            const fromMoves = r.points_delta ?? r.delta
+            const usePoints = r.projected_points != null
+            return (
+              <Fragment key={r.team_id}>
+                <tr aria-selected={open} className="olt__row"
+                  role="button" tabIndex={0} onClick={() => onToggle(r.team_id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(r.team_id) } }}>
+                  <td className="num olt__rank">{fmtRank(r.projected_rank).replace('#', '')}</td>
+                  <td>
+                    <span className="olt__team">
+                      <img className="olt__logo" src={getTeamLogoUrl(r.team_abbrev ?? '')} alt="" aria-hidden
+                        onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+                      <span className="olt__idtext">
+                        <span className="olt__name">
+                          {getTeamName(r.team_abbrev ?? '')}
+                          {quiet && <span className="olt__quiet">quiet</span>}
+                        </span>
+                        <span className="olt__meta">
+                          <span className={rankTierClass(r.base_rank)}>{fmtRank(r.base_rank)}</span> last season
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  <td className={`num olt__points${em('points')}`}>
+                    {usePoints ? fmtPoints(r.projected_points) : r.projected_rating.toFixed(2)}
+                  </td>
+                  <td className={`num${em('from_moves')} ${signClass(fromMoves)}`}>
+                    {r.points_delta != null ? fmtPointsDelta(r.points_delta) : fmtWar(r.delta)}
+                  </td>
+                  <td className={`num olt__hide-sm${em('moves')}`}>{r.n_moves}</td>
+                  <td className={`num olt__hide-sm${em('war')} ${signClass(r.net_delta_war, 0.05)}`}>{fmtWar(r.net_delta_war)}</td>
+                  {/* TODO(data): effective space (cap space after projected RFA awards + min fills) not served
+                      by /tools/offseason — column shows an em dash until the forecast row carries it. */}
+                  <td className="num olt__space">—</td>
+                </tr>
+                {open && (
+                  <tr className="olt__exp">
+                    <td colSpan={7} className="olt__exp-cell">{dossier(r)}</td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+
+      {hidden > 0 && (
+        <button type="button" className="olt__showall" onClick={onShowAll}>Show all 32 teams ({hidden} more)</button>
+      )}
+
+      <div className="olt__captions">
+        <p>Effective space is cap space after projected RFA awards and league-minimum fills.</p>
+        <p>Updated daily as moves land. Tap a team to open its summer.</p>
       </div>
-      <p className="olb__legend">dashed = unresolved roster spots</p>
     </div>
   )
 }

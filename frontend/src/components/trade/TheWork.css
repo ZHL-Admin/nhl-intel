@@ -1,0 +1,88 @@
+/* =============================================================================
+   The work (doc 13 §4) — collapsible appendix, one shared table on the plain Well.
+   No card chrome; hairline-separated rows.
+   ============================================================================= */
+.tb-work { border-top: 1px solid var(--color-border-subtle); padding-top: var(--space-3); }
+.tb-work__toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: none;
+  font-size: var(--text-sm); font-weight: 600; color: var(--color-text-secondary); cursor: pointer; padding: var(--space-1) 0;
+}
+.tb-work__toggle:hover { color: var(--color-text-primary); }
+.tb-work__chev { transition: transform var(--dur-fast) var(--ease-out); }
+.tb-work__chev--open { transform: rotate(180deg); }
+
+.tb-work__table { display: flex; flex-direction: column; margin-top: var(--space-3); }
+.tb-work__row {
+  display: grid; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border-subtle);
+}
+.tb-work__row--head {
+  padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border-strong);
+}
+.tb-work__row--head span {
+  font-size: var(--text-eyebrow); font-weight: 550; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--color-text-muted);
+}
+.tb-work__team { text-align: right; font-variant-numeric: tabular-nums; }
+.tb-work__ctx-head { text-align: left; }
+
+.tb-work__metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tb-work__metric-name {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary);
+}
+.tb-work__metric-cap { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.35; }
+.tb-work__info { color: var(--color-text-muted); cursor: help; }
+.tb-work__approx {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; color: var(--color-text-muted);
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0 4px;
+}
+
+.tb-work__cell { text-align: right; }
+.tb-work__val { font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
+.tb-work__val--pos { color: var(--color-data-positive); }
+.tb-work__val--neg { color: var(--color-data-negative); }
+.tb-work__val--zero { color: var(--color-text-muted); }
+.tb-work__val--ink { color: var(--color-text-primary); }
+
+.tb-work__fit { display: inline-flex; align-items: baseline; gap: 5px; justify-content: flex-end; }
+.tb-work__fit-word { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); }
+.tb-work__fit-num { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+.tb-work__ctx { min-width: 0; }
+.tb-work__ctx--sentence {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: var(--text-xs); color: var(--color-text-secondary); line-height: 1.4;
+}
+.tb-work__caparith { font-size: 11px; color: var(--color-text-secondary); }
+
+.tb-work__nostrip { font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; }
+
+/* history strip — league-distribution row anatomy */
+.tb-strip { display: flex; flex-direction: column; gap: 3px; }
+.tb-strip__track { position: relative; height: 12px; }
+.tb-strip__track::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px;
+  background: var(--color-border); transform: translateY(-50%);
+}
+.tb-strip__tick {
+  position: absolute; top: 50%; width: 1px; height: 6px; background: var(--color-border-strong);
+  transform: translate(-50%, -50%); opacity: 0.5;
+}
+.tb-strip__dot {
+  position: absolute; top: 50%; width: 8px; height: 8px; border-radius: var(--radius-full);
+  background: var(--line-blue); transform: translate(-50%, -50%);
+}
+.tb-strip__caption { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.35; }
+
+.tb-work__foot {
+  font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5;
+  margin: var(--space-3) 0 0; max-width: 90ch;
+}
+.tb-work__foot-term { color: var(--line-blue); border-bottom: 1px dotted var(--line-blue); cursor: help; }
+
+/* mobile: the work scrolls horizontally beyond two teams */
+@media (max-width: 900px) {
+  .tb-work__table { overflow-x: auto; }
+  .tb-work__row { min-width: 640px; }
+}

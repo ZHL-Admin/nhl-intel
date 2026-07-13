@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { CalendarDays, Home, Users, Shield, Menu } from 'lucide-react'
 import MoreSheet from './MoreSheet'
+import { GAMES_ENABLED } from '../../config/features'
 import './BottomTabBar.css'
 
 // D18 mobile tabs. The first four are direct destinations; "More" opens a sheet with everything
 // the collapsed NavBar center links would otherwise hold (Studio areas, Learn, seasonal Playoffs).
+// Games is gated behind GAMES_ENABLED; the flex tabbar redistributes evenly with it removed.
 const TABS = [
   { to: '/', label: 'Today', icon: Home, end: true },
-  { to: '/games', label: 'Games', icon: CalendarDays },
+  ...(GAMES_ENABLED ? [{ to: '/games', label: 'Games', icon: CalendarDays }] : []),
   { to: '/players', label: 'Players', icon: Users },
   { to: '/teams', label: 'Teams', icon: Shield },
 ]

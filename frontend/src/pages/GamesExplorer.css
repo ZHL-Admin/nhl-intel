@@ -1,10 +1,43 @@
-/* §01 Games Explorer — scoreboard list at container width. */
-.games-explorer__sections { display: flex; flex-direction: column; gap: var(--space-8); }
-.games-explorer__section { display: flex; flex-direction: column; }
-.games-explorer__rows { display: flex; flex-direction: column; }
+/* §01 Games Explorer — masthead, section grammar, empty + skeleton states.
+   The Well and footer come from PageLayout; this page supplies a custom one-row masthead
+   (no eyebrow/dek) and the status-section stack. No red rules; the only red is the live dot. */
 
-/* Status group divider: an eyebrow label, no box. */
-.games-explorer__group {
+/* ── Masthead (§1): serif date title left, date strip right, one row ─────── */
+.games-masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-bottom: var(--space-5);
+}
+.games-masthead__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.games-masthead__strip { flex: 0 1 auto; min-width: 0; }
+
+/* Below 1080 the strip wraps to its own full-width row beneath the title. */
+@media (max-width: 1080px) {
+  .games-masthead { flex-direction: column; align-items: stretch; }
+  .games-masthead__strip { width: 100%; }
+}
+
+/* ── Sections (§4) ───────────────────────────────────────────────────────── */
+.games-sections { display: flex; flex-direction: column; }
+.games-section { padding-top: 20px; margin-top: 22px; border-top: 1px solid var(--color-border-subtle); }
+.games-section--first { padding-top: 0; margin-top: 0; border-top: none; }
+
+.games-section__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-sans);
   font-size: var(--text-eyebrow);
   font-weight: 550;
@@ -12,13 +45,60 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
-  margin-bottom: var(--space-2);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-border-subtle);
+  margin: 0 0 12px;
+}
+.games-section__count { color: var(--color-text-muted); font-weight: 500; }
+
+/* Rows stack with a 10px gutter. */
+.games-rows { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Recent results (§6) ─────────────────────────────────────────────────── */
+.recent-results { padding-top: 20px; margin-top: 22px; border-top: 1px solid var(--color-border-subtle); }
+.recent-results__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.recent-results__link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
 }
 
-/* Flat skeleton block matching row height — no shimmer (§01 remove list). */
-.game-row-skeleton {
-  height: 64px;
-  margin-bottom: 1px;
+/* ── Empty slate (§3) ────────────────────────────────────────────────────── */
+.games-empty { padding: var(--space-10) var(--space-4); text-align: center; }
+.games-empty__line {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-title);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+.games-empty__link {
+  display: inline-block;
+  margin-top: var(--space-4);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--line-blue);
+}
+
+/* ── Skeletons: flat tiles, no shimmer (§8) ─────────────────────────────── */
+.games-skeleton { border-radius: 12px; }
+
+/* ── The 120ms opacity fade on date change (§2/§8) ──────────────────────── */
+.games-fade { animation: games-fade-in var(--dur-fast) var(--ease-out); }
+@keyframes games-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .games-fade { animation: none; }
 }

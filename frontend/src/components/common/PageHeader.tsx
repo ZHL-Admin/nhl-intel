@@ -1,11 +1,10 @@
 /**
  * The Sheet (§6.2): every page opens with this same uncarded header block —
  *   eyebrow (section name) · title (Newsreader display) · optional dek · controls row ·
- *   then the site's constant: a single 1px red rule spanning the container width.
- * The red rule appears exactly once per page and is the brand's handshake; nothing else
- * on a page may be a red horizontal rule. Component API is unchanged (title/subtitle/back/
- * children); `eyebrow` is the one addition. On route change the rule draws in left→right and
- * the header text fades up (stilled under prefers-reduced-motion).
+ *   then a neutral 1px hairline spanning the full Well width (00c retired the red rule).
+ * Component API is unchanged (title/subtitle/back/children); `eyebrow` is the one addition.
+ * On route change the divider draws in left→right and the header text fades up (stilled under
+ * prefers-reduced-motion).
  */
 import { ReactNode } from 'react'
 import { Link } from 'react-router-dom'

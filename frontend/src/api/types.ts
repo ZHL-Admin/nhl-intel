@@ -1630,6 +1630,23 @@ export interface OffseasonLineupSlot {
   war_sd: number
   no_track_record: boolean
   replacement: boolean
+  // Additive last-season context (realized only — the engine projects WAR, never a counting line).
+  base_war?: number | null
+  age?: number | null
+  gp?: number | null
+  g?: number | null
+  a?: number | null
+  p?: number | null
+}
+
+export interface OffseasonLineFit {
+  grade?: string | null
+  xgf_pct?: number | null
+}
+
+export interface OffseasonLineFits {
+  forward: (OffseasonLineFit | null)[]   // up to 4, index-aligned to forward lines
+  defense: (OffseasonLineFit | null)[]   // up to 3, index-aligned to defense pairs
 }
 
 export interface OffseasonTeamDetail {
@@ -1637,6 +1654,7 @@ export interface OffseasonTeamDetail {
   base_components: Record<string, number | null>
   moves: RosterMove[]
   projected_lineup: OffseasonLineupSlot[]
+  line_fits?: OffseasonLineFits | null
   style_note?: string | null
   verdict: string
   reasons: string[]
@@ -1804,4 +1822,35 @@ export interface PlayerContext {
   quality?: QualityContext | null
   wowy_top: WowyPartner[]
   fit: FitLinks
+}
+
+// ── Moves feed (Home Ledger + Offseason Forecast) — one dated, global, newest-first source. ──
+// Verdicts are precomputed server-side (Contract Grader grade for signings/extensions; Trade Builder
+// edge+margin for trades); the client never grades a move.
+export interface MovePlayer { player_id: number; name: string; pos?: string | null }
+export interface ContractTerms { years: number; aav: number }   // aav in dollars
+export interface MoveVerdict { grade?: string | null; edge?: string | null; margin?: number | null }
+export type MoveType = 'signing' | 'extension' | 'trade'
+export interface MoveRow {
+  id: string
+  date: string                     // ISO YYYY-MM-DD
+  type: MoveType
+  teams: string[]                  // team abbrevs involved
+  players: MovePlayer[]
+  terms?: ContractTerms | null     // signings/extensions only
+  verdict?: MoveVerdict | null     // null until the DAG grades it
+}
+export interface MovesPage { items: MoveRow[]; total: number }
+
+// ── Free-agent pool (Home "Still available" + Offseason best fits). ──
+export interface FreeAgentRow {
+  player_id: number
+  name: string
+  pos?: string | null
+  age?: number | null
+  status?: string | null                   // "UFA" | "RFA" — pending free-agent status
+  projected_award?: ContractTerms | null   // {years, aav} from the Contract Grader hypothetical model
+  projected_war?: number | null            // assessed WAR (reliability-shrunk), matching the player board
+  war_sd?: number | null                   // ± band on projected_war
+  fits: Record<string, string>             // { team_abbrev: fit_grade } from Player Fit
 }

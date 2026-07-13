@@ -1,0 +1,114 @@
+/* =============================================================================
+   Player dossier card (07 v3 §5) — the expanded row detail. A Panel spanning the
+   full table width beneath the row. No radar, no season-stats table, no pills
+   (all relocated to the full profile). Header · verdict · two-column body.
+   ============================================================================= */
+.pdc { padding: 20px 24px; }
+
+/* ---- 5.1 header row ---- */
+.pdc__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.pdc__id { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.pdc__idtext { min-width: 0; }
+.pdc__name {
+  font-family: var(--font-sans); font-size: 16px; font-weight: 500;
+  color: var(--color-text-primary); line-height: 1.2;
+}
+.pdc__meta {
+  margin-top: 3px; font-size: 12px; color: var(--color-text-muted);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.pdc__meta-dot { display: inline-flex; }
+.pdc__actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.pdc__btn {
+  height: 32px; padding: 0 14px; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border: 1px solid transparent; transition: background var(--dur-fast) var(--ease-out);
+}
+.pdc__btn--primary { background: var(--color-accent); color: var(--color-text-inverse); }
+.pdc__btn--primary:hover { background: var(--color-accent-hover); }
+.pdc__btn--secondary {
+  background: transparent; color: var(--color-text-secondary);
+  border-color: var(--color-border-strong);
+}
+.pdc__btn--secondary:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
+
+/* ---- 5.2 verdict pull-quote ---- */
+.pdc__verdict {
+  margin-top: 16px; padding-left: 14px;
+  border-left: 2px solid var(--line-blue);
+  font-family: var(--font-display); font-style: italic; font-size: 16px;
+  line-height: 1.45; color: var(--color-text-primary);
+}
+
+/* ---- 5.3 two-column body ---- */
+.pdc__body {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 26px;
+}
+.pdc__coltitle {
+  font-family: var(--font-sans); font-size: var(--text-eyebrow); font-weight: 550;
+  font-stretch: 110%; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--color-text-muted); margin-bottom: 12px;
+}
+
+/* GAR composition rows */
+.pdc__comp { display: flex; flex-direction: column; gap: 8px; }
+.pdc__comp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 52px; align-items: center;
+  gap: var(--space-3);
+}
+.pdc__comp-label { font-size: var(--text-sm); color: var(--color-text-secondary); }
+.pdc__comp-bar { position: relative; height: 4px; margin-top: 4px; background: var(--color-border-subtle); }
+.pdc__comp-zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--color-border-strong); }
+.pdc__comp-fill { position: absolute; top: 0; bottom: 0; height: 4px; }
+.pdc__comp-fill--pos { background: var(--line-blue); }
+.pdc__comp-fill--neg { background: var(--line-red); }
+.pdc__comp-val {
+  font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 500;
+  text-align: right; color: var(--color-text-primary);
+}
+.pdc__comp-val--neg { color: var(--line-red); }
+
+.pdc__total {
+  margin-top: 14px; font-size: var(--text-sm); color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums; line-height: 1.5;
+}
+.pdc__total b { font-weight: 500; color: var(--color-text-primary); }
+
+/* Percentile pair */
+.pdc__pctpair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-top: 16px; }
+.pdc__pct-label {
+  font-size: var(--text-xs); color: var(--color-text-secondary); margin-bottom: 5px;
+}
+
+/* Right column — confidence band */
+.pdc__band { position: relative; height: 12px; margin: 6px 0 4px; }
+.pdc__band-track { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--color-border-strong); transform: translateY(-50%); }
+.pdc__band-range { position: absolute; top: 50%; height: 4px; transform: translateY(-50%); background: var(--color-border-strong); }
+.pdc__band-zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--color-border-strong); }
+.pdc__band-point { position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-primary); transform: translate(-50%, -50%); }
+.pdc__band-scale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--color-text-muted); }
+.pdc__band-caption {
+  margin-top: 12px; font-size: 11.5px; color: var(--color-text-muted);
+  line-height: 1.5; max-width: 44ch;
+}
+
+/* Season-by-season trend */
+.pdc__trend { margin-top: 20px; }
+.pdc__trend-bars { display: flex; align-items: flex-end; gap: 12px; height: 64px; }
+.pdc__trend-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pdc__trend-v { font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--color-text-secondary); }
+.pdc__trend-v--cur { color: var(--color-text-primary); font-weight: 500; }
+.pdc__trend-bar { width: 9px; background: var(--color-border-strong); }
+.pdc__trend-bar--cur { background: var(--line-blue); }
+.pdc__trend-season { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-muted); }
+.pdc__note { font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; font-family: var(--font-display); }
+
+.pdc__loading { padding: var(--space-4) 0; }
+
+@media (max-width: 640px) {
+  .pdc__body { grid-template-columns: 1fr; gap: 24px; }
+}

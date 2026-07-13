@@ -90,3 +90,147 @@ prospective registration, not claims now.
   construction (deployment) — concentrates in **defensemen and high-usage players**. The 2026-27
   prospective registration carries these as **pre-specified secondary subgroups** to test whether
   the concentration replicates out of sample.
+
+---
+
+# Chemistry — Finding (follow-on project, answers "is pair chemistry a persistent trait?")
+
+A follow-on research project (`research/chemistry/`, reads the frozen Atlas stints read-only) that
+built the league's pair-performance corpus (90,527 pair-team-seasons ≥50 shared 5v5 min, 2010-26,
+conservation identity exact, reconciled to `player_5v5`) and ran the keystone persistence test.
+
+- **F17 — pair chemistry is not an identifiable, materially persistent trait.** Modeling pair 5v5 xG
+  share from individual quality + context (additive-plus-curvature null on rapm_variant, both
+  same-season and prior-season anchors), the pair RESIDUAL — over/under-performance beyond the
+  players' quality — does **not** persist in a way that could be built on. Within-season split-half
+  reliability of the residual is ~0 under the conservative same-season anchor (contamination
+  straddling) and only ~0.30 under the clean prior anchor; year-over-year same-pair correlation is
+  **tiny (r≈0.04–0.09)** and, decisively, **concentrated in LOCKED pairs** (low partner-diversity,
+  D-D) where "the pair" and "the players/deployment" are collinear — under the clean anchor the
+  high-diversity (identifiable) stratum shows **zero** YoY persistence (p=0.85), while the locked
+  stratum carries all of it (p=0.001). The pre-registered rescue clause (proceed if *diverse* pairs
+  persist) **failed**. Single-season pair residuals can be large (±0.13–0.16 xG-share, CIs exclude 0)
+  but do **not** repeat: the longest-tenure pairs (up to 16 seasons together) pool to ≈0 residual.
+  *Conclusion:* fit is not pair-magic. The predictive "chemistry" arm was not justified; the corpus
+  and this null are the deliverables. Nothing shipped. *(Full detail: `research/chemistry/reports/
+  phase2.md`; keystone verdict landed in a configuration 2.4 did not enumerate — owner ruled null.)*
+
+## Chemistry → next (the role-composition pivot)
+- **F17 reframes fit as role supply-and-demand**, not dyadic magic: a follow-on **role-fit probe**
+  (`research/role-fit-probe/`) tests whether (L1) a stable per-player role/action proxy exists and
+  (L2) units over-perform their parts within a season. See that project's `reports/probe.md`.
+
+---
+
+# Role-fit probe — Finding (follow-on to F17; `research/role-fit-probe/`, seed 20260713)
+
+Two-link feasibility probe of the role-COMPOSITION theory of fit, scoped to the primary window
+2015-16→2025-26. Surfaced a production data finding along the way (**UL-P1**): the frozen Atlas
+`events.parquet` dropped six player-attribution columns that `stg_play_by_play` already parses
+(hits/takeaways/giveaways/blocks/penalties); an owner-authorized, read-only re-projection recovered
+them, turning the role model from offense-only into genuinely two-way.
+
+- **F18 — role PROFILES are real, stable, and player-carried, but unit FIT is not usable.**
+  *(Link 1 PASS)* A per-player two-way role/action proxy (shot location/volume/danger + physicality +
+  shot-blocking + puck-management, 5v5 rates) is reliable within season and across seasons and
+  **travels with the player across team changes** (retained median 0.79); **physicality is the single
+  strongest signature** (`hit60` split-half 0.95). The opponent-mirror on-ice suppression axis is
+  reliable within-season but **team-imposed, not personal** (cross-team retention 0.12–0.47) — a clean
+  player-vs-team separation. *(Link 2 FAIL)* Five-man units do **not** recur (only 15–46/season reach
+  100 shared min); forward TRIOS over-perform their parts only **weakly** — within-season split-half of
+  the unit residual is −0.15 (same-season, straddling artifact) / **+0.18 clean prior anchor, below the
+  0.30 usability bar**; two-way role composition adds only ~1 pt CV R². *Conclusion:* fit tested two
+  ways now clears no usability bar — pair-magic (F17) and unit role-composition (F18) both fail. The
+  **roles themselves** are the real, transferable thing (shippable as a descriptive player-role
+  product); **fit-beyond-parts** is not. Nothing shipped. *(Detail: `research/role-fit-probe/reports/
+  probe.md` §1b, §2; owner ruled.)*
+
+## Role-fit → next (the behavioral-dependency pivot)
+- **F17/F18 killed fit as joint OUTPUT** (pair residual; unit over-performance). A follow-on
+  **dependency probe** (`research/dependency-probe/`) tests a different angle — individual BEHAVIOR
+  conditioned on teammates (does a player change what he DOES by partner; is that dependence a stable
+  trait; does dependence on a departing teammate predict his change). Outcome is a property of ONE
+  player, sidestepping the identifiability walls. See that project's `reports/probe.md`.
+
+---
+
+# Dependency probe — Finding (follow-on to F17/F18; `research/dependency-probe/`, seed 20260713b/c)
+
+Third angle on fit after two output-based nulls: individual BEHAVIOR conditioned on teammates (the
+outcome is a property of ONE player). Two rounds, deployment-controlled throughout (Round 2 adds the
+opponent-strength control). Reuses the role-fit enriched event attribution and the Chemistry
+stint-expansion. **Owner-ruled; the probe ends at Link B.**
+
+- **F19 — behavior IS partner-conditioned in exactly one place (shooting deference), but dependence is
+  not a buildable trait; chance quality/location/finishing are player constants.**
+  - *The one real partner tendency (Link A):* a player's **share of his pair's shot attempts** (shoot
+    vs defer) moves by partner — partner-deviation split-half reliability **0.35** (beats placebo
+    p=0.002, across-partner SD ≈ 0.10 share pts), **fully survives** the OZ+score+opponent deployment
+    control, and strengthens with more shared minutes. His shot *rate* does not move — volume is his
+    own; what changes is who shoots.
+  - *Tested nulls (Round 2, Link Q):* **chance quality** (xG/attempt), **on-goal / blocked / missed
+    share**, **shot location** (slot share, distance), **finishing** (shooting %), and **penalty**
+    tendencies are all **player-constant** — they do not move by partner (reliability ~0, never beat
+    placebo; none "deployment in disguise"). *We tested whether chance quality is partner-driven, and
+    it is not.* Icing (Q5) and zone-exit (Q6) were **dropped on attribution/availability checks** (no
+    stoppage `reason` in the frozen events; no exit event type — no timing-inference, per the Round-1
+    feeding lesson).
+  - *Dependence is not a stable trait (Link B) → no Link C:* collapsing shot-share swing-across-
+    partners into a per-player dependence score (noise-corrected across-partner spread; median 0.047
+    share pts) yields **split-half 0.15 (bar 0.40), same-team YoY 0.20 (bar 0.30), across-team
+    retention 0.28** — real but far too weak and situational to be a predictive feature (3–6
+    partners/season measure it too noisily). Link C (post-departure prediction) not justified.
+  - *Interpretation, survives as a descriptive result:* **offensive / sheltered / high-usage players
+    are the context-dependent ones** (F:top-PP-sheltered-offense +0.19z; +0.17 corr with 5v5 TOI);
+    **role/checking players are partner-invariant** (F:bottom-EV-tough-defense −0.20z) — they play
+    their game regardless of who's beside them.
+  - *Conclusion:* fit tested four ways clears no usability bar as a PREDICTIVE quantity (F17 pair
+    residual, F18 unit over-performance, F19 behavioral dependence). The durable results are
+    **descriptive** (above). Nothing promoted or published. *(Detail:
+    `research/dependency-probe/reports/probe.md` + `FINDINGS.md`; owner ruled.)*
+  - *If ever revived:* a new, narrower pre-registration with **multi-season partner pooling** to lift
+    the dependence reliability past the ceiling measured here — not a near-term project.
+
+---
+
+# Composition probe — Finding (the last swing at fit; `research/composition-probe/`, seed 20260713d)
+
+The final pre-registered test of fit: does trio RECIPE (fine style composition / complementarity) beat
+recipe holding talent+style fixed, and repeat across an era split? Finer style vocabulary (16 forward
+archetypes from the validated role-fit two-way axes), continuous complementarity + redundancy scores,
+a talent-and-style-matched contrast, and an era-split repeat. Scoped to 2015-16→2025-26 (validated
+style axes only 2015+; the spec's 2010-17/2018-25 split adapted to 2015-19 vs 2020-25 — a forced,
+owner-accepted deviation). Reuses the Chemistry trio corpus and the additive-plus-curvature null.
+
+- **F20 — trio composition/recipe is talent-and-style in disguise (HARD NULL); predictive fit is
+  closed.** Recipes recur (560 distinct over 2,262 trios, median 3 each), so the sample is real — but
+  composition explains **nothing** beyond the members' individual quality and style. Incremental
+  composition CV R² = **0.0004 (0.04%)** — *below* Link 2's ~1% and far below the 3% ship bar; finer
+  ingredients LOWERED it. The talent×season-matched **balanced-minus-redundant** residual contrast is
+  **+0.0002 xG-share, 95% CI [−0.004, +0.004] (includes zero)**; the complementarity coefficient is
+  **negative** in both eras; the trio residual doesn't even repeat within a season (split-half −0.15).
+  Once the three forwards' quality and style are fixed, *how they are arranged* adds no measurable
+  performance. *(Detail: `research/composition-probe/reports/probe.md`; owner ruled, verdict accepted
+  as written.)*
+
+## THE FIT LINE — formally closed (five pre-registered swings)
+Fit-beyond-parts was tested five ways, each pre-registered, each clearing no usability bar:
+- **F17** — pair residual: over/under-performance beyond the two players' quality is not an
+  identifiable, persistent trait (locked-pair-confounded; diverse pairs show zero YoY).
+- **F18** — unit over-performance: forward trios over-perform their parts only weakly (split-half
+  +0.18 clean anchor, below 0.30); two-way role composition adds ~1 pt R². (Role-fit L2.)
+- **F19** — behavioral dependence: a player's shoot-vs-defer choice IS partner-conditioned (real
+  pairwise), but "how dependent a player is" is not a stable individual trait (split-half 0.15,
+  across-team retention 0.28); chance quality/location/finishing are player constants.
+- **role-fit L1** — the *roles themselves* are real, stable, and player-carried (two-way, retained
+  ~0.79), but that is a descriptive asset, not a fit predictor.
+- **F20** — composition/recipe: talent-and-style in disguise (hard null).
+
+**Program-level conclusion.** *Predictive fit-beyond-parts does not exist at a buildable scale in
+public event data.* The **player is the portable unit** — his quality (RAPM) and his two-way role/
+style travel with him; what a specific partner, unit, arrangement, or recipe adds on top does not
+persist, replicate, or clear a usability bar. **Reopening the fit question requires a materially new
+data source (player-tracking / off-puck + passing — the Tier-iii ceiling), not another arrangement of
+public-event features.** The surviving, shippable assets are all DESCRIPTIVE, labeled co-occurrence
+not causation: the two-way role profiles, the 16 style archetypes, and shooting-deference-as-a-
+pairwise-behavior. Nothing predictive was promoted or published from the fit line.

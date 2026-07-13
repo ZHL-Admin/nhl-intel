@@ -218,8 +218,10 @@ export default function GameTimelineStack({ gameId, homeTeamId, homeAbbrev, away
               <clipPath id="tl-worm-above"><rect x={PAD_L} y={LANE2_TOP} width={W - PAD_R - PAD_L} height={lane2Center - LANE2_TOP} /></clipPath>
               <clipPath id="tl-worm-below"><rect x={PAD_L} y={lane2Center} width={W - PAD_R - PAD_L} height={LANE2_TOP + LANE_H - lane2Center} /></clipPath>
             </defs>
-            <path d={wormArea} fill="var(--color-success)" fillOpacity={0.12} clipPath="url(#tl-worm-above)" />
-            <path d={wormArea} fill="var(--color-danger)" fillOpacity={0.12} clipPath="url(#tl-worm-below)" />
+            {/* Pole grammar (§0): above the even line = home out-chancing (home pole), below = away pole.
+                Never valence — the fills carry the two teams, not good/bad. */}
+            <path d={wormArea} fill={homeColor} fillOpacity={0.14} clipPath="url(#tl-worm-above)" />
+            <path d={wormArea} fill={awayColor} fillOpacity={0.14} clipPath="url(#tl-worm-below)" />
           </>
         )}
         <line x1={PAD_L} y1={lane2Center} x2={W - PAD_R} y2={lane2Center} stroke="var(--color-border-strong)" strokeWidth={1} />

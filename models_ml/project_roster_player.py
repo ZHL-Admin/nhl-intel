@@ -531,15 +531,10 @@ def _final_ratings(bq):
 
 
 def predictive_base(series, target_yr):
-    """R_measured for `target_yr`: 2-year weighted, league-mean-regressed rating from seasons < target."""
-    hist = [r for (yr, r) in series if yr < target_yr]
-    hist = hist[::-1]  # most recent first
-    if not hist:
-        return None
-    m = min(len(hist), len(BASE_W))
-    num = sum(BASE_W[j] * hist[j] for j in range(m)); wt = sum(BASE_W[j] for j in range(m))
-    base = num / wt
-    return (wt * base) / (wt + BASE_K)   # regress toward league mean (0)
+    """R_measured for `target_yr` — thin caller of the shared project_roster_forecast.predictive_base
+    (one definition; BASE_W/BASE_K live in config.ROSTER_FORECAST)."""
+    from models_ml.project_roster_forecast import predictive_base_for_target
+    return predictive_base_for_target(series, target_yr)
 
 
 def head_to_head(sk, go):

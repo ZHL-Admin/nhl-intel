@@ -1,186 +1,322 @@
-/* Today (P1) — 12-col grid inside the single PageCard: main (1-8) + rail (9-12). Modules are plain
-   sections (no nested cards), separated by a hairline in the .page-divider idiom. */
-.today {
+/* =============================================================================
+   Home v3 ("Today") — offseason layout. The single grid (main + 324px rail) is the
+   page's only column split; the Studio band spans the full Well width below it.
+   ============================================================================= */
+
+.home__grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr) 324px;
+  gap: 40px;
   align-items: start;
 }
-.today__main { grid-column: 1 / 9; }
-.today__rail { grid-column: 9 / 13; }
-.today__main,
-.today__rail {
+.home__main { min-width: 0; }
+.home__rail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 14px;
   min-width: 0;
 }
 
-/* hairline between stacked modules within a column (the .page-divider look, no element needed) */
-.today__main .today-mod:not(:first-child),
-.today__rail .today-mod:not(:first-child) {
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-6);
+/* ---- shared bits ---- */
+.home-eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-primary);
+  margin: 0 0 1rem 0;
 }
-
-.today-mod { min-width: 0; }
-.today-mod__head {
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.home-link:hover { color: var(--line-blue-hover); }
+.home-link--quiet { font-weight: 500; }
+.home-link--disabled { color: var(--color-text-muted); cursor: default; }
+.home-empty {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+.home-skel {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-md);
+}
+.home-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.home-mod-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  margin-bottom: 11px;
 }
-.today-mod__title { margin: 0; }   /* .page-region-title supplies the type */
-.today-mod__seeall {
-  flex-shrink: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-accent);
-  text-decoration: none;
-}
-.today-mod__seeall:hover { text-decoration: underline; }
 
-/* M1/M2 game strips — horizontal, scroll on overflow */
-.today-strip {
-  display: flex;
-  gap: var(--space-3);
-  overflow-x: auto;
-  padding-bottom: var(--space-1);
-  scrollbar-width: thin;
+/* ---- The Lead ---- */
+.home-lead {
+  background: var(--color-accent-light);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 15px 17px;
 }
-.today-strip--scores .game-chip__score { font-size: var(--text-lg); }
 
-/* Movers — two columns of rows */
-.today-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
-.today-col__head {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
+.home-lead__headline {
+  font-family: var(--font-display);
+  font-size: var(--display-sm);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--color-text-primary);
+  max-width: 620px;
+  margin: var(--space-2) 0 0;
+}
+.home-lead__dek {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  max-width: 600px;
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+/* ---- main-column divider (neutral, 00c) ---- */
+.home__divider {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 26px;
+}
+.home-ledger { 
+  margin-top: 22px; 
+  background: var(--color-accent-light);
+  border: 1px solid var(--color-border-subtle);
+  padding: 15px 17px; 
+  border-radius: var(--radius-lg);
+}
+
+/* ---- The Ledger (hairline table in the main column) ---- */
+.ledger { display: flex; flex-direction: column; }
+.ledger__head,
+.ledger__row {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) 66px 122px 96px;
+  align-items: center;
+  column-gap: 12px;
+}
+.ledger__head {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border-strong);
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
-  margin-bottom: var(--space-2);
 }
-
-.today-list { display: flex; flex-direction: column; }
-
-/* a team row shared by M3/M4/M5 */
-.today-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 7px var(--space-1);
+.ledger__verdict-h { text-align: right; }
+.ledger__row {
+  min-height: 47px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  cursor: pointer;
   border-radius: var(--radius-sm);
-  text-decoration: none;
+}
+.ledger__row:hover { background: var(--color-bg-base); }
+.ledger__row:focus-visible { outline: 2px solid var(--line-blue); outline-offset: -2px; }
+.ledger__date { font-size: 11px; text-transform: uppercase; color: var(--color-text-muted); }
+.ledger__player { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ledger__name {
+  font-size: 15px;
+  font-weight: 500;
   color: var(--color-text-primary);
-  transition: background 120ms ease;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.today-row:hover { background: var(--color-bg-elevated); }
-.today-row__logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
-.today-row__abbrev {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  width: 34px;
-  flex-shrink: 0;
-}
-.today-row__body {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  flex: 1;
-  min-width: 0;
-  justify-content: flex-end;
-}
-.today-row__val { font-size: var(--text-sm); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
-.today-row__muted { font-size: var(--text-xs); color: var(--color-text-muted); }
-.today-row__delta {
+.ledger__name:hover { color: var(--line-blue); }
+.ledger__pos { font-size: 12px; color: var(--color-text-muted); flex-shrink: 0; }
+.ledger__to { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.ledger__abbrev { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.ledger__terms { font-size: 13.5px; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.ledger__terms.is-trade { color: var(--color-text-secondary); font-variant-numeric: normal; }
+.ledger__verdict { justify-self: end; }
+.ledger__grade {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 700;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-strong);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
-.today-row__delta.is-up { color: var(--color-success); }
-.today-row__delta.is-down { color: var(--color-danger); }
-
-/* M6 shortcuts */
-.today-shortcuts { display: flex; flex-direction: column; gap: var(--space-2); }
-.today-shortcut {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  text-decoration: none;
-  transition: background 120ms ease;
-}
-.today-shortcut:hover { background: var(--color-bg-surface); }
-.today-shortcut__label { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
-.today-shortcut__blurb { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.5; }
-
-/* M7 posts */
-.today-post { display: flex; flex-direction: column; gap: 2px; padding: 7px var(--space-1); }
-.today-post__title { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
-
-/* 768–1023: narrow the main, widen the rail */
-@media (max-width: 1023px) and (min-width: 768px) {
-  .today__main { grid-column: 1 / 8; }
-  .today__rail { grid-column: 8 / 13; }
-}
-
-/* < 768: single column in the exact order M1..M7. display:contents flattens the two columns into
-   the .today flex context so `order` can interleave main + rail modules. */
-@media (max-width: 767px) {
-  .today { display: flex; flex-direction: column; gap: var(--space-5); }
-  .today__main, .today__rail { display: contents; }
-
-  /* every module separated the same way once flattened */
-  .today-mod {
-    border-top: 1px solid var(--color-border-subtle);
-    padding-top: var(--space-5);
-  }
-  .today-mod--m1 { order: 1; border-top: none; padding-top: 0; }
-  .today-mod--m2 { order: 2; }
-  .today-mod--m3 { order: 3; }
-  .today-mod--m4 { order: 4; }
-  .today-mod--m5 { order: 5; }
-  .today-mod--m6 { order: 6; }
-  .today-mod--m7 { order: 7; }
-
-  .today-cols { gap: var(--space-4); }
-}
-
-/* The Lead (P7) — the editorial front-door headline */
-.today-lead {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-bottom: var(--space-5);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.today-lead__kicker {
-  font-family: var(--font-mono);
-  font-size: var(--overline-size);
-  font-weight: var(--overline-weight);
-  letter-spacing: var(--overline-spacing);
+.ledger__edge {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  font-weight: 550;
+  font-stretch: 110%;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
 }
-.today-lead__headline {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--display-sm);
-  line-height: var(--display-sm-height);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.ledger__foot { padding-top: 12px; border-top: 1px solid var(--color-border-strong); }
+
+/* ---- Rail · Still available ---- */
+.home-fa { display: flex; flex-direction: column; }
+.home-fa__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 31px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+.home-fa__row + .home-fa__row { border-top: 1px solid var(--color-border-subtle); }
+.home-fa__row:hover .home-fa__name { color: var(--line-blue); }
+.home-fa__row:focus-visible { outline: 2px solid var(--line-blue); outline-offset: 1px; }
+.home-fa__name { font-size: 13.5px; font-weight: 500; color: var(--color-text-primary); }
+.home-fa__meta { font-size: 12px; font-weight: 400; color: var(--color-text-muted); margin-left: 6px; }
+.home-fa__val { font-size: 13px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.home-fa__band { color: var(--color-text-muted); }
+
+/* ---- Rail movers (offseason board) ---- */
+.home-movers { display: flex; flex-direction: column; }
+.home-mover {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+.home-mover:hover { background: var(--color-bg-base); }
+.home-mover:focus-visible { outline: 2px solid var(--line-blue); outline-offset: 1px; }
+.home-mover__label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.home-mover__abbrev {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--color-text-primary);
 }
-.today-lead__dek { margin: 0; font-size: var(--text-base); color: var(--color-text-secondary); }
-.today-lead__link { font-size: var(--text-sm); font-weight: 500; color: var(--color-accent); text-decoration: none; width: fit-content; }
-.today-lead__link:hover { text-decoration: underline; }
+.home-mover__track { position: relative; height: 100%; }
+.home-mover__zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+}
+.home-mover__fill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius: 1px;
+}
+.home-mover__fill.is-up { background: var(--line-blue); }
+.home-mover__fill.is-down { background: var(--line-red); }
+.home-mover__val {
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.home-mover__val.is-up { color: var(--line-blue); }
+.home-mover__val.is-down { color: var(--line-red); }
+
+/* ---- Rail featured ---- */
+.home-featured__title {
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  line-height: 1.3;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: var(--space-2) 0 var(--space-1);
+}
+.home-featured__dek {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-3);
+}
+
+/* ---- Studio band (full Well width) ---- */
+.home-studio {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.home-studio__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.home-studio__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.home-studio__name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.home-studio__cell:hover .home-studio__name { color: var(--line-blue); }
+.home-studio__cell:focus-visible { outline: 2px solid var(--line-blue); outline-offset: 3px; }
+.home-studio__dek { font-size: 12.5px; line-height: 1.5; color: var(--color-text-secondary); }
+.home-studio__contract { font-size: 11px; color: var(--color-text-muted); }
+
+/* ---- responsive: below 900 the grid stacks (main, then rail); studio to one column ---- */
+@media (max-width: 900px) {
+  .home__grid { grid-template-columns: 1fr; gap: 28px; }
+  .home-studio__grid { grid-template-columns: 1fr; gap: 20px; }
+  .home-lead__headline { font-size: 30px; }
+}
+
+/* Below 640 the Ledger restacks each row to two lines: player + verdict, then date · team · terms. */
+@media (max-width: 640px) {
+  .ledger__head { display: none; }
+  .ledger__row {
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas:
+      "player player player verdict"
+      "date   to     terms  terms";
+    row-gap: 2px;
+    padding: 9px 0;
+    align-items: baseline;
+  }
+  .ledger__player { grid-area: player; }
+  .ledger__verdict { grid-area: verdict; }
+  .ledger__date { grid-area: date; }
+  .ledger__to { grid-area: to; }
+  .ledger__terms { grid-area: terms; justify-self: end; }
+  .ledger__to .ledger__abbrev,
+  .ledger__terms { font-size: 12px; color: var(--color-text-muted); font-weight: 400; }
+}

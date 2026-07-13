@@ -1,231 +1,291 @@
 /**
- * Today (P1) — the front door at `/`. A single PageCard holding self-contained modules, each with
- * its own data call, skeleton, and empty rule. v1 uses ONLY existing endpoints (no insight feed —
- * that is v2/D18). Layout: a 12-col grid, main (cols 1-8) + rail (cols 9-12) on desktop; single
- * column on mobile in the order M1..M7. When tonight AND last night are both empty (deep offseason)
- * the offseason M5 is promoted to the top of the main column so the page never opens with a gap.
+ * Today (Home v3) — the front door at `/`. Offseason layout per instructions/19-home-v3-approved.md:
+ * a 00c context strip (no Sheet title), then the single grid (main column + 324px rail), then the
+ * full-width Studio band; the footer is the shared canvas footer from PageLayout.
+ *
+ * The single grid is the page's structural law: `minmax(0,1fr) 324px` is the only column split on the
+ * page — every vertical seam is this grid's seam. Do not introduce a second column structure.
+ *
+ * Data: ships the OFFSEASON branch only. The Lead is phase-aware (config/leadTemplates). The Ledger
+ * and Still-available modules read the /moves and /free-agents feeds — both stubbed empty until the
+ * nightly DAG/model writes them, so they render honest empty states by default. Grades are never
+ * computed client-side. Review-only: DEV + `?fixtures` renders the whole page from local fixtures.
  */
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowUp, ArrowDown } from 'lucide-react'
-import { PageLayout, PageCard, SkeletonLoader } from '../components/common'
-import GameCard from '../components/games/GameCard'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowUpRight } from 'lucide-react'
+import { PageLayout, ContextStrip, Panel } from '../components/common'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { inPlayoffWindow, inOffseasonWindow } from '../utils/seasonal'
-import { getTeamLogoUrl } from '../utils/teams'
-import { getGamesByDate } from '../api/games'
-import { getPowerRankings } from '../api/rankings'
-import { getDeservedStandings } from '../api/rankings'
-import { getPlayoffBracket } from '../api/playoffs'
+import { getTeamColor } from '../utils/teams'
+import { getGameDates } from '../api/games'
 import { getOffseasonBoard } from '../api/offseason'
-import { TRAJECTORY_MEANINGFUL_MOVE } from '../config/metrics'
-import { fmt } from '../utils/format'
+import { getPowerRankings, getDeservedStandings } from '../api/rankings'
+import { getMoves } from '../api/moves'
+import { getFreeAgents } from '../api/freeAgents'
 import { selectLead } from '../config/leadTemplates'
-import { WRITING } from '../config/writing'
-import type { Game, PowerRatingRow, DeservedStandingRow, PlayoffOdds, RosterForecastRow } from '../api/types'
+import { resolveFeatured } from '../config/featured'
+import { isFixtureMode } from '../utils/fixtures'
+import { FIXTURE_MOVES, FIXTURE_FREE_AGENTS, FIXTURE_OFFSEASON_BOARD, FIXTURE_POWER } from '../config/homeFixtures'
+import type { RosterForecastRow, PowerRatingRow, DeservedStandingRow, MoveRow, MovesPage, FreeAgentRow } from '../api/types'
 import './Today.css'
 
 const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const DAY_MS = 86_400_000
+const money = (aav: number) => `$${(aav / 1e6).toFixed(1)}M`
 
-/** Section header: sentence-case region title + a quiet "See all" link to the parent surface.
- *  `mod` drives the mobile single-column ordering (M1..M7) via a per-module class. */
-function Region({ mod, title, seeAll, children }: { mod: string; title: string; seeAll?: { to: string; label?: string }; children: React.ReactNode }) {
+/** Phase line for the context strip: "Free agency · Day {n} · {d} days to opening night".
+ *  Day count is from July 1 of the current year; days-to-opening is the first scheduled game date. */
+function usePhaseLine(): string {
+  const [line, setLine] = useState('Free agency')
+  useEffect(() => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const jul1 = new Date(now.getFullYear(), 6, 1).getTime()
+    const dayN = Math.max(1, Math.floor((startOfToday - jul1) / DAY_MS) + 1)
+    getGameDates(isoDate(now)).then((dates) => {
+      const opening = dates.map((d) => d.date).filter((d) => d >= isoDate(now)).sort()[0]
+      const days = opening ? Math.round((new Date(`${opening}T00:00:00`).getTime() - startOfToday) / DAY_MS) : null
+      setLine(`Free agency · Day ${dayN}${days != null ? ` · ${days} days to opening night` : ''}`)
+    }).catch(() => setLine(`Free agency · Day ${dayN}`))
+  }, [])
+  return line
+}
+// TODO(season): build + approve the season branch of this page; it currently ships offseason only.
+
+// ── The Lead (phase-aware) ────────────────────────────────────────────────────
+function TheLead() {
+  const [power, setPower] = useState<PowerRatingRow[]>([])
+  const [deserved, setDeserved] = useState<DeservedStandingRow[]>([])
+  const [board, setBoard] = useState<RosterForecastRow[]>([])
+  const [moves, setMoves] = useState<MoveRow[]>([])
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    let active = true
+    if (isFixtureMode()) {
+      setPower(FIXTURE_POWER); setBoard(FIXTURE_OFFSEASON_BOARD); setMoves(FIXTURE_MOVES); setReady(true)
+      return
+    }
+    Promise.all([
+      getPowerRankings().catch(() => []),
+      getDeservedStandings().catch(() => []),
+      getOffseasonBoard().catch(() => []),
+      getMoves({ limit: 20 }).then((p) => p.items).catch(() => [] as MoveRow[]),
+    ]).then(([p, d, o, m]) => { if (active) { setPower(p); setDeserved(d); setBoard(o); setMoves(m); setReady(true) } })
+    return () => { active = false }
+  }, [])
+  if (!ready) return <section className="home-lead"><div className="home-skel" style={{ height: 128 }} /></section>
+  const lead = selectLead({ phase: 'offseason', slate: [], lastNight: [], power, deserved, offseason: board, moves })
+  if (!lead) return null
   return (
-    <section className={`today-mod today-mod--${mod}`}>
-      <div className="today-mod__head">
-        <h2 className="page-region-title today-mod__title">{title}</h2>
-        {seeAll && <Link className="today-mod__seeall" to={seeAll.to}>{seeAll.label ?? 'See all'}</Link>}
-      </div>
-      {children}
+    <section className="home-lead">
+      <p className="home-eyebrow">The lead</p>
+      <h2 className="home-lead__headline">{lead.headline}</h2>
+      <p className="home-lead__dek">{lead.dek}</p>
+      <Link className="home-link" to={lead.link.to}>{lead.link.label}</Link>
     </section>
   )
 }
 
-const TeamRow = ({ abbrev, teamId, children }: { abbrev?: string | null; teamId: number; children: React.ReactNode }) => (
-  <Link to={`/teams/${teamId}`} className="today-row">
-    {abbrev && <img className="today-row__logo" src={getTeamLogoUrl(abbrev)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />}
-    <span className="today-row__abbrev">{abbrev ?? teamId}</span>
-    <span className="today-row__body">{children}</span>
-  </Link>
-)
-
-// ── M1/M2: game strips (presentational; the parent owns the single fetch so it can apply the
-//    offseason promotion rule without double-calling the endpoint). Each still owns its own render.
-function GameStrip({ mod, title, seeAll, games, loading, scoreEmphasis }:
-  { mod: string; title: string; seeAll?: { to: string }; games: Game[]; loading: boolean; scoreEmphasis?: boolean }) {
-  if (!loading && games.length === 0) return null   // hidden when no games
+// ── The Ledger ────────────────────────────────────────────────────────────────
+function LedgerRow({ m }: { m: MoveRow }) {
+  const navigate = useNavigate()
+  const p = m.players[0]
+  // Signings/extensions open the (prefilled) Contract Grader; trades open the trade dossier.
+  const to = m.type === 'trade' ? `/studio/trades/history/trade/${m.id}` : `/studio/contracts?player=${p?.player_id ?? ''}`
+  // "To" is where the headline player went (destination = teams[0]); the edge winner is the verdict.
+  const toTeam = m.teams[0]
+  const dateLabel = new Date(`${m.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+  const terms = m.type === 'trade'
+    ? `Trade · ${m.teams.filter((t) => t !== toTeam)[0] ?? m.teams.join('–')}`
+    : m.terms ? `${m.terms.years} yr · ${money(m.terms.aav)}` : ''
   return (
-    <Region mod={mod} title={title} seeAll={seeAll}>
-      {loading
-        ? <div className="today-strip"><SkeletonLoader height={72} /><SkeletonLoader height={72} /><SkeletonLoader height={72} /></div>
-        : <div className={`today-strip ${scoreEmphasis ? 'today-strip--scores' : ''}`}>
-            {games.map((g) => <GameCard key={g.game_id} game={g} size="compact" />)}
-          </div>}
-    </Region>
-  )
-}
-
-// ── M3: Movers — biggest 15-day risers and fallers past the shared meaningful-move threshold.
-function Movers() {
-  const [rows, setRows] = useState<PowerRatingRow[] | null>(null)
-  useEffect(() => { getPowerRankings().then(setRows).catch(() => setRows([])) }, [])
-  if (rows === null) return <Region mod="m3" title="Moving"><SkeletonLoader height={120} /></Region>
-  const moved = rows.filter((r) => r.trajectory_15d != null && Math.abs(r.trajectory_15d) > TRAJECTORY_MEANINGFUL_MOVE)
-  if (moved.length === 0) return null   // hidden if nobody clears the threshold
-  const risers = [...moved].filter((r) => (r.trajectory_15d ?? 0) > 0).sort((a, b) => (b.trajectory_15d ?? 0) - (a.trajectory_15d ?? 0)).slice(0, 3)
-  const fallers = [...moved].filter((r) => (r.trajectory_15d ?? 0) < 0).sort((a, b) => (a.trajectory_15d ?? 0) - (b.trajectory_15d ?? 0)).slice(0, 3)
-  const line = (r: PowerRatingRow) => {
-    const up = (r.trajectory_15d ?? 0) > 0
-    return (
-      <TeamRow key={r.team_id} abbrev={r.team_abbrev} teamId={r.team_id}>
-        <span className="today-row__val mono">{fmt.rating(r.total_rating)}</span>
-        <span className={`today-row__delta ${up ? 'is-up' : 'is-down'}`}>
-          {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(r.trajectory_15d ?? 0).toFixed(2)}
-        </span>
-      </TeamRow>
-    )
-  }
-  return (
-    <Region mod="m3" title="Moving" seeAll={{ to: '/teams?view=power' }}>
-      <div className="today-cols">
-        <div><div className="today-col__head">Rising</div>{risers.map(line)}</div>
-        <div><div className="today-col__head">Falling</div>{fallers.map(line)}</div>
-      </div>
-    </Region>
-  )
-}
-
-// ── M4: Luck watch — two luckiest and two unluckiest by luck_delta (existing valence convention).
-function LuckWatch() {
-  const [rows, setRows] = useState<DeservedStandingRow[] | null>(null)
-  useEffect(() => { getDeservedStandings().then(setRows).catch(() => setRows([])) }, [])
-  if (rows === null) return <Region mod="m4" title="Luck watch"><SkeletonLoader height={120} /></Region>
-  if (rows.length === 0) return null   // no rows off-season
-  const sorted = [...rows].sort((a, b) => b.luck_delta - a.luck_delta)
-  const pick = [...sorted.slice(0, 2), ...sorted.slice(-2)]
-  const line = (r: DeservedStandingRow) => (
-    <TeamRow key={r.team_id} abbrev={r.team_abbrev} teamId={r.team_id}>
-      <span className="today-row__val mono">{Math.round(r.actual_points)} vs {Math.round(r.deserved_points)}</span>
-      <span className="today-row__delta" style={{ color: r.luck_delta > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-        {fmt.delta(r.luck_delta)}
+    <div
+      className="ledger__row"
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(to)}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate(to) }}
+    >
+      <span className="ledger__date mono">{dateLabel}</span>
+      <span className="ledger__player">
+        <Link className="ledger__name" to={`/players/${p?.player_id ?? ''}`} onClick={(e) => e.stopPropagation()}>{p?.name ?? '—'}</Link>
+        {p?.pos && <span className="ledger__pos">{p.pos}</span>}
       </span>
-    </TeamRow>
-  )
-  return (
-    <Region mod="m4" title="Luck watch" seeAll={{ to: '/teams?view=deserved' }}>
-      <div className="today-list">{pick.map(line)}</div>
-    </Region>
+      <span className="ledger__to">
+        <span className="home-dot" style={{ background: getTeamColor(toTeam ?? '') }} />
+        <span className="ledger__abbrev">{toTeam}</span>
+      </span>
+      <span className={`ledger__terms ${m.type === 'trade' ? 'is-trade' : 'num'}`}>{terms}</span>
+      <span className="ledger__verdict">
+        {m.type === 'trade'
+          ? (m.verdict?.edge ? <span className="ledger__edge">Edge {m.verdict.edge}</span> : null)
+          : (m.verdict?.grade ? <span className="ledger__grade">{m.verdict.grade}</span> : null)}
+      </span>
+    </div>
   )
 }
 
-// ── M5: Seasonal stakes — playoff title odds (D20 window) or offseason WAR gainers (Jul–Sep).
-function SeasonalStakes({ variant }: { variant: 'playoff' | 'offseason' }) {
-  const [odds, setOdds] = useState<PlayoffOdds[] | null>(null)
+function TheLedger() {
+  const [page, setPage] = useState<MovesPage | null>(null)
+  useEffect(() => {
+    if (isFixtureMode()) { setPage({ items: FIXTURE_MOVES, total: FIXTURE_MOVES.length }); return }
+    getMoves({ limit: 8 }).then(setPage).catch(() => setPage({ items: [], total: 0 }))
+  }, [])
+  const rows = page?.items.slice(0, 8) ?? []
+  return (
+    <section className="home-ledger">
+      <div className="home-mod-head">
+        <p className="home-eyebrow">Recent moves</p>
+      </div>
+      {page === null ? (
+        <div className="home-skel" style={{ height: 180 }} />
+      ) : rows.length === 0 ? (
+        <p className="home-empty">Quiet week. The ledger fills as moves land.</p>
+      ) : (
+        <div className="ledger">
+          <div className="ledger__head">
+            <span>Date</span><span>Player</span><span>To</span><span>Terms</span><span className="ledger__verdict-h">Verdict</span>
+          </div>
+          {rows.map((m) => <LedgerRow key={m.id} m={m} />)}
+          <div className="ledger__foot">
+            <Link className="home-link" to="/studio/offseason">All moves this offseason <ArrowUpRight size={13} /></Link>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── Rail · Offseason board (movers) ───────────────────────────────────────────
+const MOVER_DOMAIN = 4.0 // shared ±WAR domain across all rows
+
+function MoversPanel() {
   const [board, setBoard] = useState<RosterForecastRow[] | null>(null)
   useEffect(() => {
-    if (variant === 'playoff') getPlayoffBracket().then((b) => setOdds(b.odds)).catch(() => setOdds([]))
-    else getOffseasonBoard().then(setBoard).catch(() => setBoard([]))
-  }, [variant])
-
-  if (variant === 'playoff') {
-    if (odds === null) return <Region mod="m5" title="The race"><SkeletonLoader height={120} /></Region>
-    if (odds.length === 0) return null
-    const top = [...odds].sort((a, b) => b.win_cup - a.win_cup).slice(0, 4)
-    return (
-      <Region mod="m5" title="The race" seeAll={{ to: '/playoffs' }}>
-        <div className="today-list">
-          {top.map((o) => (
-            <TeamRow key={o.abbrev} abbrev={o.abbrev} teamId={o.team_id ?? 0}>
-              <span className="today-row__val mono">{fmt.prob(o.win_cup)}</span>
-              <span className="today-row__muted">to win it all</span>
-            </TeamRow>
-          ))}
-        </div>
-      </Region>
-    )
-  }
-
-  if (board === null) return <Region mod="m5" title="Offseason board"><SkeletonLoader height={120} /></Region>
-  if (board.length === 0) return null
-  const gainers = [...board].sort((a, b) => b.net_delta_war - a.net_delta_war).slice(0, 3)
+    if (isFixtureMode()) { setBoard(FIXTURE_OFFSEASON_BOARD); return }
+    getOffseasonBoard().then(setBoard).catch(() => setBoard([]))
+  }, [])
+  const rows = (() => {
+    if (!board) return null
+    // Top 3 and bottom 3 teams by net WAR change from the offseason board.
+    const moved = board.filter((r) => !r.negligible && r.net_delta_war != null)
+    const risers = [...moved].filter((r) => r.net_delta_war > 0).sort((a, b) => b.net_delta_war - a.net_delta_war).slice(0, 3)
+    // 3 worst, displayed least-bad → worst (third-worst on top, the worst at the bottom).
+    const fallers = [...moved].filter((r) => r.net_delta_war < 0).sort((a, b) => a.net_delta_war - b.net_delta_war).slice(0, 3).reverse()
+    return [...risers, ...fallers]
+  })()
   return (
-    <Region mod="m5" title="Offseason board" seeAll={{ to: '/studio/offseason' }}>
-      <div className="today-list">
-        {gainers.map((r) => (
-          <TeamRow key={r.team_id} abbrev={r.team_abbrev} teamId={r.team_id}>
-            <span className="today-row__val mono" style={{ color: r.net_delta_war >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-              {fmt.war(r.net_delta_war)} WAR
-            </span>
-            <span className="today-row__muted">projected</span>
-          </TeamRow>
-        ))}
-      </div>
-    </Region>
+    <Panel title="Offseason board" action={<Link className="home-link home-link--quiet" to="/studio/offseason">Full board</Link>}>
+      {rows === null ? (
+        <div className="home-skel" style={{ height: 150 }} />
+      ) : rows.length === 0 ? (
+        <p className="home-empty">No meaningful movement yet.</p>
+      ) : (
+        <div className="home-movers">
+          {rows.map((r) => {
+            const v = Math.max(-MOVER_DOMAIN, Math.min(MOVER_DOMAIN, r.net_delta_war))
+            const up = v > 0
+            const pct = (Math.abs(v) / MOVER_DOMAIN) * 50 // half-track
+            return (
+              <Link key={r.team_id} to={`/teams/${r.team_id}`} className="home-mover">
+                <span className="home-mover__label">
+                  <span className="home-dot" style={{ background: getTeamColor(r.team_abbrev ?? '') }} />
+                  <span className="home-mover__abbrev">{r.team_abbrev}</span>
+                </span>
+                <span className="home-mover__track" aria-hidden>
+                  <span className="home-mover__zero" />
+                  <span
+                    className={`home-mover__fill ${up ? 'is-up' : 'is-down'}`}
+                    style={up ? { left: '50%', width: `${pct}%` } : { right: '50%', width: `${pct}%` }}
+                  />
+                </span>
+                <span className={`home-mover__val num ${up ? 'is-up' : 'is-down'}`}>{v > 0 ? '+' : ''}{v.toFixed(1)}</span>
+              </Link>
+            )
+          })}
+          {/* TODO(data): the doc calls for a dashed extension per row for the unresolved-forecast
+              portion (open roster spots) + a "Dashed = unresolved spots" legend. No field on
+              RosterForecastRow isolates the unresolved WAR, so bars render solid only for now. */}
+        </div>
+      )}
+    </Panel>
   )
 }
 
-// ── M6: From the studio — static shortcut cards. Blurbs are the exact §5.4 strings.
-const STUDIO_CARDS = [
-  { to: '/studio/trades', label: 'Trades', blurb: 'Build a deal, find a fit, or study history’s verdicts.' },
-  { to: '/studio/lineups', label: 'Lineups', blurb: 'Project lines before they take a shift.' },
-  { to: '/studio/contracts', label: 'Contracts', blurb: 'Grade any deal against the aging curve and the market.' },
-]
-function FromTheStudio() {
+// ── Rail · Still available ────────────────────────────────────────────────────
+function StillAvailablePanel() {
+  const [rows, setRows] = useState<FreeAgentRow[] | null>(null)
+  useEffect(() => {
+    if (isFixtureMode()) { setRows(FIXTURE_FREE_AGENTS); return }
+    getFreeAgents({ limit: 5 }).then(setRows).catch(() => setRows([]))
+  }, [])
+  const top = rows ? rows.slice(0, 5) : null
   return (
-    <Region mod="m6" title="From the studio" seeAll={{ to: '/studio' }}>
-      <div className="today-shortcuts">
-        {STUDIO_CARDS.map((c) => (
-          <Link key={c.to} to={c.to} className="today-shortcut">
-            <span className="today-shortcut__label">{c.label}</span>
-            <span className="today-shortcut__blurb">{c.blurb}</span>
+    <Panel title="Still available" action={<Link className="home-link home-link--quiet" to="/players">All free agents</Link>}>
+      {top === null ? (
+        <div className="home-skel" style={{ height: 120 }} />
+      ) : top.length === 0 ? (
+        <p className="home-empty">The free-agent board opens when the pool feed lands.</p>
+      ) : (
+        <div className="home-fa">
+          {top.map((r) => (
+            <Link key={r.player_id} to={`/players/${r.player_id}`} className="home-fa__row">
+              <span className="home-fa__name">
+                {r.name}
+                <span className="home-fa__meta">{[r.status, r.pos, r.age].filter((x) => x != null && x !== '').join(' · ')}</span>
+              </span>
+              {r.projected_award?.aav != null ? (
+                <span className="home-fa__val num">proj {money(r.projected_award.aav)}</span>
+              ) : r.projected_war != null ? (
+                <span className="home-fa__val num">
+                  {(r.projected_war >= 0 ? '+' : '') + r.projected_war.toFixed(1)} WAR
+                  {r.war_sd != null}
+                </span>
+              ) : null}
+            </Link>
+          ))}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+// ── Rail · Featured ───────────────────────────────────────────────────────────
+function FeaturedPanel() {
+  const f = resolveFeatured()
+  return (
+    <Panel>
+      <p className="home-eyebrow">{f.eyebrow}</p>
+      <h3 className="home-featured__title">{f.title}</h3>
+      <p className="home-featured__dek">{f.dek}</p>
+      <Link className="home-link" to={f.to}>{f.linkLabel} <ArrowUpRight size={13} /></Link>
+    </Panel>
+  )
+}
+
+// ── Studio band ───────────────────────────────────────────────────────────────
+// Offseason pin set (a config array so the season state can rotate it): Contracts, Trades, Lineups.
+const STUDIO_PINS = [
+  { to: '/studio/contracts', name: 'Contracts', dek: 'Grade any deal against the aging curve and the market.', contract: 'player + terms → grade' },
+  { to: '/studio/trades', name: 'Trades', dek: 'Build a deal, find a fit, weigh the tilt.', contract: 'assets ⇄ assets → verdict' },
+  { to: '/studio/lineups', name: 'Lineups', dek: 'Project lines before they take a shift.', contract: 'roster → projected WAR' },
+]
+function StudioBand() {
+  return (
+    <section className="home-studio">
+      <div className="home-mod-head">
+        <p className="home-eyebrow">From the Studio</p>
+        <Link className="home-link home-link--quiet" to="/studio">All tools</Link>
+      </div>
+      <div className="home-studio__grid">
+        {STUDIO_PINS.map((p) => (
+          <Link key={p.to} to={p.to} className="home-studio__cell">
+            <span className="home-studio__name">{p.name}</span>
+            <span className="home-studio__dek">{p.dek}</span>
+            <span className="home-studio__contract mono">{p.contract}</span>
           </Link>
         ))}
       </div>
-    </Region>
-  )
-}
-
-// ── M7: Writing — latest one or two posts from the manifest. Hidden while empty (owner-supplied
-//    markdown not yet added). The `/learn/writing` route lands in P4; until then titles are plain.
-function Writing() {
-  const posts = WRITING.slice(0, 2)
-  if (posts.length === 0) return null
-  return (
-    <Region mod="m7" title="Writing" seeAll={{ to: '/learn/writing' }}>
-      <div className="today-list">
-        {posts.map((p) => (
-          <div key={p.slug} className="today-post">
-            <span className="today-post__title">{p.title}</span>
-            <span className="today-row__muted">{new Date(`${p.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-          </div>
-        ))}
-      </div>
-    </Region>
-  )
-}
-
-// The Lead (P7): one editorial headline stating the most interesting true thing right now, chosen by
-// the deterministic rule in config/leadTemplates, with a supporting link. The reason the page feels authored.
-function TheLead({ slate, lastNight }: { slate: Game[]; lastNight: Game[] }) {
-  const [power, setPower] = useState<PowerRatingRow[]>([])
-  const [deserved, setDeserved] = useState<DeservedStandingRow[]>([])
-  const [board, setBoard] = useState<RosterForecastRow[]>([])
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    let active = true
-    Promise.all([getPowerRankings().catch(() => []), getDeservedStandings().catch(() => []), getOffseasonBoard().catch(() => [])])
-      .then(([p, d, o]) => { if (active) { setPower(p); setDeserved(d); setBoard(o); setReady(true) } })
-    return () => { active = false }
-  }, [])
-  if (!ready) return <section className="today-lead"><SkeletonLoader height={110} /></section>
-  const lead = selectLead({ slate, lastNight, power, deserved, offseason: board })
-  if (!lead) return null
-  return (
-    <section className="today-lead">
-      <span className="today-lead__kicker">{lead.kicker}</span>
-      <h2 className="today-lead__headline">{lead.headline}</h2>
-      <p className="today-lead__dek">{lead.dek}</p>
-      <Link className="today-lead__link" to={lead.link.to}>{lead.link.label}</Link>
     </section>
   )
 }
@@ -234,38 +294,24 @@ export default function Today() {
   usePageTitle('Today')
   const now = new Date()
   const longDate = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
-
-  const [slate, setSlate] = useState<Game[] | null>(null)
-  const [lastNight, setLastNight] = useState<Game[] | null>(null)
-  useEffect(() => {
-    getGamesByDate(isoDate(now)).then(setSlate).catch(() => setSlate([]))
-    getGamesByDate(isoDate(yesterday)).then(setLastNight).catch(() => setLastNight([]))
-  }, [])   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const seasonalVariant: 'playoff' | 'offseason' | null =
-    inPlayoffWindow() ? 'playoff' : inOffseasonWindow() ? 'offseason' : null
-  const gamesLoaded = slate !== null && lastNight !== null
-  const bothEmpty = gamesLoaded && (slate?.length ?? 0) === 0 && (lastNight?.length ?? 0) === 0
-  const promoteOffseason = bothEmpty && seasonalVariant === 'offseason'
+  const line = usePhaseLine()
 
   return (
     <PageLayout>
-      <PageCard title="Today" subtitle={longDate} bodyClassName="today">
-        <div className="today__main">
-          <TheLead slate={slate ?? []} lastNight={lastNight ?? []} />
-          {promoteOffseason && <SeasonalStakes variant="offseason" />}
-          <GameStrip mod="m1" title="Tonight" seeAll={{ to: '/games' }} games={slate ?? []} loading={slate === null} />
-          <GameStrip mod="m2" title="Last night" seeAll={{ to: '/games' }} games={lastNight ?? []} loading={lastNight === null} scoreEmphasis />
-          <Movers />
+      <ContextStrip primary={longDate} secondary={line} />
+      <div className="home__grid">
+        <div className="home__main">
+          <TheLead />
+          <div className="home__divider" />
+          <TheLedger />
         </div>
-        <div className="today__rail">
-          {seasonalVariant && !promoteOffseason && <SeasonalStakes variant={seasonalVariant} />}
-          <LuckWatch />
-          <Writing />
-          <FromTheStudio />
-        </div>
-      </PageCard>
+        <aside className="home__rail">
+          <MoversPanel />
+          <StillAvailablePanel />
+          <FeaturedPanel />
+        </aside>
+      </div>
+      <StudioBand />
     </PageLayout>
   )
 }

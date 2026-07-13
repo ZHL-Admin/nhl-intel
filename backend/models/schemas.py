@@ -1511,8 +1511,9 @@ class RosterEvaluateResponse(BaseModel):
     delta_band: float = 0.0
     delta_low: float = 0.0
     delta_high: float = 0.0
-    baseline_points: int
-    baseline_rating: float
+    baseline_points: int          # == the offseason forecast's projected points for the current transition
+    baseline_rating: float        # R_current: forecast projected rating (shared anchor + move delta + chemistry)
+    baseline_source: str = "forecast"  # 'forecast' (roster_forecast row) | 'measured_anchor' | 'bottom_up'
     # Secondary absolute projection, with its WIDE, calibrated band (talent x kappa + season luck).
     projected_points: int
     points_low: int
@@ -1693,7 +1694,9 @@ class RosterMove(BaseModel):
 
 
 class OffseasonLineupSlot(BaseModel):
-    """A projected-lineup slot: the player, his projected value, and its band (never a bare number)."""
+    """A projected-lineup slot: the player, his projected value, and its band (never a bare number).
+    The last-season context fields (base_war, age, gp/g/a/p) are additive + realized-only — the engine
+    projects WAR, never a projected counting line, so no G/A/P is ever fabricated forward."""
     slot: str
     player_id: Optional[int] = None
     name: Optional[str] = None
@@ -1702,6 +1705,26 @@ class OffseasonLineupSlot(BaseModel):
     war_sd: float
     no_track_record: bool = False
     replacement: bool = False
+    base_war: Optional[float] = None      # last-season REALIZED WAR (display context)
+    age: Optional[int] = None             # age at the base-season start
+    gp: Optional[int] = None              # last-season (base) regular-season counting line
+    g: Optional[int] = None
+    a: Optional[int] = None
+    p: Optional[int] = None
+
+
+class OffseasonLineFit(BaseModel):
+    """Per-line cold-start fit grade (same path as the Roster Builder), or null when a line is missing
+    members / has no line-fit profile — never a fabricated grade."""
+    grade: Optional[str] = None
+    xgf_pct: Optional[float] = None
+
+
+class OffseasonLineFits(BaseModel):
+    """Fit grades for the projected forward lines (up to 4) and defense pairs (up to 3), index-aligned
+    to the lineup's line/pair grouping. Entries may be null."""
+    forward: List[Optional[OffseasonLineFit]] = Field(default_factory=list)
+    defense: List[Optional[OffseasonLineFit]] = Field(default_factory=list)
 
 
 class OffseasonTeamDetail(BaseModel):
@@ -1710,6 +1733,7 @@ class OffseasonTeamDetail(BaseModel):
     base_components: dict                      # play_5v5 / finishing / goaltending / special_teams
     moves: List[RosterMove] = Field(default_factory=list)
     projected_lineup: List[OffseasonLineupSlot] = Field(default_factory=list)
+    line_fits: Optional[OffseasonLineFits] = None
     style_note: Optional[str] = None
     verdict: str
     reasons: List[str] = Field(default_factory=list)
@@ -2533,3 +2557,63 @@ class ArchetypeAgg(BaseModel):
     split: dict
     exemplars: List[dict] = []      # ordered, labeled, distinct: [{label, trade_id}]
     timing: List[dict] = []
+
+
+# ============================================================================
+# Moves feed (Home Ledger + Offseason Forecast) — doc 19 §5 / doc 10 §.
+# One dated, global, newest-first source with two consumers. Verdicts are
+# precomputed on write in the nightly DAG, never client-side: signings/extensions
+# carry a Contract Grader letter grade (actual-deal mode); trades carry the Trade
+# Builder scoreboard edge + margin (the same served result both pages must read).
+# ============================================================================
+
+class MovePlayer(BaseModel):
+    player_id: int
+    name: str
+    pos: Optional[str] = None
+
+
+class ContractTerms(BaseModel):
+    years: int
+    aav: float                       # average annual value, dollars
+
+
+class MoveVerdict(BaseModel):
+    """Precomputed verdict. Signings/extensions set `grade`; trades set `edge` + `margin`."""
+    grade: Optional[str] = None      # Contract Grader letter, e.g. "A", "B+", "C-"
+    edge: Optional[str] = None       # Trade Builder tilt winner, team abbrev, e.g. "DET"
+    margin: Optional[float] = None   # tilt margin (WAR/value units) behind the edge
+
+
+class MoveRow(BaseModel):
+    id: str
+    date: DateType
+    type: str                        # "signing" | "extension" | "trade"
+    teams: List[str] = []            # team abbrevs involved
+    players: List[MovePlayer] = []
+    terms: Optional[ContractTerms] = None      # signings/extensions only
+    verdict: Optional[MoveVerdict] = None      # null until the DAG grades it
+
+
+class MovesPage(BaseModel):
+    items: List[MoveRow] = []
+    total: int = 0
+
+
+# ============================================================================
+# Free-agent pool (Home "Still available" + Offseason Forecast §4 best fits).
+# One endpoint, two consumers: Home shows top-N by projected value league-wide;
+# Forecast reads the same rows sorted by per-team fit grade. Projected award comes
+# from the Contract Grader hypothetical model; fits from Player Fit, keyed by abbr.
+# ============================================================================
+
+class FreeAgentRow(BaseModel):
+    player_id: int
+    name: str
+    pos: Optional[str] = None
+    age: Optional[int] = None
+    status: Optional[str] = None      # "UFA" | "RFA" — pending free-agent status from the contract table
+    projected_award: Optional[ContractTerms] = None   # {years, aav} from the hypothetical model
+    projected_war: Optional[float] = None   # assessed WAR (reliability-shrunk), matching the player board
+    war_sd: Optional[float] = None          # ± band on projected_war
+    fits: dict = {}                  # { team_abbrev: fit_grade } from Player Fit, batch-scored nightly

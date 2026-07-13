@@ -7,8 +7,10 @@ exist in the layer; nothing here invents an asset or a value.
 from __future__ import annotations
 
 from typing import List, Optional
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Query
+import httpx
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.concurrency import run_in_threadpool
 
 from models.schemas import TradeableAsset
@@ -16,6 +18,28 @@ from services.bigquery import bq_service
 from services.cache import cache
 
 router = APIRouter()
+
+# --- NHL image proxy: draw logos/headshots onto an exportable canvas (the share card) ---------------
+# assets.nhle.com sends no CORS header, so a crossOrigin canvas load taints and toBlob() fails. We fetch
+# the image server-side and re-serve it; the app's permissive CORS middleware then makes it canvas-safe.
+# Restricted to the NHL asset host — not an open proxy (no SSRF).
+_ALLOWED_IMG_HOSTS = {"assets.nhle.com"}
+
+
+@router.get("/img")
+async def proxy_image(url: str = Query(..., description="assets.nhle.com image URL to proxy for canvas use")):
+    if (urlparse(url).hostname or "") not in _ALLOWED_IMG_HOSTS:
+        raise HTTPException(status_code=400, detail="host not allowed")
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            r = await client.get(url)
+    except Exception:  # noqa: BLE001 — upstream unreachable -> the card falls back to a color block
+        raise HTTPException(status_code=502, detail="upstream fetch failed")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail="upstream error")
+    return Response(content=r.content,
+                    media_type=r.headers.get("content-type", "application/octet-stream"),
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 _COLS = (
     "asset_id, asset_type, player_id, label, org_team, pos_or_slot, "

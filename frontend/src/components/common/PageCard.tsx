@@ -16,7 +16,7 @@ import './PageCard.css'
 /** True for anything rendered inside a PageCard — card components consume this to drop their chrome. */
 export const PageCardContext = createContext(false)
 
-export default function PageCard({ eyebrow, title, subtitle, back, header, controls, bodyClassName, children }: {
+export default function PageCard({ eyebrow, title, subtitle, back, header, controls, bodyClassName, noDivider, children }: {
   /** Section eyebrow (e.g. "Studio") — the Sheet's overline (§00 6.2). */
   eyebrow?: string
   title?: string
@@ -28,6 +28,8 @@ export default function PageCard({ eyebrow, title, subtitle, back, header, contr
   controls?: ReactNode
   /** Optional class on the body wrapper (e.g. for a grid/list layout). */
   bodyClassName?: string
+  /** Skip the header→body divider when the header supplies its own separator (e.g. a full-width tab hairline). */
+  noDivider?: boolean
   children: ReactNode
 }) {
   return (
@@ -46,8 +48,9 @@ export default function PageCard({ eyebrow, title, subtitle, back, header, contr
           )}
           {controls && <div className="page-card__controls">{controls}</div>}
         </header>
-        {/* The Sheet's one red rule (§00 6.2), closing the header. */}
-        <div className="page-card__divider" />
+        {/* The Sheet's closing divider — a neutral hairline (00c retired the red rule).
+            Suppressed when the header owns its own full-width separator. */}
+        {!noDivider && <div className="page-card__divider" />}
         <div className={bodyClassName ? `page-card__body ${bodyClassName}` : 'page-card__body'}>
           {children}
         </div>

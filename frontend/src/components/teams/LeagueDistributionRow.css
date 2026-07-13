@@ -1,0 +1,65 @@
+/* LeagueDistributionRow (06 v2 §0.1) — 130px label | flexible strip | 38px value, height 27. */
+.ldr {
+  display: grid;
+  grid-template-columns: 130px 1fr 38px;
+  align-items: center;
+  gap: var(--space-3);
+  height: 27px;
+}
+
+.ldr__label {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ldr__strip {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+}
+
+/* Faint baseline hairline through the middle of the strip. */
+.ldr__baseline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+
+/* The other 31 teams: 1.5×8px ticks at their real percentile positions. */
+.ldr__tick {
+  position: absolute;
+  top: 50%;
+  width: 1.5px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  background: #D9E4E9;
+}
+
+/* This team: a 7px ink dot. */
+.ldr__dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%);
+  background: var(--color-text-primary);
+}
+
+.ldr__value {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--color-text-primary);
+}
+
+html[data-theme='dark'] .ldr__tick { background: var(--color-border-strong); }

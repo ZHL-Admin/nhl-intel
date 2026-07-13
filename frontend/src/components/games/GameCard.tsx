@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Game } from '../../api/types'
 import { Badge, PossessionBar } from '../common'
 import { getTeamLogoUrl, getTeamColor } from '../../utils/teams'
+import { GAMES_ENABLED } from '../../config/features'
 import './GameCard.css'
 
 interface GameCardProps {
@@ -17,7 +18,7 @@ function GameCard({ game, size = 'default' }: GameCardProps) {
   const [awayLogoError, setAwayLogoError] = useState(false)
 
   const handleClick = () => {
-    navigate(`/games/${game.game_id}`)
+    if (GAMES_ENABLED) navigate(`/games/${game.game_id}`)
   }
 
   const handleTeamClick = (e: React.MouseEvent, teamId: number) => {

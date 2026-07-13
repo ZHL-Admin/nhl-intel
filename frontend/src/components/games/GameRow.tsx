@@ -1,96 +1,105 @@
 /**
- * GameRow (§01) — a 64px scoreboard row. Away and home stacked as two lines (logo + name), a
- * tabular score column with the leader inked and the trailer greyed, a status column (LIVE
- * dot-chip / Final / start time in mono), the xG-differential MiniWorm at 160x36, and the
- * possession share as a small tabular percent. The whole row links to the game; hover is the
- * crease wash. Each scored row lazy-fetches its own worm series.
+ * GameRow — row anatomy A (§01, live + final). A game tile on the Well:
+ *   280px teams | 48px score | 100px status | 1fr worm | 128px right.
+ * Teams are two logo+name lines (leader inked); scores are two right-aligned tabular lines;
+ * status is a mono period/clock or FINAL; the worm spans its full column; the right column
+ * carries the live win-probability split bar, or a quiet "Recap" affordance once final.
+ * Each tile lazy-fetches its own worm series, and live tiles also fetch the live win prob.
  */
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import GameLink from '../common/GameLink'
 import MiniWorm from '../common/MiniWorm'
-import { getGameXGWorm } from '../../api/games'
+import SplitBar from './SplitBar'
+import { getGameXGWorm, getGameWinProb } from '../../api/games'
 import type { Game, XGWormPoint } from '../../api/types'
 import { getTeamLogoUrl, getTeamColor, getTeamName } from '../../utils/teams'
 import './GameRow.css'
 
-function TeamLine({ abbrev, score, leader, showScore }: {
-  abbrev: string; score: number | null; leader: boolean; showScore: boolean
-}) {
+function TeamLine({ abbrev, leader }: { abbrev: string; leader: boolean }) {
   return (
-    <div className={`game-row__team ${leader ? 'game-row__team--leader' : ''}`}>
-      <img className="game-row__logo" src={getTeamLogoUrl(abbrev)} alt=""
+    <div className={`gr-team ${leader ? 'gr-team--leader' : ''}`}>
+      <img className="gr-logo" src={getTeamLogoUrl(abbrev)} alt=""
         onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
-      <span className="game-row__name">{getTeamName(abbrev)}</span>
-      {showScore && <span className="game-row__score num">{score ?? 0}</span>}
+      <span className="gr-name">{getTeamName(abbrev)}</span>
+      {/* TODO(data): team overall record ("26-12-4") — needs a standings source keyed by
+          team; not present on the Game list payload. Render nothing until wired. */}
     </div>
   )
 }
 
 export default function GameRow({ game: g }: { game: Game }) {
-  const scored = g.is_live || !g.is_preview
+  const isLive = !!g.is_live
   const [worm, setWorm] = useState<XGWormPoint[] | null>(null)
+  const [homeWp, setHomeWp] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!scored) return
     let active = true
     getGameXGWorm(g.game_id).then((w) => active && setWorm(w)).catch(() => active && setWorm([]))
     return () => { active = false }
-  }, [g.game_id, scored])
+  }, [g.game_id])
+
+  useEffect(() => {
+    if (!isLive) return
+    let active = true
+    getGameWinProb(g.game_id)
+      .then((s) => {
+        if (!active) return
+        const last = s.series[s.series.length - 1]
+        setHomeWp(last ? last.home_wp : null)
+      })
+      // If live win prob isn't served, the split bar is dropped and status shows alone.
+      // TODO(backend): serve a live win-probability feed for in-progress games.
+      .catch(() => active && setHomeWp(null))
+    return () => { active = false }
+  }, [g.game_id, isLive])
 
   const wormData = worm?.map((p) => ({ time: p.game_time_seconds, diff: p.cumulative_xg_diff })) ?? []
 
-  // Leader (for score inking + worm color): the higher score once scored.
-  const awayLeads = scored && (g.away_score ?? 0) > (g.home_score ?? 0)
-  const homeLeads = scored && (g.home_score ?? 0) > (g.away_score ?? 0)
-  const leaderColor = getTeamColor(awayLeads ? g.away_team_abbrev : g.home_team_abbrev)
+  const away = g.away_score ?? 0
+  const home = g.home_score ?? 0
+  const awayLeads = away > home
+  const homeLeads = home > away
+  const tied = away === home
+  // Only the leader/winner is inked; ties (incl. live ties) leave both scores secondary.
 
-  // Possession share (proxy for the "percent" column); label the favored side.
-  const homeShare = g.home_cf_pct != null && g.away_cf_pct != null
-    ? (g.home_cf_pct / (g.home_cf_pct + g.away_cf_pct)) * 100 : null
-  const favShare = homeShare != null ? Math.max(homeShare, 100 - homeShare) : null
-  const favAbbrev = homeShare != null ? (homeShare >= 50 ? g.home_team_abbrev : g.away_team_abbrev) : null
+  const wormColor = tied
+    ? 'var(--color-data-neutral)'
+    : getTeamColor(awayLeads ? g.away_team_abbrev : g.home_team_abbrev)
+
+  const statusText = isLive
+    ? `${(g.period ?? 'LIVE').toUpperCase()}${g.time_remaining ? ` · ${g.time_remaining}` : ''}`
+    // TODO(data): OT/SO suffix ("FINAL · OT") — not present on the Game list payload.
+    : 'FINAL'
 
   return (
-    <Link to={`/games/${g.game_id}`} className={`game-row ${g.is_live ? 'game-row--live' : ''}`}>
-      <div className="game-row__teams">
-        <TeamLine abbrev={g.away_team_abbrev} score={g.away_score} leader={awayLeads} showScore={scored} />
-        <TeamLine abbrev={g.home_team_abbrev} score={g.home_score} leader={homeLeads} showScore={scored} />
+    <GameLink to={`/games/${g.game_id}`} className="game-tile game-row--a">
+      <div className="gr-teams">
+        <TeamLine abbrev={g.away_team_abbrev} leader={awayLeads} />
+        <TeamLine abbrev={g.home_team_abbrev} leader={homeLeads} />
       </div>
 
-      <div className="game-row__status">
-        {g.is_live ? (
-          <span className="game-row__live">
-            <span className="live-dot" />
-            <span className="game-row__live-text">
-              {g.period ?? 'LIVE'}{g.time_remaining ? ` · ${g.time_remaining}` : ''}
-            </span>
-          </span>
-        ) : g.is_preview ? (
-          <span className="game-row__time">{g.game_time || 'TBD'}</span>
+      <div className="gr-scores">
+        <span className={`gr-score num ${awayLeads ? 'gr-score--leader' : ''}`}>{away}</span>
+        <span className={`gr-score num ${homeLeads ? 'gr-score--leader' : ''}`}>{home}</span>
+      </div>
+
+      <div className="gr-status">{statusText}</div>
+
+      <div className="gr-worm" aria-hidden="true">
+        {wormData.length > 1 && (
+          <MiniWorm data={wormData} width={220} height={28} color={wormColor} midline />
+        )}
+      </div>
+
+      <div className="gr-right">
+        {isLive ? (
+          homeWp != null && (
+            <SplitBar homeWp={homeWp} homeAbbrev={g.home_team_abbrev} awayAbbrev={g.away_team_abbrev} />
+          )
         ) : (
-          <span className="game-row__final">Final</span>
+          <span className="gr-recap">Recap →</span>
         )}
       </div>
-
-      <div className="game-row__worm" aria-hidden>
-        {scored && wormData.length > 1 ? (
-          <MiniWorm data={wormData} width={160} height={36} color={leaderColor} midline />
-        ) : homeShare != null ? (
-          <span className="game-row__lean-track">
-            <span className="game-row__lean-fill"
-              style={{ width: `${homeShare}%`, background: getTeamColor(g.home_team_abbrev) }} />
-          </span>
-        ) : null}
-      </div>
-
-      <div className="game-row__pct">
-        {favShare != null && (
-          <>
-            <span className="game-row__pct-val num">{Math.round(favShare)}%</span>
-            <span className="game-row__pct-team">{favAbbrev}</span>
-          </>
-        )}
-      </div>
-    </Link>
+    </GameLink>
   )
 }

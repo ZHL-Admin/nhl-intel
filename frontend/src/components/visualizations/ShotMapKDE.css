@@ -27,3 +27,13 @@
 }
 .shot-map-kde__label em { color: var(--color-text-muted); font-style: normal; }
 .shot-map-kde__label--home { text-align: right; }
+
+/* §6: one generated caption line under the rink (editorial fingerprint). */
+.shot-map-kde__caption {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}

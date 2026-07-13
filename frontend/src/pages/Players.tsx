@@ -6,8 +6,9 @@
  * | Production (GAR)], and the season. The list below is uniform rows (no podium): rank · avatar ·
  * name · bar · value.
  *
- * Cross-position rule: the mixed "All" list sorts by WAR (the only cross-position-comparable unit)
- * and uses a SIMPLE magnitude bar — skater and goalie component vocabularies don't mix in one
+ * Cross-position rule: every scope sorts by floor WAR (assessed WAR − 1 sd), the only
+ * cross-position-comparable unit, so a wide uncertainty band drops a player's rank. The mixed "All" list
+ * uses a SIMPLE magnitude bar — skater and goalie component vocabularies don't mix in one
  * column. Filtered scopes (Forwards/Defense/Goalies) show the rich component breakdown with the
  * right palette and expose the colour legend. Goalie rows carry a "G" tag and a visibly wider
  * uncertainty band (goaltending is less stable; its cross-position order is soft).
@@ -62,6 +63,39 @@ const mapValueRow = (r: ValueRankingRow): Row => ({
   value: r.assessed_war ?? r.war, unit: 'WAR', band: r.war_sd,
   tier: r.tier, tierLabel: r.tier_label,
 })
+
+const floorWar = (r: Row) => r.value - (r.band ?? 0)
+
+/* Backend tiers are cut on the assessed-WAR point estimate, but we rank on floor WAR (assessed − 1 sd).
+   Re-derive each row's tier on floor WAR so the labels track the sort order and separators never
+   interleave. Backend tier ranges are contiguous in assessed-WAR space, so we recover each tier's edges
+   from the loaded pool (per position group — skaters and goalies use different ladders) and classify
+   every row's floor into that ladder. A wide band drops a player a tier; a tight one keeps it. */
+function reassignTiersByFloor(rows: Row[]): Row[] {
+  const ladders: Record<string, { tier: string; label?: string | null; lo: number }[]> = {}
+  for (const kind of ['skater', 'goalie']) {
+    const agg: Record<string, { label?: string | null; min: number; max: number }> = {}
+    for (const r of rows) {
+      if (r.entityKind !== kind || !r.tier) continue
+      const a = agg[r.tier] ?? (agg[r.tier] = { label: r.tierLabel, min: r.value, max: r.value })
+      a.min = Math.min(a.min, r.value); a.max = Math.max(a.max, r.value)
+    }
+    const ordered = Object.entries(agg)
+      .map(([tier, a]) => ({ tier, ...a }))
+      .sort((x, y) => y.min - x.min)   // high tier -> low tier
+    // lo of each tier = boundary with the next-lower tier (midpoint of the gap); bottom tier catches all.
+    ladders[kind] = ordered.map((t, i) => ({
+      tier: t.tier, label: t.label,
+      lo: i === ordered.length - 1 ? -Infinity : (t.min + ordered[i + 1].max) / 2,
+    }))
+  }
+  return rows.map((r) => {
+    if (!r.tier) return r
+    const f = floorWar(r)
+    const hit = ladders[r.entityKind].find((t) => t.lo <= f) ?? ladders[r.entityKind].at(-1)!
+    return { ...r, tier: hit.tier, tierLabel: hit.label }
+  })
+}
 
 /* ============================================================================
    Shared-axis interval bar (M3.5): a thin track over the pool's WAR domain, a ±1 sd band, and a
@@ -120,6 +154,10 @@ function Leaderboard({ show, season, jumpTarget, onJumpHandled, focusedId, onCle
     const scope = mixed ? 'all' : show === 'G' ? 'goalies' : 'skaters'
     const position = (!mixed && show !== 'G') ? show : 'ALL'
     getValueRankings(scope, position, season, FETCH_ALL).then((rs) => rs.map(mapValueRow))
+      // Rank by floor WAR (assessed WAR − 1 sd), not the point estimate: a lower, tighter
+      // projection outranks a higher one with a wide band (e.g. McDavid over Swayman).
+      .then((d) => d.sort((a, b) => floorWar(b) - floorWar(a)))
+      .then(reassignTiersByFloor)   // re-cut tiers on floor WAR so labels track the sort order
       .then((d) => { if (active) { setRows(d); setRowsKey(fetchKey) } })
       .catch(() => active && setError('Could not load rankings.'))
     return () => { active = false }
@@ -160,8 +198,8 @@ function Leaderboard({ show, season, jumpTarget, onJumpHandled, focusedId, onCle
 
   // one-line caption (M3.5 item e): ranking key + band meaning + qualified count.
   const caption = mixed
-    ? `Ranked by assessed WAR, the reliability-shrunk estimate — skaters and goalies on one scale. Bands show ±1 sd; goalie bands are wide, so the order is soft. ${rows?.length ?? 0} qualified.`
-    : `Ranked by assessed WAR, the reliability-shrunk estimate${show === 'G' ? ' — goaltending is low-signal, read tiers not exact ranks' : ''}. Bands show ±1 sd. ${rows?.length ?? 0} qualified.`
+    ? `Ranked by floor WAR (assessed WAR − 1 sd) — skaters and goalies on one scale, so a wide band drops a player's rank. Bands show ±1 sd; goalie bands are wide, so the order is soft. ${rows?.length ?? 0} qualified.`
+    : `Ranked by floor WAR (assessed WAR − 1 sd)${show === 'G' ? ' — goaltending is low-signal, read tiers not exact ranks' : ''}. Bands show ±1 sd. ${rows?.length ?? 0} qualified.`
 
   const nPages = rows ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1
   const safePage = Math.min(page, nPages - 1)

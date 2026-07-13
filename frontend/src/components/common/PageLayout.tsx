@@ -24,7 +24,9 @@ function PageLayout({ children }: PageLayoutProps) {
       <NavBar />
       <CommandPalette />
       <main className="page-layout">
-        <div className="page-layout__container">
+        {/* The Well (00b): one white sheet on the ice, wrapping the whole page body incl. the
+            Sheet header. The footer sits on the canvas below it, container width. */}
+        <div className="page-layout__well">
           {children}
         </div>
         <FooterMeta />

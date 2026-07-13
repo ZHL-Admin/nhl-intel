@@ -1,4 +1,4 @@
-.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate assessment assessment-validate prior-quality quality-context goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate roster-builder-calibrate roster-player-projection contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
+.PHONY: setup dbt-build backend frontend test edge-refresh roster-refresh rapm gar gar-validate assessment assessment-validate prior-quality quality-context goalie-gar goalie-gar-validate overall linefit team-needs trade-fit-validate archetypes-v2 radar deployment archetype-explainer precompute-serving export-serving verify-serving roster-forecast roster-forecast-validate baseline-consistency roster-builder-calibrate roster-player-projection contracts-load contracts-match contract-value futures-ingest futures-value trade-data trade-fit-validate trade-engine-validate
 
 # --- DuckDB serving layer ----------------------------------------------------
 # The API serves request-time reads from a local DuckDB file (built nightly from BigQuery),
@@ -127,6 +127,12 @@ roster-forecast:
 
 roster-forecast-validate:
 	python -m models_ml.validate_roster_forecast
+
+# Hard gate: the Roster Builder's unedited baseline reproduces the offseason forecast's projected points
+# for every team (shared R_current baseline; points_delta == 0). Reads the local serving file, so run
+# after export-serving. Non-zero exit if any team drifts.
+baseline-consistency:
+	SERVING_BACKEND=duckdb python -m scripts.validate_baseline_consistency
 
 # Roster Builder absolute-rating calibration: fit LEAGUE_AVG_LINEUP_WAR + WAR_TO_RATING and validate
 # the chain (realized-WAR<->rating reconciliation, projected-points MAE vs actual). Reads only; run

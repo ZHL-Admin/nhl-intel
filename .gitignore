@@ -74,3 +74,12 @@ data/serving/
 # Local server logs + agent scratch output (not source)
 *.log
 frontend/.dx/
+
+# Research projects (NIR/research/{project}): never commit their data or venvs.
+# Each project is removable by deleting its folder with zero impact on the site.
+research/*/data/
+research/*/.venv/
+research/*/.pytest_cache/
+research/**/*.duckdb
+research/**/*.parquet
+research/reports/figures/*.png

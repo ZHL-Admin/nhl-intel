@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   height: var(--nav-height);
-  background: var(--color-bg-base);
+  background: var(--color-accent-light);
   border-bottom: 1px solid var(--color-border-subtle);
   z-index: 100;
   transition: background var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out);
@@ -39,9 +39,9 @@
 .navbar__logo svg { flex-shrink: 0; }
 /* Wordmark: Newsreader 500, 18px (§6.1). */
 .navbar__logo .rt-logo__wordmark {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
   color: var(--color-text-primary);
 }

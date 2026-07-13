@@ -1,13 +1,15 @@
+/* 00b: blessed as a system primitive. Sits on the canvas below the Well, container width,
+   its top rule aligned to the Well's outer edges. */
 .footer-meta {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  max-width: var(--page-max, 1280px);
+  max-width: var(--container-max);
   margin: var(--space-8) auto var(--space-6);
-  padding: var(--space-4) var(--space-4) 0;
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--color-border-subtle);
   font-size: 13px;
   color: var(--color-text-muted, var(--color-text-tertiary));
 }

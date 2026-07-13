@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { PageLayout, PageCard, StatCard, Badge, SkeletonLoader, ComponentStackBar, IdentityHeader, PlayerAvatar, PlayerValueLadder, Tabs, Select, RailProvider, Rail, Note, Ref } from '../components/common'
 import type { StackSegment, PlayerValueLadderRow } from '../components/common'
+import { gameButtonProps } from '../components/common/GameLink'
 import { COMPOSITE_COMPONENTS, GOALIE_VALUE_COMPONENTS } from '../config/metrics'
 import ShotMap from '../components/visualizations/ShotMap'
 import StripPlot from '../components/visualizations/StripPlot'
@@ -1337,7 +1338,7 @@ function PlayerProfile() {
                           <tbody>
                             {sortedGamelog.map((game) => (
                               <tr key={game.game_id} className="player-profile__table-row"
-                                onClick={() => handleGameClick(game.game_id)}>
+                                {...gameButtonProps(() => handleGameClick(game.game_id))}>
                                 <td>{formatDate(game.game_date)}</td>
                                 <td className="player-profile__opponent-cell">vs {game.opponent_abbrev}</td>
                                 <td className="mono">{formatTOI(game.toi)}</td>

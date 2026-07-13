@@ -526,6 +526,38 @@ def absolute_rating(total_lineup_war: float, chemistry_adj: float = 0.0, cfg: di
     return ((total_lineup_war - cfg["LEAGUE_AVG_LINEUP_WAR"]) * cfg["WAR_TO_RATING"]) + chemistry_adj
 
 
+def predictive_base(hist_desc: list, cfg: dict = CFG):
+    """R_measured — the ONE shared MEASURED team anchor for BOTH the offseason forecast and the Roster
+    Builder. A 2-year recency-weighted, league-mean-regressed season-final rating (it beat the latest
+    single season at predicting next-year strength — Handoff 13). hist_desc = the team's season-final
+    measured ratings, MOST RECENT FIRST; returns None if empty. Weights ROSTER_BUILDER_BASE_W, regression-
+    to-league-mean strength ROSTER_BUILDER_BASE_K. Pure + unit-tested (extracted from the duplicated
+    implementations in tools._team_predictive_base and project_roster_player.predictive_base)."""
+    if not hist_desc:
+        return None
+    W = cfg["ROSTER_BUILDER_BASE_W"]; K = cfg["ROSTER_BUILDER_BASE_K"]
+    m = min(len(hist_desc), len(W))
+    wt = sum(W[j] for j in range(m))
+    base = sum(W[j] * hist_desc[j] for j in range(m)) / wt
+    return (wt * base) / (wt + K)   # regress toward the league mean (0)
+
+
+def predictive_base_for_target(series, target_yr: int, cfg: dict = CFG):
+    """predictive_base for `target_yr` (the upcoming season's start year) from a [(yr, rating), ...]
+    series in any order: blends only seasons with yr < target_yr, most recent first."""
+    hist = sorted(((yr, r) for yr, r in series if yr < target_yr), reverse=True)
+    return predictive_base([r for _, r in hist], cfg)
+
+
+def hybrid_projected_rating(built_bottomup: float, retained_share: float, r_current: float,
+                            actual_bottomup: float) -> float:
+    """The Roster Builder's unified hybrid: R_bottomup(built) + w*(R_current - R_bottomup(current actual)).
+    R_current is the offseason forecast's projected rating (the shared 'current team' number). No edits ->
+    built == actual and w == 1 -> the projection collapses to R_current (points_delta 0); a full rebuild ->
+    w == 0 -> pure bottom-up. Pure + unit-tested."""
+    return built_bottomup + retained_share * (r_current - actual_bottomup)
+
+
 def forecast_team(base_players: list[PlayerProj], updated_players: list[PlayerProj],
                   base_rating: float, base_components: dict, n_moves: int | None = None,
                   xgf_share_delta: float | None = None, cfg: dict = CFG,
@@ -720,6 +752,24 @@ def load_team_ratings(bq, season: str) -> dict:
         out[int(x.team_id)] = {"rating": float(x.total_rating), "play_5v5": float(x.play_5v5),
                                "finishing": float(x.finishing), "goaltending": float(x.goaltending),
                                "special_teams": float(x.special_teams)}
+    return out
+
+
+def load_team_rating_series(bq) -> dict:
+    """team_id -> [(yr, rating), ...] season-final measured rating per team-season (all seasons) — the
+    history the shared predictive_base anchor blends. One row per (team, season): the last game's rating."""
+    df = bq.query_df(f"""
+        WITH r AS (
+            SELECT team_id, season, total_rating,
+                   ROW_NUMBER() OVER (PARTITION BY team_id, season
+                                      ORDER BY game_date DESC, games_played DESC) AS rn
+            FROM {bq.models('team_ratings')})
+        SELECT team_id, season, total_rating FROM r WHERE rn = 1""")
+    out: dict = {}
+    for _, x in df.iterrows():
+        out.setdefault(int(x.team_id), []).append((int(str(x.season)[:4]), float(x.total_rating)))
+    for t in out:
+        out[t].sort()
     return out
 
 
@@ -985,41 +1035,59 @@ def offseason_updated_membership(bq, base_season: str, min_games: int) -> dict:
     than gating on its label. Universe = live-roster players UNION the base-season robust roster, which
     excludes stale fallback-only players (retired/in-Europe) that would otherwise be phantom arrivals.
 
-    PUBLISHED ROSTER IS AUTHORITATIVE: the base-season team is only a fallback for a club that has NO
-    current published roster. Once a team's live roster is published (all 32 are, in the offseason), it
-    is the complete statement of that club's membership — so a base-season holdover who is absent from
-    his old team's published roster has DEPARTED (released/unsigned UFA), not merely "not yet re-listed".
-    Keeping him would leave released players (e.g. a bought-out veteran) phantom-rostered all summer and
-    crowd real signings out of the projected lineup. He is dropped here; his vacated slot fills at
-    replacement. A player still counts as MOVED only when he is actively on a different club's live roster.
+    PUBLISHED ROSTER IS AUTHORITATIVE, BUT ONLY FOR THE ACTIVE ROSTER: the NHL published roster
+    (stg_roster_current) lists a club's ACTIVE NHL players — it does NOT include non-roster / AHL players
+    who are still team property. So "on the base roster but absent from the published roster" does NOT by
+    itself mean DEPARTED: a signed prospect sent to the AHL (e.g. Axel Sandin-Pellikka) looks identical to
+    a released UFA in the roster feed alone. We disambiguate with CONTRACTS: a base-season holdover who is
+    still under a contract covering the upcoming season with his base team is KEPT (non-roster property,
+    "returning"); a holdover with no such contract AND not on any live roster has truly DEPARTED
+    (unsigned UFA / retiree) and is dropped, his slot filling at replacement. A player still counts as
+    MOVED only when he is actively on a DIFFERENT club's live roster. This mirrors the Roster Builder's
+    current-roster rule (backend _team_current_members), so the two tools show the same current roster.
     """
+    upcoming = _season_year(base_season) + 2   # a contract covering next season has expiry_year >= this
+    # ROW_NUMBER (not ARRAY_AGG(STRUCT ... LIMIT 1)[OFFSET]) so this is DuckDB-compatible as well as BQ:
+    # the Roster Builder calls this SAME function at serving time (backend _team_current_members) so the
+    # two tools start from the exact same current roster. Semantics are identical (latest base-season
+    # game fixes the team; COUNT floors cup-of-coffee call-ups).
     sql = f"""
     WITH base AS (
-        SELECT player_id, e.team_id AS team_id, e.position_code AS position_code,
-               e.first_name || ' ' || e.last_name AS name FROM (
-            SELECT player_id, COUNT(*) AS gp,
-                   ARRAY_AGG(STRUCT(team_id, position_code, first_name, last_name)
-                             ORDER BY game_id DESC LIMIT 1)[OFFSET(0)] AS e
+        SELECT player_id, team_id, position_code, first_name || ' ' || last_name AS name FROM (
+            SELECT player_id, team_id, position_code, first_name, last_name,
+                   ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_id DESC) AS rn,
+                   COUNT(*) OVER (PARTITION BY player_id) AS gp
             FROM {bq.staging('stg_rosters')}
             WHERE season = '{base_season}' AND {GAME_TYPE_FILTER}
-            GROUP BY player_id
-        ) WHERE gp >= {int(min_games)}
+        ) WHERE rn = 1 AND gp >= {int(min_games)}
     ),
     live AS (
         SELECT player_id, team_id, COALESCE(position_code, '') AS position_code,
                COALESCE(full_name, '') AS name
         FROM {bq.staging('stg_roster_current')} WHERE team_id IS NOT NULL
     ),
-    teams_with_live AS (SELECT DISTINCT team_id FROM live)
-    SELECT player_id,
+    teams_with_live AS (SELECT DISTINCT team_id FROM live),
+    tm AS (SELECT DISTINCT team_id, team_abbrev FROM {bq.mart('mart_team_game_stats')}
+           WHERE team_abbrev IS NOT NULL),
+    -- (player, team_id) pairs the player is under contract with for the upcoming season -> still property
+    contracted AS (
+        SELECT DISTINCT c.player_id, tm.team_id
+        FROM {bq.mart('mart_player_contracts')} c JOIN tm ON tm.team_abbrev = c.contract_team
+        WHERE c.contract_status IN ('signed', 'rfa_projected') AND c.expiry_year >= {upcoming}
+    )
+    SELECT COALESCE(l.player_id, b.player_id) AS player_id,
            COALESCE(l.team_id, b.team_id) AS team_id,
            COALESCE(NULLIF(l.position_code, ''), b.position_code) AS position_code,
            COALESCE(NULLIF(l.name, ''), b.name) AS name
-    FROM live l FULL OUTER JOIN base b USING (player_id)
-    -- Keep a player iff he is on a live roster, OR his base team has no published roster at all
-    -- (early offseason / a team we could not pull). Otherwise he is a real departure and is dropped.
+    FROM live l FULL OUTER JOIN base b ON b.player_id = l.player_id
+    LEFT JOIN contracted ct ON ct.player_id = COALESCE(l.player_id, b.player_id)
+                           AND ct.team_id = b.team_id
+    -- Keep a player iff: he is on a live roster (his live team); OR his base team has no published roster
+    -- at all (early offseason / unpulled club); OR he is still under contract with his base team (a signed
+    -- non-roster/AHL holdover). Otherwise he has departed and is dropped.
     WHERE l.team_id IS NOT NULL
        OR b.team_id NOT IN (SELECT team_id FROM teams_with_live)
+       OR ct.player_id IS NOT NULL
     """
     out: dict = {}
     for _, x in bq.query_df(sql).iterrows():
@@ -1163,11 +1231,15 @@ def main() -> None:
     effpos = load_effective_position(bq)   # forward listed-position -> effective (faceoff-derived) override
     hand = load_handedness(bq)             # shoots, for D side + winger-side tiebreak in seeding
     seed_units = load_seed_units(bq, base_season)   # team -> observed base-season 5v5 units (deployment seeding)
+    # Shared anchor: the 2-year regressed predictive_base for the UPCOMING season (seasons < target year).
+    series = load_team_rating_series(bq)
+    target_yr = _season_year(updated_season)
+    anchors = {tid: predictive_base_for_target(series.get(tid, []), target_yr) for tid in ratings}
 
     forecasts, move_rows = _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data,
                                     aging, ages, archetypes, trans, run_id, sample=args.sample,
                                     goalie_workload=goalie_workload, effpos=effpos, hand=hand,
-                                    seed_units=seed_units)
+                                    seed_units=seed_units, anchors=anchors)
     _rank_and_finalize(forecasts)
     report = _write_report(forecasts, move_rows, trans, run_id, base_season, window, args)
     print(f"report -> {report}")
@@ -1252,11 +1324,13 @@ def _style_note(bq, team_id, upd_lineup, season):
 
 
 def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ages, archetypes,
-             trans, run_id, sample=None, goalie_workload=None, effpos=None, hand=None, seed_units=None):
+             trans, run_id, sample=None, goalie_workload=None, effpos=None, hand=None, seed_units=None,
+             anchors=None):
     goalie_workload = goalie_workload or {}
     effpos = effpos or {}
     hand = hand or {}
     seed_units = seed_units or {}
+    anchors = anchors or {}   # team_id -> shared predictive_base anchor; falls back to the single-season
     scored_at = datetime.now(timezone.utc).isoformat()
     names = load_player_names(bq)
     team_ids = sorted(set(base_mem) | set(upd_mem))
@@ -1273,11 +1347,17 @@ def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ag
         upd_players = _projected_players(tid, upd_mem, skater_data, goalie_data, aging, ages,
                                          archetypes, project_value=True, effpos=effpos)
         rc = ratings[tid]
+        # Anchor on the SHARED predictive_base (2-year regressed measured rating) when available, so the
+        # offseason forecast and the Roster Builder start from the same measured level; fall back to the
+        # single end-of-season rating only if a team has no rating history for the blend.
+        base_rating = anchors.get(tid)
+        if base_rating is None:
+            base_rating = rc["rating"]
         gshares = goalie_workload.get(tid)   # None -> forecast_team uses the league-default split
         tunits = seed_units.get(tid)         # observed base-season 5v5 units (deployment seeding)
         # n_moves is derived inside forecast_team from the ledger (lineup-relevant turnover), not the
         # full-roster symmetric difference (a season's call-ups are not offseason moves).
-        f = forecast_team(base_players, upd_players, rc["rating"], rc,
+        f = forecast_team(base_players, upd_players, base_rating, rc,
                           xgf_share_delta=None, goalie_shares=gshares,
                           seed_units=tunits, hand=hand, effpos=effpos)  # chemistry filled next
         # The line-fit / style overlays are only meaningful when the roster actually changed. Skip
@@ -1286,7 +1366,7 @@ def _run_all(bq, ratings, base_mem, upd_mem, skater_data, goalie_data, aging, ag
         has_moves = any(m["move_type"] in ("arrival", "departure") for m in f["ledger"])
         if has_moves:
             chem_delta = _chemistry_delta(f["base_lineup"], f["updated_lineup"], trans.split("->")[0])
-            f = forecast_team(base_players, upd_players, rc["rating"], rc, xgf_share_delta=chem_delta,
+            f = forecast_team(base_players, upd_players, base_rating, rc, xgf_share_delta=chem_delta,
                               goalie_shares=gshares, seed_units=tunits, hand=hand, effpos=effpos)
             f["style_note"] = _style_note(bq, tid, f["updated_lineup"], trans.split("->")[0])
         else:

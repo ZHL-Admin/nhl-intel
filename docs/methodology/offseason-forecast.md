@@ -53,11 +53,21 @@ The live view always targets the upcoming offseason: BASE = latest completed sea
 The live feed is refreshed daily and reflects offseason signings and trades AS THEY HAPPEN, even
 while it is still labelled the prior season (NHL rolls the season label later) — so we read team
 membership from it directly rather than gating on its label. Each player's UPDATED team is his live
-team if he is on a published roster, else his base-season END team (a fallback so AHL/unsigned
-holdovers do not falsely depart); the universe is (live ∪ base), which excludes stale fallback-only
-players. A player only counts as moved when actively on a different club's live roster. The ledger
-therefore grows through the summer as moves land; before the first move a team reads "no moves logged
-yet", and no-move teams skip the line-fit/style overlays so they are cheap to compute.
+team if he is on a published roster; a base-season holdover who is NOT on any published roster is kept
+on his base team **only if he is still under a contract covering the upcoming season** with that team.
+
+That contract check is the key correctness fix. The NHL published roster (`stg_roster_current`) lists a
+club's **active** NHL players — it does NOT include non-roster / AHL players who are still team
+property. So "on the base roster but off the published roster" is ambiguous in the roster feed alone: a
+signed prospect sent to the AHL (e.g. Axel Sandin-Pellikka) looks identical to a released UFA. We
+disambiguate with `mart_player_contracts`: a holdover under a signed/RFA contract (`expiry_year ≥` the
+upcoming season) with his base team is **kept** (non-roster property, reads "returning"); a holdover
+with no such contract and no live-roster spot has genuinely **departed** (unsigned UFA / retiree) and is
+dropped, his slot filling at replacement. A player counts as MOVED only when actively on a DIFFERENT
+club's live roster. This is the SAME current-roster rule the Roster Builder applies
+(`backend/services/tools._team_current_members`), so the two tools start from the same roster: the
+active roster ∪ signed non-roster players, minus phantom latest-game UFAs. The ledger grows through the
+summer as moves land; before the first move a team reads "no moves logged yet".
 
 The `--backtest` path is the only one that targets a COMPLETED offseason — `2024-25 END -> 2025-26
 OPENING` — purely to measure calibration against what actually happened.
@@ -85,9 +95,14 @@ view (base = latest completed season) and the 2024-25 -> 2025-26 backtest (base 
 constants live in `config.ROSTER_FORECAST`; `GOALS_PER_WIN` is asserted equal to `GAR_CONFIG` at
 import so a WAR delta and the team rating share one goals scale.
 
-1. **Base.** The team's last `team_ratings` row of the base season (`total_rating` + the four
-   weighted components `play_5v5` / `finishing` / `goaltending` / `special_teams`) and its
-   season-end roster (the BASE join above).
+1. **Base.** The team's measured anchor is the **shared `predictive_base`** — a 2-year recency-weighted,
+   league-mean-regressed `team_ratings` (`project_roster_forecast.predictive_base`, the SAME anchor the
+   Roster Builder uses), which predicts next-year strength better than the latest single season. The four
+   weighted components (`play_5v5` / `finishing` / `goaltending` / `special_teams`) still come from the
+   base season's last row (`load_team_ratings`); only the scalar rating anchor is the blend. Plus the
+   team's season-end roster (the BASE join above). *(The Roster Builder seeds its unedited baseline from
+   THIS tool's projected rating — see roster-builder.md → Cross-tool consistency — so the two tools show
+   one "current team" number.)*
 
 2. **Diff.** Updated roster minus base roster, each player classified `arrival` / `departure` /
    `returning`. Prior value comes from `player_gar` (skaters) or `goalie_gar` (goalies) at the

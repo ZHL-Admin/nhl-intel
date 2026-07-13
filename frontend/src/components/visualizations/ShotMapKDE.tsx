@@ -11,7 +11,6 @@ import ChartPanel from '../common/ChartPanel'
 import SkeletonLoader from '../common/SkeletonLoader'
 import GoalPopup, { type GoalInfo, buildGoalInfoMap } from '../games/GoalPopup'
 import { getGameShots, getGameGoals } from '../../api/games'
-import { getChartColors } from '../../utils/chartTheme'
 import type { ShotAttempt, GoalDetail } from '../../api/types'
 import './ShotMapKDE.css'
 
@@ -19,9 +18,12 @@ interface ShotMapKDEProps {
   gameId: number
   homeTeamAbbrev: string
   awayTeamAbbrev: string
+  /** Pole ink (§0): home passes --line-blue, away passes --line-red. Not team identity. */
   homeTeamColor: string
   awayTeamColor: string
   situation: string
+  /** One generated caption line (§6). */
+  caption?: string
 }
 
 // Rink in feet: x ∈ [-100, 100], y ∈ [-42.5, 42.5]. SVG works in a [0,200] × [0,85] pixel box.
@@ -38,14 +40,26 @@ function normalize(s: ShotAttempt, attackRight: boolean, team: string): NShot {
   return { x: nx, y: ny, goal: s.shot_type === 'goal', src: s, team }
 }
 
-function densityPaths(shots: NShot[], color0: string[]): { d: string; fill: string; opacity: number }[] {
+// Pole heat ramp (§6): a single pole ink ramped from a faint tint to full saturation. The percentage
+// number is the only digit that varies, so d3's string interpolation walks it cleanly.
+function poleRamp(pole: string): string[] {
+  return [
+    `color-mix(in srgb, ${pole} 14%, var(--color-bg-surface))`,
+    `color-mix(in srgb, ${pole} 36%, var(--color-bg-surface))`,
+    `color-mix(in srgb, ${pole} 58%, var(--color-bg-surface))`,
+    `color-mix(in srgb, ${pole} 80%, var(--color-bg-surface))`,
+    pole,
+  ]
+}
+
+function densityPaths(shots: NShot[], pole: string): { d: string; fill: string; opacity: number }[] {
   const pts = shots.map((s) => toPx(s.x, s.y))
   if (pts.length < 3) return []
   const density = d3.contourDensity<[number, number]>()
     .x((d) => d[0]).y((d) => d[1])
     .size([200, 85]).cellSize(2).bandwidth(6).thresholds(12)(pts)
   const max = d3.max(density, (c) => c.value) || 1
-  const heat = d3.scaleLinear<string>().domain([0, 0.25, 0.5, 0.75, 1]).range(color0).clamp(true)
+  const heat = d3.scaleLinear<string>().domain([0, 0.25, 0.5, 0.75, 1]).range(poleRamp(pole)).clamp(true)
   const geo = d3.geoPath()
   return density.map((c) => {
     const t = c.value / max
@@ -53,7 +67,7 @@ function densityPaths(shots: NShot[], color0: string[]): { d: string; fill: stri
   })
 }
 
-export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev }: ShotMapKDEProps) {
+export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev, homeTeamColor, awayTeamColor, caption }: ShotMapKDEProps) {
   const [shots, setShots] = useState<{ home: ShotAttempt[]; away: ShotAttempt[] } | null>(null)
   const [goals, setGoals] = useState<GoalDetail[]>([])
 
@@ -75,18 +89,18 @@ export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev }: S
     if (!shots) return null
     const homeN = shots.home.map((s) => normalize(s, true, homeTeamAbbrev))
     const awayN = shots.away.map((s) => normalize(s, false, awayTeamAbbrev))
-    const heat = getChartColors().seqHeat
     const outside = [...homeN, ...awayN].filter((p) => Math.abs(p.x) > 100 || Math.abs(p.y) > 42.5).length
     // Sanity smoke test (§V8f): attempts outside the rink after normalization should be ~0.
     // eslint-disable-next-line no-console
     console.log(`[shot-map] outside-rink after normalize: ${outside} / ${homeN.length + awayN.length}`)
     return {
-      homePaths: densityPaths(homeN, heat),
-      awayPaths: densityPaths(awayN, heat),
+      // Pole heat (§0/§6): home end reads blue, away end reads red — team ink is retired here.
+      homePaths: densityPaths(homeN, homeTeamColor),
+      awayPaths: densityPaths(awayN, awayTeamColor),
       goals: [...homeN, ...awayN].filter((s) => s.goal),
       awayN, homeN, outside,
     }
-  }, [shots, homeTeamAbbrev, awayTeamAbbrev])
+  }, [shots, homeTeamAbbrev, awayTeamAbbrev, homeTeamColor, awayTeamColor])
 
   if (!shots) return <div className="shot-map-kde"><SkeletonLoader height={340} /></div>
   if (!model || (model.awayN.length + model.homeN.length) === 0) return null
@@ -138,7 +152,10 @@ export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev }: S
             const [cx, cy] = toPx(g.x, g.y)
             return (
               <circle
-                key={`g${i}`} cx={cx} cy={cy} r={2.2} className="rink__goal-dot" style={{ cursor: 'pointer' }}
+                key={`g${i}`} cx={cx} cy={cy} r={2.2}
+                fill={g.team === homeTeamAbbrev ? homeTeamColor : awayTeamColor}
+                stroke="var(--color-bg-surface)" strokeWidth={0.9}
+                style={{ cursor: 'pointer' }}
                 onClick={(e) => setPopup({
                   anchor: { x: e.clientX, y: e.clientY },
                   goal: goalMap.get(`${g.src.scorer_id}:${g.src.time_in_period}`) ?? {
@@ -159,6 +176,7 @@ export default function ShotMapKDE({ gameId, homeTeamAbbrev, awayTeamAbbrev }: S
           <span className="shot-map-kde__label">{awayTeamAbbrev} · {model.awayN.length} attempts <em>(attacking left)</em></span>
           <span className="shot-map-kde__label shot-map-kde__label--home">{homeTeamAbbrev} · {model.homeN.length} attempts <em>(attacking right)</em></span>
         </div>
+        {caption && <p className="shot-map-kde__caption">{caption}</p>}
       </div>
     </ChartPanel>
     {popup && <GoalPopup goal={popup.goal} anchor={popup.anchor} onClose={() => setPopup(null)} />}
