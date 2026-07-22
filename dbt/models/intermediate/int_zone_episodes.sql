@@ -227,6 +227,9 @@ strength_ov as (
 select
     ep.game_id, ep.season, ep.game_date, ep.period_number,
     ep.defending_team_id, ep.attacker_team_id,
+    -- deterministic episode surrogate key (unique: one attacker vs one defender starting at one instant)
+    concat(cast(ep.game_id as string), '-', cast(ep.defending_team_id as string), '-',
+           cast(cast(round(ep.start_elapsed * 10) as int64) as string)) as episode_id,
     ep.start_elapsed, ep.end_elapsed, (ep.end_elapsed - ep.start_elapsed) as duration_seconds,
     -- start_type
     case
