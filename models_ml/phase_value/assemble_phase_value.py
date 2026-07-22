@@ -37,6 +37,7 @@ MODEL_VERSION = "phase_value_v1"
 ARTDIR = "artifacts/phase_value"
 REPORT = "artifacts/phase_value/overlap_report.md"
 CORR_TOI_MIN = 200          # qualified set for correlations (mirrors RAPM report threshold)
+CORR_TOI_HIGH = 1000        # spec's high-cohort correlation threshold (reported alongside ≥200)
 COMPONENTS = ["deny", "suppress", "escape", "deny_rush"]
 
 
@@ -63,7 +64,9 @@ def _price(df, k):
     df["suppress_g60"] = df["suppress"] * (s_in / 60.0) * cal
     df["escape_rate"] = df["escape"]                       # published as a rate (v1)
     df["pv_def_g60"] = df["deny_g60"] + df["suppress_g60"]
-    df["pv_def_g60_sd"] = np.nan                           # pending within-resample composite (§8.1), not quadrature
+    # pv_def_g60_sd comes from train's within-resample composite bootstrap (§8.1); keep it if present
+    if "pv_def_g60_sd" not in df.columns:
+        df["pv_def_g60_sd"] = np.nan
     return df
 
 
@@ -88,11 +91,11 @@ def _weighted_corr(df, cols, wcol):
     return corr, int(ok.sum())
 
 
-def _corr_block(W, sub, label):
+def _corr_block(W, sub, label, thr):
     cols = COMPONENTS + ["pv_def_g60", "def_impact"]
     have = [c for c in cols if c in sub.columns]
     corr, n = _weighted_corr(sub, have, "def_in_sec")
-    W(f"### {label} — exposure-weighted correlations (qualified: toi ≥ {CORR_TOI_MIN} min, n={n})")
+    W(f"### {label} — exposure-weighted correlations (qualified: toi ≥ {thr} min, n={n})")
     W("| | " + " | ".join(have) + " |")
     W("|" + "---|" * (len(have) + 1))
     for i, r in enumerate(have):
@@ -101,7 +104,7 @@ def _corr_block(W, sub, label):
     W("")
 
 
-def _report(assembled, diags, k):
+def _report(assembled, diags, cap, k):
     L = []; W = L.append
     W("# Phase Value — Stage 4 overlap report (REPORT-ONLY; pre-validation review)\n")
     W(f"Model `{MODEL_VERSION}`. Components are defence-side, higher = better. Accounting priced with "
@@ -110,7 +113,11 @@ def _report(assembled, diags, k):
 
     # (d) wiring gate per target per window
     W("## (d) Wiring gate — team-season reconciliation per target (hard gate r ≥ 0.80)")
-    W("Exposure-weighted actual vs model-predicted target aggregated by (defending team, season).\n")
+    W("Exposure-weighted actual vs model-predicted target aggregated by (defending team, season). This "
+      "is a WIRING DIAGNOSTIC, not a reliability test: the single-season fits are the sharp check "
+      "(r≈0.97–0.99); the 3-season window's softening (deny 0.819) is expected shrinkage from "
+      "season-weighting + replacement pooling, and both the actual and predicted sides use the same "
+      "0.3/0.6/1.0 season weights (PV-D019 / owner ruling 2).\n")
     W("| window | fit | wiring_r | gate | n_team_seasons |")
     W("|---|---|---|---|---|")
     for _, r in diags.sort_values(["window", "fit"]).iterrows():
@@ -127,26 +134,26 @@ def _report(assembled, diags, k):
         W(f"| {r['window']} | {r['fit']} | {r['coef_spread']:.4f} | {r['mean_boot_sd']:.4f} | {r['spread_over_sd']:.2f} |")
     W("")
 
-    # (b) component correlation matrix incl vs def_impact, per window
+    # (b) component correlation matrix incl vs def_impact, per window — BOTH cohorts (≥200 and ≥1000 min)
     W("## (b) Component overlap — correlation matrix incl. vs def_impact")
+    W("Reported at two cohorts: the ≥200-min set and the spec's ≥1000-min cohort.\n")
     for win in sorted(assembled["season_window"].unique()):
-        sub = assembled[(assembled["season_window"] == win) & (assembled["toi_min"] >= CORR_TOI_MIN)]
-        if len(sub) >= 20:
-            _corr_block(W, sub, win)
+        for thr in (CORR_TOI_MIN, CORR_TOI_HIGH):
+            sub = assembled[(assembled["season_window"] == win) & (assembled["toi_min"] >= thr)]
+            if len(sub) >= 20:
+                _corr_block(W, sub, f"{win} (toi ≥ {thr})", thr)
 
-    # (c) PV-D011 capture counts
+    # (c) PV-D011 capture counts — per-EPISODE (k=1), from the design capture totals (PV-D019)
     W("## (c) PV-D011 captured counts (zero-duration goal episodes are kept)")
-    W("Defence-side attributed totals; the floor is on stint totals (≥5s), never per-episode, so these "
-      "zero-duration starts/xG remain in the fits.\n")
-    W("| window | Σ def_ep_nonfo | Σ ep_nonfo_zerodur | zerodur % | Σ def_xg_in | Σ xg_in_zerodur | zerodur xG % |")
+    W("Per-EPISODE totals (k=1) direct from the design (home+away direction-summed = each episode once; "
+      "NOT the per-defender ×5 aggregation — PV-D019). The ≥5s floor is on stint-direction totals, never "
+      "per-episode, so these zero-duration starts/xG remain in Fit A's counts and Fit B's xG mass.\n")
+    W("| window | nonfo episodes | zero-dur starts | zerodur % | in-zone xG | zero-dur xG | zerodur xG % |")
     W("|---|---|---|---|---|---|---|")
-    for win in sorted(assembled["season_window"].unique()):
-        s = assembled[assembled["season_window"] == win]
-        en, ez = s["def_ep_nonfo"].sum(), s["def_ep_nonfo_zerodur"].sum()
-        xn, xz = s["def_xg_in"].sum(), s["def_xg_in_zerodur"].sum()
-        W(f"| {win} | {en:,.0f} | {ez:,.0f} | {ez/en*100:.2f}% | {xn:,.1f} | {xz:,.1f} | {xz/xn*100:.2f}% |")
-    W("(counts are doubled across the two attack directions — every stint is seen once per direction; "
-      "the ratio is direction-invariant.)\n")
+    for _, s in cap.sort_values("window").iterrows():
+        en, ez, xn, xz = s["ep_nonfo"], s["ep_nonfo_zerodur"], s["xg_inzone"], s["xg_inzone_zerodur"]
+        W(f"| {s['window']} | {en:,.0f} | {ez:,.0f} | {ez/en*100:.2f}% | {xn:,.1f} | {xz:,.1f} | {xz/xn*100:.2f}% |")
+    W("")
 
     # headline overlap summary vs def_impact
     W("## Headline: pv_def_g60 vs def_impact (3-season window)")
@@ -177,7 +184,8 @@ def main():
     assembled = comp.merge(di, on=["player_id", "season_window"], how="left")
 
     diags = pd.read_parquet(f"{ARTDIR}/diagnostics.parquet")
-    _report(assembled, diags, k)
+    cap = pd.read_parquet(f"{ARTDIR}/capture_totals.parquet")
+    _report(assembled, diags, cap, k)
 
     out_cols = (["player_id", "season_window"] + COMPONENTS + [f"{c}_sd" for c in COMPONENTS]
                 + ["deny_g60", "suppress_g60", "escape_rate", "pv_def_g60", "pv_def_g60_sd",

@@ -68,22 +68,51 @@ def _rows_for_fit(dirrows, num_field, expo_field):
     return rows, np.array(def_teams, dtype=np.int64)
 
 
-def _fit(rows, sign, pos, bootstrap):
-    """Fit one two-sided ridge; return the defence component (sign*def_c), its bootstrap sd, the
-    fitted model + design (for the wiring gate), the player index, and alpha."""
+def _fit(rows, sign, pos):
+    """Point fit of one two-sided ridge; return the defence component (sign*centered def_c) plus the
+    design bits (kept for the wiring gate and the shared-draw bootstrap). No bootstrap here."""
     X, y, w, games, players, n_players, two_sided = R.build_design(rows, two_sided=True, pos=pos)
     alpha, _ = R.cv_alpha(X, y, w, games)
     m = Ridge(alpha=alpha, solver="lsqr", fit_intercept=True, max_iter=3000)
     m.fit(X, y, sample_weight=w)
     def_c = m.coef_[n_players:2 * n_players]
     def_c = def_c - def_c.mean()
-    value = sign * def_c
-    if bootstrap:
-        _, def_sd = R.bootstrap_sd(X, y, w, games, alpha, players, n_players, two_sided, bootstrap)
-    else:
-        def_sd = np.full(n_players, np.nan)
-    return dict(players=players, value=value, value_sd=def_sd, model=m, X=X, y=y, w=w,
+    return dict(players=players, value=sign * def_c, sign=sign, model=m, X=X, y=y, w=w, games=games,
                 alpha=alpha, n_players=n_players)
+
+
+def _shared_bootstrap(fits, kconst, B, seed=7):
+    """ONE game-resample bootstrap SHARED across all fits: each draw b samples a single per-game
+    multiplier over the union game set and applies it to EVERY fit's weights (same seed, same draw
+    sequence). Returns per-fit sd arrays (aligned to each fit's player index) and the composite
+    pv_def_g60 sd — the composite priced WITHIN each draw from that draw's deny+suppress coefs
+    (§8.1; not quadrature). B refits per fit per window."""
+    fd = (kconst["s_out_min_per_60"] / 60.0) * kconst["c_seq_xg_nonfo"] * kconst.get("xg_calibration", 1.0)
+    fs = (kconst["s_in_min_per_60"] / 60.0) * kconst.get("xg_calibration", 1.0)
+    games_union = np.unique(np.concatenate([f["games"] for f in fits.values()]))
+    rng = np.random.default_rng(seed)
+    comp_draws = {name: [] for name in fits}          # name -> list of per-draw value arrays
+    pv_draws = []                                      # list of per-draw {player_id: pv_def_g60}
+    for _ in range(B):
+        draw = rng.multinomial(len(games_union), np.full(len(games_union), 1.0 / len(games_union)))
+        mult = dict(zip(games_union, draw))
+        vb = {}
+        for name, f in fits.items():
+            wb = f["w"] * np.array([mult[g] for g in f["games"]], dtype="float64")
+            coef = R.fit_coefs(f["X"], f["y"], wb, f["alpha"])
+            dc = coef[f["n_players"]:2 * f["n_players"]]
+            val = f["sign"] * (dc - dc.mean())
+            comp_draws[name].append(val)
+            vb[name] = dict(zip(f["players"], val))
+        dny, sup = vb["deny"], vb["suppress"]
+        pv_draws.append({p: fd * dny[p] + fs * sup[p] for p in (dny.keys() & sup.keys())})
+    sds = {name: pd.DataFrame({"player_id": fits[name]["players"],
+                               f"{name}_sd": np.std(np.array(comp_draws[name]), axis=0)})
+           for name in fits}
+    pv = pd.DataFrame([(p, np.std([d[p] for d in pv_draws if p in d]))
+                       for p in {p for d in pv_draws for p in d}],
+                      columns=["player_id", "pv_def_g60_sd"])
+    return sds, pv
 
 
 def _wiring_r(fit, def_teams, seasons_arr):
@@ -106,26 +135,44 @@ def _wiring_r(fit, def_teams, seasons_arr):
     return r, len(s)
 
 
-def fit_window(dirrows, pos, label, bootstrap):
-    """Run all four fits for one window (design already pulled/expanded); return (frame, diagnostics)."""
-    frame = None
-    diags = {}
+def fit_window(dirrows, pos, label, bootstrap, kconst):
+    """Run all four fits for one window, then ONE shared-draw bootstrap across them (component sds +
+    composite pv_def_g60 sd). Returns (frame, diagnostics)."""
+    fits, wiring = {}, {}
     for name, (num, expo, sign) in list(FITS.items()) + [("deny_rush", RUSH_FIT)]:
         rows, def_teams = _rows_for_fit(dirrows, num, expo)
         seasons_arr = np.array([r[9] for r in rows])
-        fit = _fit(rows, sign, pos, bootstrap)
-        r_wire, n_ts = _wiring_r(fit, def_teams, seasons_arr)
+        fit = _fit(rows, sign, pos)
+        fits[name] = fit
+        wiring[name] = (_wiring_r(fit, def_teams, seasons_arr), len(rows))
+
+    sds, pv = ({}, None)
+    if bootstrap:
+        sds, pv = _shared_bootstrap(fits, kconst, bootstrap)
+
+    frame = None
+    diags = {}
+    for name, fit in fits.items():
+        (r_wire, n_ts), n_rows = wiring[name]
         spread = float(np.std(fit["value"]))
-        sd = fit["value_sd"]
-        mean_sd = float(np.nanmean(sd)) if np.isfinite(sd).any() else float("nan")
-        diags[name] = dict(alpha=fit["alpha"], n_rows=len(rows), wiring_r=r_wire, n_team_seasons=n_ts,
+        sd_frame = sds.get(name)
+        mean_sd = float(sd_frame[f"{name}_sd"].mean()) if sd_frame is not None else float("nan")
+        diags[name] = dict(alpha=fit["alpha"], n_rows=n_rows, wiring_r=r_wire, n_team_seasons=n_ts,
                            coef_spread=spread, mean_boot_sd=mean_sd,
                            spread_over_sd=(spread / mean_sd if mean_sd and not np.isnan(mean_sd) else np.nan))
-        col = pd.DataFrame({"player_id": fit["players"], name: fit["value"], f"{name}_sd": fit["value_sd"]})
+        col = pd.DataFrame({"player_id": fit["players"], name: fit["value"]})
+        if sd_frame is not None:
+            col = col.merge(sd_frame, on="player_id", how="left")
+        else:
+            col[f"{name}_sd"] = np.nan
         frame = col if frame is None else frame.merge(col, on="player_id", how="outer")
-        print(f"[{label}] {name}: rows={len(rows):,} alpha={fit['alpha']:.0f} "
+        print(f"[{label}] {name}: rows={n_rows:,} alpha={fit['alpha']:.0f} "
               f"wiring_r={r_wire:.3f} (n_ts={n_ts}) spread={spread:.4f} mean_sd={mean_sd:.4f}", file=sys.stderr)
 
+    if pv is not None:
+        frame = frame.merge(pv, on="player_id", how="left")
+    else:
+        frame["pv_def_g60_sd"] = np.nan
     frame["season_window"] = label
     frame = frame[frame["player_id"] >= 0].copy()   # drop REPL_F/REPL_D sentinels
     return frame, diags
@@ -174,6 +221,24 @@ def _windows():
         yield [s], s, None
 
 
+def _capture_totals(df, label):
+    """Per-EPISODE (k=1) capture totals from the design, for overlap-report (c). These are the true
+    denominators — NOT the per-defender ×5 aggregation (PV-D019). Direction-summed home+away = each
+    episode once (attacker is home XOR away)."""
+    return dict(window=label,
+                ep_nonfo=float((df["home_ep_nonfo"] + df["away_ep_nonfo"]).sum()),
+                ep_nonfo_zerodur=float((df["home_ep_nonfo_zerodur"] + df["away_ep_nonfo_zerodur"]).sum()),
+                xg_inzone=float((df["home_xg_inzone"] + df["away_xg_inzone"]).sum()),
+                xg_inzone_zerodur=float((df["home_xg_inzone_zerodur"] + df["away_xg_inzone_zerodur"]).sum()))
+
+
+def _constants():
+    from models_ml import bq
+    d = bq.query_df(f"select constant_name, value from `{bq.project()}.nhl_models.phase_league_constants` "
+                    f"where model_version='{MODEL_VERSION}'", bq.client())
+    return {r.constant_name: float(r.value) for r in d.itertuples()}
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
@@ -191,19 +256,23 @@ def main():
         windows = list(_windows())
         b2b = _b2b(R.SINGLE_SEASONS)
 
+    kconst = _constants()
     all_diag = {}
+    captures = []
     for seasons, label, sw in windows:
-        single_B = min(B, 40) if len(seasons) == 1 else B
-        print(f"[{label}] pulling PV design for {seasons} ...", file=sys.stderr)
+        single_B = min(B, 40) if len(seasons) == 1 else B    # spec: 100 headline window, 40 singles (PV-D019)
+        print(f"[{label}] pulling PV design for {seasons} (B={single_B}) ...", file=sys.stderr)
         df = BD.pull(seasons)                       # ONE pull per window, reused by fits + exposures
         dirrows = BD.expand_rows(df, b2b, sw)
         print(f"[{label}] {len(df):,} segments -> {len(dirrows):,} direction-rows", file=sys.stderr)
         pos = R.positions(seasons)
-        frame, diags = fit_window(dirrows, pos, label, single_B)
+        frame, diags = fit_window(dirrows, pos, label, single_B, kconst)
         expo = _exposures(dirrows)
         frame = frame.merge(expo, on="player_id", how="left")
         frame.to_parquet(f"{ARTDIR}/components_{label}.parquet", index=False)
+        captures.append(_capture_totals(df, label))
         all_diag[label] = diags
+    pd.DataFrame(captures).to_parquet(f"{ARTDIR}/capture_totals.parquet", index=False)
 
     # boundary deliverables (d) wiring gate + (e) coef spread vs bootstrap sd, per fit per window
     print("\n=== (d) WIRING GATE  &  (e) DEFENCE-COEF SPREAD vs MEAN BOOTSTRAP SD ===")
