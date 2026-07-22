@@ -126,6 +126,23 @@ def test_gv10_bare_rush_goal_zero_duration_episode():
     assert e["start_type"] == "rush"
 
 
+def test_gv11_boundary_crossing_episode_kept_with_prefive_start():
+    # PV-D009: an episode that STARTS in non-5v5 (tail of a PP) and crosses INTO 5v5 is KEPT (any in-zone
+    # spell has a 5v5 event). The recorded start + start_type are the TRUE pre-5v5 segmentation start
+    # (start_5v5 = False), and keep_5v5 = True. Base outcomes span the whole thing; the 5v5-restricted
+    # columns (SQL-side) are what downstream consumes.
+    ev = [_ev(0, "faceoff", A, "N"), _ev(5, "shot-on-goal", A, "O"),
+          _ev(10, "shot-on-goal", A, "O"), _ev(12, "stoppage", None, None)]
+    is5 = [False, False, True, True]                     # PP expires between the two shots
+    r = run(ev, H, A, is_5v5=is5)
+    eps = _episodes_vs(r, H)
+    assert len(eps) == 1
+    e = eps[0]
+    assert e["start"] == 5 and e["end"] == 12 and e["end_reason"] == "stoppage"
+    assert e["start_type"] == "carry_other" and e["n_unblocked"] == 2
+    assert e["keep_5v5"] is True and e["start_5v5"] is False   # kept, but started outside 5v5
+
+
 def test_gv8_period_boundary():
     ev = [_ev(1190, "faceoff", A, "N"), _ev(1195, "shot-on-goal", A, "O"),
           _ev(1200, "period-end", None, None)]

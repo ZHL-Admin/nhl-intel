@@ -69,3 +69,12 @@ models:
               values: ['goal', 'stoppage', 'exit', 'flip_sustained']
       - name: clipped_by_strength
         tests: [not_null]
+      - name: started_outside_5v5
+        description: Start instant is not 5v5 (entry-side boundary crossing); contributes no episode_start to Fit A
+        tests: [not_null]
+      - name: duration_5v5_seconds
+        description: 5v5-segment overlap of the span; Stage 3 exposure consumes this, not duration_seconds
+        tests: [not_null]
+      - name: xg_5v5
+        description: 5v5-restricted xG against (Stage 2 C_seq consumes this, not the full-span xg_against)
+        tests: [not_null]

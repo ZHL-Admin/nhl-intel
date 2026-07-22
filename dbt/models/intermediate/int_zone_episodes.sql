@@ -187,19 +187,24 @@ ozfo_prior as (
     group by ep.game_id, ep.period_number, ep.start_sort
 ),
 
--- OUTCOMES: unblocked 5v5 attempts by the attacker inside [start,end]
+-- OUTCOMES: unblocked attacker attempts inside [start,end]. Base columns are FULL-SPAN, ALL-STRENGTH
+-- (segmentation truth); the *_5v5 columns are the 5v5-restricted subset that Stage 2 constants and Stage 3
+-- measures consume (PV-D009 precision pass). The BETWEEN is inclusive so a zero-length episode's goal at
+-- start==end lands in the counts (PV-D011).
 shots as (
     select ss.game_id, ss.event_id, ss.team_id, ss.elapsed_seconds, ss.is_goal, ss.period_number,
-           coalesce(x.xg, 0.0) as xg
+           (ss.strength = '5v5') as is5, coalesce(x.xg, 0.0) as xg
     from {{ ref('int_shot_sequence') }} ss
     left join {{ source('nhl_models', 'shot_xg') }} x using (game_id, event_id)
-    where ss.strength = '5v5'
 ),
 outcomes as (
     select ep.game_id, ep.period_number, ep.start_sort,
-           count(sh.event_id) as n_unblocked,
+           count(sh.event_id) as n_unblocked,                 -- full-span, all strengths
            sum(sh.xg) as xg_against,
-           countif(sh.is_goal) as goals
+           countif(sh.is_goal) as goals,
+           countif(sh.is5) as attempts_5v5,                   -- 5v5-restricted subset (consumed downstream)
+           sum(if(sh.is5, sh.xg, 0.0)) as xg_5v5,
+           countif(sh.is5 and sh.is_goal) as goals_5v5
     from episodes ep
     left join shots sh
       on sh.game_id = ep.game_id and sh.period_number = ep.period_number
@@ -240,13 +245,20 @@ select
         when ep.term.next_zone is distinct from ep.d_dzone then 'exit'
         else 'flip_sustained'
     end as end_reason,
+    -- BASE outcomes = full-span, all-strength (segmentation truth)
     coalesce(o.n_unblocked, 0) as n_unblocked,
     coalesce(o.xg_against, 0.0) as xg_against,
     coalesce(o.goals, 0) as goals,
-    -- clipped: the episode crosses out of 5v5 (some non-5v5 time in its span). 0-duration point episodes
-    -- (rush goals at a whistle) are never clipped. (PV-D007: v1 keeps clipped episodes flagged, does not
-    -- truncate their end to the strength boundary.)
-    coalesce((ep.end_elapsed - ep.start_elapsed) - coalesce(st.sec_5v5, 0) > 0.001, false) as clipped_by_strength
+    -- 5v5-RESTRICTED outcomes + exposure (what Stage 2 C_seq and Stage 3 fits consume; PV-D009)
+    coalesce(st.sec_5v5, 0.0) as duration_5v5_seconds,
+    coalesce(o.attempts_5v5, 0) as attempts_5v5,
+    coalesce(o.xg_5v5, 0.0) as xg_5v5,
+    coalesce(o.goals_5v5, 0) as goals_5v5,
+    -- clipped: the episode's span contains non-5v5 time (either side). started_outside_5v5 isolates the
+    -- ENTRY-side case — the start instant is not 5v5 (a boundary-crossing episode); its start still lies
+    -- outside any 5v5 stint, so it contributes NO episode_start to Stage 3 Fit A (PV-D009, quantified/logged).
+    coalesce((ep.end_elapsed - ep.start_elapsed) - coalesce(st.sec_5v5, 0) > 0.001, false) as clipped_by_strength,
+    (not coalesce(se.s_5v5, false)) as started_outside_5v5
 from episodes ep
 left join start_ev se on se.game_id = ep.game_id and se.start_sort = ep.start_sort
 left join rush_prior r on r.game_id = ep.game_id and r.period_number = ep.period_number and r.start_sort = ep.start_sort

@@ -4,6 +4,18 @@ State engine: `int_phase_events`, `int_phase_spells`, `int_zone_episodes` (dbt, 
 conforming to `tests/phase_value/reference_state_machine.py` (the authority). Built + validated on
 2023-24 → 2025-26.
 
+## PV-D009 precision pass (owner review) — 5v5 scoping made explicit
+Boundary-crossing episodes (start in non-5v5, cross into 5v5) are kept; scoping is now unambiguous:
+- **Segmentation truth (full span, all strengths):** `start_elapsed`/`start_type` (the true pre-5v5 start),
+  `duration_seconds`, `n_unblocked`, `xg_against`, `goals`.
+- **5v5-restricted (what Stage 2 constants + Stage 3 measures consume):** `duration_5v5_seconds`,
+  `attempts_5v5`, `xg_5v5`, `goals_5v5`. Over 3 seasons, base xG 19,075 vs `xg_5v5` 17,590 → ~1,485 PP-tail
+  xG is in the base only, NOT the 5v5 column, so **`C_seq` (which consumes `xg_5v5`) does not absorb PP-tail xG.**
+- **Flags:** `clipped_by_strength` (any non-5v5 time, either side) = 4.71%; NEW `started_outside_5v5`
+  (entry-side crossing; start instant not 5v5) = **1.10%** (4,127/375,593) — these contribute **no
+  `episode_start` to Fit A** (`deny` counts sequences *started* under 5v5). Pinned by golden vector **GV11**;
+  reconciliation stays 0.0000%. Verified no-segment games → 0 episodes, 0 spells (excluded from all 5v5 use).
+
 ## Hard gates (all PASS)
 | gate | result | threshold |
 |---|---|---|
