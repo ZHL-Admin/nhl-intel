@@ -78,3 +78,18 @@ models:
       - name: xg_5v5
         description: 5v5-restricted xG against (Stage 2 C_seq consumes this, not the full-span xg_against)
         tests: [not_null]
+
+  - name: int_phase_ticks
+    description: >
+      One row per phase_tick_seconds (5s) of live-5v5 spell time — the duration-weighting grid for the
+      state value function V(state). state resolves the P_OZ rush/established split via episode age.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: tick_duration
+        tests: [not_null]
+      - name: state
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['P_OWN_D', 'P_NZ', 'P_OZ_RUSH', 'P_OZ_EST']

@@ -5,7 +5,7 @@ which it never modifies and against which it is validated. Filled in progressive
 sections are stubs until their stage completes. Spec + decisions: `docs/phase-value/` (schema-map,
 DECISIONS) and the build specification.*
 
-Status: **Stage 1 complete** (state engine — all hard gates green). Stages 2–6 pending.
+Status: **Stage 2 complete** (state engine + value function — hard gates green). Stages 3–6 pending.
 
 ## 1. Summary and motivation
 `def_impact` is structurally the weakest number on the platform (rare outcome, uniform 5-defender
@@ -60,8 +60,29 @@ carry 59% / oz_faceoff 19% / rush 11% / forecheck 11%; end_reason exit 56% / sto
 5%. 5v5-scoped on the start event's strength; clipped-by-strength share **3.4%** (< 10%), kept & flagged (PV-D007).
 
 ## 4. The value function
-*(V(state) table with se, per-season stability, and the one-paragraph interpretation incl. the empirical
-sign of V(P_OWN_D). Hard gate V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D). Filled in Stage 2.)*
+`int_phase_ticks` (one row per 5 s of live-5v5 spell time) + `compute_state_values.py` estimate
+**V(state)** = tick-duration-weighted mean net goals (possessing team − opponent) over (t, t+40 s] within
+the same period, pooled 2015-16 → 2025-26; cluster bootstrap by game (200). Output `nhl_models.state_values`.
+
+| state | V | se | n_ticks |
+|---|---|---|---|
+| P_OZ_EST | **0.00520** | 0.00027 | 4.65M |
+| P_OZ_RUSH | 0.00351 | 0.00084 | 0.12M |
+| P_NZ | 0.00143 | 0.00036 | 1.57M |
+| P_OWN_D | **−0.00027** | 0.00032 | 1.91M |
+
+**HARD GATE PASS:** V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D) (0.00520 > 0.00143 > −0.00027; pooled gap ~5 se).
+**V(P_OWN_D) is slightly negative** — possessing the puck in your own D zone is, on net over the next 40 s,
+marginally worse than neutral (a breakout is a vulnerable state), exactly as the spec anticipated. V(P_OZ_EST)
+is stable across seasons (0.0039–0.0068, always the top state). Report-only deviations (PV-D013): rush < est
+(established pressure out-earns the rush instant over 40 s), and V(P_NZ)/V(P_OWN_D) are both near zero so
+their fine ordering is within noise — the accounting relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}.
+Full detail: `docs/phase-value/stage2-acceptance.md`.
+
+**League constants** (`nhl_models.phase_league_constants`, 2015-16+): s_out 12.58 min/60, s_in 17.42 min/60,
+`C_seq` (mean `xg_5v5` per non-faceoff episode) 0.0517 (rush highest at 0.0589, oz-faceoff lowest 0.0305),
+r_inzone_xg_per_sec 0.00246, xG calibration 0.983 → fixed 1.0 (inside ±0.03). All consume the 5v5-restricted
+episode columns (PV-D009), so PP-tail xG is excluded.
 
 ## 5. Estimation
 *(Two-sided stint design, three fits deny/suppress/escape on the RAPM machinery, CV, bootstrap,
