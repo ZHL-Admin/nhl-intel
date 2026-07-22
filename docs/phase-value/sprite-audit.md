@@ -52,6 +52,18 @@ At every k the aligned **precision sits BELOW the base rate** (0.143 vs 20.4%, 0
 **Caption for the three rush diagnostics** `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` (carry verbatim wherever they surface, with the precision-vs-base numbers): _defined by scorer-recorded precursor events; the sprite audit found no positive association with tracking-fast entries at goals; event-space category only._
 Recall (~0.09, flat across k) confirms the ceiling is ABSENT events (entries that generate no PBP event are invisible), so no PBP-side redefinition recovers them — the pre-committed possession-proxy limit.
 
+### E1c — false rush-qualifier source: blocked-shot owner × zone (report-only follow-up)
+Blocked-shots in the ≤4 s pre-goal window across the **487** no-tracking-entry rush-labeled goals, split by owner (relative to the scoring team) × raw `zone_code`; `n_qualifies` = how many pass `seq_rush`'s own owner-relative D/N + post-faceoff test:
+
+| owner | zone_code | in window | qualifies |
+|---|---|---|---|
+| attacker-owned | D | 408 | 408 |
+| attacker-owned | O | 1 | 0 |
+
+**What the split shows — it REFUTES the N-zone/defender-owned hypothesis.** The qualifying blocked-shots are **408/408 attacker-owned with `zone_code='D'`** — zero defender-owned, zero N-zone. Mechanism the numbers support: `seq_rush` keeps `zone_code` for attacker-owned events, so a block the SCORING team owns coded in its own defensive zone (`'D'`) satisfies the D/N precursor and fires the rush label. But these are the `established_full_window` goals — the puck is tracked in the offensive zone the whole 8 s — so the block's recorded D-zone location/timing is inconsistent with the tracked possession; the block-location coordinate (or its ±2 s PBP timing) is the unreliable input, not the owner/zone rule.
+
+**Consequence for the v1.1 note (correction):** the false qualifiers are attacker-owned **D-zone** blocks — the SAME owner×zone cell as the legitimate _block-in-own-D → counterattack_ precursor. So there is **no clean owner×zone rule** that drops the false ones without also destroying legitimate counter-rush starts, and the specific _drop-N-zone-blocks_ candidate does not apply here (there are no N-zone blocks). The surgical fix a v1.1 pass would need is a **location/timing-consistency check** on the block (does the block coordinate corroborate an actual zone exit before the entry?), which at goals is a tracking-only discriminator; wholesale blocked-shot exclusion is still wrong (it would erase the legitimate cell). **No PV action — report-only, do-not-touch on the production sequence engine applies.**
+
 ## E2 — entry-to-goal time (the independent instrument on PV-D013)
 Entries (n=7,522): median 3.80s; p25 2.80s; p75 5.30s.
 - share of entries < 2.5 s (below the 5 s tick grid's half-tick floor): **13.6%**
