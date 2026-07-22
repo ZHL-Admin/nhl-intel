@@ -72,12 +72,28 @@ the same period, pooled 2015-16 → 2025-26; cluster bootstrap by game (200). Ou
 | P_OWN_D | **−0.00027** | 0.00032 | 1.91M |
 
 **HARD GATE PASS:** V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D) (0.00520 > 0.00143 > −0.00027; pooled gap ~5 se).
-**V(P_OWN_D) is slightly negative** — possessing the puck in your own D zone is, on net over the next 40 s,
-marginally worse than neutral (a breakout is a vulnerable state), exactly as the spec anticipated. V(P_OZ_EST)
-is stable across seasons (0.0039–0.0068, always the top state). Report-only deviations (PV-D013): rush < est
-(established pressure out-earns the rush instant over 40 s), and V(P_NZ)/V(P_OWN_D) are both near zero so
-their fine ordering is within noise — the accounting relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}.
-Full detail: `docs/phase-value/stage2-acceptance.md`.
+V(P_OZ_EST) is stable across seasons (0.0039–0.0068, always the top state).
+
+**The V(P_OWN_D) < 0 finding.** Possession is not uniformly good — *where* you hold the puck is what
+matters, and holding it in your own defensive zone is, on net over the next 40 s, **marginally negative**
+(−0.00027 goals; slightly worse than neutral-zone possession and than having no particular possession at
+all). The hockey reading: a team retrieving the puck deep in its own end is at the highest-turnover-risk
+moment of the sequence — it is under forecheck pressure, its breakout can be stripped for a high-danger
+chance against, and the reward (a successful exit merely reaches neutral ice) is asymmetric with the risk (a
+failed exit yields a chance against). Over a 40 s horizon that asymmetry nets out slightly below zero. The
+magnitude is small and near zero (as the spec anticipated), but the **sign is the interesting result**: it
+says D-zone puck-possession is not itself a positive state, which is exactly why a defensive model built on
+*escaping* that state (the `escape` component) is well-motivated. The value only turns clearly positive once
+possession reaches the offensive zone (P_OZ_EST 0.0052).
+
+**Granularity caveat on V(P_OZ_RUSH) (PV-D013).** At the 5 s tick grid V(P_OZ_RUSH)=0.0035 sits *below*
+V(P_OZ_EST)=0.0052, but this is a measurement artifact, not a finding: the rush state's ≤5 s lifetime equals
+the tick grid and sub-2.5 s partial ticks are dropped, so 71.2% of *scoring* rush episodes (mean duration
+2.14 s) contribute zero rush ticks and their goals credit the preceding windows. A tick=2 s diagnostic
+restores the spec-expected order (V(rush)=0.0054 > V(est)=0.0051). **The rush's danger is therefore stated
+from the artifact-free view — `c_seq_rush` = 0.0589, the highest episode xG cost of any start type — not from
+V(P_OZ_RUSH).** V(P_NZ)/V(P_OWN_D) are both near zero, so their fine ordering is within noise; the accounting
+relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}. Full detail: `docs/phase-value/stage2-acceptance.md`.
 
 **League constants** (`nhl_models.phase_league_constants`, 2015-16+): s_out 12.58 min/60, s_in 17.42 min/60,
 `C_seq` (mean `xg_5v5` per non-faceoff episode) 0.0517 (rush highest at 0.0589, oz-faceoff lowest 0.0305),

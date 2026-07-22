@@ -73,16 +73,28 @@ Decision: keep the global owner heuristic (possession → opponent(event_owner_t
 Rationale: (1) impact is bounded — the ~5.7% owner-appears-to-be-shooter rows are ~0.6% of all events, and blocked-shots rarely change zone_abs (block location is near the true zone); (2) it is already covered by the pre-registered Stage 5 blocked-shot possession sensitivity; (3) adopting it would require threading a roster-resolved possession field through the pure-Python reference (which currently takes only `owner`), eroding the "reference IS the spec" simplicity, plus new golden vectors + a reconciliation pass. The cost/benefit favors deferring to v1.1, gated behind whatever the Stage 5 sensitivity shows.
 Alternative: adopt the join now — declined for v1 (bounded impact, already sensitivity-covered). Revisit if Stage 5 flags blocked-shot possession as material.
 
-**PV-D013 | 2026-07-24 (Stage 2) | State value function — report-only deviations, all accepted.**
-The hard gate `V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D)` PASSES pooled (0.00520 > 0.00143 > -0.00027, gap ~5 se).
-Three report-only observations, none a gate failure:
-- **V(P_OZ_RUSH) 0.0035 < V(P_OZ_EST) 0.0052** (spec guessed rush >= est). Established O-zone possession
-  yields more net goals over the 40 s window than the rush instant; rush also has the smallest n (121k
-  ticks) and is the noisiest per-season. Accepted as the empirical reality; the accounting does not depend
-  on rush >= est.
+**PV-D013 | 2026-07-24 (Stage 2, rewritten after owner review) | State value function — hard gate + a measurement-validity check on V(P_OZ_RUSH).**
+The hard gate `V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D)` PASSES pooled (0.00520 > 0.00143 > -0.00027, gap ~5 se); it is unaffected by everything below.
+- **V(P_OZ_RUSH) at the 5 s grid is a GRANULARITY ARTIFACT, not a finding.** The rush state's lifetime
+  (`phase_rush_state_seconds` = 5 s) equals the tick grid (5 s) and sub-2.5 s partial ticks are dropped, so a
+  rush episode that scores within ~2.5 s of entry contributes ZERO rush ticks — its goal instead credits the
+  preceding P_NZ / P_OZ_EST windows. Quantified: **23.0% of rush episodes contribute zero rush ticks, and
+  71.2% of *scoring* rush episodes do** (their mean 5v5 duration is 2.14 s, below the 2.5 s floor). The most
+  successful rushes are excised from the rush state's own sample, biasing V(P_OZ_RUSH) DOWN and V(P_OZ_EST) UP.
+  **Measurement-validity check (not a sensitivity re-tune): a tick=2 s diagnostic rebuild** (dry-run $0.0035,
+  logged) doubles rush n (121k → 249k) and RESTORES the spec-expected order: **V(P_OZ_RUSH) 0.00542 >
+  V(P_OZ_EST) 0.00514** at 2 s. So the 5 s ordering is an artifact of the grid, not "established out-earns rush."
+  **Decision:** keep the 5 s production grid (per spec `phase_tick_seconds`=5); the methodology carries a
+  granularity caveat and leans on the artifact-free view — **`c_seq_rush` = 0.0589 (the HIGHEST episode xG cost
+  among start types)** — for the "rush is dangerous" statement, NOT on V(P_OZ_RUSH). The prior "established
+  out-earns rush" interpretation is WITHDRAWN.
 - **|V(P_NZ)| and |V(P_OWN_D)| < 0.003** (below the spec's expectation-band floor). Both are genuinely near
   zero (V(P_OWN_D) near-zero is spec-anticipated). The coarse structure P_OZ_EST >> {P_NZ, P_OWN_D ~ 0} is
   what matters; the fine P_NZ vs P_OWN_D order flips within ~1 se in 2/11 seasons (pooled gap ~5 se). No action.
-- **~1.3% of P_OZ ticks lack an episode_id link** (fall through to P_OZ_EST rather than being split into
-  RUSH/EST). Does not affect the gate (EST vs NZ vs OWN_D). Candidate v1.1 cleanup (tighten the tick↔episode
-  containment join); flagged, not fixed in v1.
+- **~1.3% of P_OZ ticks lack an episode_id link** (default to P_OZ_EST; does not affect the gate). Cause: a
+  linkage/materialization gap, NOT a boundary-rounding edge (only 0.4% sit within 2.5 s of an episode edge).
+  Ticks are generated across long, sparse-event P_OZ spells (from segment-split `int_phase_spells`) whose
+  bracketing events lie outside the sampled window, and the tick↔episode TIME-containment join across two
+  separately-materialized derivations of the same state (spells vs `int_zone_episodes` state-spell spans)
+  leaves that spell-time outside the matching episode's `[start,end]`. v1.1 fix: link on shared spell identity
+  rather than time-containment. Diagnostic-only in v1.
