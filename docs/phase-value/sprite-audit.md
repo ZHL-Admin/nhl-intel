@@ -47,7 +47,7 @@ n = **16,068**. Rows = episode start_type, cols = sprite_rush_4 (entry ≤4s):
 
 Cross-check: oz_faceoff goals established_full_window (or crossing-free): 1,102/1,332 (82.7%) — expect overwhelming.
 
-Interpretation: recall stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by ABSENT events (entries that generate no PBP event are invisible), not by window size, so no PBP-side redefinition can recover them. This is the pre-committed possession-proxy limitation, measured.
+Interpretation: **recall** stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by ABSENT events (entries that generate no PBP event are invisible), not by window size, so no PBP-side redefinition can recover them (the pre-committed possession-proxy limitation, measured). **Precision** (aligned/zero-duration) rises 0.14→0.39 over k=3→6; at k=4 only ~26% of `rush`-labeled episodes are tracking-fast entries — the concrete size behind the *event-visible rush = small, non-random subset* caption on the rush diagnostics (`c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef`). Recall answers the ceiling question; precision sets the diagnostic captions.
 
 ## E2 — entry-to-goal time (the independent instrument on PV-D013)
 Entries (n=7,522): median 3.80s; p25 2.80s; p75 5.30s.

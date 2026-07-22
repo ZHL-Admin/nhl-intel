@@ -118,6 +118,11 @@ split-half, team out-of-sample, sensitivity summary, external A3Z agreement if r
 sprite-audit.md`) — 10 Hz PPT goal-replay ground-truth of episode `start_type` + entry timing at goals,
 sits beside the A3Z module. Success-conditioned (goals only); the goals-only banner caveat is stated
 plainly there and inherited here.
+**Pre-registered arena-bias diagnostic for `deny` (PV-D015, report-only):** correlate team-level `deny`
+aggregates (minutes-weighted, per season) against the home-arena under-recording rate (the
+`established_full_window` share from the sprite audit's arena table). A material correlation means `deny`
+partially measures scorekeeper behavior, not defense; reported beside the smell tests either way, and it is
+the activation test for the v1.1 rink adjustment.
 
 ## 8. Known limitations (pre-committed)
 Possession is a proxy from scorer-recorded events; entries generating no event are invisible, so `deny`

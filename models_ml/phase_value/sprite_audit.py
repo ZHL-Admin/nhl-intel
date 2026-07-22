@@ -246,9 +246,13 @@ def main():
         est = int((ozf["status"] == "established_full_window").sum())
         W(f"Cross-check: oz_faceoff goals established_full_window (or crossing-free): "
           f"{est:,}/{len(ozf):,} ({est/len(ozf)*100:.1f}%) — expect overwhelming.\n")
-    W("Interpretation: recall stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by ABSENT "
-      "events (entries that generate no PBP event are invisible), not by window size, so no PBP-side "
-      "redefinition can recover them. This is the pre-committed possession-proxy limitation, measured.\n")
+    W("Interpretation: **recall** stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by "
+      "ABSENT events (entries that generate no PBP event are invisible), not by window size, so no PBP-side "
+      "redefinition can recover them (the pre-committed possession-proxy limitation, measured). **Precision** "
+      "(aligned/zero-duration) rises 0.14→0.39 over k=3→6; at k=4 only ~26% of `rush`-labeled episodes are "
+      "tracking-fast entries — the concrete size behind the *event-visible rush = small, non-random subset* "
+      "caption on the rush diagnostics (`c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef`). Recall answers the "
+      "ceiling question; precision sets the diagnostic captions.\n")
 
     # (E2) entry-to-goal time distribution + share < 2.5s and < 5s (PV-D013 instrument)
     ent = usable[usable["status"] == "entry"]["entry_time"]
