@@ -109,12 +109,71 @@ r_inzone_xg_per_sec 0.00246, xG calibration 0.983 → fixed 1.0 (inside ±0.03).
 episode columns (PV-D009), so PP-tail xG is excluded.
 
 ## 5. Estimation
-*(Two-sided stint design, three fits deny/suppress/escape on the RAPM machinery, CV, bootstrap,
-centering, def sign-flip. In the register of `isolated-impact.md`. Filled in Stage 3.)*
+The unit is the 5v5 stint (`int_segment_context` × `int_shift_segments`, `segment_duration ≥ 5`,
+PV-D002), expanded to two attacking-direction rows per stint exactly as RAPM's `expand_rows` does — the
+attacking team is the `off` side, the defending team is the `deff` side. Each of the three components
+(plus the `deny_rush` diagnostic) is the **same two-sided sparse ridge as RAPM, reused by import**
+(`train_rapm.build_design / cv_alpha / bootstrap_sd`): identical controls (attacker score-state, faceoff
+zone, home, back-to-back, game-time bucket, season FE), identical replacement pooling (< 100 exposure-min
+→ F/D sentinel pools), identical game-grouped 5-fold α-CV over the imported `ALPHAS` grid (PV-D003). The
+ONLY per-fit differences are the target and the weight (§7.1):
+
+| fit | target (per 60 of exposure) | weight | exposure floor |
+|---|---|---|---|
+| `deny` | `episode_starts_nonfo / outside_sec × 3600` | `outside_sec` | `outside_sec ≥ 5` |
+| `suppress` | `xg_inzone / inzone_sec × 3600` | `inzone_sec` | `inzone_sec ≥ 5` |
+| `escape` | `favorable_ends / inzone_sec × 3600` | `inzone_sec` | `inzone_sec ≥ 5` |
+| `deny_rush` (diag.) | `episode_starts_rush / outside_sec × 3600` | `outside_sec` | `outside_sec ≥ 5` |
+
+The floor is applied on the **stint-direction total**, never per-episode (PV-D011), so zero-duration
+goal episodes keep their start (deny) and their goal xG (suppress). Each component is read off the
+**centered DEFENCE coefficient** with a per-fit sign (PV-D017): `deny`/`suppress` = `−def_c` (good
+defence lowers the target), `escape` = `+def_c` (a favourable end is the defender's success and raises
+it). Windows mirror RAPM: a 3-season weighted headline (0.3/0.6/1.0) plus single seasons 2021-22→2025-26.
+
+Uncertainty is a single **shared-draw game-resample bootstrap across all four fits** (same seed and draw
+sequence; B=100 on the headline window, 40 on singles, PV-D019). The composite `pv_def_g60` sd is priced
+**within each draw** from that draw's deny+suppress coefficients (§8.1), never by quadrature — deny and
+suppress are positively correlated through the shared resampling, and quadrature would understate it.
+
+**Wiring gate (report-only diagnostic, not a reliability test).** Per target, the exposure-weighted
+team-season mean of the fitted prediction is correlated against the directly-observed team-season target
+rate; the gate is r ≥ 0.80. **All 24 fit×window combinations pass.** The single-season fits are the sharp
+check (r ≈ 0.97–0.99); the 3-season window softens (deny 0.819) as expected shrinkage from
+season-weighting + replacement pooling — both sides carry the same 0.3/0.6/1.0 weights, and removing them
+*lowers* r (0.795), so the softening is pooling, not a weighting artifact (PV-D019). Reliability itself —
+the defence-coef spread is only ~1.1–1.4× the mean bootstrap sd across every fit and window (defence is
+the platform's weakest signal) — is quantified but **formally adjudicated by the pre-registered Stage 5
+tiers**, not here.
 
 ## 6. Accounting
-*(deny_g60 / suppress_g60 / pv_def_g60 formulas, league constants, the worked example with real numbers,
-per-60 and per-1000-minute framings. Filled in Stage 4.)*
+Rate coefficients are priced per 60 of ICE time in goals per **spec §8.1**, with the Stage-2 constants
+(a=`deny`, b=`suppress`, cal=`xg_calibration`; PV-D018):
+
+```
+deny_g60     = a · (s_out_min_per_60/60) · c_seq_xg_nonfo · cal      # 12.58/60 · 0.0517 · 1.0
+suppress_g60 = b · (s_in_min_per_60/60) · cal                        # 17.42/60 · 1.0
+escape       = published as a RATE only (favourable ends /60 in-zone)
+pv_def_g60   = deny_g60 + suppress_g60
+```
+
+Worked example (top-of-league defender, 3-season): `deny` 2.23 → `deny_g60` 0.024; `suppress` 0.609 →
+`suppress_g60` 0.177; **`pv_def_g60` 0.201** goals saved /60 (vs RAPM `def_impact` 0.34). PV-D011 capture
+(per-episode, k=1): zero-duration goal episodes are 3.5–9.4% of nonfo starts and 5–9% of in-zone xG per
+window, and are retained.
+
+**Component-first, per the pre-registered thesis (owner Ruling 1).** Because g60 pricing makes `deny_g60`
+≈ 1/7 the magnitude of `suppress_g60`, the composite `pv_def_g60` is **suppress-dominated** and correlates
+**~0.87 with `def_impact`**. It is kept exactly as §8.1 defines it — no reweighting (any other weighting
+is ad-hoc tuning), and the dominance is reported as an empirical finding, not engineered away. It
+**confirms** the project thesis rather than undercutting it: `suppress` at 0.86 with `def_impact` is the
+expected result of shared on-ice attribution (it is `def_impact`'s xG channel re-denominated per in-zone
+second); `deny` at 0.42 and `escape` at ≈0 are the genuinely **new** channels the transition frame adds,
+and `deny`-vs-`suppress` at 0.29 clears the spec's 0.8 double-counting flag with enormous room. Surfaces
+are therefore built **component-first**; the composite carries an honesty note that it is suppress-dominated
+and overlaps `def_impact` at ~0.87. Final publication emphasis is set by the **Stage 5 reliability tiers**
+(if `deny`/`escape` earn tiers `suppress` does not, component-first follows from the pre-registered rules),
+not by this overlap matrix.
 
 ## 7. Validation
 *(Pre-registered reliability tiers A/B/C with thresholds restated, the def_impact baseline comparison,
