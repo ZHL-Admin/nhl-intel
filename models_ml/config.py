@@ -1057,11 +1057,10 @@ PHASE_VALUE_CONFIG = {
     "TICK_SECONDS": 5,
 
     # Minimum exposure seconds for a stint directional row to enter a fit (Stage 3 row filters).
-    # NOTE (recon, PV-D002): the comment "mirrors RAPM MIN_SEGMENT_SECONDS" in the spec is kept in
-    # spirit, but train_rapm.py's actual MIN_SEGMENT_SECONDS is 5, not 4. PV deliberately uses 4 as a
-    # small-exposure floor (the spec's Stage 3 row filters say >= 4 explicitly); the 1 s difference is
-    # immaterial to a floor whose only job is to drop trivially-short exposure. Do not "fix" to 5.
-    "MIN_EXPOSURE_SECONDS": 4,
+    # PV-D002 (AMENDED 2026-07-24 per owner Stage 0 ruling): MIRROR RAPM's real MIN_SEGMENT_SECONDS = 5.
+    # Owner: "Use 5 for the exposure filters... the repo wins, and MIN_EXPOSURE_SECONDS should mirror the
+    # real value." Stage 3 >= filters (build_design.py) and PV-D011 use 5.
+    "MIN_EXPOSURE_SECONDS": 5,
 
     # Bootstrap resample counts, matching the RAPM convention (100 for the 3-season weighted window,
     # 40 for single seasons). Composite pv_def sd is taken from these resamples, NOT quadrature.
