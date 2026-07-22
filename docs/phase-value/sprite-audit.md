@@ -15,7 +15,7 @@ Independent 10 Hz ground-truth from the PPT goal-replay full track, seasons 2023
 - unclear: 2 (0.0%)
 
 ## E1 — episode start_type vs sprite entry timing
-**Architecture note (finding 1 is contained):** the headline components never consume the rush label — Fit A (`deny`) counts episode starts of EVERY non-faceoff type, and Fits B (`suppress`) / C (`escape`) are label-blind. Any rush-label contamination is localized to three published DIAGNOSTICS — `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` — each of which carries the caveat where it surfaces. `start_type='rush'` is therefore documented as an **event-visible rush**: a small, non-random subset of true rushes, not the population.
+**Architecture note (finding 1 is contained):** the headline components never consume the rush label — Fit A (`deny`) counts episode starts of EVERY non-faceoff type, and Fits B (`suppress`) / C (`escape`) are label-blind. Any rush-label contamination is localized to three published DIAGNOSTICS — `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` — each of which carries the caveat where it surfaces. Per the decomposition below, `start_type='rush'` is documented as an **event-space category only** (scorer-recorded precursor events) with **no positive association** to tracking-fast entries at goals — it is ANTI-SELECTED (precision below base rate at every k), not a small subset.
 
 ### Aligned window (zero-duration episodes) — the apples-to-apples view
 For zero-duration goal-only episodes the PBP rush lookback (≤4s before the goal) and the sprite window measure the SAME moment, so this is the fair precision/recall.
@@ -25,10 +25,10 @@ n = **8,326**. Rows = episode start_type, cols = sprite_rush_4 (entry ≤4s):
 |---|---|---|---|
 | rush | 236 | 661 | 26.3% |
 | carry_other | 2,661 | 4,768 | 35.8% |
-- start_type='rush' vs sprite_rush_3: precision 0.143, recall 0.075 (sprite-rush goals at k=3: 1,699)
-- start_type='rush' vs sprite_rush_4: precision 0.263, recall 0.081 (sprite-rush goals at k=4: 2,897)
-- start_type='rush' vs sprite_rush_5: precision 0.338, recall 0.084 (sprite-rush goals at k=5: 3,603)
-- start_type='rush' vs sprite_rush_6: precision 0.386, recall 0.083 (sprite-rush goals at k=6: 4,156)
+- start_type='rush' vs sprite_rush_3: **precision 0.143 vs base rate 20.4% (BELOW base (anti-selected))**, recall 0.075 (sprite-rush goals at k=3: 1,699)
+- start_type='rush' vs sprite_rush_4: **precision 0.263 vs base rate 34.8% (BELOW base (anti-selected))**, recall 0.081 (sprite-rush goals at k=4: 2,897)
+- start_type='rush' vs sprite_rush_5: **precision 0.338 vs base rate 43.3% (BELOW base (anti-selected))**, recall 0.084 (sprite-rush goals at k=5: 3,603)
+- start_type='rush' vs sprite_rush_6: **precision 0.386 vs base rate 49.9% (BELOW base (anti-selected))**, recall 0.083 (sprite-rush goals at k=6: 4,156)
 
 ### Full sample — WINDOW-MISMATCHED (report-only)
 Full-sample start_type reflects the SEQUENCE ORIGIN (which may precede the goal by many seconds) while sprite_rush measures ENTRY-TO-GOAL, so low alignment here is partly a window mismatch, not a pure error. Kept for completeness; do not read as apples-to-apples.
@@ -40,14 +40,17 @@ n = **16,068**. Rows = episode start_type, cols = sprite_rush_4 (entry ≤4s):
 | forecheck | 183 | 1,080 | 14.5% |
 | carry_other | 3,518 | 8,347 | 29.7% |
 | oz_faceoff | 115 | 1,217 | 8.6% |
-- start_type='rush' vs sprite_rush_3: precision 0.123, recall 0.084 (sprite-rush goals at k=3: 2,370)
-- start_type='rush' vs sprite_rush_4: precision 0.230, recall 0.088 (sprite-rush goals at k=4: 4,186)
-- start_type='rush' vs sprite_rush_5: precision 0.301, recall 0.090 (sprite-rush goals at k=5: 5,377)
-- start_type='rush' vs sprite_rush_6: precision 0.361, recall 0.092 (sprite-rush goals at k=6: 6,293)
+- start_type='rush' vs sprite_rush_3: **precision 0.123 vs base rate 14.7% (BELOW base (anti-selected))**, recall 0.084 (sprite-rush goals at k=3: 2,370)
+- start_type='rush' vs sprite_rush_4: **precision 0.230 vs base rate 26.1% (BELOW base (anti-selected))**, recall 0.088 (sprite-rush goals at k=4: 4,186)
+- start_type='rush' vs sprite_rush_5: **precision 0.301 vs base rate 33.5% (BELOW base (anti-selected))**, recall 0.090 (sprite-rush goals at k=5: 5,377)
+- start_type='rush' vs sprite_rush_6: **precision 0.361 vs base rate 39.2% (BELOW base (anti-selected))**, recall 0.092 (sprite-rush goals at k=6: 6,293)
 
 Cross-check: oz_faceoff goals established_full_window (or crossing-free): 1,102/1,332 (82.7%) — expect overwhelming.
 
-Interpretation: **recall** stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by ABSENT events (entries that generate no PBP event are invisible), not by window size, so no PBP-side redefinition can recover them (the pre-committed possession-proxy limitation, measured). **Precision** (aligned/zero-duration) rises 0.14→0.39 over k=3→6; at k=4 only ~26% of `rush`-labeled episodes are tracking-fast entries — the concrete size behind the *event-visible rush = small, non-random subset* caption on the rush diagnostics (`c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef`). Recall answers the ceiling question; precision sets the diagnostic captions.
+### Rush-label decomposition — the label is ANTI-SELECTED, not a small subset
+At every k the aligned **precision sits BELOW the base rate** (0.143 vs 20.4%, 0.263 vs 34.8%, 0.338 vs 43.3%, 0.386 vs 49.9%): a random label would pick MORE tracking-fast entries than `start_type='rush'` does. Decomposing the **897** rush-labeled aligned goals: **54.3% show NO entry at all** (established_full_window — puck in-zone the whole 8 s window), and the 45.7% with an entry do not cluster in 4–7 s (median 3.7 s, only 37% in 4–7 s). A **majority have no tracking entry.**
+**Caption for the three rush diagnostics** `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` (carry verbatim wherever they surface, with the precision-vs-base numbers): _defined by scorer-recorded precursor events; the sprite audit found no positive association with tracking-fast entries at goals; event-space category only._
+Recall (~0.09, flat across k) confirms the ceiling is ABSENT events (entries that generate no PBP event are invisible), so no PBP-side redefinition recovers them — the pre-committed possession-proxy limit.
 
 ## E2 — entry-to-goal time (the independent instrument on PV-D013)
 Entries (n=7,522): median 3.80s; p25 2.80s; p75 5.30s.

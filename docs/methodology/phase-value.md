@@ -90,10 +90,15 @@ possession reaches the offensive zone (P_OZ_EST 0.0052).
 V(P_OZ_EST)=0.0052, but this is a measurement artifact, not a finding: the rush state's ≤5 s lifetime equals
 the tick grid and sub-2.5 s partial ticks are dropped, so 71.2% of *scoring* rush episodes (mean duration
 2.14 s) contribute zero rush ticks and their goals credit the preceding windows. A tick=2 s diagnostic
-restores the spec-expected order (V(rush)=0.0054 > V(est)=0.0051). **The rush's danger is therefore stated
-from the artifact-free view — `c_seq_rush` = 0.0589, the highest episode xG cost of any start type — not from
-V(P_OZ_RUSH).** V(P_NZ)/V(P_OWN_D) are both near zero, so their fine ordering is within noise; the accounting
-relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}. `phase_rush_state_seconds` stays **5 s** — sprite-tracked
+restores the spec-expected order (V(rush)=0.0054 > V(est)=0.0051). `c_seq_rush` = 0.0589 is **the costliest
+event-visible start category** (highest episode xG cost) — but this is a statement about the *event-space
+`start_type='rush'` category*, NOT about tracking rushes: the sprite audit (`sprite-audit.md`) found the label
+**anti-selected** at goals (precision below base rate at every k∈{3,4,5,6}; a majority of rush-labeled goals
+show no tracking entry at all) with **no positive association** to tracking-fast entries — because it is
+success-conditioned (goals only) it cannot speak to non-goal sequences, and the ceiling is absent events, not
+window size. So `c_seq_rush` / `V(P_OZ_RUSH)` / `deny_rush_coef` are reported as event-space diagnostics with
+that caption, not as tracking-rush danger. V(P_NZ)/V(P_OWN_D) are both near zero, so their fine ordering is
+within noise; the accounting relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}. `phase_rush_state_seconds` stays **5 s** — sprite-tracked
 entry-to-goal times (median 3.8 s, **p75 5.3 s**) show a 5 s rush-state lifetime captures ~70% of entries;
 this is supporting context, carried with the granularity caveat above. Full detail:
 `docs/phase-value/stage2-acceptance.md` and `docs/phase-value/sprite-audit.md`.

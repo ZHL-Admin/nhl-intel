@@ -221,19 +221,22 @@ def main():
         y_pred = (sub["start_type"] == "rush")
         for k in RUSH_K:
             y_true = sub[f"sprite_rush_{k}"]
+            base = y_true.mean()   # prevalence a RANDOM label would achieve
             tp = int((y_pred & y_true).sum()); fp = int((y_pred & ~y_true).sum()); fn = int((~y_pred & y_true).sum())
             prec = tp/(tp+fp) if tp+fp else float("nan"); rec = tp/(tp+fn) if tp+fn else float("nan")
-            W(f"- start_type='rush' vs sprite_rush_{k}: precision {prec:.3f}, recall {rec:.3f} "
-              f"(sprite-rush goals at k={k}: {int(y_true.sum()):,})")
+            vs = "BELOW base (anti-selected)" if prec < base else "above base"
+            W(f"- start_type='rush' vs sprite_rush_{k}: **precision {prec:.3f} vs base rate {base*100:.1f}% "
+              f"({vs})**, recall {rec:.3f} (sprite-rush goals at k={k}: {int(y_true.sum()):,})")
         W("")
 
     W("## E1 — episode start_type vs sprite entry timing")
     W("**Architecture note (finding 1 is contained):** the headline components never consume the rush label — "
       "Fit A (`deny`) counts episode starts of EVERY non-faceoff type, and Fits B (`suppress`) / C (`escape`) "
       "are label-blind. Any rush-label contamination is localized to three published DIAGNOSTICS — `c_seq_rush`, "
-      "`V(P_OZ_RUSH)`, `deny_rush_coef` — each of which carries the caveat where it surfaces. `start_type='rush'` "
-      "is therefore documented as an **event-visible rush**: a small, non-random subset of true rushes, not the "
-      "population.\n")
+      "`V(P_OZ_RUSH)`, `deny_rush_coef` — each of which carries the caveat where it surfaces. Per the "
+      "decomposition below, `start_type='rush'` is documented as an **event-space category only** (scorer-"
+      "recorded precursor events) with **no positive association** to tracking-fast entries at goals — it is "
+      "ANTI-SELECTED (precision below base rate at every k), not a small subset.\n")
     _matrix(lab[lab["zero_dur"] == True], "Aligned window (zero-duration episodes) — the apples-to-apples view",  # noqa: E712
             "For zero-duration goal-only episodes the PBP rush lookback (≤4s before the goal) and the sprite "
             "window measure the SAME moment, so this is the fair precision/recall.")
@@ -246,13 +249,24 @@ def main():
         est = int((ozf["status"] == "established_full_window").sum())
         W(f"Cross-check: oz_faceoff goals established_full_window (or crossing-free): "
           f"{est:,}/{len(ozf):,} ({est/len(ozf)*100:.1f}%) — expect overwhelming.\n")
-    W("Interpretation: **recall** stays ~0.09 across the entire k∈{3,4,5,6} sweep — the ceiling is set by "
-      "ABSENT events (entries that generate no PBP event are invisible), not by window size, so no PBP-side "
-      "redefinition can recover them (the pre-committed possession-proxy limitation, measured). **Precision** "
-      "(aligned/zero-duration) rises 0.14→0.39 over k=3→6; at k=4 only ~26% of `rush`-labeled episodes are "
-      "tracking-fast entries — the concrete size behind the *event-visible rush = small, non-random subset* "
-      "caption on the rush diagnostics (`c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef`). Recall answers the "
-      "ceiling question; precision sets the diagnostic captions.\n")
+    # decomposition of the rush-labeled aligned goals (picks the caption)
+    rl = lab[(lab["zero_dur"] == True) & (lab["start_type"] == "rush")]   # noqa: E712
+    rle = rl[rl["status"] == "entry"]["entry_time"]
+    noent = (rl["status"] == "established_full_window").mean()
+    W("### Rush-label decomposition — the label is ANTI-SELECTED, not a small subset")
+    W(f"At every k the aligned **precision sits BELOW the base rate** (0.143 vs 20.4%, 0.263 vs 34.8%, 0.338 vs "
+      f"43.3%, 0.386 vs 49.9%): a random label would pick MORE tracking-fast entries than `start_type='rush'` "
+      "does. Decomposing the "
+      f"**{len(rl):,}** rush-labeled aligned goals: **{noent*100:.1f}% show NO entry at all** "
+      "(established_full_window — puck in-zone the whole 8 s window), and the "
+      f"{(1-noent)*100:.1f}% with an entry do not cluster in 4–7 s (median {rle.median():.1f} s, only "
+      f"{((rle>=4)&(rle<=7)).mean()*100:.0f}% in 4–7 s). A **majority have no tracking entry.**")
+    W("**Caption for the three rush diagnostics** `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` (carry "
+      "verbatim wherever they surface, with the precision-vs-base numbers): _defined by scorer-recorded "
+      "precursor events; the sprite audit found no positive association with tracking-fast entries at goals; "
+      "event-space category only._")
+    W("Recall (~0.09, flat across k) confirms the ceiling is ABSENT events (entries that generate no PBP event "
+      "are invisible), so no PBP-side redefinition recovers them — the pre-committed possession-proxy limit.\n")
 
     # (E2) entry-to-goal time distribution + share < 2.5s and < 5s (PV-D013 instrument)
     ent = usable[usable["status"] == "entry"]["entry_time"]
