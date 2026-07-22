@@ -72,17 +72,3 @@ Correction to the original PV-D010 framing: preseason is NOT uniformly excluded.
 Decision: keep the global owner heuristic (possession → opponent(event_owner_team_id), PV-D005); do NOT resolve the blocker's team per-row from `blocking_player_id` via a shift/roster join in v1.
 Rationale: (1) impact is bounded — the ~5.7% owner-appears-to-be-shooter rows are ~0.6% of all events, and blocked-shots rarely change zone_abs (block location is near the true zone); (2) it is already covered by the pre-registered Stage 5 blocked-shot possession sensitivity; (3) adopting it would require threading a roster-resolved possession field through the pure-Python reference (which currently takes only `owner`), eroding the "reference IS the spec" simplicity, plus new golden vectors + a reconciliation pass. The cost/benefit favors deferring to v1.1, gated behind whatever the Stage 5 sensitivity shows.
 Alternative: adopt the join now — declined for v1 (bounded impact, already sensitivity-covered). Revisit if Stage 5 flags blocked-shot possession as material.
-
-**PV-D013 | 2026-07-24 (Stage 2) | State value function — report-only deviations, all accepted.**
-The hard gate `V(P_OZ_EST) > V(P_NZ) > V(P_OWN_D)` PASSES pooled (0.00520 > 0.00143 > -0.00027, gap ~5 se).
-Three report-only observations, none a gate failure:
-- **V(P_OZ_RUSH) 0.0035 < V(P_OZ_EST) 0.0052** (spec guessed rush >= est). Established O-zone possession
-  yields more net goals over the 40 s window than the rush instant; rush also has the smallest n (121k
-  ticks) and is the noisiest per-season. Accepted as the empirical reality; the accounting does not depend
-  on rush >= est.
-- **|V(P_NZ)| and |V(P_OWN_D)| < 0.003** (below the spec's expectation-band floor). Both are genuinely near
-  zero (V(P_OWN_D) near-zero is spec-anticipated). The coarse structure P_OZ_EST >> {P_NZ, P_OWN_D ~ 0} is
-  what matters; the fine P_NZ vs P_OWN_D order flips within ~1 se in 2/11 seasons (pooled gap ~5 se). No action.
-- **~1.3% of P_OZ ticks lack an episode_id link** (fall through to P_OZ_EST rather than being split into
-  RUSH/EST). Does not affect the gate (EST vs NZ vs OWN_D). Candidate v1.1 cleanup (tighten the tick↔episode
-  containment join); flagged, not fixed in v1.
