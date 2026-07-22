@@ -55,12 +55,15 @@ def _load_components():
 
 
 def _price(df, k):
+    # spec §8.1: deny_g60 = a*(s_out/60)*C_seq*cal ; suppress_g60 = b*(s_in/60)*cal ;
+    #            escape rate only ; pv_def_g60 = deny_g60 + suppress_g60
     s_out, s_in, c_seq = k["s_out_min_per_60"], k["s_in_min_per_60"], k["c_seq_xg_nonfo"]
-    df["deny_g60"] = df["deny"] * (s_out / 60.0) * c_seq
-    df["suppress_g60"] = df["suppress"] * (s_in / 60.0)
+    cal = k.get("xg_calibration", 1.0)
+    df["deny_g60"] = df["deny"] * (s_out / 60.0) * c_seq * cal
+    df["suppress_g60"] = df["suppress"] * (s_in / 60.0) * cal
     df["escape_rate"] = df["escape"]                       # published as a rate (v1)
     df["pv_def_g60"] = df["deny_g60"] + df["suppress_g60"]
-    df["pv_def_g60_sd"] = np.nan                           # pending shared-resample composite bootstrap
+    df["pv_def_g60_sd"] = np.nan                           # pending within-resample composite (§8.1), not quadrature
     return df
 
 
