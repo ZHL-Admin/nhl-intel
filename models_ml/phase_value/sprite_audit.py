@@ -197,7 +197,11 @@ def _blockshot_split(W, client, p, rl_noentry):
       "owns coded in its own defensive zone (`'D'`) satisfies the D/N precursor and fires the rush label. But "
       "these are the `established_full_window` goals — the puck is tracked in the offensive zone the whole 8 s — "
       "so the block's recorded D-zone location/timing is inconsistent with the tracked possession; the "
-      "block-location coordinate (or its ±2 s PBP timing) is the unreliable input, not the owner/zone rule.\n")
+      "block-location coordinate (or its ±2 s PBP timing) is the unreliable input, not the owner/zone rule. "
+      "A real, correctly-timed attacker-owned own-zone block within 4 s of a goal entails a tracked zone entry "
+      "within 4 s; no entry appears anywhere in the 8 s window on any of the 408, so these records are displaced "
+      "in time by more than the clip span or misrecorded outright, and they share the exact owner-and-zone cell "
+      "of the legitimate counterattack precursor, so no PBP-side rule can separate them.\n")
     W("**Consequence for the v1.1 note (correction):** the false qualifiers are attacker-owned **D-zone** "
       "blocks — the SAME owner×zone cell as the legitimate _block-in-own-D → counterattack_ precursor. So there "
       "is **no clean owner×zone rule** that drops the false ones without also destroying legitimate counter-rush "
