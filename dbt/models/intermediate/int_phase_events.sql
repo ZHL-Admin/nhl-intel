@@ -65,6 +65,9 @@ mapped as (
         -- side; correct for blocked-shots too since zone_abs is absolute.
         case
             when zone_code is null then null
+            -- penalty keeps the previous zone (spec §5.2: zone_abs unchanged), even though penalties carry
+            -- a zone_code ~99% of the time; only the zone-updating types below set zone_abs.
+            when type_desc_key = 'penalty' then null
             when owner_is_home then case zone_code when 'O' then 'D_away' when 'D' then 'D_home' when 'N' then 'N' end
             else                     case zone_code when 'O' then 'D_home' when 'D' then 'D_away' when 'N' then 'N' end
         end as zone_set,

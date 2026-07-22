@@ -109,15 +109,27 @@ def _dzone(d, home):
     return D_HOME if d == home else D_AWAY
 
 
-def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link):
+def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link, is_5v5=None):
     """DZ episodes for defending team d, from the per-event state series. An interval [t_i, t_{i+1})
-    carries state_after(i); it is 'in-zone' iff poss==attacker, zone==d's D zone, and live."""
+    carries state_after(i); it is 'in-zone' iff poss==attacker, zone==d's D zone, and (live or atk goal).
+    If is_5v5 (list aligned to the original event indices) is given, each episode is tagged with the
+    start event's is_5v5 for parity with the 5v5-scoped dbt model."""
     attacker = opponent(d, home, away)
     dz = _dzone(d, home)
     n = len(states)
 
+    def is_atk_goal(s):
+        return s.type == "goal" and s.poss == attacker
+
     def in_zone(s):
-        return s.live and s.poss == attacker and s.zone == dz
+        # attacker possessing in d's D zone; live OR a terminating attacker goal (spec §5.4: the raw
+        # interval condition is possession+zone; a goal is the attacker culminating in-zone even though
+        # play goes DEAD after, so it anchors/ends the episode). This is what covers rush/quick goals.
+        return s.poss == attacker and s.zone == dz and (s.live or is_atk_goal(s))
+
+    def dz_ok(s):
+        # gap-merge test: puck stayed in d's zone and live (or a terminal attacker goal)
+        return s.zone == dz and (s.live or is_atk_goal(s))
 
     # raw in-zone runs over event indices (each index i owns interval [t_i, t_{i+1}))
     raw = []
@@ -144,8 +156,7 @@ def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link):
         gap_secs = gap_end_t - gap_start_t
         gap_ok = gap_secs <= gap
         for k in range(pb + 1, a):
-            s = states[k]
-            if (not s.live) or s.zone != dz:     # DEAD inside, or puck left the zone -> cannot merge
+            if not dz_ok(states[k]):              # puck left the zone or went DEAD (non-goal) -> cannot merge
                 gap_ok = False
                 break
         if gap_ok:
@@ -156,11 +167,15 @@ def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link):
     episodes = []
     for (a, b) in merged:
         start_t = states[a].t
-        # episode end = end of the last in-zone interval = time of the first event after index b
-        end_idx = b + 1 if b + 1 < n else b
-        end_t = states[end_idx].t if b + 1 < n else states[b].t
+        if is_atk_goal(states[b]):
+            # the episode's last in-zone spell IS the attacker goal: it ends here, reason goal.
+            end_t = states[b].t
+            end_reason = "goal"
+        else:
+            # episode end = end of the last in-zone interval = time of the first event after index b
+            end_t = states[b + 1].t if b + 1 < n else states[b].t
+            end_reason = _end_reason(states, a, b, d, home, away, gap)
         start_type = _start_type(states, a, d, home, away, rush_w, ozfo_link)
-        end_reason = _end_reason(states, a, b, d, home, away, gap)
         # unblocked attempts by attacker with t in [start,end]; goals among them
         n_unblocked = sum(1 for s in states if s.owner == attacker and s.type in SHOT_TYPES
                           and start_t <= s.t <= end_t)
@@ -170,6 +185,7 @@ def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link):
             "defending_team": d, "attacking_team": attacker,
             "start": start_t, "end": end_t, "start_type": start_type, "end_reason": end_reason,
             "n_unblocked": n_unblocked, "goals": goals,
+            "start_5v5": (is_5v5[states[a].idx] if is_5v5 is not None else None),
         })
     return episodes
 
@@ -236,11 +252,13 @@ def _end_reason(states, a, b, d, home, away, gap):
     return "flip_sustained"
 
 
-def run(events, home, away, gap=GAP_SECONDS, rush_w=RUSH_WINDOW, ozfo_link=OZ_FACEOFF_LINK) -> dict:
-    """Process one game's events. Returns per_event states, episodes (both defending sides), unmapped count."""
+def run(events, home, away, gap=GAP_SECONDS, rush_w=RUSH_WINDOW, ozfo_link=OZ_FACEOFF_LINK,
+        is_5v5=None) -> dict:
+    """Process one game's events. Returns per_event states, episodes (both defending sides), unmapped count.
+    is_5v5 (optional, aligned to events) tags each episode's start-event strength for 5v5 parity with dbt."""
     states, unmapped = _states(events, home, away)
-    episodes = (_detect_episodes(states, home, home, away, gap, rush_w, ozfo_link)
-                + _detect_episodes(states, away, home, away, gap, rush_w, ozfo_link))
+    episodes = (_detect_episodes(states, home, home, away, gap, rush_w, ozfo_link, is_5v5)
+                + _detect_episodes(states, away, home, away, gap, rush_w, ozfo_link, is_5v5))
     episodes.sort(key=lambda e: (e["start"], str(e["defending_team"])))
     per_event = [{"t": s.t, "type": s.type, "poss": s.poss, "zone": s.zone, "live": s.live} for s in states]
     return {"per_event": per_event, "episodes": episodes, "unmapped": unmapped}

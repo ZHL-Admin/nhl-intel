@@ -1,0 +1,71 @@
+version: 2
+
+# Phase Value (phase_value_v1) state-engine models (spec Section 5). The pure-Python reference
+# (tests/phase_value/reference_state_machine.py) is the authority; these are reconciled against it by
+# models_ml/phase_value/stage1_reconcile.py. See docs/methodology/phase-value.md.
+
+models:
+  - name: int_phase_events
+    description: >
+      Event-level possession-state assignment: possession, absolute puck zone (zone_abs), and liveness
+      AFTER each PBP event, as a forward-filled step function within a period. Foundation of the state
+      engine. One row per PBP event (time_in_period not null).
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: zone_abs
+        description: Absolute puck zone (null while dead / pre-faceoff)
+        tests:
+          - accepted_values:
+              values: ['D_home', 'N', 'D_away']
+      - name: is_live
+        tests: [not_null]
+      - name: is_5v5
+        tests: [not_null]
+
+  - name: int_phase_spells
+    description: >
+      Maximal intervals of constant (possession, zone_abs, liveness), SPLIT at 5v5 strength boundaries.
+      One row per (spell x overlapping segment); every row is wholly inside one shift-segment. Summing
+      is_5v5 durations reproduces total 5v5 segment time (Stage 1 conservation gate).
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: duration_seconds
+        tests: [not_null]
+      - name: state_rel
+        description: State from the possessing team's perspective (null while dead)
+        tests:
+          - accepted_values:
+              values: ['P_OWN_D', 'P_NZ', 'P_OZ']
+      - name: is_5v5
+        tests: [not_null]
+      - name: is_live
+        tests: [not_null]
+
+  - name: int_zone_episodes
+    description: >
+      DZ episodes: threatening sequences against a defending team (opponent possessing in d's D zone),
+      merging brief in-zone interruptions. One row per episode, 5v5-scoped. start_type precedence
+      oz_faceoff > rush > forecheck > carry_other; end_reason goal > stoppage > exit > flip_sustained.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: defending_team_id
+        tests: [not_null]
+      - name: attacker_team_id
+        tests: [not_null]
+      - name: start_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['oz_faceoff', 'rush', 'forecheck', 'carry_other']
+      - name: end_reason
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['goal', 'stoppage', 'exit', 'flip_sustained']
+      - name: clipped_by_strength
+        tests: [not_null]

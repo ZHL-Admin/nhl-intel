@@ -5,7 +5,7 @@ which it never modifies and against which it is validated. Filled in progressive
 sections are stubs until their stage completes. Spec + decisions: `docs/phase-value/` (schema-map,
 DECISIONS) and the build specification.*
 
-Status: **Stage 0 complete** (recon + scaffolding). Stages 1–6 pending.
+Status: **Stage 1 complete** (state engine — all hard gates green). Stages 2–6 pending.
 
 ## 1. Summary and motivation
 `def_impact` is structurally the weakest number on the platform (rare outcome, uniform 5-defender
@@ -25,12 +25,37 @@ Assumptions stated plainly (all sensitivity-tested or revisited as noted):
 - **PV-A3** hits do not change possession.
 - **PV-A4** the V outcome window counts goals regardless of mid-window strength changes (5v5-goals-only
   is a Stage 5 sensitivity).
-*(Mapping table, spells, DZ-episode start/end taxonomy, and Stage 1 acceptance results — filled in Stage 1.)*
+
+**Models** (dbt, `nhl_staging`): `int_phase_events` (event-level state), `int_phase_spells` (constant-state
+intervals split at 5v5 boundaries), `int_zone_episodes` (DZ episodes). The pure-Python reference
+`tests/phase_value/reference_state_machine.py` is the authority; the SQL conforms to it.
+**State** = (possession, `zone_abs` ∈ {D_home, N, D_away}, liveness), a forward-filled step function reset
+each period. `zone_abs` is absolute, derived from the owner-relative `zone_code` + owner home/away side;
+possession/zone are "set" by the event or keep the previous value (mapping per spec §5.2). A penalty keeps
+the previous zone (does not adopt its own `zone_code`). Blocked-shots send possession to `opponent(owner)`
+(the shooter, PV-A1/PV-D005) with the absolute zone from the actual (blocking) owner.
+
+**Stage 1 acceptance (2023-24 → 2025-26), all hard gates PASS:**
+- Conservation: 5v5 live spell-seconds vs 5v5 segment-seconds — mean & max |Δ| = **0.000%** (0 games > 1%).
+- Golden vectors GV1–GV8: **8/8 pass**.
+- Unmapped events: **0.0017%** (gate < 0.5%).
+- Goal coverage: **98.3%** of 5v5 non-EN goals fall inside an episode vs the conceding team (gate ≥ 90%).
+- dbt↔reference reconciliation (75 games, 25/season × 3): per-event state **0.0000%** (gate ≤ 0.5%),
+  episode count **0.0000%** (gate ≤ 2%).
+- Schema tests: **18/18 pass**.
+- Bands: episodes/team-game **45.0** (20–55); mean episode duration **17.4 s** (6–25); 5v5 possession-time
+  shares P_OZ 51.7% / P_NZ 30.1% / P_OWN_D 18.1% (per-team in-zone-against ≈ 25.8%, in 15–30% band).
 
 ## 3. Episodes
-*(DZ-episode definition, start_type precedence oz_faceoff>rush>forecheck>carry_other, end_reason
-taxonomy, and the oz_faceoff-exclusion rationale — a defensive-zone draw is deployment, not defense, so
-excluding it from `deny` avoids crediting line-change luck. Filled in Stage 1.)*
+A DZ episode against team *d* is a maximal set of spells where the opponent possesses in *d*'s D zone,
+merging brief interruptions that (a) total ≤ `phase_episode_gap_seconds` (4), (b) keep the puck in *d*'s D
+zone, and (c) contain no DEAD boundary. An attacker **goal** anchors/ends an episode even though play goes
+DEAD after it (PV-D008) — this is what covers rush/quick-strike goals. **start_type** (precedence
+oz_faceoff > rush > forecheck > carry_other): oz_faceoff excludes a defensive-zone draw from `deny` because a
+draw is *deployment, not defense* (avoids crediting line-change luck); rush mirrors `int_shot_sequence`'s
+`seq_rush`. **end_reason**: goal > stoppage > exit > flip_sustained. Measured mix (3 seasons): start_type
+carry 59% / oz_faceoff 19% / rush 11% / forecheck 11%; end_reason exit 56% / stoppage 33% / flip 6% / goal
+5%. 5v5-scoped on the start event's strength; clipped-by-strength share **3.4%** (< 10%), kept & flagged (PV-D007).
 
 ## 4. The value function
 *(V(state) table with se, per-season stability, and the one-paragraph interpretation incl. the empirical

@@ -34,3 +34,13 @@ Alternative: take owner as the shooter (the naive reading) — rejected; empiric
 Decision: route both to the fallback mapping row — `failed-shot-attempt` → LIVE no-op (counts toward the unmapped metric); `shootout-complete` → treat as a DEAD boundary. Both are far under the 0.5% unmapped gate.
 Rationale: neither is a 5v5 possession event; shootout is out of scope entirely. Explicit assignment avoids silent mishandling.
 Alternative: add dedicated mapping rows — unnecessary at these volumes; revisit only if counts grow.
+
+**PV-D007 | 2026-07-22 | 5v5 scoping of episodes: how to keep/flag, and how to test 5v5 for 0-duration point episodes (rush goals at a whistle).**
+Decision: gate an episode's 5v5 membership on its START event's `is_5v5` (robust for 0-duration episodes, where a segment-overlap test degenerates); keep episodes whose start is 5v5. Flag `clipped_by_strength` when the span contains any non-5v5 time (positive-duration only). v1 does NOT truncate a clipped episode's end to the strength boundary (the spec's stated end-at-boundary behavior) — it keeps the whole span and flags it. Clipped share measured 3.4% (< 10% expectation).
+Rationale: the initial segment-overlap 5v5 filter returned NULL duration for 0-width point episodes and silently dropped rush/quick goals, tanking goal coverage to 43.8%. Start-event strength is unambiguous and lifted coverage to 98.3%. End-truncation is deferred as a v1.1 refinement; at 3.4% clipped it barely affects outcomes and the flag makes it auditable.
+Alternative: full-span segment-overlap gate (drops point episodes; fails the goal-coverage gate) — rejected. Truncating clipped ends now — deferred (adds complexity for <4% of episodes).
+
+**PV-D008 | 2026-07-22 | A terminating attacker goal (live=false) must anchor/end a DZ episode, or rush/quick-strike goals fall outside all episodes.**
+Decision: treat an attacker `goal` spell as in-zone for episode membership (spec §5.4's raw-interval condition is possession+zone, not liveness), applied identically in the Python reference and the dbt SQL; a goal is always the terminating in-zone spell (end_reason='goal'). This covers goals with no preceding live in-zone event (pure rush goals).
+Rationale: goals are DEAD after recording, so a liveness-gated in_zone excludes them; only goals that terminated a pre-existing episode were covered (43.8%). Including attacker goals lifts goal coverage to 98.3% and keeps the reference and SQL bit-identical (reconciliation 0.0000%). Golden vectors GV1–GV8 still pass.
+Alternative: leave goals out (fails the ≥90% goal-coverage hard gate).
