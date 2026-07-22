@@ -234,3 +234,83 @@ data source (player-tracking / off-puck + passing — the Tier-iii ceiling), not
 public-event features.** The surviving, shippable assets are all DESCRIPTIVE, labeled co-occurrence
 not causation: the two-way role profiles, the 16 style archetypes, and shooting-deference-as-a-
 pairwise-behavior. Nothing predictive was promoted or published from the fit line.
+
+---
+
+# Goaltending investigation — Findings (goal-tracking Stage 1 + goalie-probe; seeds 20260714 / 20260714b)
+
+Two linked efforts asked what distinguishes goalies. Stage 1 (goal-tracking) profiled goalies from the
+composition of GOALS AGAINST (player-tracking, goals-only, no shot denominator); the goalie-probe redid
+the question over SHOTS FACED (the denominator) and then tested behavioral habits from the tracking
+fusion. **THE DENOMINATOR IS THE POINT:** a goalie is never characterized from the composition of goals
+alone.
+
+- **F21 — a goalie's goal-against MECHANISM MIX is not a stable trait (goals-only, unstable).** Stage 1
+  tagged each goal's beat-mechanism (east-west, screened, clean-look, unset, rush, location,
+  second-chance) and profiled goalies. Reliability split-half: only **1/10 mechanisms (UNSET, r=0.34)**
+  replicated; east-west / screened / rush / location all ~0. The mix reflects the defense and situation
+  in front of the goalie, not a persistent goalie signature — and it carries no shot denominator. Only
+  pooled three-season tables ship; single seasons are noise. *(Detail:
+  `research/goal-tracking/reports/stage1.md`.)*
+
+- **F22 — goalies differ in OVERALL stopping, not in identifiable shot-type specialties (with the
+  denominator).** Over shots faced (SOG + goals, 2023-26, 248,989 shots, 155 goalies), GSAx-over-shots-
+  faced is real and modestly reliable (**split-half 0.44, YoY 0.27**). But **no shot-type bucket** —
+  wrist/snap/slap/backhand/deflection, danger tier, region, rebound-shot — is stable *beyond* overall;
+  the only buckets clearing the bar (non-rebound ≈ all shots; inner-slot = the danger core) are the
+  overall signal in disguise. Goalies are not shot-type specialists. *(Detail:
+  `research/goalie-probe/reports/probe.md` G1.)*
+
+- **F23 — one behavioral habit persists: lateral-recovery / how-set, but goals-only.** Continuous goalie
+  lateral speed at release (the continuous form of F21's UNSET) is the lone behavior axis clearing the
+  stability gate (**split-half 0.41, p<0.001 decisive; YoY p≈0.05 borderline / underpowered on two
+  season-pairs**), confirming F21's UNSET hint. But it is measured on goals-against (no save
+  denominator), so it is a describable positioning **STYLE, not a skill** — and it barely relates to
+  results (r=−0.13 vs overall GSAx). *(goalie-probe G2.)*
+
+- **F24 — rebound-control, the one denominator-backed behavioral axis, is NOT a stable trait.**
+  Second-on-goal-shot-within-3s-after-a-save rate (over saves, from the pbp spine — the only behavior
+  axis with a real denominator) fails the gate (**split-half 0.21**) and does not relate to overall GSAx
+  (r≈0). The honest-denominator behavioral skill does not materialize. *(goalie-probe G2.)*
+
+## GOALTENDING — one durable skill that does not decompose
+Goaltending, tested for internal structure the way the fit line was, gives the parallel result: there is
+exactly **one durable, denominator-backed goalie skill — overall save-quality over shots faced** (GSAx,
+split-half 0.44) — **and it does not decompose.** It does not split into shot-type specialties (F22); it
+is not captured by the goals-only mechanism mix (F21); and the behavioral habits that might underlie it
+either do not persist (rebound-control, F24) or persist only as a goals-only positioning style with no
+tie to results (lateral-recovery, F23). As **the player is the portable unit** in the fit line, **overall
+stopping is the portable unit** in goaltending: a single skill that travels with the goalie but resists
+being broken into buildable sub-skills on public data. Reopening "what KIND of goalie" as a predictive
+question would require tracked **SAVES** (this data is goals-only), not another decomposition of goals.
+The shippable asset is descriptive — an overall save-quality card (GSAx-over-shots-faced + 90% CIs),
+optionally tagged with the goals-only lateral-recovery style (labeled style-not-skill) — not a
+specialties model. **F2 ships on that basis; the Stage-1 mechanism-mix framing is retired.** Nothing
+predictive was promoted from the goaltending line.
+
+---
+
+# Goal-tracking playmaking — Finding (Stage 2; `research/goal-tracking/`, seed 20260714)
+
+Stage 2 built per-goal buildup descriptors and per-player buildup signatures from the tracking corpus
+(Stage 0 fused goals + reconstructed events, reads the Stage 0 API only), then tested whether the
+signatures are stable player traits.
+
+- **F25 — player BUILDUP SIGNATURES are stable, persistent traits (the tracking program's first positive
+  result).** Over 735 players with ≥15 involved goals, the reliability gate (odd/even split-half vs a
+  shuffled-identity placebo, 2000 perms) PASSES on **5/7 fields**: **net-front (0.76), finisher (0.70),
+  entry-driver (0.56), carrier (0.54), rush (0.37)** replicate and beat placebo — these are
+  **identity-grade** signatures, and per-season profiles are publishable (subject to the ≥15-goal gate).
+  **royal-road (0.24) and feeder (0.16) do NOT replicate** — creating cross-slot goals and feeding a
+  specific scorer are situation / linemate-driven, so they ship **descriptive-only, never as identity
+  claims.** The role-axis sanity matrix confirms face validity (finisher↔goals60 0.74, net-front↔
+  slot_share 0.72, net-front↔tip_share 0.65; no contradictory sign). *(Detail:
+  `research/goal-tracking/reports/stage2.md`.)*
+
+**Contrast with the goaltending line.** Where the goalie mechanism mix does NOT decompose into stable
+sub-skills (F21–F24), player buildup DOES: how a player contributes to goals — finishes, drives entries,
+carries, goes to the net, plays on the rush — is a persistent individual signature. The tracking fusion
+delivers real, publishable PLAYER description even though it delivered only confirmation on goalies.
+This unlocks the **F1 (goal-anatomy viewer)** and **F3 (player signatures)** design briefs, both fed by
+Stage 0 + Stage 2; the visuals proceed through the design (mockup/critique/handoff) process, not a
+Claude Code paste. Nothing was promoted from the backend.

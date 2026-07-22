@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Defensive Responsibility Map — Scheme Selector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#111823; --line:#3a4a5e; --line-soft:#26313f; --edge:#4a5c72;
+    --text:#e7edf5; --muted:#8b9bb0; --dim:#5f6f84; --red:#e2504b; --blue:#3f7fd6;
+    --LD:#38bdf8; --RD:#34d399; --C:#fbbf24; --LW:#f472b6; --RW:#a78bfa; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;}
+  body{background:
+      radial-gradient(1200px 600px at 15% -10%, #10202f 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 110%, #131b2a 0%, transparent 50%), var(--bg);
+    min-height:100vh; padding:28px 20px 48px;}
+  .wrap{max-width:1120px;margin:0 auto}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  h1{font-family:"Barlow Condensed",sans-serif;font-weight:700;letter-spacing:.01em;
+    text-transform:uppercase;font-size:34px;line-height:1;margin:0 0 8px}
+  .sub{color:var(--muted);font-size:14px;max-width:62ch;line-height:1.55;margin:0}
+  .layout{display:grid;grid-template-columns:1fr 320px;gap:22px;margin-top:22px;align-items:start}
+  @media (max-width:820px){.layout{grid-template-columns:1fr}}
+  .rinkcard{background:var(--panel);border:1px solid var(--line-soft);border-radius:14px;
+    padding:14px;box-shadow:0 20px 60px -30px rgba(0,0,0,.9)}
+  svg{width:100%;height:auto;display:block;touch-action:none;cursor:crosshair}
+  .panel{display:flex;flex-direction:column;gap:18px}
+  .block{background:var(--panel);border:1px solid var(--line-soft);border-radius:14px;padding:16px}
+  .block h2{font-family:"Barlow Condensed",sans-serif;font-weight:600;text-transform:uppercase;
+    letter-spacing:.08em;font-size:13px;color:var(--muted);margin:0 0 10px}
+  select{width:100%;background:#151d29;color:var(--text);border:1px solid var(--edge);
+    border-radius:var(--radius);padding:11px 12px;font-family:"Barlow Condensed",sans-serif;
+    font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:16px;cursor:pointer}
+  .caption{margin-top:11px;color:var(--muted);font-size:13px;line-height:1.5;min-height:38px}
+  .presets{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .presets button{background:#151d29;color:var(--text);border:1px solid var(--line-soft);
+    border-radius:8px;padding:9px 8px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;cursor:pointer;transition:.14s}
+  .presets button:hover{background:#18212e;border-color:var(--edge)}
+  .legend{display:flex;flex-direction:column;gap:7px}
+  .chip{display:flex;align-items:center;gap:10px;background:#151d29;border:1px solid var(--line-soft);
+    border-radius:9px;padding:8px 11px;cursor:pointer;transition:.14s;user-select:none}
+  .chip:hover{background:#18212e}
+  .chip .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .chip .nm{font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;font-size:15px;width:30px}
+  .chip .desc{color:var(--dim);font-size:11.5px;font-family:"IBM Plex Mono",monospace}
+  .chip.off{opacity:.4}
+  .chip.solo{border-color:var(--edge);background:#18212e}
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .toggle{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+  .toggle input{accent-color:var(--blue);width:15px;height:15px}
+  .reset{background:none;border:none;color:var(--dim);font-size:12px;cursor:pointer;
+    font-family:"IBM Plex Mono",monospace;text-decoration:underline;text-underline-offset:3px}
+  .reset:hover{color:var(--muted)}
+  .note{color:var(--dim);font-size:11.5px;line-height:1.55;font-family:"IBM Plex Mono",monospace}
+  .zone-label{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:13px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  @media (prefers-reduced-motion: no-preference){
+    #puckRing{animation:ringpulse 1.9s ease-in-out infinite}
+    @keyframes ringpulse{0%,100%{opacity:.25}50%{opacity:.7}}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">Rink Theory · teaching tool</p>
+    <h1>Defensive Responsibility Map</h1>
+    <p class="sub">Drag the puck around the defensive zone and watch the shape of each defender's
+      responsibility area change. Switch the coverage scheme to see how the same five positions carve
+      up the ice differently. These are idealized, league-general templates, not any one team's system
+      and not a data claim.</p>
+  </header>
+
+  <div class="layout">
+    <div class="rinkcard">
+      <h2 class="sr-only">Defensive zone tiled into five responsibility regions with a draggable puck</h2>
+      <svg id="rink" viewBox="0 0 680 620" role="img" aria-label="Defensive zone responsibility map">
+        <defs>
+          <radialGradient id="iceGrad" cx="50%" cy="30%" r="80%">
+            <stop offset="0%" stop-color="#1a2432"/><stop offset="100%" stop-color="#121a25"/>
+          </radialGradient>
+          <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+          <clipPath id="iceClip"><path d="M4 20 L4 452 Q4 596 156 596 L524 596 Q676 596 676 452 L676 20 Z"/></clipPath>
+        </defs>
+        <path fill="url(#iceGrad)" stroke="var(--edge)" stroke-width="1.5"
+          d="M4 20 L4 452 Q4 596 156 596 L524 596 Q676 596 676 452 L676 20 Z"/>
+        <!-- responsibility territories (filled, tile the whole zone) -->
+        <g id="zones" clip-path="url(#iceClip)"></g>
+        <!-- rink markings, drawn over the fills so they stay crisp -->
+        <g clip-path="url(#iceClip)" fill="none">
+          <line x1="4" y1="20" x2="676" y2="20" stroke="var(--blue)" stroke-width="5" opacity="0.9"/>
+          <circle cx="164" cy="372" r="120" stroke="var(--line)" stroke-width="1.2" opacity="0.5"/>
+          <circle cx="516" cy="372" r="120" stroke="var(--line)" stroke-width="1.2" opacity="0.5"/>
+          <line x1="40" y1="532" x2="640" y2="532" stroke="var(--red)" stroke-width="2" opacity="0.9"/>
+          <path d="M300 532 A40 40 0 0 1 380 532" stroke="var(--line)" stroke-width="1.4" opacity="0.7"/>
+        </g>
+        <circle cx="164" cy="372" r="4" fill="var(--red)" opacity="0.85"/>
+        <circle cx="516" cy="372" r="4" fill="var(--red)" opacity="0.85"/>
+        <rect x="317" y="532" width="46" height="30" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+        <g id="landmarks" opacity="0"></g>
+        <g id="sites"></g>
+        <g id="puckG" style="cursor:grab">
+          <circle r="24" fill="transparent"/>
+          <circle id="puckRing" r="18" fill="none" stroke="#f4f6fa" stroke-width="1.5" opacity="0.5"/>
+          <circle r="15" fill="#000" opacity="0.35" filter="url(#soft)"/>
+          <circle r="10.5" fill="#f4f6fa" stroke="#0a0e14" stroke-width="2.5"/>
+          <circle r="3.6" fill="#0a0e14"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <div class="block">
+        <h2>Coverage scheme</h2>
+        <select id="scheme" aria-label="Coverage scheme">
+          <option value="man">Man-to-man</option>
+          <option value="zone">Zone (collapse)</option>
+          <option value="fiveTight">Five Tight (overload)</option>
+          <option value="box1">Box + 1 (hybrid)</option>
+          <option value="swarm">Swarm (pressure)</option>
+        </select>
+        <p class="caption" id="caption"></p>
+      </div>
+      <div class="block">
+        <h2>Move the puck</h2>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="block">
+        <h2>Positions · click to isolate</h2>
+        <div class="legend" id="legend"></div>
+        <div class="foot" style="margin-top:12px">
+          <label class="toggle"><input type="checkbox" id="prToggle" checked> puck pressure</label>
+          <label class="toggle"><input type="checkbox" id="lmToggle"> landmarks</label>
+          <button class="reset" id="reset">show all</button>
+        </div>
+      </div>
+      <div class="block">
+        <p class="note">Each region is the area of ice closest to that defender's responsibility
+          center, interpolated over eight puck anchors. With puck pressure on, a defender steps out of
+          his resting center toward the puck when it enters his area, hard in man and swarm, barely at
+          all in zone, and the dashed marker shows the resting spot he left. Toggle it off for the plain
+          responsibility map.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* frame: L lateral (left NEGATIVE .. right POSITIVE, boards +-42.5); D depth (0 goal line, ~64 blue line, <0 behind net). Net at bottom. */
+const S=8, CX=340, TOP=20, DMAX=64;
+const toSx=L=>CX+L*S, toSy=D=>TOP+(DMAX-D)*S;
+
+const ROLES=["LD","RD","C","LW","RW"];
+const ROLE_COLOR={LD:"#38bdf8",RD:"#34d399",C:"#fbbf24",LW:"#f472b6",RW:"#a78bfa"};
+const ROLE_DESC={LD:"left D",RD:"right D",C:"centre",LW:"left wing",RW:"right wing"};
+
+const LM={
+  net_front:[0,5], low_slot:[0,11], high_slot:[0,32],
+  post_left:[-3,2], post_right:[3,2],
+  dot_lane_left:[-22,20], dot_lane_right:[22,20],
+  half_wall_left:[-40,21], half_wall_right:[40,21],
+  point_left:[-25,62], point_right:[25,62],
+};
+const FLIP={post_left:"post_right",post_right:"post_left",dot_lane_left:"dot_lane_right",
+  dot_lane_right:"dot_lane_left",half_wall_left:"half_wall_right",half_wall_right:"half_wall_left",
+  point_left:"point_right",point_right:"point_left"};
+const SWAP={LD:"RD",RD:"LD",LW:"RW",RW:"LW",C:"C"};
+const flipLM=id=>id==="PUCK"?"PUCK":(FLIP[id]||id);
+
+const ANCHOR_PUCK={cornerL:[-37,9],halfWallL:[-38,22],pointL:[-20,60],behindNet:[0,-5],slot:[0,19]};
+
+const SCHEMES={
+  man:{label:"Each defender tracks a man. Wingers take the points; centre and D cover low.",
+    a:{cornerL:{LD:"PUCK",RD:"net_front",C:"low_slot",LW:"point_left",RW:"point_right"},
+       halfWallL:{LD:"half_wall_left",RD:"net_front",C:"low_slot",LW:"point_left",RW:"point_right"},
+       pointL:{LD:"dot_lane_left",RD:"net_front",C:"high_slot",LW:"point_left",RW:"point_right"},
+       behindNet:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"},
+       slot:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"point_left",RW:"point_right"}}},
+  zone:{label:"Areas, not men. The five collapse toward the slot and concede the perimeter.",
+    a:{cornerL:{LD:"dot_lane_left",RD:"net_front",C:"low_slot",LW:"high_slot",RW:"dot_lane_right"},
+       halfWallL:{LD:"half_wall_left",RD:"net_front",C:"low_slot",LW:"high_slot",RW:"dot_lane_right"},
+       pointL:{LD:"dot_lane_left",RD:"net_front",C:"high_slot",LW:"point_left",RW:"dot_lane_right"},
+       behindNet:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"},
+       slot:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"}}},
+  fiveTight:{label:"Overload the strong-side quadrant, outnumber the puck low, protect the middle.",
+    a:{cornerL:{LD:"PUCK",RD:"net_front",C:"dot_lane_left",LW:"point_left",RW:"high_slot"},
+       halfWallL:{LD:"half_wall_left",RD:"net_front",C:"dot_lane_left",LW:"point_left",RW:"high_slot"},
+       pointL:{LD:"dot_lane_left",RD:"net_front",C:"low_slot",LW:"point_left",RW:"high_slot"},
+       behindNet:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"},
+       slot:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"}}},
+  box1:{label:"Four hold a box around the net; one roamer (C) pressures the puck.",
+    a:{cornerL:{C:"PUCK",LD:"net_front",RD:"post_right",LW:"dot_lane_left",RW:"dot_lane_right"},
+       halfWallL:{C:"PUCK",LD:"net_front",RD:"post_right",LW:"dot_lane_left",RW:"dot_lane_right"},
+       pointL:{C:"high_slot",LD:"post_left",RD:"post_right",LW:"point_left",RW:"point_right"},
+       behindNet:{C:"PUCK",LD:"post_left",RD:"post_right",LW:"dot_lane_left",RW:"dot_lane_right"},
+       slot:{C:"PUCK",LD:"post_left",RD:"post_right",LW:"dot_lane_left",RW:"dot_lane_right"}}},
+  swarm:{label:"Aggressive low pressure. D attack the puck to outnumber it; forwards fill behind.",
+    a:{cornerL:{LD:"PUCK",RD:"dot_lane_left",C:"high_slot",LW:"net_front",RW:"low_slot"},
+       halfWallL:{LD:"PUCK",RD:"half_wall_left",C:"high_slot",LW:"net_front",RW:"low_slot"},
+       pointL:{LD:"dot_lane_left",RD:"net_front",C:"high_slot",LW:"point_left",RW:"low_slot"},
+       behindNet:{LD:"post_left",RD:"post_right",C:"low_slot",LW:"dot_lane_left",RW:"dot_lane_right"},
+       slot:{LD:"post_left",RD:"post_right",C:"PUCK",LW:"dot_lane_left",RW:"dot_lane_right"}}},
+};
+
+// Puck pressure per scheme: P = how hard the nearest defender jumps the puck (0..1),
+// sig = reach in feet (how many defenders get pulled / how far the pull carries).
+const PRESSURE={man:{P:0.82,sig:15},zone:{P:0.20,sig:14},fiveTight:{P:0.62,sig:22},box1:{P:0.50,sig:12},swarm:{P:0.92,sig:26}};
+function buildAnchors(id){
+  const A=SCHEMES[id].a, out=[];
+  for(const k of ["cornerL","halfWallL","pointL","behindNet","slot"]) out.push({puck:ANCHOR_PUCK[k],assign:A[k]});
+  for(const k of ["cornerL","halfWallL","pointL"]){
+    const bp=ANCHOR_PUCK[k], base=A[k], assign={};
+    for(const r of ROLES) assign[r]=flipLM(base[SWAP[r]]);
+    out.push({puck:[-bp[0],bp[1]],assign});
+  }
+  return out;
+}
+const resolvePos=(id,puck)=>id==="PUCK"?puck:LM[id];
+function zoneCenters(pL,pD,id){
+  const anchors=buildAnchors(id), acc={LD:[0,0],RD:[0,0],C:[0,0],LW:[0,0],RW:[0,0]}; let ws=0;
+  for(const a of anchors){
+    const dl=pL-a.puck[0], dd=pD-a.puck[1], w=1/(dl*dl+dd*dd+1.0); ws+=w;
+    for(const r of ROLES){const p=resolvePos(a.assign[r],[pL,pD]); acc[r][0]+=w*p[0]; acc[r][1]+=w*p[1];}
+  }
+  const out={}; for(const r of ROLES) out[r]=[acc[r][0]/ws,acc[r][1]/ws]; return out;
+}
+
+/* ---- ice boundary polygon (svg px) for Voronoi clipping ---- */
+function quad(p0,c,p1,t){const u=1-t;return [u*u*p0[0]+2*u*t*c[0]+t*t*p1[0], u*u*p0[1]+2*u*t*c[1]+t*t*p1[1]];}
+const BOUNDARY=(()=>{
+  const p=[[4,20],[4,452]];
+  for(let t=0.2;t<0.99;t+=0.2) p.push(quad([4,452],[4,596],[156,596],t));
+  p.push([156,596],[524,596]);
+  for(let t=0.2;t<0.99;t+=0.2) p.push(quad([524,596],[676,596],[676,452],t));
+  p.push([676,452],[676,20]); return p;
+})();
+function clipHalf(poly,mx,my,nx,ny){
+  const res=[], n=poly.length;
+  for(let i=0;i<n;i++){
+    const A=poly[i], B=poly[(i+1)%n];
+    const fa=(A[0]-mx)*nx+(A[1]-my)*ny, fb=(B[0]-mx)*nx+(B[1]-my)*ny;
+    const ain=fa<=0, bin=fb<=0;
+    if(ain) res.push(A);
+    if(ain!==bin){const t=fa/(fa-fb); res.push([A[0]+t*(B[0]-A[0]), A[1]+t*(B[1]-A[1])]);}
+  }
+  return res;
+}
+function voronoiCell(sites,i){
+  let poly=BOUNDARY.slice();
+  for(let j=0;j<sites.length;j++){
+    if(j===i) continue;
+    const mx=(sites[i][0]+sites[j][0])/2, my=(sites[i][1]+sites[j][1])/2;
+    const nx=sites[j][0]-sites[i][0], ny=sites[j][1]-sites[i][1];
+    poly=clipHalf(poly,mx,my,nx,ny);
+    if(poly.length===0) break;
+  }
+  return poly;
+}
+
+/* ---- state + nodes ---- */
+let puck={L:0,D:20}, schemeId="man", solo=null, pressureOn=true;
+const svg=document.getElementById("rink");
+const NS=svg.namespaceURI;
+const zonesG=document.getElementById("zones"), sitesG=document.getElementById("sites");
+const homesG=document.createElementNS(NS,"g"); sitesG.parentNode.insertBefore(homesG,sitesG);
+const cellNodes={}, siteNodes={};
+for(const r of ROLES){
+  const poly=document.createElementNS(NS,"polygon");
+  poly.setAttribute("stroke-linejoin","round");
+  zonesG.append(poly); cellNodes[r]=poly;
+  const line=document.createElementNS(NS,"line"); line.setAttribute("stroke",ROLE_COLOR[r]);
+  line.setAttribute("stroke-width",1.5); line.setAttribute("stroke-dasharray","3 3"); line.setAttribute("opacity",0);
+  const home=document.createElementNS(NS,"circle"); home.setAttribute("r",5); home.setAttribute("fill","none");
+  home.setAttribute("stroke",ROLE_COLOR[r]); home.setAttribute("stroke-width",1.5); home.setAttribute("opacity",0);
+  homesG.append(line,home);
+  const g=document.createElementNS(NS,"g");
+  const tok=document.createElementNS(NS,"circle"); tok.setAttribute("r",13); tok.setAttribute("fill",ROLE_COLOR[r]);
+  tok.setAttribute("stroke","#0a0e14"); tok.setAttribute("stroke-width",2);
+  const lab=document.createElementNS(NS,"text"); lab.setAttribute("class","zone-label");
+  lab.setAttribute("text-anchor","middle"); lab.setAttribute("dominant-baseline","central");
+  lab.setAttribute("fill","#0a0e14"); lab.textContent=r;
+  g.append(tok,lab); sitesG.append(g); siteNodes[r]={g,tok,lab,home,line};
+}
+const lmG=document.getElementById("landmarks");
+for(const [id,[L,D]] of Object.entries(LM)){
+  const c=document.createElementNS(NS,"circle");
+  c.setAttribute("cx",toSx(L)); c.setAttribute("cy",toSy(D)); c.setAttribute("r",3);
+  c.setAttribute("fill","none"); c.setAttribute("stroke","#93a7bd"); c.setAttribute("stroke-width",1);
+  const t=document.createElementNS(NS,"text"); t.setAttribute("x",toSx(L)+6); t.setAttribute("y",toSy(D)+3);
+  t.setAttribute("fill","#8296ad"); t.setAttribute("font-size","9"); t.setAttribute("font-family","IBM Plex Mono, monospace");
+  t.textContent=id.replace(/_/g," "); lmG.append(c,t);
+}
+
+const puckG=document.getElementById("puckG"), caption=document.getElementById("caption");
+function render(){
+  const rest=zoneCenters(puck.L,puck.D,schemeId);
+  const pr=PRESSURE[schemeId], centers={};
+  for(const r of ROLES){
+    const rc=rest[r];
+    if(pressureOn){
+      const dl=puck.L-rc[0], dd=puck.D-rc[1], d2=dl*dl+dd*dd;
+      const w=(pr.sig*pr.sig)/(d2+pr.sig*pr.sig), k=pr.P*w;   // proximity-gated pull toward the puck
+      centers[r]=[rc[0]+k*dl, rc[1]+k*dd];
+    } else centers[r]=rc;
+  }
+  const sites=ROLES.map(r=>[toSx(centers[r][0]),toSy(centers[r][1])]);
+  let pressureRole=null,best=1e9;
+  ROLES.forEach(r=>{const dl=centers[r][0]-puck.L,dd=centers[r][1]-puck.D,d2=dl*dl+dd*dd; if(d2<best){best=d2;pressureRole=r;}});
+  ROLES.forEach((r,i)=>{
+    const cell=voronoiCell(sites,i);
+    const poly=cellNodes[r];
+    poly.setAttribute("points",cell.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" "));
+    const isP=r===pressureRole, dim=solo&&solo!==r, shown=!solo||solo===r;
+    poly.setAttribute("fill",ROLE_COLOR[r]);
+    poly.setAttribute("fill-opacity", dim?0.05:(isP?0.5:0.3));
+    poly.setAttribute("stroke", (isP&&shown)?ROLE_COLOR[r]:"#0b1017");
+    poly.setAttribute("stroke-width", (isP&&shown)?2.2:1.4);
+    poly.setAttribute("stroke-opacity", dim?0.25:0.9);
+    const m=siteNodes[r], hx=toSx(rest[r][0]), hy=toSy(rest[r][1]);
+    m.tok.setAttribute("cx",sites[i][0]); m.tok.setAttribute("cy",sites[i][1]);
+    m.lab.setAttribute("x",sites[i][0]); m.lab.setAttribute("y",sites[i][1]);
+    m.tok.setAttribute("opacity",dim?0.25:1); m.lab.setAttribute("opacity",dim?0.25:1);
+    m.g.style.filter=(isP&&shown)?"drop-shadow(0 0 6px "+ROLE_COLOR[r]+"88)":"none";
+    const step=Math.hypot(sites[i][0]-hx, sites[i][1]-hy), showHome=pressureOn&&!dim&&step>14;
+    m.home.setAttribute("cx",hx); m.home.setAttribute("cy",hy); m.home.setAttribute("opacity",showHome?0.6:0);
+    m.line.setAttribute("x1",hx); m.line.setAttribute("y1",hy);
+    m.line.setAttribute("x2",sites[i][0]); m.line.setAttribute("y2",sites[i][1]); m.line.setAttribute("opacity",showHome?0.5:0);
+  });
+  puckG.setAttribute("transform","translate("+toSx(puck.L)+","+toSy(puck.D)+")");
+  caption.textContent=SCHEMES[schemeId].label;
+}
+
+/* ---- interaction ---- */
+function clientToLD(evt){
+  const pt=svg.createSVGPoint(), src=evt.touches?evt.touches[0]:evt;
+  pt.x=src.clientX; pt.y=src.clientY;
+  const u=pt.matrixTransform(svg.getScreenCTM().inverse());
+  let L=(u.x-CX)/S, D=DMAX-(u.y-TOP)/S;
+  L=Math.max(-41,Math.min(41,L)); D=Math.max(-7,Math.min(63,D));
+  return {L,D};
+}
+let dragging=false;
+svg.addEventListener("pointerdown",e=>{dragging=true;puckG.style.cursor="grabbing";puck=clientToLD(e);render();e.preventDefault();});
+window.addEventListener("pointermove",e=>{if(!dragging)return;puck=clientToLD(e);render();e.preventDefault();});
+window.addEventListener("pointerup",()=>{dragging=false;puckG.style.cursor="grab";});
+
+const PRESETS=[["L corner",-37,9],["R corner",37,9],["L half-wall",-38,22],["R half-wall",38,22],
+  ["L point",-20,60],["R point",20,60],["Behind net",0,-5],["Slot",0,19]];
+const pw=document.getElementById("presets");
+for(const [name,L,D] of PRESETS){const b=document.createElement("button");b.textContent=name;
+  b.onclick=()=>{puck={L,D};render();};pw.append(b);}
+
+const legend=document.getElementById("legend"), chips={};
+for(const r of ROLES){
+  const c=document.createElement("div"); c.className="chip";
+  c.innerHTML='<span class="dot" style="background:'+ROLE_COLOR[r]+'"></span>'+
+    '<span class="nm" style="color:'+ROLE_COLOR[r]+'">'+r+'</span>'+
+    '<span class="desc">'+ROLE_DESC[r]+'</span>';
+  c.onclick=()=>{solo=(solo===r)?null:r;syncChips();render();};
+  legend.append(c); chips[r]=c;
+}
+function syncChips(){for(const r of ROLES){chips[r].classList.toggle("solo",solo===r);chips[r].classList.toggle("off",solo&&solo!==r);}}
+document.getElementById("reset").onclick=()=>{solo=null;syncChips();render();};
+document.getElementById("scheme").onchange=e=>{schemeId=e.target.value;render();};
+document.getElementById("lmToggle").onchange=e=>{document.getElementById("landmarks").setAttribute("opacity",e.target.checked?1:0);};
+document.getElementById("prToggle").onchange=e=>{pressureOn=e.target.checked;render();};
+
+render();
+</script>
+</body>
+</html>
