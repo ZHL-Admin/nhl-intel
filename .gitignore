@@ -83,3 +83,6 @@ research/*/.pytest_cache/
 research/**/*.duckdb
 research/**/*.parquet
 research/reports/figures/*.png
+
+# Phase-value / scratch pipeline outputs at repo root (regenerable; never commit data)
+/artifacts/

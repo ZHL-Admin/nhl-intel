@@ -128,10 +128,20 @@ FLIP = {"leading": "trailing", "trailing": "leading", "tied": "tied"}
 ZONE_CATS = ("O", "D", "N")
 
 
+NUMCOLS = ("dur", "home_outside_sec", "home_inzone_sec", "away_outside_sec", "away_inzone_sec",
+           "home_ep_nonfo", "home_ep_rush", "home_ep_nonfo_zerodur", "home_fav_ends",
+           "home_xg_inzone", "home_xg_inzone_zerodur",
+           "away_ep_nonfo", "away_ep_rush", "away_ep_nonfo_zerodur", "away_fav_ends",
+           "away_xg_inzone", "away_xg_inzone_zerodur")
+
+
 def pull(seasons: list[str]) -> pd.DataFrame:
     sql = DESIGN_SQL.format(p=bq.project(), minsec=MINSEC,
                             seasons=", ".join(f"'{s}'" for s in seasons))
-    return bq.query_df(sql, bq.client())
+    df = bq.query_df(sql, bq.client())
+    for c in NUMCOLS:
+        df[c] = pd.to_numeric(df[c]).astype("float64")
+    return df
 
 
 def expand_rows(df: pd.DataFrame, b2b: dict, season_weights: dict | None):
@@ -145,13 +155,15 @@ def expand_rows(df: pd.DataFrame, b2b: dict, season_weights: dict | None):
         sw = 1.0 if season_weights is None else season_weights.get(r.season, 1.0)
         zone = r.zone_start_code if r.zone_start_code in ZONE_CATS else None
         gt = min(int(r.segment_start_seconds) // 1200, 3)
-        rows.append(dict(game_id=r.game_id, off=home_sk, deff=away_sk, season=r.season, sw=sw,
+        rows.append(dict(game_id=r.game_id, off=home_sk, deff=away_sk, def_team=int(r.away_team_id),
+                         season=r.season, sw=sw,
                          score_state=r.home_score_state, zone=zone, home=1.0, gt=gt,
                          b2b=b2b.get((int(r.game_id), int(r.home_team_id)), 0.0),
                          outside_sec=r.home_outside_sec, inzone_sec=r.home_inzone_sec,
                          ep_nonfo=r.home_ep_nonfo, ep_rush=r.home_ep_rush, ep_nonfo_zerodur=r.home_ep_nonfo_zerodur,
                          fav_ends=r.home_fav_ends, xg_inzone=r.home_xg_inzone, xg_inzone_zerodur=r.home_xg_inzone_zerodur))
-        rows.append(dict(game_id=r.game_id, off=away_sk, deff=home_sk, season=r.season, sw=sw,
+        rows.append(dict(game_id=r.game_id, off=away_sk, deff=home_sk, def_team=int(r.home_team_id),
+                         season=r.season, sw=sw,
                          score_state=FLIP[r.home_score_state], zone=zone, home=0.0, gt=gt,
                          b2b=b2b.get((int(r.game_id), int(r.away_team_id)), 0.0),
                          outside_sec=r.away_outside_sec, inzone_sec=r.away_inzone_sec,
