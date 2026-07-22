@@ -103,3 +103,22 @@ Elapsed seconds: `(period_number-1)*1200 + MM*60 + SS` (verbatim from int_shot_s
 ## dev-season scoping
 No pre-existing dbt season-scoping var (PV-D004). Added `phase_dev_seasons: []` in dbt_project.yml
 (list of seasons to limit PV models in dev; empty = full).
+
+## Sprite audit — Section A recon (2026-07-24; addendum at the Stage 2/3 boundary)
+Independent ground-truth audit of episode start_type + entry timing at goals, from the PPT goal-replay full track.
+- **Full-track storage EXISTS** (STOP condition (i) NOT triggered): `nhl_raw.raw_ppt_replay` (serialized frames)
+  → `nhl_staging.stg_ppt_tracking_frames` (one row per game_id,event_id,frame_index,entity; `is_puck` =
+  entityKey '1'; `team_id`/`team_abbrev` per entity; `x_std`=raw_x/12−100, `y_std`=raw_y/12−42.5 center-origin
+  feet, goal line ±89, boards ±100; `timestamp_ds` deciseconds, `frame_seconds`=(ts−min)/10). Not just the
+  single-frame `int_goal_release_frame`.
+- **Frame rate = 10.0 Hz (empirical):** median consecutive `timestamp_ds` delta = 1 decisecond; median 140
+  frames/replay; median span 13.9 s (working window is the final 8 s per Section C). 25,946 replays total.
+- **Release-frame pinning (reuse unchanged):** `int_goal_release_frame` pins the release frame GEOMETRICALLY —
+  puck frame minimizing `least(|x_std−89|,|x_std+89|)` (puck nearest a net). Time axis: `t_before_goal =
+  (release_frame_index − frame_index)/10`. The scored-on net's sign (release-frame puck x_std) drives the
+  attack-→+x reflection (Section B).
+- **Season coverage (empirical):** sprites exist only 2023-24, 2024-25, 2025-26 (tracking era); 0 before.
+  Audit universe = 5v5 non-EN goals in segment-covered games. With-sprite by season: 2023-24 5,543 / 2024-25
+  5,685 / 2025-26 5,684 = **16,912 goals with sprite payloads** (of 17,073-ish in-scope for those 3 seasons).
+- **≥500 usable-goal floor: reachable** (16,912 ≫ 500; STOP condition (ii) not at risk at the availability stage;
+  final count set after parse + track-usable attrition in the report).

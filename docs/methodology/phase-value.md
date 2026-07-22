@@ -90,10 +90,18 @@ possession reaches the offensive zone (P_OZ_EST 0.0052).
 V(P_OZ_EST)=0.0052, but this is a measurement artifact, not a finding: the rush state's ≤5 s lifetime equals
 the tick grid and sub-2.5 s partial ticks are dropped, so 71.2% of *scoring* rush episodes (mean duration
 2.14 s) contribute zero rush ticks and their goals credit the preceding windows. A tick=2 s diagnostic
-restores the spec-expected order (V(rush)=0.0054 > V(est)=0.0051). **The rush's danger is therefore stated
-from the artifact-free view — `c_seq_rush` = 0.0589, the highest episode xG cost of any start type — not from
-V(P_OZ_RUSH).** V(P_NZ)/V(P_OWN_D) are both near zero, so their fine ordering is within noise; the accounting
-relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}. Full detail: `docs/phase-value/stage2-acceptance.md`.
+restores the spec-expected order (V(rush)=0.0054 > V(est)=0.0051). `c_seq_rush` = 0.0589 is **the costliest
+event-visible start category** (highest episode xG cost) — but this is a statement about the *event-space
+`start_type='rush'` category*, NOT about tracking rushes: the sprite audit (`sprite-audit.md`) found the label
+**anti-selected** at goals (precision below base rate at every k∈{3,4,5,6}; a majority of rush-labeled goals
+show no tracking entry at all) with **no positive association** to tracking-fast entries — because it is
+success-conditioned (goals only) it cannot speak to non-goal sequences, and the ceiling is absent events, not
+window size. So `c_seq_rush` / `V(P_OZ_RUSH)` / `deny_rush_coef` are reported as event-space diagnostics with
+that caption, not as tracking-rush danger. V(P_NZ)/V(P_OWN_D) are both near zero, so their fine ordering is
+within noise; the accounting relies only on P_OZ_EST ≫ {P_NZ, P_OWN_D ≈ 0}. `phase_rush_state_seconds` stays **5 s** — sprite-tracked
+entry-to-goal times (median 3.8 s, **p75 5.3 s**) show a 5 s rush-state lifetime captures ~70% of entries;
+this is supporting context, carried with the granularity caveat above. Full detail:
+`docs/phase-value/stage2-acceptance.md` and `docs/phase-value/sprite-audit.md`.
 
 **League constants** (`nhl_models.phase_league_constants`, 2015-16+): s_out 12.58 min/60, s_in 17.42 min/60,
 `C_seq` (mean `xg_5v5` per non-faceoff episode) 0.0517 (rush highest at 0.0589, oz-faceoff lowest 0.0305),
@@ -111,12 +119,34 @@ per-60 and per-1000-minute framings. Filled in Stage 4.)*
 ## 7. Validation
 *(Pre-registered reliability tiers A/B/C with thresholds restated, the def_impact baseline comparison,
 split-half, team out-of-sample, sensitivity summary, external A3Z agreement if run. Filled in Stage 5.)*
+**External-validation module #2 (already run, report-only): the sprite audit** (`docs/phase-value/
+sprite-audit.md`) — 10 Hz PPT goal-replay ground-truth of episode `start_type` + entry timing at goals,
+sits beside the A3Z module. Success-conditioned (goals only); the goals-only banner caveat is stated
+plainly there and inherited here.
+**Pre-registered arena-bias diagnostic for `deny` (PV-D015, report-only):** correlate team-level `deny`
+aggregates (minutes-weighted, per season) against the home-arena under-recording rate (the
+`established_full_window` share from the sprite audit's arena table). A material correlation means `deny`
+partially measures scorekeeper behavior, not defense; reported beside the smell tests either way, and it is
+the activation test for the v1.1 rink adjustment.
 
 ## 8. Known limitations (pre-committed)
 Possession is a proxy from scorer-recorded events; entries generating no event are invisible, so `deny`
-measures threatening-sequences-allowed, not true entries; `suppress` still rests on shared on-ice
-attribution and is expected to be the weakest component; scorer bias on giveaways/takeaways is inherited
-(PV-A2); 5v5 only in v1; the V goals-window includes cross-strength goals (PV-A4).
+measures **event-visible threatening sequences allowed**, not true entries; `suppress` still rests on shared
+on-ice attribution and is expected to be the weakest component; scorer bias on giveaways/takeaways is
+inherited (PV-A2); 5v5 only in v1; the V goals-window includes cross-strength goals (PV-A4).
+
+**Measured against sprite ground-truth (10 Hz PPT goal replays, 16,074 usable goals; report-only, PV-D014):**
+- `start_type='rush'` is an **event-visible rush** — a small, non-random subset of true rushes. Against
+  tracking-detected entries its recall is pinned at **~0.09 across k∈{3,4,5,6}** (the ceiling is absent
+  events, not window size). Contamination is architecturally contained: `deny`/`suppress`/`escape` never
+  consume the rush label; only the diagnostics `c_seq_rush`, `V(P_OZ_RUSH)`, `deny_rush_coef` are affected,
+  and each carries this caveat where it surfaces.
+- Zero-duration goal-only episodes (PV-D008) are **57.9% genuine rapid entries / 42.1% under-recorded settled
+  possession**; the 42% share shows arena spread (p10 35% / p90 50%), so `deny` may inherit scorekeeper bias
+  (Stage 5 input; v1.1 rink-adjustment candidate). This refines `deny`'s meaning, not its construction — the
+  accounting stays consistent because `C_seq` prices exactly the universe the coefficient counts.
+The sprite audit is **success-conditioned (goals only)**; the inherited banner caveat is carried verbatim in
+`docs/phase-value/sprite-audit.md`.
 
 ## 9. Surfaces
 *(Tables `state_values` + `player_phase_value`, the `GET /players/{id}/phase-value` endpoint, and
