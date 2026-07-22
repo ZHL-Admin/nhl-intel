@@ -45,6 +45,17 @@ vars:
   draft_eval_class_min: 2010    # classes fully observable under the window (headline universe)
   draft_eval_class_max: 2018
   draft_regular_gp: 200         # "became a regular" career-GP threshold (literature)
+  # Phase Value (phase_value_v1): possession-state engine + episode segmentation. See
+  # docs/methodology/phase-value.md. rush_window_seconds (above) is REUSED for the rush start_type;
+  # these are the additional PV knobs. Values are owner-ruled defaults (Stage 5 sensitivity-tests
+  # phase_episode_gap_seconds in {2,4,6}); SQL never hardcodes them.
+  phase_episode_gap_seconds: 4      # max defender-touch gap merged inside one DZ episode
+  phase_rush_state_seconds: 5       # OZ ticks count as P_OZ_RUSH for this long after a rush start
+  phase_oz_faceoff_link_seconds: 2  # faceoff-to-start linkage window for the oz_faceoff start_type
+  phase_tick_seconds: 5             # int_phase_ticks sample length (mirror PHASE_VALUE_CONFIG.TICK_SECONDS)
+  # Dev-season scoping (no such mechanism pre-existed, PV-D004): set to a list of seasons to limit PV
+  # dbt models during development, e.g. ['2023-24','2024-25']; empty list = full history.
+  phase_dev_seasons: []
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
