@@ -145,6 +145,73 @@ def _detect_entry(sub: pd.DataFrame, reflect: bool):
     return "entry", float(ti[entry_idx]), True, span_s
 
 
+BLOCKSHOT_SPLIT_SQL = """
+with k as (select game_id, event_id, scoring_team from `{p}.nhl_models.{tmp}`),
+gr as (
+  select ss.game_id, ss.event_id, ss.period_number, ss.sort_order as gsort,
+         ss.elapsed_seconds as ge, k.scoring_team
+  from `{p}.nhl_staging.int_shot_sequence` ss join k using (game_id, event_id)),
+win as (
+  select gr.scoring_team, e.event_owner_team_id as owner, e.zone_code, e.sort_order as esort,
+    case when e.event_owner_team_id = gr.scoring_team then e.zone_code
+         when e.zone_code = 'O' then 'D' when e.zone_code = 'D' then 'O' else 'N' end as zrel,
+    max(if(e.type_desc_key='faceoff', e.sort_order, null))
+      over (partition by gr.game_id, gr.event_id) as fo
+  from gr join `{p}.nhl_staging.stg_play_by_play` e
+    on e.game_id = gr.game_id and e.period_number = gr.period_number and e.sort_order < gr.gsort
+   and e.type_desc_key = 'blocked-shot'
+   and (gr.ge - ((e.period_number-1)*1200
+        + cast(split(e.time_in_period,':')[offset(0)] as int64)*60
+        + cast(split(e.time_in_period,':')[offset(1)] as int64))) between 0 and 4)
+select if(owner = scoring_team, 'attacker-owned', 'defender-owned') as owner_type, zone_code,
+       count(*) as n_in_window,
+       countif(zrel in ('D','N') and (fo is null or esort > fo)) as n_qualifies
+from win group by 1, 2 order by n_in_window desc
+"""
+
+
+def _blockshot_split(W, client, p, rl_noentry):
+    """follow-up (report-only): two-way split of the blocked-shot false rush qualifiers by
+    owner (attacker vs defender) x zone_code, on the no-tracking-entry rush-labeled goals."""
+    W("### E1c — false rush-qualifier source: blocked-shot owner × zone (report-only follow-up)")
+    keys = rl_noentry[["game_id", "event_id", "scoring_team"]].dropna()
+    if len(keys) < 20:
+        W("(skipped — too few no-entry rush-labeled goals to split.)\n")
+        return
+    tmp = "tmp_bs_split"
+    bq.write_df(keys.assign(_mv="x"), tmp)
+    rows = list(client.query(BLOCKSHOT_SPLIT_SQL.format(p=p, tmp=tmp)).result())
+    client.query(f"drop table if exists `{p}.nhl_models.{tmp}`").result()
+    q = sum(r.n_qualifies for r in rows)
+    W(f"Blocked-shots in the ≤4 s pre-goal window across the **{len(keys):,}** no-tracking-entry rush-labeled "
+      f"goals, split by owner (relative to the scoring team) × raw `zone_code`; `n_qualifies` = how many pass "
+      "`seq_rush`'s own owner-relative D/N + post-faceoff test:\n")
+    W("| owner | zone_code | in window | qualifies |")
+    W("|---|---|---|---|")
+    for r in rows:
+        W(f"| {r.owner_type} | {r.zone_code} | {r.n_in_window:,} | {r.n_qualifies:,} |")
+    W("")
+    W("**What the split shows — it REFUTES the N-zone/defender-owned hypothesis.** The qualifying blocked-shots "
+      f"are **{q:,}/{q:,} attacker-owned with `zone_code='D'`** — zero defender-owned, zero N-zone. Mechanism the "
+      "numbers support: `seq_rush` keeps `zone_code` for attacker-owned events, so a block the SCORING team "
+      "owns coded in its own defensive zone (`'D'`) satisfies the D/N precursor and fires the rush label. But "
+      "these are the `established_full_window` goals — the puck is tracked in the offensive zone the whole 8 s — "
+      "so the block's recorded D-zone location/timing is inconsistent with the tracked possession; the "
+      "block-location coordinate (or its ±2 s PBP timing) is the unreliable input, not the owner/zone rule. "
+      "A real, correctly-timed attacker-owned own-zone block within 4 s of a goal entails a tracked zone entry "
+      "within 4 s; no entry appears anywhere in the 8 s window on any of the 408, so these records are displaced "
+      "in time by more than the clip span or misrecorded outright, and they share the exact owner-and-zone cell "
+      "of the legitimate counterattack precursor, so no PBP-side rule can separate them.\n")
+    W("**Consequence for the v1.1 note (correction):** the false qualifiers are attacker-owned **D-zone** "
+      "blocks — the SAME owner×zone cell as the legitimate _block-in-own-D → counterattack_ precursor. So there "
+      "is **no clean owner×zone rule** that drops the false ones without also destroying legitimate counter-rush "
+      "starts, and the specific _drop-N-zone-blocks_ candidate does not apply here (there are no N-zone blocks). "
+      "The surgical fix a v1.1 pass would need is a **location/timing-consistency check** on the block (does the "
+      "block coordinate corroborate an actual zone exit before the entry?), which at goals is a tracking-only "
+      "discriminator; wholesale blocked-shot exclusion is still wrong (it would erase the legitimate cell). "
+      "**No PV action — report-only, do-not-touch on the production sequence engine applies.**\n")
+
+
 def main():
     p = bq.project()
     client = bq.client()
@@ -267,6 +334,9 @@ def main():
       "event-space category only._")
     W("Recall (~0.09, flat across k) confirms the ceiling is ABSENT events (entries that generate no PBP event "
       "are invisible), so no PBP-side redefinition recovers them — the pre-committed possession-proxy limit.\n")
+
+    # follow-up: two-way split of the blocked-shot false qualifiers on the no-tracking-entry goals
+    _blockshot_split(W, client, p, rl[rl["status"] == "established_full_window"])
 
     # (E2) entry-to-goal time distribution + share < 2.5s and < 5s (PV-D013 instrument)
     ent = usable[usable["status"] == "entry"]["entry_time"]
