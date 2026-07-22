@@ -39,7 +39,9 @@ the previous zone (does not adopt its own `zone_code`). Blocked-shots send posse
 - Conservation: 5v5 live spell-seconds vs 5v5 segment-seconds — mean & max |Δ| = **0.000%** (0 games > 1%).
 - Golden vectors GV1–GV8: **8/8 pass**.
 - Unmapped events: **0.0017%** (gate < 0.5%).
-- Goal coverage: **98.3%** of 5v5 non-EN goals fall inside an episode vs the conceding team (gate ≥ 90%).
+- Goal coverage: **99.95%** of in-scope 5v5 non-EN goals fall inside an episode vs the conceding team
+  (gate ≥ 90%; scope = segment-covered games per PV-D010; residual = 8 genuinely outside-zone goals, 0
+  DZ artifacts). Goal anchoring is a boundary convention, NOT zone coercion (PV-D008; GV9/GV10).
 - dbt↔reference reconciliation (75 games, 25/season × 3): per-event state **0.0000%** (gate ≤ 0.5%),
   episode count **0.0000%** (gate ≤ 2%).
 - Schema tests: **18/18 pass**.

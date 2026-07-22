@@ -102,6 +102,30 @@ def test_gv7_blocked_retains_then_goal():
     assert e["n_unblocked"] == 2 and e["goals"] == 1                 # shot + goal; blocked-shot excluded
 
 
+def test_gv9_outside_zone_goal_not_coerced():
+    # Adversarial (PV-D008 convention (a), NOT (b)): attacker A scores from the NEUTRAL zone
+    # (zone_code 'N') -> zone_abs = N, not a defensive zone. A goal is in-zone ONLY if its recorded
+    # zone IS the DZ; the code does NOT coerce a goal's zone to the DZ. So this goal anchors NO episode
+    # against either team. This is what keeps genuinely outside-zone goals legitimately uncovered.
+    ev = [_ev(0, "faceoff", A, "N"), _ev(5, "goal", A, "N")]
+    r = run(ev, H, A)
+    assert _pe(r, 1)["poss"] == A and _pe(r, 1)["zone"] == N and _pe(r, 1)["live"] is False
+    assert _episodes_vs(r, H) == [] and _episodes_vs(r, A) == []
+
+
+def test_gv10_bare_rush_goal_zero_duration_episode():
+    # Adversarial (PV-D008 convention (a) boundary inclusion): A gains the zone off a NZ turnover and
+    # scores immediately — NO live in-zone event precedes the DEAD goal. The goal (recorded in the DZ)
+    # anchors a ZERO-DURATION episode (start == end), end_reason goal, covered. Contrast GV9.
+    ev = [_ev(0, "faceoff", H, "N"), _ev(2, "giveaway", H, "N"), _ev(4, "goal", A, "O")]
+    r = run(ev, H, A)
+    eps = _episodes_vs(r, H)
+    assert len(eps) == 1
+    e = eps[0]
+    assert e["start"] == 4 and e["end"] == 4 and e["end_reason"] == "goal" and e["goals"] == 1
+    assert e["start_type"] == "rush"
+
+
 def test_gv8_period_boundary():
     ev = [_ev(1190, "faceoff", A, "N"), _ev(1195, "shot-on-goal", A, "O"),
           _ev(1200, "period-end", None, None)]

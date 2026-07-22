@@ -77,8 +77,8 @@ def reconcile_game(c, game_id):
             n_events += 1
             if (pe["poss"] != r.poss_after) or (pe["zone"] != r.zone_abs) or (pe["live"] != r.is_live):
                 ev_mismatch += 1
-        # 5v5-scoped episodes
-        ref_ep += sum(1 for e in res["episodes"] if e["start_5v5"])
+        # 5v5-scoped episodes (kept if start OR terminating in-zone event is 5v5)
+        ref_ep += sum(1 for e in res["episodes"] if e["keep_5v5"])
     dbt_ep = _dbt_ep_count(c, game_id)
     return {"game_id": game_id, "n_events": n_events, "ev_mismatch": ev_mismatch,
             "ref_ep": ref_ep, "dbt_ep": dbt_ep}
@@ -115,7 +115,7 @@ def main():
           f"(gate <= {EP_GATE*100:.2f}%)  {'PASS' if ep_rate <= EP_GATE else 'FAIL'}")
     print("=" * 66)
     if worst:
-        worst.sort(reverse=True)
+        worst.sort(key=lambda x: x[0], reverse=True)
         print("\nTop discrepancy games:")
         for emr, r in worst[:8]:
             print(f"  game {r['game_id']}: ev {r['ev_mismatch']}/{r['n_events']} ({emr*100:.3f}%) "

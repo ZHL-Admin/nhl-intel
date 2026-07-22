@@ -52,8 +52,11 @@ state_spells as (
         any_value(poss_after)   as poss_team_id,
         any_value(zone_abs)     as zone_abs,
         any_value(is_live)      as is_live,
+        logical_or(is_5v5)      as spell_any5v5,   -- any 5v5 event in this spell (5v5 keep rule)
+        logical_or(type_desc_key = 'goal') as spell_has_goal,  -- any attacker goal in this spell (goal-anchor,
+                                                   -- robust to anomalous stoppage-before-goal ordering)
         -- first event of the spell (the transition trigger), by min sort_order
-        array_agg(struct(type_desc_key, event_owner_team_id, zone_code) order by sort_order limit 1)[offset(0)] as first_ev
+        array_agg(struct(type_desc_key, event_owner_team_id, zone_code, is_5v5) order by sort_order limit 1)[offset(0)] as first_ev
     from seq
     group by game_id, season, game_date, period_number, spell_seq
 ),
@@ -80,10 +83,10 @@ sided as (
         -- in-zone / dz_ok include a terminating attacker goal (live=false) so rush/quick goals anchor an
         -- episode (spec §5.4 raw-interval condition is possession+zone; goal is the attacker culminating).
         (s.zone_abs = if(d.side = 'home', 'D_home', 'D_away')
-         and (s.is_live or s.first_ev.type_desc_key = 'goal')) as dz_ok,
+         and (s.is_live or s.spell_has_goal)) as dz_ok,
         (s.poss_team_id = if(d.side = 'home', s.away_team_id, s.home_team_id)
          and s.zone_abs = if(d.side = 'home', 'D_home', 'D_away')
-         and (s.is_live or s.first_ev.type_desc_key = 'goal')) as in_zone
+         and (s.is_live or s.spell_has_goal)) as in_zone
     from spells s
     cross join unnest([struct('home' as side), struct('away' as side)]) d
 ),
@@ -130,6 +133,7 @@ episodes as (
         min(start_elapsed) as start_elapsed,
         min(start_sort)    as start_sort,
         max(end_elapsed)   as end_elapsed,
+        logical_or(spell_any5v5) as any_5v5,   -- keep the episode if any in_zone spell has a 5v5 event
         -- terminating spell (right after the last in_zone spell) + the last in_zone spell's own event
         array_agg(struct(next_poss, next_zone, next_live, next_ev, next_start) order by spell_seq desc limit 1)[offset(0)] as term,
         array_agg(first_ev order by spell_seq desc limit 1)[offset(0)] as last_ev
@@ -249,5 +253,7 @@ left join rush_prior r on r.game_id = ep.game_id and r.period_number = ep.period
 left join ozfo_prior oz on oz.game_id = ep.game_id and oz.period_number = ep.period_number and oz.start_sort = ep.start_sort
 left join outcomes o on o.game_id = ep.game_id and o.period_number = ep.period_number and o.start_sort = ep.start_sort
 left join strength_ov st on st.game_id = ep.game_id and st.period_number = ep.period_number and st.start_sort = ep.start_sort
--- v1: 5v5 scope keyed on the episode START event's strength (robust for 0-duration point episodes)
-where coalesce(se.s_5v5, false)
+-- v1: 5v5 scope — keep an episode if ANY of its in-zone spells has a 5v5 event. Retains episodes crossing
+-- a strength boundary INTO 5v5 (a PP expires, the goal is 5v5) so 5v5 goals are not dropped; robust for
+-- 0-duration point episodes; Stage 3 intersects with 5v5 stints for exact accounting.
+where ep.any_5v5

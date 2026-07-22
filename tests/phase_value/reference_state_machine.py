@@ -181,11 +181,19 @@ def _detect_episodes(states, d, home, away, gap, rush_w, ozfo_link, is_5v5=None)
                           and start_t <= s.t <= end_t)
         goals = sum(1 for s in states if s.owner == attacker and s.type == "goal"
                     and start_t <= s.t <= end_t)
+        # 5v5 keep rule: keep an episode if ANY of its in-zone spells contains a 5v5 event. This retains
+        # episodes crossing a strength boundary INTO 5v5 (a PP expires, the goal is 5v5) so 5v5 goals are
+        # not dropped; it is spell-exact-matchable to the dbt model. Stage 3 intersects with 5v5 stints
+        # for exact accounting, so clipped/boundary episodes do not pollute the fits.
+        keep_5v5 = None
+        if is_5v5 is not None:
+            keep_5v5 = any(is_5v5[states[k].idx] for k in range(a, b + 1) if in_zone(states[k]))
         episodes.append({
             "defending_team": d, "attacking_team": attacker,
             "start": start_t, "end": end_t, "start_type": start_type, "end_reason": end_reason,
             "n_unblocked": n_unblocked, "goals": goals,
             "start_5v5": (is_5v5[states[a].idx] if is_5v5 is not None else None),
+            "keep_5v5": keep_5v5,
         })
     return episodes
 

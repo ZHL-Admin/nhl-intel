@@ -58,6 +58,13 @@ Elapsed seconds: `(period_number-1)*1200 + MM*60 + SS` (verbatim from int_shot_s
    naive reading. **Mapping implication (binding):** on a `blocked-shot`, the shooting (attacking) team
    = `opponent(event_owner_team_id)`, and the zone must be flipped O↔D to express it attacker-relative.
    Intent PV-A1 (attacker retains possession) is preserved; GV7 anticipated this ("per Stage 0 finding").
+   **~6% residual characterized (owed from Stage 0):** of 97,455 blocked-shots (2023-24/24-25), the
+   non-'D' 5.85% is **5.70% zone-'O'** rows (mean |x| ≈ 74, median 78 — deep in the attacking end, i.e.
+   `event_owner_team_id` recorded as the SHOOTING team, not the blocker) + **0.15% neutral-zone** + **21
+   rows (0.02%) missing `blocking_player_id`**; 0% null zone, 0 missing shooter/coord. For the ~5.7%
+   owner-appears-to-be-shooter rows, PV-A1's possession rule (possession → opponent(owner)) sends the puck
+   to the wrong side; bounded (~6% of blocked-shots, themselves ~10% of events) and covered by the Stage 5
+   blocked-shot possession sensitivity. No v1 action beyond this note.
 4. **Stoppage reason column = `reason`** (also `secondary_reason`). Top values: `goalie-stopped-after-sog,
    icing, puck-in-netting, offside, puck-frozen, puck-in-crowd, puck-in-benches, tv-timeout,
    referee-or-linesman, hand-pass, high-stick, ...`. Available for `end_reason='stoppage'` sub-labeling.
