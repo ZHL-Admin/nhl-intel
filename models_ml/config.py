@@ -1037,3 +1037,71 @@ VERDICT = {
     "BACKFILL_CONCURRENCY": 8,  # default parallel workers for --full (Gemini calls are I/O-bound)
     "PERSIST_BATCH": 40,        # checkpoint: flush completed verdicts every N (crash-safe, resumable)
 }
+
+
+# --- Phase Value: transition-based defensive value (phase_value_v1) ----------
+# Decomposes defensive impact into dense phase-flow components (deny/suppress/escape) priced in
+# goals via an empirical state value function V(state). Companion to RAPM def_impact (player_impact),
+# which it NEVER modifies and against which it is validated. The idea: stop regressing on the rare
+# outcome (xGA) and regress on the frequent PROCESS (phase transitions, hundreds/game), then convert
+# back to goals through V. Full spec + decisions log: docs/methodology/phase-value.md,
+# docs/phase-value/DECISIONS.md, docs/phase-value/schema-map.md.
+PHASE_VALUE_CONFIG = {
+    # Forward window (seconds) for the state value function V(state) = mean net goals in (t, t+H]
+    # within the same period. 40 s is the headline; the {20,40,60} grid is the Stage 5 sensitivity.
+    "H_SECONDS": 40,
+    "H_SENSITIVITY": [20, 40, 60],
+
+    # Duration-weighting grid: V is averaged over fixed TICK_SECONDS samples of live 5v5 spell time,
+    # so long spells are not over-counted vs short ones. Also the int_phase_ticks grain.
+    "TICK_SECONDS": 5,
+
+    # Minimum exposure seconds for a stint directional row to enter a fit (Stage 3 row filters).
+    # NOTE (recon, PV-D002): the comment "mirrors RAPM MIN_SEGMENT_SECONDS" in the spec is kept in
+    # spirit, but train_rapm.py's actual MIN_SEGMENT_SECONDS is 5, not 4. PV deliberately uses 4 as a
+    # small-exposure floor (the spec's Stage 3 row filters say >= 4 explicitly); the 1 s difference is
+    # immaterial to a floor whose only job is to drop trivially-short exposure. Do not "fix" to 5.
+    "MIN_EXPOSURE_SECONDS": 4,
+
+    # Bootstrap resample counts, matching the RAPM convention (100 for the 3-season weighted window,
+    # 40 for single seasons). Composite pv_def sd is taken from these resamples, NOT quadrature.
+    "BOOTSTRAP_N_WINDOW": 100,
+    "BOOTSTRAP_N_SINGLE": 40,
+
+    # V + league constants are pooled from PRIMARY_SCOPE_START forward (shift segments, and thus
+    # player fits, only exist 2015-16 onward). The state engine itself runs on the full PBP history;
+    # per-season V diagnostics use that full history.
+    "PRIMARY_SCOPE_START": "2015-16",
+
+    # xG calibration: if league sum(goals)/sum(xG) on 5v5 unblocked attempts in scope falls outside
+    # 1 +/- this tolerance, apply it as a multiplier in the Stage 4 accounting; else fix at 1.0.
+    "XG_CAL_TOLERANCE": 0.03,
+
+    # STOP-and-ask threshold: before any full-history BigQuery build, dry-run the byte estimate and
+    # halt if projected cost exceeds this (Section 11). User-editable. Recon confirmed a 2-season PBP
+    # scan is ~0.12 GB (~$0.001), so dev iterations are far under this; full-history builds are the risk.
+    "COST_CAP_USD_PER_JOB": 5.00,
+
+    # Pre-registered reliability tiers (Stage 5), fixed BEFORE fitting. Year-over-year Pearson r of a
+    # component (single-season fits) over the primary cohort: >= A -> skill estimate; [B, A) ->
+    # descriptive estimate (uncertainty framing, no unqualified skill language); < B -> not published
+    # at player level (team/pair only), reported as an explicit null. A Tier C `suppress` with Tier
+    # A/B `deny` is an ANTICIPATED, acceptable outcome and a publishable finding.
+    "RELIABILITY_TIER_A": 0.35,
+    "RELIABILITY_TIER_B": 0.20,
+
+    # 5v5-minute cohorts for the reliability metrics (headline 400, sensitivity 200).
+    "VALIDATION_MIN_TOI": [400, 200],
+
+    # Stage 1 hard gates.
+    "GOAL_COVERAGE_GATE": 0.90,     # >= share of 5v5 non-EN goals occurring inside an active episode
+    "UNMAPPED_EVENT_GATE": 0.005,   # unmapped events must be < this share per season
+    "RECONCILE_EVENT_GATE": 0.005,  # dbt-vs-Python-reference per-event state mismatch tolerance
+    "RECONCILE_EPISODE_GATE": 0.02, # dbt-vs-reference episode-count mismatch tolerance
+
+    "SEED": 42,                     # bootstrap/resample determinism (repo has no other convention)
+}
+# Alpha grid: REUSE train_rapm's ALPHAS by import/reference (Appendix C: "Do not fork it").
+# NOTE (recon, PV-D003): the spec prose "[250..8000]" is approximate; train_rapm.ALPHAS is actually
+# list(np.logspace(2, 6, 13)) = 100 .. 1e6 (13 log-spaced). We use the ACTUAL grid, imported in
+# train_phase_value.py, so PV and RAPM regularization stay identical by construction.
