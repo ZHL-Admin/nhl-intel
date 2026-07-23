@@ -210,9 +210,15 @@ therefore carries only the danger half and loses the exposure-share signal the b
 retained for team/pair analysis only.** Its per-pair YoY r declines monotonically (0.25 → 0.19 → 0.13 →
 0.06). This is not measurement noise: `deny`'s within-season split-half Spearman-Brown is 0.33–0.44, so it
 is internally consistent WITHIN a season but does not PERSIST across years. A team-continuity post-mortem
-rules out a system-level mechanism: same-primary-team YoY r (pooled 0.163) does NOT exceed movers (0.142),
-and the decline appears in both groups, so `deny` is not a roster-independent system signal passing through
-players. The pre-registered candidate explanation was scorer drift; the PV-D015 arena-bias diagnostic
+(same-primary-team YoY 0.163 ≈ movers 0.142) rules out player-CARRIED persistence but does NOT prove
+absence of structure: platform finding **F26** shows defensive coverage identity re-forms annually,
+tracking neither roster nor coach (continuity gradient r=0.00), so under a season-reforming defensive
+context same-team ≈ movers is exactly what a structure-driven `deny` would produce (validation §1c tests
+this directly: team-season coherence, F26 continuity gradient, and cross-loading on the F26 coverage
+signatures; where §1c's pre-stated conditions are met, `deny` and F26 read as two instruments on the same
+annually-reforming defensive structure, carrying F26's goals-only caveat). Either way `deny` stays Tier C
+at player level — this is interpretation, not a tier change. The pre-registered candidate for the temporal
+decline was scorer drift; the PV-D015 arena-bias diagnostic
 (team-season `deny` vs home-arena under-recording share, **r = +0.010** over 100 team-seasons) **rules out
 cross-arena scorekeeper bias**. That diagnostic is cross-sectional, however — it addresses venue-level bias
 in `deny`'s levels, NOT the monotonic temporal decline; **league-wide drift in recording or play over time
@@ -228,12 +234,16 @@ tiers are unchanged by construction (the effect is confined to the goal SCALE of
 `phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative change the episode
 definition and were rebuilt into isolated `nhl_staging_sens_*` datasets (canary-proven, production
 untouched — PV-I001/PV-D020) and refit on 2023-24 & 2024-25. The **gap knob is inert** — YoY r moves
-≤0.006 and split-half ≤0.01 across gap {2,4,6}. The **blocked-shot alternative** (`='owner'`) is the
-larger perturbation (~18% fewer episodes): on the 2023-24→2024-25 pair `deny`'s YoY rises 0.13→0.28. But
-that convention is the empirically-rejected reading (PV-D005: the blocked-shot owner is the blocker 94%
-of the time), so it is a robustness caveat — `deny`'s stability depends on the possession convention —
-not a valid tier rescue; under the correct convention `deny` stays Tier C. It does mark
-possession-attribution as the most promising lever for the deny channel in v1.1.
+≤0.006 and split-half ≤0.01 across gap {2,4,6}. The **blocked-shot alternative is the pre-registered
+PV-A1 possession assumption** (blocker GAINS possession, vs the v1 default of shooter-retains; this is
+PV-A1, distinct from the settled PV-D005 owner SEMANTICS). It roughly doubles `deny`'s observed stability
+on the tested pair (YoY 0.13→0.28; split-half +0.07/+0.18) and improves `suppress`. Per §9.3 the v1
+default STANDS (defaults change only for outright error, and one pair cannot establish a tier); this is
+logged as the **leading v1.1 lever for `deny`** (PV-D021), with a full-history evaluation plan and
+validity checks fixed before running.
+
+**Smell test.** The top-10 `pv_def_g60` oddities (e.g. offensive forwards) carry `def_impact` percentiles
+73–100 — they are inherited from the baseline's own behaviour, not Phase-Value artifacts.
 
 **External A3Z agreement** is gated (reference absent in-repo).
 

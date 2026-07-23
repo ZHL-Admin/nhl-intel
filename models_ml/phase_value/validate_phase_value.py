@@ -96,6 +96,105 @@ def _deny_continuity():
     return rows, means
 
 
+def _team_deny_full():
+    """Minutes-weighted team-season deny (full-season fit, from the shipped table) for the tracking seasons."""
+    p = bq.project()
+    toi = bq.query_df(f"""select s.season, s.team_id, s.player_id, sum(s.segment_duration)/60.0 toi_min
+        from `{p}.nhl_staging.int_shift_segments` s join `{p}.nhl_staging.int_segment_context` c
+          using (game_id, segment_index) where s.is_goalie=0 and c.strength_state='5v5'
+          and s.season in {tuple(SINGLES)} group by 1,2,3""", bq.client())
+    dv = bq.query_df(f"""select season_window season, player_id, deny from `{p}.nhl_models.player_phase_value`
+        where model_version='{MODEL_VERSION}' and season_window in {tuple(SINGLES)}""", bq.client())
+    dv["deny"] = pd.to_numeric(dv["deny"], errors="coerce")
+    m = toi.merge(dv, on=["season", "player_id"]).dropna(subset=["deny"])
+    m["dw"] = m["deny"] * m["toi_min"]
+    g = m.groupby(["season", "team_id"], as_index=False).agg(dw=("dw", "sum"), toi=("toi_min", "sum"))
+    g["team_deny"] = g["dw"] / g["toi"]
+    return g[["season", "team_id", "team_deny"]]
+
+
+def _deny_structure():
+    """Section 1c (ruling 2): three report-only tests of whether deny is a structure-driven team property.
+    (a) team-season within-season even/odd split-half coherence; (b) continuity gradient vs F26 roster
+    continuity; (c) cross-instrument loading on the F26 coverage signatures (tracking seasons)."""
+    import glob
+    import numpy as np
+    from sklearn.linear_model import Ridge
+    from models_ml import train_rapm as R
+    from models_ml.phase_value import build_design as BD, train_phase_value as T
+    p = bq.project()
+    out = {}
+    # primary team + TOI per player-season (for team aggregation)
+    pt = bq.query_df(f"""select season, player_id, team_id, toi_min from (
+        select s.season, s.player_id, s.team_id, sum(s.segment_duration)/60.0 toi_min,
+          row_number() over (partition by s.season, s.player_id order by sum(s.segment_duration) desc) rn
+        from `{p}.nhl_staging.int_shift_segments` s join `{p}.nhl_staging.int_segment_context` c
+          using (game_id, segment_index) where s.is_goalie=0 and c.strength_state='5v5'
+          and s.season in {tuple(SINGLES)} group by 1,2,3) where rn=1""", bq.client())
+
+    # (a) even/odd refit of deny per season -> team-season deny per half -> correlate across team-seasons
+    half = {0: {}, 1: {}}
+    for season in SINGLES:
+        df = BD.pull([season]); b2b = T._b2b([season]); pos = R.positions([season]); dr = BD.expand_rows(df, b2b, None)
+        for par in (0, 1):
+            rows, _ = T._rows_for_fit([d for d in dr if int(d["game_id"]) % 2 == par], "ep_nonfo", "outside_sec")
+            X, y, w, g, players, npl, _ = R.build_design(rows, two_sided=True, pos=pos)
+            alpha, _ = R.cv_alpha(X, y, w, g)
+            m = Ridge(alpha=alpha, solver="lsqr", fit_intercept=True, max_iter=3000); m.fit(X, y, sample_weight=w)
+            dc = m.coef_[npl:2 * npl]; val = dict(zip(players, -(dc - dc.mean())))     # deny = -def_c
+            sub = pt[pt["season"] == season]
+            acc = {}
+            for r in sub.itertuples():
+                if r.player_id in val and r.player_id >= 0:
+                    acc.setdefault(r.team_id, []).append((val[r.player_id], r.toi_min))
+            for tid, lst in acc.items():
+                half[par][(tid, season)] = np.average([v for v, _ in lst], weights=[t for _, t in lst])
+    keys = set(half[0]) & set(half[1])
+    ev = np.array([half[0][k] for k in keys]); od = np.array([half[1][k] for k in keys])
+    out["a"] = (float(np.corrcoef(ev, od)[0, 1]) if len(keys) > 3 else float("nan"), len(keys))
+
+    # (b) continuity gradient: F26 roster continuity vs team-season deny YoY (high vs low continuity)
+    cont_path = "research/def-scheme/data/parquet/continuity_pairs.parquet"
+    tdeny = _team_deny_full()
+    if glob.glob(cont_path):
+        cp = pd.read_parquet(cont_path)[["team_id", "season_from", "season_to", "roster_continuity"]]
+        j = cp.merge(tdeny.rename(columns={"season": "season_from", "team_deny": "deny_from"}), on=["team_id", "season_from"]) \
+              .merge(tdeny.rename(columns={"season": "season_to", "team_deny": "deny_to"}), on=["team_id", "season_to"]).dropna()
+        if len(j) >= 12:
+            med = j["roster_continuity"].median()
+            hi = j[j["roster_continuity"] >= med]; lo = j[j["roster_continuity"] < med]
+            rhi = float(hi["deny_from"].corr(hi["deny_to"])); rlo = float(lo["deny_from"].corr(lo["deny_to"]))
+            grad = float(j["roster_continuity"].corr(-(j["deny_to"] - j["deny_from"]).abs()))
+            out["b"] = dict(r_hi=rhi, r_lo=rlo, gradient=grad, n=len(j))
+        else:
+            out["b"] = dict(note=f"insufficient matched pairs (n={len(j)})")
+    else:
+        out["b"] = dict(note="continuity_pairs.parquet not found")
+
+    # (c) cross-instrument: team-season deny vs F26 coverage signatures (tracking seasons)
+    sig_path = "research/def-scheme/data/parquet/coverage_signatures.parquet"
+    if glob.glob(sig_path):
+        sg = pd.read_parquet(sig_path)
+        sg["season"] = sg["season"].astype(str)
+        feats = ["depth", "spread", "netfront", "marking", "highest", "strong_frac"]
+        sg["nf"] = pd.to_numeric(sg["n_frames"], errors="coerce")
+        agg = sg.groupby(["defending_team_id", "season"]).apply(
+            lambda t: pd.Series({f: np.average(pd.to_numeric(t[f], errors="coerce").fillna(0), weights=t["nf"]) for f in feats}),
+            include_groups=False).reset_index().rename(columns={"defending_team_id": "team_id"})
+        j = agg.merge(tdeny, on=["team_id", "season"]).dropna()
+        if len(j) >= 12:
+            X = j[feats].to_numpy(float); Xd = np.column_stack([np.ones(len(X)), X]); yv = j["team_deny"].to_numpy(float)
+            beta, *_ = np.linalg.lstsq(Xd, yv, rcond=None); yh = Xd @ beta
+            R2 = 1 - ((yv - yh) ** 2).sum() / ((yv - yv.mean()) ** 2).sum()
+            singles = {f: float(j[f].corr(j["team_deny"])) for f in feats}
+            out["c"] = dict(R=float(np.sqrt(max(R2, 0))), R2=float(R2), n=len(j), singles=singles)
+        else:
+            out["c"] = dict(note=f"insufficient matched team-seasons (n={len(j)})")
+    else:
+        out["c"] = dict(note="coverage_signatures.parquet not accessible — CROSS-REPO, skipped")
+    return out
+
+
 def _names(ids):
     if not len(ids):
         return {}
@@ -105,7 +204,7 @@ def _names(ids):
     return dict(zip(df["player_id"], df["name"]))
 
 
-def _report(df, sh, oos, dc):
+def _report(df, sh, oos, dc, ds):
     L = []; W = L.append
     W("# Phase Value — Stage 5 validation report (REPORT-ONLY; no tiers written)\n")
     W(f"Model `{MODEL_VERSION}`. Criteria pre-registered in `config.PHASE_VALUE_CONFIG` before results: "
@@ -148,10 +247,56 @@ def _report(df, sh, oos, dc):
         for pair, grp, r, n in rows:
             W(f"| {pair} | {grp} | {r:+.3f} | {n} |")
         W(f"\n**Pooled: same-team {means['same team']:+.3f} vs moved {means['moved']:+.3f}.** "
-          "Same-team persistence does NOT materially exceed movers, so `deny` is **not** a system-level "
-          "signal passing through players — the null stands as written. The monotonic decline appears in "
-          "BOTH groups (same-team 0.26→0.05, moved 0.24→0.09), consistent with a temporal, not a "
-          "roster-continuity, mechanism.\n")
+          "**Conclusion (corrected).** This split rules out player-CARRIED deny persistence, but it CANNOT "
+          "discriminate a structure-driven signal — because defensive structure itself does not persist "
+          "season-to-season for stayers or movers (platform finding F26: defensive coverage identity tracks "
+          "NEITHER roster nor coach; continuity gradient flat r=0.00; high-continuity persistence 0.16 vs the "
+          "0.40 bar; F12's roster-carried offensive style does NOT extend to defence). Under a "
+          "season-reforming defensive context, **same-team ≈ movers is the EXPECTED result of a "
+          "structure-driven `deny`**, not evidence against one. The discriminating tests are in 1c.\n")
+
+    # 1c. Deny-as-structure tests (ruling 2) — criteria stated BEFORE running
+    W("### 1c. Is `deny` a structure-driven team signal? (report-only; criteria pre-stated)")
+    W("**Pre-stated criteria:** (a) team-season deny is a coherent team property if its within-season "
+      "even/odd split-half r is high; (b) if deny mirrors F26, its continuity gradient is FLAT (a positive "
+      "gradient would instead mean roster-carried structure); (c) a positive loading of team-season deny on "
+      "the F26 coverage signatures is direct evidence deny measures defensive structure. **Interpretation "
+      "rule (pre-stated):** if (a) is high AND (b) is flat, the methodology may state the convergence "
+      "hypothesis — deny and F26 are two independent instruments on the same phenomenon (defensive structure "
+      "real within-season, re-forming annually, tracking neither roster nor coach), carrying F26's goals-only "
+      "caveat. **Tiers are unchanged regardless; deny stays Tier C at player level — this is interpretation only.**\n")
+    if ds:
+        ra, na = ds["a"]
+        W(f"- **(a) Team coherence:** team-season deny within-season split-half (even/odd game_id) **r = "
+          f"{ra:+.3f}** (n={na} team-seasons). {'HIGH — deny is a coherent team-season property.' if ra >= 0.5 else 'moderate/low.'}")
+        b = ds["b"]
+        if "gradient" in b:
+            W(f"- **(b) Continuity gradient:** deny YoY r high-continuity {b['r_hi']:+.3f} vs low-continuity "
+              f"{b['r_lo']:+.3f}; gradient corr(continuity, deny stability) = **{b['gradient']:+.3f}** (n={b['n']} pairs). "
+              f"{'FLAT — mirrors F26 (structure re-forms, not roster-carried).' if abs(b['gradient']) < 0.2 else 'a gradient is present — roster-carried structure.'}")
+        else:
+            W(f"- **(b) Continuity gradient:** {b['note']}.")
+        cc = ds["c"]
+        if "R" in cc:
+            top = sorted(cc["singles"].items(), key=lambda kv: -abs(kv[1]))[:3]
+            W(f"- **(c) Cross-instrument link (F26 coverage signatures, tracking seasons):** multiple "
+              f"R(deny ~ signature) = **{cc['R']:.3f}** (R²={cc['R2']:.3f}, n={cc['n']} team-seasons); strongest "
+              f"single features: {', '.join(f'{k} {v:+.2f}' for k, v in top)}. "
+              f"{'Positive loading — deny co-varies with defensive-structure geometry.' if cc['R'] >= 0.4 else 'weak loading.'}")
+        else:
+            W(f"- **(c) Cross-instrument link:** {cc['note']}.")
+        # verdict against the pre-stated rule
+        a_hi = ds["a"][0] >= 0.5
+        b_flat = ("gradient" in ds["b"]) and abs(ds["b"]["gradient"]) < 0.2
+        W(f"\n**Verdict vs the pre-stated rule:** (a) {'high' if a_hi else 'not high'}; (b) "
+          f"{'flat' if b_flat else 'not flat'}. "
+          + ("Both conditions met → the convergence hypothesis is SUPPORTED and carried into methodology §7 "
+             "(deny and F26 as two instruments on annually-reforming defensive structure)."
+             if a_hi and b_flat else
+             "Conditions not both met → convergence hypothesis NOT asserted; deny's structure interpretation "
+             "stays open.") + " Tiers unchanged; deny stays Tier C at player level.\n")
+    else:
+        W("_(run with --full to compute the 1c tests; (a) refits deny even/odd per season.)_\n")
 
     # 2. def_impact baseline (headline window)
     W("## 2. def_impact baseline comparison (3-season window, toi ≥ 200)")
@@ -271,14 +416,15 @@ def _report(df, sh, oos, dc):
                       f"{r['sh_2425']:+.3f} ({r['sh_2425']-b['sh_2425']:+.3f}) |")
         bl = "; ".join(f"{c} YoY {base.loc[c,'yoy_r']:+.3f}" for c in ["deny", "suppress", "escape"] if c in base.index)
         W(f"\nBaseline (gap=4, blocked-shot=opp), 2023-24→2024-25 pair: {bl}. **Read:** the gap variants move "
-          "everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — the "
-          "conclusions are robust to the episode-gap knob. The **blocked-shot alternative** is the larger "
-          "perturbation (~18% fewer episodes): on this pair deny's YoY rises 0.13→0.28 and its split-half "
-          "climbs. But `blocked_shot_possession='owner'` is the **empirically-REJECTED reading** (PV-D005: the "
-          "blocked-shot owner is the BLOCKER 94% of the time, so possession = the opponent). So this is a "
-          "robustness CAVEAT — deny's stability is sensitive to the possession convention — NOT a valid tier "
-          "rescue: under the correct PV-D005 convention deny remains Tier C. It does flag that a future "
-          "possession-attribution refinement is the most promising lever for the deny channel.\n")
+          "everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — robust "
+          "to the episode-gap knob. The **blocked-shot alternative is the pre-registered PV-A1 possession "
+          "assumption** (blocker GAINS possession, vs the v1 default of shooter-retains; this is PV-A1, NOT "
+          "PV-D005 — PV-D005 settled owner SEMANTICS, owner=blocker, and is final). The PV-A1 alternative "
+          "roughly **doubles deny's observed stability on the tested pair (YoY 0.13→0.28; split-half "
+          "+0.07/+0.18)** and improves `suppress`. Per §9.3 the v1 default STANDS (defaults change only for "
+          "outright error, and one pair cannot establish a tier); this is logged as the **leading v1.1 lever "
+          "for `deny`** (PV-D021), with a full-history evaluation plan and validity checks stated before "
+          "running. Tiers unchanged; `deny` stays Tier C at player level in v1.\n")
     else:
         W("_(sensitivity.parquet not found — run models_ml.phase_value.sensitivity per variant.)_\n")
 
@@ -462,7 +608,8 @@ def main():
     sh = _split_half() if args.full else None
     oos = _team_oos() if args.full else None
     dc = _deny_continuity()          # cheap; always run (ruling 2)
-    tiers = _report(df, sh, oos, dc)
+    ds = _deny_structure() if args.full else None   # (a) refits deny even/odd -> --full only
+    tiers = _report(df, sh, oos, dc, ds)
     if args.write_tiers:
         _write_tiers(tiers)
     else:

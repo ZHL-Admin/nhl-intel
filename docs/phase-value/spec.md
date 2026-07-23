@@ -46,6 +46,11 @@ Tier C, verbatim:
 > within seasons 2023-24 and 2024-25, split games by even/odd game_id, refit A/B/C per half (no
 > bootstrap), correlate player coefficients across halves (same cohorts).
 
+> **ERRATA (owner-confirmed).** §9.2.3's "from 2016-17 onward" contradicts §7.2, whose single-season
+> windows begin **2021-22**. This is an owner authorship inconsistency, not a build error. The accepted
+> range is **2021-22 as run** (four YoY pairs / 126 team-season pairs); extending team-OOS back to
+> 2016-17 would require backfilling single-season PV fits for 2016-17→2020-21 (flagged, not run).
+
 ## §9.2.3 — Team out-of-sample (owner-quoted, verbatim)
 > for season pairs (t, t+1) from 2016-17 onward: predict team 5v5 on-ice xGA/60 in t+1 from (i)
 > minutes-weighted team aggregate of pv_def_g60 in t, (ii) minutes-weighted def_impact aggregate in t,
