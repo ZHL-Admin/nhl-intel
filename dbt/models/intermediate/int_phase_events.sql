@@ -77,7 +77,9 @@ mapped as (
             when 'shot-on-goal' then event_owner_team_id
             when 'missed-shot'  then event_owner_team_id
             when 'goal'         then event_owner_team_id
-            when 'blocked-shot' then owner_opp                 -- PV-D005
+            -- PV-D005: possession = the shooting/attacking team = opponent of the (blocking) owner.
+            -- §9.3 sensitivity: blocked_shot_possession='owner' uses the naive owner-as-shooter reading.
+            when 'blocked-shot' then {% if var('blocked_shot_possession', 'opp') == 'owner' %}event_owner_team_id{% else %}owner_opp{% endif %}
             when 'giveaway'     then owner_opp
             when 'takeaway'     then event_owner_team_id
             else null                                          -- hit/penalty/stoppage/delayed/fallback keep

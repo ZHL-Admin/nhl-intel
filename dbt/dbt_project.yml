@@ -53,6 +53,7 @@ vars:
   phase_rush_state_seconds: 5       # OZ ticks count as P_OZ_RUSH for this long after a rush start
   phase_oz_faceoff_link_seconds: 2  # faceoff-to-start linkage window for the oz_faceoff start_type
   phase_tick_seconds: 5             # int_phase_ticks sample length (mirror PHASE_VALUE_CONFIG.TICK_SECONDS)
+  blocked_shot_possession: 'opp'    # PV-D005 default (possession=opponent of blocking owner); §9.3 sens uses 'owner'
   # Dev-season scoping (no such mechanism pre-existed, PV-D004): set to a list of seasons to limit PV
   # dbt models during development, e.g. ['2023-24','2024-25']; empty list = full history.
   phase_dev_seasons: []

@@ -77,6 +77,8 @@ If this concentrates by arena, `deny` inherits scorekeeper bias the way hits/GV/
   - Benchmark International Arena 2025-26: 32% (n=82)
   - United Center 2023-24: 32% (n=75)
 
+Persisted 96 arena-season under-recording shares to `nhl_models.phase_arena_underrecording` (+ artifacts CSV) for the PV-D015 diagnostic.
+
 ## Honest limits
 - **Conditioning on success:** this audits labels AT GOALS only; precision/recall here do NOT transfer to non-goal episodes (the vast majority of the model's exposure).
 - No exit validation, no non-goal validation.

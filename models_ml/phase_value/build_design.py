@@ -51,7 +51,7 @@ expo as (
     sum(if(sp.poss_team_id = s.home_team_id and sp.state_rel = 'P_OZ', sp.duration_seconds, 0)) as home_inzone_sec,
     sum(if(sp.poss_team_id = s.away_team_id and sp.state_rel in ('P_OWN_D','P_NZ'), sp.duration_seconds, 0)) as away_outside_sec,
     sum(if(sp.poss_team_id = s.away_team_id and sp.state_rel = 'P_OZ', sp.duration_seconds, 0)) as away_inzone_sec
-  from `{p}.nhl_staging.int_phase_spells` sp
+  from `{ps}.int_phase_spells` sp
   join seg s using (game_id, segment_index)
   where sp.is_5v5 and sp.is_live and sp.poss_team_id is not null and sp.state_rel is not null
   group by 1, 2
@@ -65,7 +65,7 @@ epstart as (  -- episodes whose START instant falls in the segment (per attacker
     countif(e.attacker_team_id = s.away_team_id and e.start_type = 'rush') as away_ep_rush,
     countif(e.attacker_team_id = s.away_team_id and e.start_type != 'oz_faceoff' and e.duration_seconds = 0) as away_ep_nonfo_zerodur
   from seg s
-  join `{p}.nhl_staging.int_zone_episodes` e
+  join `{ps}.int_zone_episodes` e
     on e.game_id = s.game_id and e.start_elapsed >= s.sstart and e.start_elapsed < s.send
   group by 1, 2
 ),
@@ -74,7 +74,7 @@ epend as (  -- favorable ends (exit / flip_sustained) whose END instant falls in
     countif(e.attacker_team_id = s.home_team_id and e.end_reason in ('exit','flip_sustained')) as home_fav_ends,
     countif(e.attacker_team_id = s.away_team_id and e.end_reason in ('exit','flip_sustained')) as away_fav_ends
   from seg s
-  join `{p}.nhl_staging.int_zone_episodes` e
+  join `{ps}.int_zone_episodes` e
     on e.game_id = s.game_id and e.end_elapsed >= s.sstart and e.end_elapsed < s.send
   group by 1, 2
 ),
@@ -88,7 +88,7 @@ shots_in_ep as (  -- attacker 5v5 shots that fall inside an episode (flag zero-d
   select sh.game_id, sh.team_id, sh.elapsed_seconds, sh.xg,
          logical_or(e.duration_seconds = 0) as zerodur
   from shots sh
-  join `{p}.nhl_staging.int_zone_episodes` e
+  join `{ps}.int_zone_episodes` e
     on e.game_id = sh.game_id and e.attacker_team_id = sh.team_id
    and sh.elapsed_seconds between e.start_elapsed and e.end_elapsed
   group by sh.game_id, sh.team_id, sh.elapsed_seconds, sh.xg
@@ -135,8 +135,11 @@ NUMCOLS = ("dur", "home_outside_sec", "home_inzone_sec", "away_outside_sec", "aw
            "away_xg_inzone", "away_xg_inzone_zerodur")
 
 
-def pull(seasons: list[str]) -> pd.DataFrame:
-    sql = DESIGN_SQL.format(p=bq.project(), minsec=MINSEC,
+def pull(seasons: list[str], phase_schema: str = "nhl_staging") -> pd.DataFrame:
+    # phase_schema switches ONLY int_phase_spells / int_zone_episodes (the episode-definition tables) to a
+    # variant dataset for §9.3 sensitivity; all other inputs stay in prod nhl_staging.
+    ps = f"{bq.project()}.{phase_schema}"
+    sql = DESIGN_SQL.format(p=bq.project(), ps=ps, minsec=MINSEC,
                             seasons=", ".join(f"'{s}'" for s in seasons))
     df = bq.query_df(sql, bq.client())
     for c in NUMCOLS:
