@@ -61,6 +61,14 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Frontend build config must be tracked so the site builds from a clean clone,
+# despite the global `*.json` GCP-key ignore above. Path-specific negations ONLY
+# — the global *.json default stays in force for every other JSON in the repo.
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/tsconfig.node.json
+
 # Model layer: versioned artifacts are large/binary; keep the dir, not the contents
 models_ml/artifacts/*
 !models_ml/artifacts/.gitkeep

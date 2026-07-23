@@ -1,0 +1,48 @@
+{
+  "name": "nhl-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "gen:rss": "node scripts/gen-rss.mjs",
+    "prebuild": "node scripts/gen-rss.mjs",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "^5.2.8",
+    "@fontsource-variable/newsreader": "^5.2.10",
+    "@fontsource/spline-sans-mono": "^5.2.8",
+    "@types/d3-hexbin": "^0.2.5",
+    "axios": "^1.17.0",
+    "d3": "^7.9.0",
+    "d3-hexbin": "^0.2.2",
+    "lucide-react": "^1.17.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.1.0",
+    "react-router-dom": "^7.17.0",
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@mdx-js/rollup": "^3.1.1",
+    "@types/d3": "^7.4.3",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "gray-matter": "^4.0.3",
+    "playwright": "^1.61.1",
+    "remark-frontmatter": "^5.0.0",
+    "remark-mdx-frontmatter": "^5.2.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0"
+  }
+}
