@@ -253,10 +253,34 @@ def _report(df, sh, oos, dc):
       "are unchanged by H and the goals-only V variant **by construction**; the effect is confined to the "
       "goal SCALE of `*_g60`, reported as Stage-2 V/constant sensitivity (stage2-acceptance.md), not a tier "
       "change. **`phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative** DO change "
-      "the episode definition (Stage-1 dbt rebuild, two seasons) and require refits; their component "
-      "YoY/split-half movement is the live sensitivity cell. **Status:** the two rebuild cells are the "
-      "remaining compute (dbt rebuild of `int_phase_*` on 2023-24/2024-25 under each variant + refit); "
-      "scoped and pending a rebuild pass — flagged explicitly rather than silently skipped.\n")
+      "the episode definition and were REBUILT into isolated `nhl_staging_sens_*` datasets (canary-proven, "
+      "prod untouched — PV-I001) and refit on 2023-24 & 2024-25:\n")
+    sens_path = "artifacts/phase_value/sensitivity.parquet"
+    if os.path.exists(sens_path):
+        s = pd.read_parquet(sens_path)
+        base = s[s["variant"] == "baseline_gap4_opp"].set_index("component")
+        W("| variant | component | YoY r (Δ vs base) | split-half 23-24 (Δ) | split-half 24-25 (Δ) |")
+        W("|---|---|---|---|---|")
+        for var in ["gap2", "gap6", "blockshot_owner"]:
+            for comp in ["deny", "suppress", "escape"]:
+                row = s[(s["variant"] == var) & (s["component"] == comp)]
+                if len(row) and comp in base.index:
+                    r = row.iloc[0]; b = base.loc[comp]
+                    W(f"| {var} | {comp} | {r['yoy_r']:+.3f} ({r['yoy_r']-b['yoy_r']:+.3f}) | "
+                      f"{r['sh_2324']:+.3f} ({r['sh_2324']-b['sh_2324']:+.3f}) | "
+                      f"{r['sh_2425']:+.3f} ({r['sh_2425']-b['sh_2425']:+.3f}) |")
+        bl = "; ".join(f"{c} YoY {base.loc[c,'yoy_r']:+.3f}" for c in ["deny", "suppress", "escape"] if c in base.index)
+        W(f"\nBaseline (gap=4, blocked-shot=opp), 2023-24→2024-25 pair: {bl}. **Read:** the gap variants move "
+          "everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — the "
+          "conclusions are robust to the episode-gap knob. The **blocked-shot alternative** is the larger "
+          "perturbation (~18% fewer episodes): on this pair deny's YoY rises 0.13→0.28 and its split-half "
+          "climbs. But `blocked_shot_possession='owner'` is the **empirically-REJECTED reading** (PV-D005: the "
+          "blocked-shot owner is the BLOCKER 94% of the time, so possession = the opponent). So this is a "
+          "robustness CAVEAT — deny's stability is sensitive to the possession convention — NOT a valid tier "
+          "rescue: under the correct PV-D005 convention deny remains Tier C. It does flag that a future "
+          "possession-attribution refinement is the most promising lever for the deny channel.\n")
+    else:
+        W("_(sensitivity.parquet not found — run models_ml.phase_value.sensitivity per variant.)_\n")
 
     # 8. PV-D015 arena-bias diagnostic for deny (pre-registered)
     W("## 8. PV-D015 arena-bias diagnostic for `deny`")

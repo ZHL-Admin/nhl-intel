@@ -226,8 +226,14 @@ and window — defence is the platform's weakest signal, and this is the mechani
 and constants); component coefficients never consume V and YoY r is invariant to uniform repricing, so the
 tiers are unchanged by construction (the effect is confined to the goal SCALE of `*_g60`).
 `phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative change the episode
-definition (Stage-1 rebuild, two seasons) and require refits; those two cells are pending a dev-schema
-rebuild (they must NOT overwrite the production `int_phase_*` the shipped fits depend on).
+definition and were rebuilt into isolated `nhl_staging_sens_*` datasets (canary-proven, production
+untouched — PV-I001/PV-D020) and refit on 2023-24 & 2024-25. The **gap knob is inert** — YoY r moves
+≤0.006 and split-half ≤0.01 across gap {2,4,6}. The **blocked-shot alternative** (`='owner'`) is the
+larger perturbation (~18% fewer episodes): on the 2023-24→2024-25 pair `deny`'s YoY rises 0.13→0.28. But
+that convention is the empirically-rejected reading (PV-D005: the blocked-shot owner is the blocker 94%
+of the time), so it is a robustness caveat — `deny`'s stability depends on the possession convention —
+not a valid tier rescue; under the correct convention `deny` stays Tier C. It does mark
+possession-attribution as the most promising lever for the deny channel in v1.1.
 
 **External A3Z agreement** is gated (reference absent in-repo).
 
