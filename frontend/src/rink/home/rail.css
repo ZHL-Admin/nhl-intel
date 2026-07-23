@@ -1,0 +1,69 @@
+/* =============================================================================
+   RINK THEORY — Home right rail (§3.1): three white cards with mono headers.
+   POWER RATINGS (top 5) · LUCK WATCH (one sentence) · FROM THE TOOLKIT.
+   ============================================================================= */
+
+.rt-home {
+  display: grid;
+  grid-template-columns: 1fr var(--w-rail);
+  gap: 48px;
+  align-items: start;
+  margin-top: 32px;
+}
+@media (max-width: 900px) {
+  .rt-home { grid-template-columns: 1fr; }
+}
+
+.rt-rail { display: flex; flex-direction: column; gap: 20px; }
+
+.rt-railcard {
+  background: var(--white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.rt-railcard__hd {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 10px;
+}
+
+/* Power Ratings mini-rows */
+.rt-railrow {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.rt-railrow__rk { color: var(--muted); }
+.rt-railrow__tm { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
+.rt-railrow__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.rt-railrow__rt { color: var(--orange); font-weight: 500; text-align: right; }
+
+.rt-raillink {
+  display: inline-block;
+  margin-top: 10px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+/* Luck watch — one editorial sentence (deterministic template). */
+.rt-luckwatch { font-family: var(--font-serif); font-size: 1rem; line-height: 1.5; color: var(--ink); }
+.rt-luckwatch .ahead { color: var(--orange); font-weight: 600; }
+.rt-luckwatch .behind { color: var(--blue); font-weight: 600; }
+
+/* From the toolkit — four links. */
+.rt-toolkit { display: flex; flex-direction: column; gap: 8px; }
+.rt-toolkit a { font-family: var(--font-serif); font-size: 1rem; color: var(--ink); }
+.rt-toolkit a:hover { color: var(--blue); text-decoration: none; }
+.rt-toolkit a span { color: var(--orange); }

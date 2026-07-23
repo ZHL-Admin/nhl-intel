@@ -1,6 +1,34 @@
 import { apiClient } from './client'
 import { PowerRatingRow, DeservedStandingRow, ValueRankingRow } from './types'
 
+// RINK THEORY §4.2 — the standing-number payload for the Power Ratings table and
+// the Home rail. Backed by the new GET /ratings (merges the existing power +
+// deserved queries; data_through = MAX(game_date)).
+export interface TeamRating {
+  rank: number
+  team_id: number
+  team_abbrev: string | null
+  rating: number
+  comp_5v5: number
+  comp_finishing: number
+  comp_goaltending: number
+  comp_special_teams: number
+  luck: number | null
+}
+export interface RatingsPayload {
+  season: string
+  data_through: string | null
+  teams: TeamRating[]
+}
+
+/** The Power Ratings payload: per-team rating + four components + luck, DATA THROUGH stamp. */
+export async function getRatings(season?: string): Promise<RatingsPayload> {
+  const response = await apiClient.get<RatingsPayload>('/ratings', {
+    params: season ? { season } : undefined,
+  })
+  return response.data
+}
+
 /** Current power ratings, highest first (Phase 3.1). */
 export async function getPowerRankings(season?: string): Promise<PowerRatingRow[]> {
   const response = await apiClient.get<PowerRatingRow[]>('/rankings/power', {

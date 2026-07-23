@@ -1,0 +1,87 @@
+/* =============================================================================
+   RINK THEORY — Power Ratings tables (§3.4 / §6). Checked against
+   design/mockups/ratings-v2.png: header shade, zebra rows, orange/blue luck
+   cells, team-color dots, mono right-aligned numbers.
+   ============================================================================= */
+
+.rt-rttable {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+/* Header: shade row, mono uppercase labels, right-aligned (first two cols left). */
+.rt-rttable thead th {
+  background: var(--shade-tablehead);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.rt-rttable thead th.rk, .rt-rttable thead th.team { text-align: left; }
+
+.rt-rttable tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  text-align: right;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.rt-rttable tbody tr:last-child td { border-bottom: 0; }
+.rt-rttable tbody tr:nth-child(even) td { background: var(--shade-zebra); }
+
+/* RK — muted. */
+.rt-rttable td.rk { color: var(--muted); text-align: left; width: 3rem; }
+
+/* TEAM — dot + full name in the editorial serif, left-aligned. */
+.rt-rttable td.team { text-align: left; }
+.rt-team { display: inline-flex; align-items: center; gap: 9px; }
+.rt-team__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.rt-team__name { font-family: var(--font-serif); font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+
+/* RATING — the signature column, orange. */
+.rt-rttable td.rating { color: var(--orange); font-weight: 500; }
+
+/* Component columns — muted-ink mono. */
+.rt-rttable td.comp { color: var(--ink); }
+
+/* LUCK — tinted cell: orange (results ahead of play) / blue (behind). */
+.rt-rttable td.luck { font-weight: 500; }
+.rt-rttable td.luck.ahead  { color: var(--orange); background: var(--shade-luck-ahead); }
+.rt-rttable td.luck.behind { color: var(--blue);   background: var(--shade-luck-behind); }
+.rt-rttable tbody tr:nth-child(even) td.luck.ahead  { background: var(--shade-luck-ahead); }
+.rt-rttable tbody tr:nth-child(even) td.luck.behind { background: var(--shade-luck-behind); }
+
+/* A quiet trailing spacer column, as in the mockup. */
+.rt-rttable td.pad, .rt-rttable th.pad { width: 1.5rem; background: var(--white); }
+.rt-rttable tbody tr:nth-child(even) td.pad { background: var(--shade-zebra); }
+
+/* Position filter (players table) — small mono segmented control. */
+.rt-posfilter { display: inline-flex; gap: 4px; margin-top: 6px; }
+.rt-posfilter button {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.rt-posfilter button.is-active { color: var(--white); background: var(--ink); border-color: var(--ink); }
+
+.rt-tablenote { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; color: var(--muted); margin-top: 12px; }

@@ -100,3 +100,17 @@ build when ported into `src/rink` in Step 5. No source is deleted.
   dormant `GET /rankings/deserved` but ships a frozen 2025-26 snapshot.
 - ShotMap/StripPlot relocated into `src/rink/figures/` (unmodified; ShotMap's one
   cross-dir import path updated for the move; reservation comments intact).
+- Note 2 (rink bias): its primary artifact `artifacts/phase_value/arena_underrecording.csv`
+  and `docs/phase-value/phase-value.md` are UNTRACKED (not on the rebuild branch);
+  the exact values are frozen verbatim in the MDX citation comment with `[T]`
+  (tracked-corroborated) / `[U]` (untracked-only) tags so provenance survives.
+  `docs/phase-value/sprite-audit.md` and `docs/methodology/scorer-bias.md` ARE tracked.
+
+## Ship-gate checklist (Step 8) — additions
+
+Beyond the plan's §7 step-8 gate (≥3 published notes, /ratings reflects last run,
+four tools work in the new shell), also confirm at ship:
+
+- [ ] **Set a real `SITE_URL`** for the RSS build (`scripts/gen-rss.mjs`) — replaces
+      the `https://rinktheory.example` placeholder in `<link>`, `<guid>`, and the
+      `atom:link` self href. Set via the `SITE_URL` env at build time.

@@ -41,6 +41,7 @@ const TEAM_NAMES: Record<string, string> = {
   STL: 'St. Louis Blues',
   TBL: 'Tampa Bay Lightning',
   TOR: 'Toronto Maple Leafs',
+  UTA: 'Utah Mammoth',
   VAN: 'Vancouver Canucks',
   VGK: 'Vegas Golden Knights',
   WSH: 'Washington Capitals',
@@ -87,6 +88,7 @@ const TEAM_COLORS: Record<string, string> = {
   STL: '#002F87',
   TBL: '#002868',
   TOR: '#00205B',
+  UTA: '#71AFE5',  // Utah Mammoth "Salt Lake blue" (name verified vs stg_roster_current.sql; color not in repo data)
   VAN: '#00205B',
   VGK: '#B4975A',
   WSH: '#041E42',

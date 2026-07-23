@@ -19,16 +19,26 @@ CORRECTION 2a — scorer-bias multipliers on subjective events (hits/giveaways/t
   Range: Toronto hits 1.43x (inflation) to Columbus 0.68x (under-count) (scorer-bias.md:38-39).
   Effect: Toronto 2024-25 team hits 2,489 raw -> 2,100 adjusted (scorer-bias.md:40).
 
-CORRECTION 2b — phase-value "under-recording share" (artifacts/phase_value/arena_underrecording.csv).
-  established_full_window share within zero-duration goal-only episodes per arena-season
-  (docs/phase-value/sprite-audit.md:82-89 ; def phase-value.md:126-129). Columns:
-  venue_name, season, n, underrecord_share, model_version(phase_value_v1). 96 rows.
-  League mean 42.1% (sprite-audit.md:83).
-  Max Bridgestone Arena 2025-26 = 0.5833 (n=72): arena_underrecording.csv:16 ; sprite-audit.md:85
-  Ball Arena 2024-25 = 0.5814 (n=86): CSV:11 ; sprite-audit.md:86
-  Benchmark Intl Arena 2025-26 = 0.3171 (n=82): CSV:13 ; sprite-audit.md:89
-  Min Canadian Tire Centre 2024-25 = 0.2877 (n=73): arena_underrecording.csv:21
-  2b is REPORT-ONLY / not yet applied — v1.1 candidate (sprite-audit.md:84 ; phase-value.md:130).
+CORRECTION 2b — phase-value "under-recording share".
+  established_full_window share within zero-duration goal-only episodes per arena-season.
+  Columns: venue_name, season, n, underrecord_share, model_version(phase_value_v1). 96 rows.
+
+  PROVENANCE NOTE: the primary source artifacts/phase_value/arena_underrecording.csv and the
+  definition doc docs/phase-value/phase-value.md are UNTRACKED local artifacts (not on the
+  rebuild branch). Per owner instruction the exact values are FROZEN VERBATIM below with their
+  original paths, so this note's provenance survives independent of those artifacts. The tracked
+  doc docs/phase-value/sprite-audit.md corroborates all but the minimum (see [T]/[U] tags).
+
+  Verbatim underrecord_share values (full precision as materialized):
+    League mean          = 0.42001 across 96 rows  [T sprite-audit.md:83 = "42.1%"]
+    Bridgestone Arena  25-26 = 0.5833333333333334 (n=72)  [U arena_underrecording.csv:16] [T sprite-audit.md:85]
+    Ball Arena         24-25 = 0.5813953488372093 (n=86)  [U arena_underrecording.csv:11] [T sprite-audit.md:86]
+    Benchmark Intl Arena 25-26 = 0.3170731707317073 (n=82) [U arena_underrecording.csv:13] [T sprite-audit.md:89]
+    Canadian Tire Centre 24-25 = 0.2876712328767123 (n=73) [U arena_underrecording.csv:21 — untracked-only; min]
+    def of established_full_window: [U phase-value.md:126-129]
+  [T] = corroborated in a TRACKED doc ; [U] = untracked local artifact (value frozen here).
+  Note displays rounded: 58.3% / 58.1% / 42.1% / 31.7% / 28.8%.
+  2b is REPORT-ONLY / not yet applied — v1.1 candidate (sprite-audit.md:84 [T] ; phase-value.md:130 [U]).
 */}
 
 import { BarFigure, TableFigure } from '@figures'
