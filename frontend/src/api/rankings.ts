@@ -29,6 +29,23 @@ export async function getRatings(season?: string): Promise<RatingsPayload> {
   return response.data
 }
 
+// Offseason forecast board — consumed by the seasonal Home rail (§3.1 amended).
+// Read as-is from the dormant GET /tools/offseason. `projected_rating` is the
+// projected next-season strength (absolute); `delta`/`net_delta_war` measure
+// offseason move impact (biggest movers), which is NOT what the rail wants.
+export interface OffseasonRow {
+  team_id: number
+  team_abbrev: string | null
+  projected_rating: number
+  projected_rank: number | null
+  delta: number
+  net_delta_war: number
+}
+export async function getOffseasonBoard(): Promise<OffseasonRow[]> {
+  const response = await apiClient.get<OffseasonRow[]>('/tools/offseason')
+  return response.data
+}
+
 /** Current power ratings, highest first (Phase 3.1). */
 export async function getPowerRankings(season?: string): Promise<PowerRatingRow[]> {
   const response = await apiClient.get<PowerRatingRow[]>('/rankings/power', {

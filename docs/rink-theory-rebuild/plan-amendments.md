@@ -106,6 +106,27 @@ build when ported into `src/rink` in Step 5. No source is deleted.
   (tracked-corroborated) / `[U]` (untracked-only) tags so provenance survives.
   `docs/phase-value/sprite-audit.md` and `docs/methodology/scorer-bias.md` ARE tracked.
 
+## A9 — Seasonal Home rail (§3.1 amended)
+
+The Home rail is seasonal, with an automatic, data-derived switch (no config flag):
+**offseason** mode when the `/ratings` payload's `data_through` is more than 30 days
+older than today; **in-season** otherwise. Switch logic lives in
+`frontend/src/rink/home/Rail.tsx` (`isOffseason(data_through)`), with a dev-only
+URL override (`?rail=inseason` / `?rail=offseason`) to capture either mode.
+
+- **In-season:** POWER RATINGS (top 5) + LUCK WATCH — unchanged from Step 4.
+- **Offseason:** PROJECTED 2026-27 (top 5 by `projected_rating` from
+  `/tools/offseason`, read as-is — chose `projected_rating` = absolute projected
+  strength over `delta`/`net_delta_war`, which measure offseason move impact /
+  biggest movers, not strength; no footer link, as no board page exists) +
+  CONTRACT WATCH (deterministic template: best/worst deal from `/rankings/surplus`
+  read as-is, links to `/ratings/players`).
+- FROM THE TOOLKIT: unchanged, year-round. Both modes styled identically per §6.
+
+Frontend-only; no endpoint modified. **§4.2 append (standing rule):** the rail now
+also consumes the dormant `GET /tools/offseason` (offseason mode) — read exactly
+as it responds today.
+
 ## Ship-gate checklist (Step 8) — additions
 
 Beyond the plan's §7 step-8 gate (≥3 published notes, /ratings reflects last run,
