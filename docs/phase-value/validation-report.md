@@ -40,7 +40,16 @@ Model `phase_value_v1`. Criteria pre-registered in `config.PHASE_VALUE_CONFIG` b
 | 2024-25->2025-26 | same team | +0.045 | 370 |
 | 2024-25->2025-26 | moved | +0.088 | 128 |
 
-**Pooled: same-team +0.163 vs moved +0.142.** Same-team persistence does NOT materially exceed movers, so `deny` is **not** a system-level signal passing through players — the null stands as written. The monotonic decline appears in BOTH groups (same-team 0.26→0.05, moved 0.24→0.09), consistent with a temporal, not a roster-continuity, mechanism.
+**Pooled: same-team +0.163 vs moved +0.142.** **Conclusion (corrected).** This split rules out player-CARRIED deny persistence, but it CANNOT discriminate a structure-driven signal — because defensive structure itself does not persist season-to-season for stayers or movers (platform finding F26: defensive coverage identity tracks NEITHER roster nor coach; continuity gradient flat r=0.00; high-continuity persistence 0.16 vs the 0.40 bar; F12's roster-carried offensive style does NOT extend to defence). Under a season-reforming defensive context, **same-team ≈ movers is the EXPECTED result of a structure-driven `deny`**, not evidence against one. The discriminating tests are in 1c.
+
+### 1c. Is `deny` a structure-driven team signal? (report-only; criteria pre-stated)
+**Pre-stated criteria:** (a) team-season deny is a coherent team property if its within-season even/odd split-half r is high; (b) if deny mirrors F26, its continuity gradient is FLAT (a positive gradient would instead mean roster-carried structure); (c) a positive loading of team-season deny on the F26 coverage signatures is direct evidence deny measures defensive structure. **Interpretation rule (pre-stated):** if (a) is high AND (b) is flat, the methodology may state the convergence hypothesis — deny and F26 are two independent instruments on the same phenomenon (defensive structure real within-season, re-forming annually, tracking neither roster nor coach), carrying F26's goals-only caveat. **Tiers are unchanged regardless; deny stays Tier C at player level — this is interpretation only.**
+
+- **(a) Team coherence:** team-season deny within-season split-half (even/odd game_id) **r = +0.269** (n=157 team-seasons). moderate/low.
+- **(b) Continuity gradient:** deny YoY r high-continuity +0.065 vs low-continuity -0.056; gradient corr(continuity, deny stability) = **+0.019** (n=62 pairs). FLAT — mirrors F26 (structure re-forms, not roster-carried).
+- **(c) Cross-instrument link (F26 coverage signatures, tracking seasons):** multiple R(deny ~ signature) = **0.135** (R²=0.018, n=95 team-seasons); strongest single features: spread +0.06, marking +0.02, highest +0.02. weak loading.
+
+**Verdict vs the pre-stated rule:** (a) not high; (b) flat; (c) weak/null. Conditions not met → convergence hypothesis NOT asserted; deny's structure interpretation stays open. Tiers unchanged; deny stays Tier C at player level.
 
 ## 2. def_impact baseline comparison (3-season window, toi ≥ 200)
 | component | r vs def_impact |
@@ -127,7 +136,7 @@ Read (i) vs (ii): whether team `pv_def_g60` predicts future defence better than 
 | blockshot_owner | suppress | +0.298 (+0.040) | +0.473 (+0.045) | +0.489 (+0.011) |
 | blockshot_owner | escape | +0.054 (-0.031) | +0.497 (+0.044) | +0.285 (-0.140) |
 
-Baseline (gap=4, blocked-shot=opp), 2023-24→2024-25 pair: deny YoY +0.131; suppress YoY +0.258; escape YoY +0.085. **Read:** the gap variants move everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — the conclusions are robust to the episode-gap knob. The **blocked-shot alternative** is the larger perturbation (~18% fewer episodes): on this pair deny's YoY rises 0.13→0.28 and its split-half climbs. But `blocked_shot_possession='owner'` is the **empirically-REJECTED reading** (PV-D005: the blocked-shot owner is the BLOCKER 94% of the time, so possession = the opponent). So this is a robustness CAVEAT — deny's stability is sensitive to the possession convention — NOT a valid tier rescue: under the correct PV-D005 convention deny remains Tier C. It does flag that a future possession-attribution refinement is the most promising lever for the deny channel.
+Baseline (gap=4, blocked-shot=opp), 2023-24→2024-25 pair: deny YoY +0.131; suppress YoY +0.258; escape YoY +0.085. **Read:** the gap variants move everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — robust to the episode-gap knob. The **blocked-shot alternative is the pre-registered PV-A1 possession assumption** (blocker GAINS possession, vs the v1 default of shooter-retains; this is PV-A1, NOT PV-D005 — PV-D005 settled owner SEMANTICS, owner=blocker, and is final). The PV-A1 alternative roughly **doubles deny's observed stability on the tested pair (YoY 0.13→0.28; split-half +0.07/+0.18)** and improves `suppress`. Per §9.3 the v1 default STANDS (defaults change only for outright error, and one pair cannot establish a tier); this is logged as the **leading v1.1 lever for `deny`** (PV-D021), with a full-history evaluation plan and validity checks stated before running. Tiers unchanged; `deny` stays Tier C at player level in v1.
 
 ## 8. PV-D015 arena-bias diagnostic for `deny`
 Deny's monotonic YoY decline (0.25→0.19→0.13→0.06) makes this more informative, not less.

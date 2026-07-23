@@ -213,11 +213,12 @@ is internally consistent WITHIN a season but does not PERSIST across years. A te
 (same-primary-team YoY 0.163 ≈ movers 0.142) rules out player-CARRIED persistence but does NOT prove
 absence of structure: platform finding **F26** shows defensive coverage identity re-forms annually,
 tracking neither roster nor coach (continuity gradient r=0.00), so under a season-reforming defensive
-context same-team ≈ movers is exactly what a structure-driven `deny` would produce (validation §1c tests
-this directly: team-season coherence, F26 continuity gradient, and cross-loading on the F26 coverage
-signatures; where §1c's pre-stated conditions are met, `deny` and F26 read as two instruments on the same
-annually-reforming defensive structure, carrying F26's goals-only caveat). Either way `deny` stays Tier C
-at player level — this is interpretation, not a tier change. The pre-registered candidate for the temporal
+context same-team ≈ movers is exactly what a structure-driven `deny` would produce. Validation §1c tests
+this directly and **does NOT support the convergence hypothesis**: team-season coherence is only moderate
+(even/odd split-half r=0.27), the F26 continuity gradient is flat (+0.02, F26-like but also noise-consistent),
+and cross-loading of team-season `deny` on the F26 coverage signatures is null (R=0.135). So the structure
+interpretation stays OPEN — `deny` is not shown to be a coherent structure-driven team signal, and it is not
+shown to converge with F26. Either way `deny` stays Tier C at player level — interpretation, not a tier change. The pre-registered candidate for the temporal
 decline was scorer drift; the PV-D015 arena-bias diagnostic
 (team-season `deny` vs home-arena under-recording share, **r = +0.010** over 100 team-seasons) **rules out
 cross-arena scorekeeper bias**. That diagnostic is cross-sectional, however — it addresses venue-level bias
