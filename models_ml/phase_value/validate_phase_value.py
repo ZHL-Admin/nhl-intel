@@ -50,15 +50,17 @@ def _load():
 
 
 def _yoy(df, comp, floor):
-    """Mean year-over-year Pearson r for one component at one TOI floor, over consecutive season pairs."""
+    """Mean year-over-year Pearson r for one component at one TOI floor, over consecutive season pairs.
+    Returns (mean_r, rows) where each row = (pair_label, r, n_merged, n_a, n_b) — cohort sizes exposed
+    so the effective (pooling-limited) cohort is auditable, not just the paired n."""
     rs = []
     for a, b in zip(SINGLES[:-1], SINGLES[1:]):
-        da = df[(df["season_window"] == a) & (df["toi_min"] >= floor)][["player_id", comp]]
-        db = df[(df["season_window"] == b) & (df["toi_min"] >= floor)][["player_id", comp]]
-        m = da.merge(db, on="player_id", suffixes=("_a", "_b")).dropna()
+        da = df[(df["season_window"] == a) & (df["toi_min"] >= floor)][["player_id", comp]].dropna()
+        db = df[(df["season_window"] == b) & (df["toi_min"] >= floor)][["player_id", comp]].dropna()
+        m = da.merge(db, on="player_id", suffixes=("_a", "_b"))
         if len(m) >= 20:
-            rs.append((f"{a}->{b}", m[f"{comp}_a"].corr(m[f"{comp}_b"]), len(m)))
-    mean_r = float(np.mean([r for _, r, _ in rs])) if rs else float("nan")
+            rs.append((f"{a}->{b}", m[f"{comp}_a"].corr(m[f"{comp}_b"]), len(m), len(da), len(db)))
+    mean_r = float(np.mean([r for _, r, _, _, _ in rs])) if rs else float("nan")
     return mean_r, rs
 
 
@@ -78,20 +80,32 @@ def _report(df):
       f"Tier A r ≥ {TIER_A}, Tier B r ≥ {TIER_B} (else C) on year-over-year r; TOI floors {TOI_FLOORS}. "
       "No number in Stages 1–4 was re-tuned to these results.\n")
 
-    # 1. Reliability tiers — the crux (year-over-year r)
+    # 1. Reliability tiers — the crux (year-over-year r) + the def_impact baseline (§9.2.1)
     W("## 1. Reliability tiers — year-over-year r (the pre-registered crux)")
+    W("**Baseline (§9.2.1):** `def_impact` YoY r on the identical cohort, side by side — the project's "
+      "comparative verdict number. **Cohort note:** the TOI floors are applied (`toi_min ≥ floor`) but are "
+      "largely NON-BINDING for the exposure-heavy components: each component's RAPM replacement pooling "
+      "(< 100 exposure-min → F/D pool) already imposes a higher effective TOI floor — ~475 min for "
+      "deny/deny_rush (outside exposure ≈ 21% of ice) and ~345 min for suppress/escape (in-zone ≈ 29%). "
+      "So deny's cohort is empty in [200,400) (its min toi is ~514) and suppress gains only a handful "
+      "when the floor halves. Per-pair cohort sizes (n_a, n_b) are shown so this is auditable. This is "
+      "RAPM-parity pooling, not a misapplied filter.\n")
     tiers = {}
     for floor in TOI_FLOORS:
         W(f"\n### TOI ≥ {floor} min")
-        W("| component | mean YoY r | tier | per-pair r (n) |")
+        W("| component | mean YoY r | tier | per-pair r (n_pair; n_a/n_b) |")
         W("|---|---|---|---|")
-        for comp in COMPONENTS:
+        for comp in COMPONENTS + ["def_impact"]:
             mean_r, rs = _yoy(df, comp, floor)
-            pairs = "; ".join(f"{lab} {r:+.2f} (n={n})" for lab, r, n in rs)
+            pairs = "; ".join(f"{lab} {r:+.2f} (n={n}; {na}/{nb})" for lab, r, n, na, nb in rs)
             t = _tier(mean_r) if not np.isnan(mean_r) else "—"
             tiers[(comp, floor)] = (mean_r, t)
-            W(f"| **{comp}** | {mean_r:+.3f} | **{t}** | {pairs} |")
+            tag = " _(baseline §9.2.1)_" if comp == "def_impact" else ""
+            W(f"| **{comp}**{tag} | {mean_r:+.3f} | **{t}** | {pairs} |")
     W("")
+    W("**Comparative verdict:** PV components vs the `def_impact` baseline on identical cohorts, above. "
+      "`pv_def_g60`/`suppress`/`escape` at Tier B; `deny`/`deny_rush` at Tier C; read each against the "
+      "baseline's own YoY r in the same table.\n")
 
     # 2. def_impact baseline (headline window)
     W("## 2. def_impact baseline comparison (3-season window, toi ≥ 200)")
@@ -107,15 +121,33 @@ def _report(df):
         W("\nExpected (pre-registered thesis): suppress high (def_impact's xG channel re-denominated), "
           "deny moderate (new frequency channel), escape ≈ 0 (orthogonal). pv_def_g60 ~0.87 = suppress-dominated.\n")
 
-    # 3. Smell tests — face validity (top/bottom by pv_def_g60, headline)
+    # 3. Smell tests — face validity + diagnostics (a) def_impact percentile, (b) in-zone-share corr
     W("## 3. Smell tests — face validity (3-season pv_def_g60, toi ≥ 400)")
     if win:
-        sub = df[(df["season_window"] == win[0]) & (df["toi_min"] >= 400)].dropna(subset=["pv_def_g60"])
+        sub = df[(df["season_window"] == win[0]) & (df["toi_min"] >= 400)].dropna(subset=["pv_def_g60"]).copy()
+        sub["di_pct"] = sub["def_impact"].rank(pct=True) * 100      # def_impact percentile within cohort
         nm = _names(sub["player_id"].tolist())
         for lab, asc in [("Top 10", False), ("Bottom 10", True)]:
             top = sub.sort_values("pv_def_g60", ascending=asc).head(10)
             W(f"**{lab} pv_def_g60:** " + ", ".join(
                 f"{nm.get(r.player_id, r.player_id)} ({r.pv_def_g60:+.3f})" for r in top.itertuples()))
+        # (a) def_impact percentile of the top anomalies — inherited-from-baseline vs PV-specific
+        W("\n**(a) def_impact percentile of the top-10** (distinguishes inherited-from-baseline from PV-specific):")
+        top10 = sub.sort_values("pv_def_g60", ascending=False).head(10)
+        W("| player | pv_def_g60 | def_impact %ile |")
+        W("|---|---|---|")
+        for r in top10.itertuples():
+            W(f"| {nm.get(r.player_id, r.player_id)} | {r.pv_def_g60:+.3f} | {r.di_pct:.0f} |")
+        W("A high def_impact percentile ⇒ the ranking is inherited from the baseline (not a PV artifact); "
+          "a low one ⇒ PV-specific and worth scrutiny.")
+        # (b) corr(pv_def_g60, in-zone-against share of TOI) — the flattery hypothesis, as a number
+        if {"def_in_sec", "def_out_sec"}.issubset(sub.columns):
+            sub["inzone_share"] = sub["def_in_sec"] / (sub["def_in_sec"] + sub["def_out_sec"])
+            rr = sub[["pv_def_g60", "inzone_share"]].dropna()
+            r_flat = rr["pv_def_g60"].corr(rr["inzone_share"]) if len(rr) > 2 else float("nan")
+            W(f"\n**(b) corr(pv_def_g60, in-zone-against share of TOI) = {r_flat:+.3f}** (n={len(rr)}). "
+              "A strong NEGATIVE value would support the per-in-zone-second flattery hypothesis (players who "
+              "defend in-zone less get a smaller denominator and a flattered rate); near zero refutes it.")
         W("")
 
     # 4. Discrimination (spread vs bootstrap sd) — from the assembled sds
