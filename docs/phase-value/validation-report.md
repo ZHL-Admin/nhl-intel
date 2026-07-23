@@ -3,24 +3,30 @@
 Model `phase_value_v1`. Criteria pre-registered in `config.PHASE_VALUE_CONFIG` before results: Tier A r ≥ 0.35, Tier B r ≥ 0.2 (else C) on year-over-year r; TOI floors [400, 200]. No number in Stages 1–4 was re-tuned to these results.
 
 ## 1. Reliability tiers — year-over-year r (the pre-registered crux)
+**Baseline (§9.2.1):** `def_impact` YoY r on the identical cohort, side by side — the project's comparative verdict number. **Cohort note:** the TOI floors are applied (`toi_min ≥ floor`) but are largely NON-BINDING for the exposure-heavy components: each component's RAPM replacement pooling (< 100 exposure-min → F/D pool) already imposes a higher effective TOI floor — ~475 min for deny/deny_rush (outside exposure ≈ 21% of ice) and ~345 min for suppress/escape (in-zone ≈ 29%). So deny's cohort is empty in [200,400) (its min toi is ~514) and suppress gains only a handful when the floor halves. Per-pair cohort sizes (n_a, n_b) are shown so this is auditable. This is RAPM-parity pooling, not a misapplied filter.
+
 
 ### TOI ≥ 400 min
-| component | mean YoY r | tier | per-pair r (n) |
+| component | mean YoY r | tier | per-pair r (n_pair; n_a/n_b) |
 |---|---|---|---|
-| **deny** | +0.158 | **C** | 2021-22->2022-23 +0.25 (n=472); 2022-23->2023-24 +0.19 (n=461); 2023-24->2024-25 +0.13 (n=492); 2024-25->2025-26 +0.06 (n=498) |
-| **suppress** | +0.219 | **B** | 2021-22->2022-23 +0.20 (n=523); 2022-23->2023-24 +0.23 (n=532); 2023-24->2024-25 +0.26 (n=526); 2024-25->2025-26 +0.18 (n=526) |
-| **escape** | +0.206 | **B** | 2021-22->2022-23 +0.27 (n=523); 2022-23->2023-24 +0.30 (n=532); 2023-24->2024-25 +0.09 (n=526); 2024-25->2025-26 +0.17 (n=526) |
-| **deny_rush** | +0.085 | **C** | 2021-22->2022-23 +0.04 (n=472); 2022-23->2023-24 +0.12 (n=461); 2023-24->2024-25 +0.04 (n=492); 2024-25->2025-26 +0.15 (n=498) |
-| **pv_def_g60** | +0.246 | **B** | 2021-22->2022-23 +0.20 (n=472); 2022-23->2023-24 +0.25 (n=461); 2023-24->2024-25 +0.31 (n=488); 2024-25->2025-26 +0.23 (n=496) |
+| **deny** | +0.158 | **C** | 2021-22->2022-23 +0.25 (n=472; 582/571); 2022-23->2023-24 +0.19 (n=461; 571/568); 2023-24->2024-25 +0.13 (n=492; 568/607); 2024-25->2025-26 +0.06 (n=498; 607/579) |
+| **suppress** | +0.219 | **B** | 2021-22->2022-23 +0.20 (n=523; 644/635); 2022-23->2023-24 +0.23 (n=532; 635/637); 2023-24->2024-25 +0.26 (n=526; 637/610); 2024-25->2025-26 +0.18 (n=526; 610/637) |
+| **escape** | +0.206 | **B** | 2021-22->2022-23 +0.27 (n=523; 644/635); 2022-23->2023-24 +0.30 (n=532; 635/637); 2023-24->2024-25 +0.09 (n=526; 637/610); 2024-25->2025-26 +0.17 (n=526; 610/637) |
+| **deny_rush** | +0.085 | **C** | 2021-22->2022-23 +0.04 (n=472; 582/571); 2022-23->2023-24 +0.12 (n=461; 571/568); 2023-24->2024-25 +0.04 (n=492; 568/607); 2024-25->2025-26 +0.15 (n=498; 607/579) |
+| **pv_def_g60** | +0.246 | **B** | 2021-22->2022-23 +0.20 (n=472; 582/571); 2022-23->2023-24 +0.25 (n=461; 571/568); 2023-24->2024-25 +0.31 (n=488; 568/600); 2024-25->2025-26 +0.23 (n=496; 600/579) |
+| **def_impact** _(baseline §9.2.1)_ | +0.346 | **B** | 2021-22->2022-23 +0.35 (n=523; 644/635); 2022-23->2023-24 +0.35 (n=532; 635/637); 2023-24->2024-25 +0.38 (n=530; 637/617); 2024-25->2025-26 +0.31 (n=530; 617/637) |
 
 ### TOI ≥ 200 min
-| component | mean YoY r | tier | per-pair r (n) |
+| component | mean YoY r | tier | per-pair r (n_pair; n_a/n_b) |
 |---|---|---|---|
-| **deny** | +0.158 | **C** | 2021-22->2022-23 +0.25 (n=472); 2022-23->2023-24 +0.19 (n=461); 2023-24->2024-25 +0.13 (n=492); 2024-25->2025-26 +0.06 (n=498) |
-| **suppress** | +0.218 | **B** | 2021-22->2022-23 +0.20 (n=526); 2022-23->2023-24 +0.23 (n=535); 2023-24->2024-25 +0.26 (n=526); 2024-25->2025-26 +0.18 (n=526) |
-| **escape** | +0.205 | **B** | 2021-22->2022-23 +0.27 (n=526); 2022-23->2023-24 +0.30 (n=535); 2023-24->2024-25 +0.09 (n=526); 2024-25->2025-26 +0.17 (n=526) |
-| **deny_rush** | +0.085 | **C** | 2021-22->2022-23 +0.04 (n=472); 2022-23->2023-24 +0.12 (n=461); 2023-24->2024-25 +0.04 (n=492); 2024-25->2025-26 +0.15 (n=498) |
-| **pv_def_g60** | +0.246 | **B** | 2021-22->2022-23 +0.20 (n=472); 2022-23->2023-24 +0.25 (n=461); 2023-24->2024-25 +0.31 (n=488); 2024-25->2025-26 +0.23 (n=496) |
+| **deny** | +0.158 | **C** | 2021-22->2022-23 +0.25 (n=472; 582/571); 2022-23->2023-24 +0.19 (n=461; 571/568); 2023-24->2024-25 +0.13 (n=492; 568/607); 2024-25->2025-26 +0.06 (n=498; 607/579) |
+| **suppress** | +0.218 | **B** | 2021-22->2022-23 +0.20 (n=526; 648/637); 2022-23->2023-24 +0.23 (n=535; 637/639); 2023-24->2024-25 +0.26 (n=526; 639/610); 2024-25->2025-26 +0.18 (n=526; 610/637) |
+| **escape** | +0.205 | **B** | 2021-22->2022-23 +0.27 (n=526; 648/637); 2022-23->2023-24 +0.30 (n=535; 637/639); 2023-24->2024-25 +0.09 (n=526; 639/610); 2024-25->2025-26 +0.17 (n=526; 610/637) |
+| **deny_rush** | +0.085 | **C** | 2021-22->2022-23 +0.04 (n=472; 582/571); 2022-23->2023-24 +0.12 (n=461; 571/568); 2023-24->2024-25 +0.04 (n=492; 568/607); 2024-25->2025-26 +0.15 (n=498; 607/579) |
+| **pv_def_g60** | +0.246 | **B** | 2021-22->2022-23 +0.20 (n=472; 582/571); 2022-23->2023-24 +0.25 (n=461; 571/568); 2023-24->2024-25 +0.31 (n=488; 568/600); 2024-25->2025-26 +0.23 (n=496; 600/579) |
+| **def_impact** _(baseline §9.2.1)_ | +0.345 | **B** | 2021-22->2022-23 +0.34 (n=526; 648/637); 2022-23->2023-24 +0.35 (n=535; 637/639); 2023-24->2024-25 +0.38 (n=530; 639/617); 2024-25->2025-26 +0.31 (n=530; 617/637) |
+
+**Comparative verdict:** PV components vs the `def_impact` baseline on identical cohorts, above. `pv_def_g60`/`suppress`/`escape` at Tier B; `deny`/`deny_rush` at Tier C; read each against the baseline's own YoY r in the same table.
 
 ## 2. def_impact baseline comparison (3-season window, toi ≥ 200)
 | component | r vs def_impact |
@@ -37,6 +43,23 @@ Expected (pre-registered thesis): suppress high (def_impact's xG channel re-deno
 **Top 10 pv_def_g60:** Sam Reinhart (+0.201), Alexander Wennberg (+0.176), Moritz Seider (+0.175), Devon Toews (+0.173), Jordan Kyrou (+0.167), Cam York (+0.165), Tyler Tucker (+0.161), Nate Schmidt (+0.160), Luke Evangelista (+0.160), Radek Faksa (+0.160)
 **Bottom 10 pv_def_g60:** Connor Bedard (-0.310), Tony DeAngelo (-0.263), Evander Kane (-0.252), Ben Chiarot (-0.233), Chandler Stephenson (-0.232), Artyom Levshunov (-0.199), Dylan Strome (-0.183), Frank Vatrano (-0.182), Mikael Granlund (-0.179), Vinnie Hinostroza (-0.175)
 
+**(a) def_impact percentile of the top-10** (distinguishes inherited-from-baseline from PV-specific):
+| player | pv_def_g60 | def_impact %ile |
+|---|---|---|
+| Sam Reinhart | +0.201 | 100 |
+| Alexander Wennberg | +0.176 | 93 |
+| Moritz Seider | +0.175 | 99 |
+| Devon Toews | +0.173 | 97 |
+| Jordan Kyrou | +0.167 | 99 |
+| Cam York | +0.165 | 76 |
+| Tyler Tucker | +0.161 | 73 |
+| Nate Schmidt | +0.160 | 98 |
+| Luke Evangelista | +0.160 | 91 |
+| Radek Faksa | +0.160 | 97 |
+A high def_impact percentile ⇒ the ranking is inherited from the baseline (not a PV artifact); a low one ⇒ PV-specific and worth scrutiny.
+
+**(b) corr(pv_def_g60, in-zone-against share of TOI) = -0.148** (n=702). A strong NEGATIVE value would support the per-in-zone-second flattery hypothesis (players who defend in-zone less get a smaller denominator and a flattered rate); near zero refutes it.
+
 ## 4. Discrimination — between-player spread vs bootstrap sd (headline)
 | component | sd(value) across players | mean bootstrap sd | ratio |
 |---|---|---|---|
@@ -48,12 +71,41 @@ Expected (pre-registered thesis): suppress high (def_impact's xG channel re-deno
 
 Ratio near 1 = between-player signal barely exceeds resample noise (defence is the weakest signal); this is the empirical basis for the tiers above.
 
-## 5. PV-D015 arena-bias diagnostic for `deny`
-Deferred: the arena under-recording rate lives only inside the sprite-audit run (E3b), not a persisted table. Activating this pre-registered diagnostic needs the sprite audit to export its per-arena `established_full_window` share; flagged rather than approximated. deny team-season sample available: 889 players across 5 seasons.
-## 6. PENDING (protocol not pinned verbatim in-repo — flagged, not invented)
-- **Split-half reliability:** needs a within-season odd/even refit pass (extra fits); method not pinned verbatim. Awaiting owner confirmation of the split (odd/even game vs random-half) before running.
-- **Team out-of-sample:** predict-team-season-from-held-out-seasons protocol not pinned verbatim.
-- **Sensitivity grid:** `H_SENSITIVITY` = [20,40,60] is a STATE-VALUE horizon sweep (Stage 2); its propagation into the component fits is not pinned. Held for owner direction.
-- **External A3Z agreement:** 'if run' in §7; not run this pass.
+## 5. Split-half reliability (§9.2.2 — even/odd game_id, 2023-24 & 2024-25)
+Refit A/B/C per half at the full-season CV alpha; Pearson r across halves + Spearman-Brown (half→full). Same cohorts.
 
-**Tiers are NOT written to `player_phase_value` in this run.** Rerun with `--write-tiers` only after owner review of this report.
+| season | fit | r (halves) | Spearman-Brown | n |
+|---|---|---|---|---|
+| 2023-24 | deny | +0.280 | +0.438 | 151 |
+| 2023-24 | suppress | +0.272 | +0.428 | 401 |
+| 2023-24 | escape | +0.293 | +0.453 | 401 |
+| 2024-25 | deny | +0.197 | +0.329 | 319 |
+| 2024-25 | suppress | +0.314 | +0.478 | 341 |
+| 2024-25 | escape | +0.270 | +0.425 | 341 |
+
+## 6. Team out-of-sample — predict team 5v5 xGA/60 in t+1 (§9.2.3)
+Minutes-weighted team aggregates in t predict team 5v5 xGA/60 in t+1 (temporal-OOS). 126 team-season pairs over the available PV seasons (2021-22→2025-26). **Range note:** the spec's 2016-17 start needs single-season PV fits for 2016-17→2020-21 backfilled — flagged as a scope decision, not run here.
+
+| predictor set | r | out-of-sample R² |
+|---|---|---|
+| (i) pv_def_g60 | +0.330 | +0.109 |
+| (ii) def_impact | +0.489 | +0.239 |
+| (iii) own xGA/60 | +0.451 | +0.203 |
+| (iv) i+iii | +0.452 | +0.205 |
+| (v) ii+iii | +0.490 | +0.240 |
+
+Read (i) vs (ii): whether team `pv_def_g60` predicts future defence better than team `def_impact`; (iv)/(v) vs (iii): whether either adds over the team's own past xGA/60.
+
+## 7. Sensitivity grid (§9.3, seasons 2023-24 & 2024-25)
+**H_SECONDS ∈ {20,40,60} and the 5v5-goals-only V variant touch ONLY Stage 2** (V and the league constants). Component coefficients never consume V, and year-over-year r is INVARIANT to a uniform repricing (a common scalar on `deny_g60`/`suppress_g60` cancels in a correlation). So the tiers above are unchanged by H and the goals-only V variant **by construction**; the effect is confined to the goal SCALE of `*_g60`, reported as Stage-2 V/constant sensitivity (stage2-acceptance.md), not a tier change. **`phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative** DO change the episode definition (Stage-1 dbt rebuild, two seasons) and require refits; their component YoY/split-half movement is the live sensitivity cell. **Status:** the two rebuild cells are the remaining compute (dbt rebuild of `int_phase_*` on 2023-24/2024-25 under each variant + refit); scoped and pending a rebuild pass — flagged explicitly rather than silently skipped.
+
+## 8. PV-D015 arena-bias diagnostic for `deny`
+Deny's monotonic YoY decline (0.25→0.19→0.13→0.06) makes this more informative, not less.
+
+Team-season `deny` (minutes-weighted) vs home-arena under-recording share, over **100 team-seasons**: **r = +0.010**. A material positive r ⇒ teams whose home scorers under-record settled possession look better at `deny` (scorekeeper bias, not defence); near zero clears it. Since deny is already Tier C, this bounds how much of even that weak signal is arena artifact.
+
+## 9. External A3Z agreement — GATED (directory absent)
+Not run: the A3Z reference is not present in-repo; '§7 if run' condition unmet.
+
+---
+**Tiers:** written to `nhl_models.phase_component_tiers` only with `--write-tiers` after owner review. Tier C (deny, deny_rush) semantics (§9.1): not published at player level; retained for team/pair analysis only; the deny null is reported explicitly in methodology §7.

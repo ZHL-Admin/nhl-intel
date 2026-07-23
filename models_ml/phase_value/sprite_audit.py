@@ -319,6 +319,18 @@ def main():
     for v, r in by.sort_values("est_share").head(3).iterrows():
         W(f"  - {v[0]} {v[1]}: {r['est_share']*100:.0f}% (n={int(r['n'])})")
     W("")
+    # PERSIST the per-arena-season under-recording shares (PV-D015 activation): CSV + a small BQ table so
+    # validate_phase_value can run the pre-registered deny arena-bias diagnostic without re-running this audit.
+    arena = by.reset_index().rename(columns={"est_share": "underrecord_share"})
+    arena["model_version"] = "phase_value_v1"
+    os.makedirs("artifacts/phase_value", exist_ok=True)
+    arena.to_csv("artifacts/phase_value/arena_underrecording.csv", index=False)
+    try:
+        bq.write_df(arena, "phase_arena_underrecording", write_disposition="WRITE_TRUNCATE")
+        W(f"Persisted {len(arena)} arena-season under-recording shares to "
+          "`nhl_models.phase_arena_underrecording` (+ artifacts CSV) for the PV-D015 diagnostic.\n")
+    except Exception as e:
+        W(f"(arena-share persist to BigQuery skipped: {e})\n")
 
     # (F) honest limits
     W("## Honest limits")

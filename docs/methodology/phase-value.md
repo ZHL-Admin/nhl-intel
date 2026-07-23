@@ -5,7 +5,10 @@ which it never modifies and against which it is validated. Filled in progressive
 sections are stubs until their stage completes. Spec + decisions: `docs/phase-value/` (schema-map,
 DECISIONS) and the build specification.*
 
-Status: **Stage 2 complete** (state engine + value function — hard gates green). Stages 3–6 pending.
+Status: **Stages 3–5 complete** (fits + accounting + pre-registered validation; tiers written to
+`phase_component_tiers`). Verdict: no Tier A; PV does not beat the `def_impact` baseline on reliability or
+team-OOS; `escape` (Tier B, orthogonal) is the genuinely new channel; `deny`/`deny_rush` Tier C (null,
+not arena-biased). Two sensitivity cells (gap, blocked-shot) pending a dev-schema rebuild. Stage 6 pending.
 
 ## 1. Summary and motivation
 `def_impact` is structurally the weakest number on the platform (rare outcome, uniform 5-defender
@@ -176,17 +179,60 @@ and overlaps `def_impact` at ~0.87. Final publication emphasis is set by the **S
 not by this overlap matrix.
 
 ## 7. Validation
-*(Pre-registered reliability tiers A/B/C with thresholds restated, the def_impact baseline comparison,
-split-half, team out-of-sample, sensitivity summary, external A3Z agreement if run. Filled in Stage 5.)*
+Pre-registered against criteria fixed in `config.PHASE_VALUE_CONFIG` before results (full report:
+`docs/phase-value/validation-report.md`; tiers persisted to `nhl_models.phase_component_tiers`).
+
+**Reliability tiers — year-over-year r (Tier A ≥ 0.35, B ≥ 0.20, else C), with the `def_impact` baseline
+(§9.2.1) on identical cohorts:**
+
+| component | YoY r | tier | split-half SB (23-24/24-25) |
+|---|---|---|---|
+| `def_impact` (baseline) | **0.346** | B | — |
+| `pv_def_g60` | 0.246 | B | — |
+| `suppress` | 0.219 | B | 0.43 / 0.48 |
+| `escape` | 0.206 | B | 0.45 / 0.43 |
+| `deny` | 0.158 | **C** | 0.44 / 0.33 |
+| `deny_rush` | 0.085 | **C** | — |
+
+**Comparative verdict (the headline).** The `def_impact` baseline is MORE year-over-year reliable (0.35)
+than every phase-value component including the composite `pv_def_g60` (0.25); no component reaches Tier A.
+The team out-of-sample test (§9.2.3, predict team 5v5 xGA/60 in t+1) agrees: `def_impact` (OOS R²=0.24)
+> the team's own past xGA/60 (0.20) > `pv_def_g60` (0.11), and `pv_def_g60` adds **nothing** over past
+xGA (0.205 vs 0.203). **Phase Value does not beat the baseline as a defensive rating.** Its defensible
+contribution is narrow and specific: `escape` (Tier B, and near-orthogonal to `def_impact`, r=0.14) is a
+genuinely NEW reliable channel the transition frame adds; `suppress` (Tier B) is `def_impact`'s xG channel
+re-denominated (r=0.85) and `pv_def_g60` is suppress-dominated (r=0.87 with `def_impact`).
+
+**The `deny` null, reported explicitly (§9.1 Tier C).** `deny` is Tier C — **not published at player level;
+retained for team/pair analysis only.** Its per-pair YoY r declines monotonically (0.25 → 0.19 → 0.13 →
+0.06). This is not measurement noise: `deny`'s within-season split-half Spearman-Brown is 0.33–0.44, so it
+is internally consistent WITHIN a season but does not PERSIST across years. The pre-registered candidate
+explanation was scorer drift; the PV-D015 arena-bias diagnostic (team-season `deny` vs home-arena
+under-recording share, **r = +0.010** over 100 team-seasons) **rules out cross-arena scorekeeper bias** —
+so if drift is the cause it is temporal/league-wide, not venue-specific (cross-referenced to the sprite
+audit's under-recording measurements, `sprite-audit.md` §E3b). `deny_rush` (Tier C, YoY 0.09) is the
+event-space rush diagnostic and is likewise not a player-level surface (PV-D014).
+
+**Discrimination.** Between-player spread is only ~1.1–1.4× the mean bootstrap sd across every component
+and window — defence is the platform's weakest signal, and this is the mechanism behind the modest tiers.
+
+**Sensitivity (§9.3).** `H_SECONDS ∈ {20,40,60}` and the 5v5-goals-only V variant touch only Stage 2 (V
+and constants); component coefficients never consume V and YoY r is invariant to uniform repricing, so the
+tiers are unchanged by construction (the effect is confined to the goal SCALE of `*_g60`).
+`phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative change the episode
+definition (Stage-1 rebuild, two seasons) and require refits; those two cells are pending a dev-schema
+rebuild (they must NOT overwrite the production `int_phase_*` the shipped fits depend on).
+
+**External A3Z agreement** is gated (reference absent in-repo).
 **External-validation module #2 (already run, report-only): the sprite audit** (`docs/phase-value/
 sprite-audit.md`) — 10 Hz PPT goal-replay ground-truth of episode `start_type` + entry timing at goals,
 sits beside the A3Z module. Success-conditioned (goals only); the goals-only banner caveat is stated
 plainly there and inherited here.
-**Pre-registered arena-bias diagnostic for `deny` (PV-D015, report-only):** correlate team-level `deny`
-aggregates (minutes-weighted, per season) against the home-arena under-recording rate (the
-`established_full_window` share from the sprite audit's arena table). A material correlation means `deny`
-partially measures scorekeeper behavior, not defense; reported beside the smell tests either way, and it is
-the activation test for the v1.1 rink adjustment.
+**Pre-registered arena-bias diagnostic for `deny` (PV-D015) — RUN:** team-level `deny` (minutes-weighted)
+vs the home-arena under-recording rate (`established_full_window` share, persisted to
+`nhl_models.phase_arena_underrecording`). Result **r = +0.010** (100 team-seasons) — `deny` is NOT
+arena-biased, so no v1.1 rink adjustment is activated; the `deny` non-persistence is a real trait null,
+not a venue artifact.
 
 ## 8. Known limitations (pre-committed)
 Possession is a proxy from scorer-recorded events; entries generating no event are invisible, so `deny`
