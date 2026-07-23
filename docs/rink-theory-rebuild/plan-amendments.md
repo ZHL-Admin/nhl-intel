@@ -159,3 +159,8 @@ four tools work in the new shell), also confirm at ship:
 - [ ] **Set a real `SITE_URL`** for the RSS build (`scripts/gen-rss.mjs`) — replaces
       the `https://rinktheory.example` placeholder in `<link>`, `<guid>`, and the
       `atom:link` self href. Set via the `SITE_URL` env at build time.
+- [ ] **Fix stale copy that references removed tools** (TEXT-ONLY, authorized).
+      The salvaged tools' internal copy links to surfaces that no longer exist
+      (e.g. DraftValue body → "Trade Builder"; check the other three for similar).
+      Repoint link labels/copy at surfaces that exist, or remove the link. No logic
+      changes — that stays out of scope.
