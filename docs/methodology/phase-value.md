@@ -201,17 +201,23 @@ The team out-of-sample test (§9.2.3, predict team 5v5 xGA/60 in t+1) agrees: `d
 xGA (0.205 vs 0.203). **Phase Value does not beat the baseline as a defensive rating.** Its defensible
 contribution is narrow and specific: `escape` (Tier B, and near-orthogonal to `def_impact`, r=0.14) is a
 genuinely NEW reliable channel the transition frame adds; `suppress` (Tier B) is `def_impact`'s xG channel
-re-denominated (r=0.85) and `pv_def_g60` is suppress-dominated (r=0.87 with `def_impact`).
+re-denominated (r=0.85) and `pv_def_g60` is suppress-dominated (r=0.87 with `def_impact`). The OOS result
+has a clean structural reading: `def_impact` bundles in-zone frequency with per-second danger in one xGA
+target; PV split them by design; the frequency half (`deny`) proved unreliable; the recombined composite
+therefore carries only the danger half and loses the exposure-share signal the bundle retains.
 
 **The `deny` null, reported explicitly (§9.1 Tier C).** `deny` is Tier C — **not published at player level;
 retained for team/pair analysis only.** Its per-pair YoY r declines monotonically (0.25 → 0.19 → 0.13 →
 0.06). This is not measurement noise: `deny`'s within-season split-half Spearman-Brown is 0.33–0.44, so it
-is internally consistent WITHIN a season but does not PERSIST across years. The pre-registered candidate
-explanation was scorer drift; the PV-D015 arena-bias diagnostic (team-season `deny` vs home-arena
-under-recording share, **r = +0.010** over 100 team-seasons) **rules out cross-arena scorekeeper bias** —
-so if drift is the cause it is temporal/league-wide, not venue-specific (cross-referenced to the sprite
-audit's under-recording measurements, `sprite-audit.md` §E3b). `deny_rush` (Tier C, YoY 0.09) is the
-event-space rush diagnostic and is likewise not a player-level surface (PV-D014).
+is internally consistent WITHIN a season but does not PERSIST across years. A team-continuity post-mortem
+rules out a system-level mechanism: same-primary-team YoY r (pooled 0.163) does NOT exceed movers (0.142),
+and the decline appears in both groups, so `deny` is not a roster-independent system signal passing through
+players. The pre-registered candidate explanation was scorer drift; the PV-D015 arena-bias diagnostic
+(team-season `deny` vs home-arena under-recording share, **r = +0.010** over 100 team-seasons) **rules out
+cross-arena scorekeeper bias**. That diagnostic is cross-sectional, however — it addresses venue-level bias
+in `deny`'s levels, NOT the monotonic temporal decline; **league-wide drift in recording or play over time
+remains unexcluded (open question, not a finding).** `deny_rush` (Tier C, YoY 0.09) is the event-space rush
+diagnostic and is likewise not a player-level surface (PV-D014).
 
 **Discrimination.** Between-player spread is only ~1.1–1.4× the mean bootstrap sd across every component
 and window — defence is the platform's weakest signal, and this is the mechanism behind the modest tiers.
@@ -224,6 +230,10 @@ definition (Stage-1 rebuild, two seasons) and require refits; those two cells ar
 rebuild (they must NOT overwrite the production `int_phase_*` the shipped fits depend on).
 
 **External A3Z agreement** is gated (reference absent in-repo).
+
+**v1.1 backlog (not built).** Validating the OFFENSIVE duals is the natural first move: the offence
+baseline (`off_impact` YoY ≈ 0.43) is materially more reliable than defence, so the transition
+decomposition may clear on the offensive side the tiers it could not on defence.
 **External-validation module #2 (already run, report-only): the sprite audit** (`docs/phase-value/
 sprite-audit.md`) — 10 Hz PPT goal-replay ground-truth of episode `start_type` + entry timing at goals,
 sits beside the A3Z module. Success-conditioned (goals only); the goals-only banner caveat is stated

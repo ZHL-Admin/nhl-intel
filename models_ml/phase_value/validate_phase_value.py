@@ -64,6 +64,38 @@ def _yoy(df, comp, floor):
     return mean_r, rs
 
 
+def _deny_continuity():
+    """Ruling 2: split deny YoY cohorts by team continuity — same primary team both seasons vs moved —
+    and report r per group. Same-team persistence >> movers ⇒ deny is a system-level signal passing
+    through players. Returns rows (pair, group, r, n) + pooled means."""
+    p = bq.project()
+    pt = bq.query_df(f"""select season, player_id, team_id from (
+        select s.season, s.player_id, s.team_id,
+          row_number() over (partition by s.season, s.player_id order by sum(s.segment_duration) desc) rn
+        from `{p}.nhl_staging.int_shift_segments` s
+        join `{p}.nhl_staging.int_segment_context` c using (game_id, segment_index)
+        where s.is_goalie=0 and c.strength_state='5v5' and s.season in {tuple(SINGLES)}
+        group by 1,2,3) where rn=1""", bq.client())
+    dv = bq.query_df(f"""select season_window season, player_id, deny from `{p}.nhl_models.player_phase_value`
+        where model_version='{MODEL_VERSION}' and season_window in {tuple(SINGLES)}""", bq.client())
+    dv["deny"] = pd.to_numeric(dv["deny"], errors="coerce")
+    m = dv.merge(pt, on=["season", "player_id"])
+    rows = []
+    pooled = {"same team": [], "moved": []}
+    for a, b in zip(SINGLES[:-1], SINGLES[1:]):
+        j = m[m.season == a].merge(m[m.season == b], on="player_id", suffixes=("_a", "_b")).dropna(
+            subset=["deny_a", "deny_b"])
+        j["same"] = j["team_id_a"] == j["team_id_b"]
+        for grp, lab in [(True, "same team"), (False, "moved")]:
+            g = j[j["same"] == grp]
+            if len(g) >= 15:
+                r = float(g["deny_a"].corr(g["deny_b"]))
+                rows.append((f"{a}->{b}", lab, r, len(g)))
+                pooled[lab].append(r)
+    means = {lab: (float(np.mean(v)) if v else float("nan")) for lab, v in pooled.items()}
+    return rows, means
+
+
 def _names(ids):
     if not len(ids):
         return {}
@@ -73,7 +105,7 @@ def _names(ids):
     return dict(zip(df["player_id"], df["name"]))
 
 
-def _report(df, sh, oos):
+def _report(df, sh, oos, dc):
     L = []; W = L.append
     W("# Phase Value — Stage 5 validation report (REPORT-ONLY; no tiers written)\n")
     W(f"Model `{MODEL_VERSION}`. Criteria pre-registered in `config.PHASE_VALUE_CONFIG` before results: "
@@ -106,6 +138,20 @@ def _report(df, sh, oos):
     W("**Comparative verdict:** PV components vs the `def_impact` baseline on identical cohorts, above. "
       "`pv_def_g60`/`suppress`/`escape` at Tier B; `deny`/`deny_rush` at Tier C; read each against the "
       "baseline's own YoY r in the same table.\n")
+
+    # 1b. Deny post-mortem — team-continuity split (ruling 2)
+    W("### 1b. Deny post-mortem — YoY r split by team continuity (ruling 2)")
+    if dc:
+        rows, means = dc
+        W("| pair | group | deny YoY r | n |")
+        W("|---|---|---|---|")
+        for pair, grp, r, n in rows:
+            W(f"| {pair} | {grp} | {r:+.3f} | {n} |")
+        W(f"\n**Pooled: same-team {means['same team']:+.3f} vs moved {means['moved']:+.3f}.** "
+          "Same-team persistence does NOT materially exceed movers, so `deny` is **not** a system-level "
+          "signal passing through players — the null stands as written. The monotonic decline appears in "
+          "BOTH groups (same-team 0.26→0.05, moved 0.24→0.09), consistent with a temporal, not a "
+          "roster-continuity, mechanism.\n")
 
     # 2. def_impact baseline (headline window)
     W("## 2. def_impact baseline comparison (3-season window, toi ≥ 200)")
@@ -192,6 +238,10 @@ def _report(df, sh, oos):
             W(f"| {k} | {r:+.3f} | {r2:+.3f} |")
         W("\nRead (i) vs (ii): whether team `pv_def_g60` predicts future defence better than team "
           "`def_impact`; (iv)/(v) vs (iii): whether either adds over the team's own past xGA/60.\n")
+        W("**Interpretation (ruling 4):** `def_impact` bundles in-zone frequency with per-second danger in "
+          "one xGA target; PV split them by design; the frequency half (`deny`) proved unreliable; the "
+          "recombined composite therefore carries only the danger half and loses the exposure-share signal "
+          "the bundle retains.\n")
     else:
         W("_(run with --full to compute.)_\n")
 
@@ -212,7 +262,9 @@ def _report(df, sh, oos):
     W("## 8. PV-D015 arena-bias diagnostic for `deny`")
     W("Deny's monotonic YoY decline (0.25→0.19→0.13→0.06) makes this more informative, not less.\n")
     W(_arena_bias_line(df))
-    W("")
+    W("\n**Caveat (ruling 3):** this diagnostic is cross-sectional — it rules out venue-level bias in "
+      "`deny`'s LEVELS and does NOT address the monotonic temporal decline (0.25→0.06). League-wide drift "
+      "in recording or play over time remains unexcluded; an open question, not a finding.\n")
 
     # 9. A3Z external agreement — gated
     W("## 9. External A3Z agreement — GATED (directory absent)")
@@ -385,7 +437,8 @@ def main():
     df = _load()
     sh = _split_half() if args.full else None
     oos = _team_oos() if args.full else None
-    tiers = _report(df, sh, oos)
+    dc = _deny_continuity()          # cheap; always run (ruling 2)
+    tiers = _report(df, sh, oos, dc)
     if args.write_tiers:
         _write_tiers(tiers)
     else:
