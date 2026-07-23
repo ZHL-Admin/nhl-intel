@@ -614,6 +614,26 @@ with DAG(
     # --- Phase 4.3 reconciliation (weekly, Monday-gated except the cheap leverage build) ---
     _mon = "{% if macros.datetime.strptime(ds, '%Y-%m-%d').weekday() == 0 %}{}{% else %}echo 'weekly cadence, not Monday — skipping'{% endif %}"
 
+    # --- Phase Value (phase_value_v1) — weekly, Monday-gated. The state engine (int_phase_*) is built by
+    # the dbt tasks; then V + constants -> fits -> assembly writes nhl_models.player_phase_value. Component
+    # TIERS are a static validation artifact (validate_phase_value --write-tiers, owner-gated) and are NOT
+    # re-written nightly. Serving picks up player_phase_value + phase_component_tiers via export_serving.
+    compute_state_values = BashOperator(
+        task_id="compute_state_values",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.phase_value.compute_state_values"),
+        env=_dbt_env,
+    )
+    train_phase_value = BashOperator(
+        task_id="train_phase_value",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.phase_value.train_phase_value"),
+        env=_dbt_env,
+    )
+    assemble_phase_value = BashOperator(
+        task_id="assemble_phase_value",
+        bash_command=_mon.format("cd /opt/airflow && python -m models_ml.phase_value.assemble_phase_value"),
+        env=_dbt_env,
+    )
+
     # int_event_leverage needs win_probability (scored above), so build it after score_winprob.
     build_event_leverage = BashOperator(
         task_id="build_event_leverage",
@@ -914,6 +934,11 @@ with DAG(
     # archetypes. RAPM needs shot_xg + segments + marts; composite/archetypes need RAPM.
     run_dbt_marts >> train_rapm >> compute_composite >> generate_report
     train_rapm >> compute_gar >> generate_report
+    # Phase Value: state engine (dbt) -> V/constants -> fits -> assembly; needs player_impact for the
+    # def_impact baseline join; the fresh player_phase_value must land before the serving export.
+    run_dbt_marts >> compute_state_values >> train_phase_value >> assemble_phase_value >> generate_report
+    train_rapm >> assemble_phase_value
+    assemble_phase_value >> export_serving
     train_rapm >> write_archetypes >> generate_report
     # Phase 4.3 reconciliation: clutch (needs leverage), consistency + coach trust (marts),
     # divergence (needs composite + coach trust).
