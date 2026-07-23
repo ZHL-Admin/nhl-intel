@@ -1,0 +1,83 @@
+---
+title: "The rink is not a neutral scorekeeper"
+slug: "rink-scorekeeper-bias"
+date: "2026-07-11"
+dek: "A hit in Toronto and a hit in Columbus are not the same event — they're the same event scored by different people. Two corrections, measured."
+tags: ["Teams"]
+status: draft
+readingTime: "7 MIN"
+---
+
+{/*
+CITATIONS — every number below is from a real repo artifact. No illustrative values.
+
+CORRECTION 2a — scorer-bias multipliers on subjective events (hits/giveaways/takeaways).
+  Source: docs/methodology/scorer-bias.md. Table = int_rink_bias; adjusted = raw / multiplier;
+  measured from VISITING teams only, rolling 3-season window, clipped to [0.5, 2.0] (scorer-bias.md:15).
+  Per-arena hit multipliers, 2024-25 window (scorer-bias.md:28-36):
+    Toronto (10) 1.43 ; Tampa Bay (14) 1.30 ; Edmonton (22) 1.24 ; San Jose (28) 0.77 ; Columbus (29) 0.68
+  Range: Toronto hits 1.43x (inflation) to Columbus 0.68x (under-count) (scorer-bias.md:38-39).
+  Effect: Toronto 2024-25 team hits 2,489 raw -> 2,100 adjusted (scorer-bias.md:40).
+
+CORRECTION 2b — phase-value "under-recording share" (artifacts/phase_value/arena_underrecording.csv).
+  established_full_window share within zero-duration goal-only episodes per arena-season
+  (docs/phase-value/sprite-audit.md:82-89 ; def phase-value.md:126-129). Columns:
+  venue_name, season, n, underrecord_share, model_version(phase_value_v1). 96 rows.
+  League mean 42.1% (sprite-audit.md:83).
+  Max Bridgestone Arena 2025-26 = 0.5833 (n=72): arena_underrecording.csv:16 ; sprite-audit.md:85
+  Ball Arena 2024-25 = 0.5814 (n=86): CSV:11 ; sprite-audit.md:86
+  Benchmark Intl Arena 2025-26 = 0.3171 (n=82): CSV:13 ; sprite-audit.md:89
+  Min Canadian Tire Centre 2024-25 = 0.2877 (n=73): arena_underrecording.csv:21
+  2b is REPORT-ONLY / not yet applied — v1.1 candidate (sprite-audit.md:84 ; phase-value.md:130).
+*/}
+
+import { BarFigure, TableFigure } from '@figures'
+
+Two arenas, the same play: a forward finishes a check along the boards. In one building the off-ice crew records a hit; in another, the same contact goes in the book as nothing. The players didn't differ. The scorekeeper did. If you rank teams on the raw counts, you are partly ranking the people holding the clickers.
+
+## The subjective events drift by building
+
+Hits, giveaways, and takeaways are judgment calls, and the judgment travels with the arena. Measuring only *visiting* teams — so a club's own home-scorer habits can't flatter its numbers — each building gets a multiplier: how much it inflates or suppresses an event relative to league norm. Divide the raw count by the multiplier to get an adjusted one.
+
+<BarFigure
+  n={1}
+  data={[
+    { arena: "TOR", mult: 1.43 },
+    { arena: "TBL", mult: 1.30 },
+    { arena: "EDM", mult: 1.24 },
+    { arena: "SJS", mult: 0.77 },
+    { arena: "CBJ", mult: 0.68 },
+  ]}
+  x="arena"
+  y="mult"
+  unit="×"
+  height={260}
+  caption={<>Home-arena <b>hit</b> multipliers, 2024-25 (visiting-team basis, clipped to 0.5–2.0). 1.0 = league-neutral.</>}
+/>
+
+The spread is not subtle. Toronto's building writes down hits at 1.43× the league rate; Columbus's at 0.68×. That is more than a factor of two between two NHL arenas for the identical physical event. Applied to a season, the correction bites: Toronto's 2,489 raw team hits in 2024-25 deflate to 2,100 once you divide out the building. A "physical team" can be, in part, a generous press box.
+
+## The tracking gap is a different, larger problem
+
+The scorer-bias multipliers stay inside a sane band — every building lands between 0.5× and 2.0×, and by construction they average out near 1.0. The second correction is bigger and, for now, only measured, not applied.
+
+Inside goal-scoring sequences the play-by-play engine sometimes can't see the possession at all — a zero-duration, goal-only record where the buildup went unlogged. The share of those blind possessions varies by arena too, and far more widely than the hit multipliers do.
+
+<TableFigure
+  n={2}
+  caption={<>Possession <b>under-recording share</b> by arena (phase-value v1). League mean <b>42.1%</b>. Report-only; not yet applied.</>}
+  columns={[
+    { key: "arena", label: "Arena" },
+    { key: "season", label: "Season" },
+    { key: "share", label: "Under-recorded", className: () => "pos" },
+  ]}
+  rows={[
+    { arena: "Bridgestone Arena", season: "2025-26", share: "58.3%" },
+    { arena: "Ball Arena", season: "2024-25", share: "58.1%" },
+    { arena: "League mean", season: "—", share: "42.1%" },
+    { arena: "Benchmark Intl Arena", season: "2025-26", share: "31.7%" },
+    { arena: "Canadian Tire Centre", season: "2024-25", share: "28.8%" },
+  ]}
+/>
+
+Better than four in ten possessions inside these sequences go unseen on average, and in Nashville's building it is nearly six in ten. That is not a nudge you divide out; it is a structural hole in what the feed records, and it is why this share is flagged as a correction candidate rather than something already baked into the ratings. The first lesson is small and fixable. The second is a standing reminder that the box score is a transcript, and transcripts have authors.

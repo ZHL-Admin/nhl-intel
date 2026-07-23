@@ -9,7 +9,7 @@ import * as d3 from 'd3'
 import { hexbin } from 'd3-hexbin'
 import './ShotMap.css'
 import { ShotAttempt } from '../../api/types'
-import { xgBreakdownHTML } from '../common/XGBreakdown'
+import { xgBreakdownHTML } from '../../components/common/XGBreakdown'  // path updated for figures/ relocation (logic unchanged)
 
 type SituationFilter = 'all' | '5v5' | 'pp' | 'pk'
 

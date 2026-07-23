@@ -26,7 +26,7 @@ export default function Masthead() {
           <RinkTheoryLogo size={48} withWordmark={false} interactive />
         </div>
         <h1 className="rt-masthead__title">Rink Theory</h1>
-        <div className="rt-masthead__subline">An analytic study of the NHL</div>
+        <div className="rt-masthead__subline">An ongoing study of the NHL</div>
         <hr className="rt-masthead__rule" />
       </div>
     </>

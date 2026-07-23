@@ -55,7 +55,7 @@
   --w-content: 1120px;  /* 160 side padding at design width */
   --w-reading: 680px;
   --w-rail:    352px;
-  --pad-side:  clamp(20px, 6vw, 160px);
+  --pad-side:  clamp(20px, 1vw, 20px);
   --radius:    3px;
 }
 

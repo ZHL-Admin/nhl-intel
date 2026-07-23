@@ -58,3 +58,45 @@ scaffolded in Step 3.
 Nav is **NOTES · RATINGS · TOOLS**. The v2 mockups show a "SEARCH" item; the plan
 of record (§2, "no search in v1") overrides. Search becomes a new idea with an
 obvious home if/when needed.
+
+## A6 — RATINGS & TOOLS are dropdowns (§2)
+
+No nav item should lead to a page that is just more navigation. NOTES stays a
+plain link; **RATINGS** and **TOOLS** are editorial dropdowns (white panel, 1px
+hairline, subtle shadow, no icons):
+- RATINGS → **Teams** (`/ratings`), **Players** (`/ratings/players`, new route).
+- TOOLS → the four tools directly. `/tools` stays reachable by URL as a plain
+  index, but the nav skips it.
+
+New page `/ratings/players` (full table in Step 4): same editorial treatment as
+the team table — RK, PLAYER, TEAM dot, POS, VALUE, CONTRACT SURPLUS, at most a
+position filter; backed **entirely** by the dormant `/rankings/talent` +
+`/rankings/surplus` read as-is (zero backend changes; cut any column the payload
+can't support).
+
+Old-path (Studio→tool) redirects are deferred to Step 5 (the tool-port step),
+done comprehensively with param preservation. Until then the catch-all lands old
+URLs on Home. (A premature partial set added in Step 2 was removed.)
+
+## A7 — Legacy `src/pages` excluded from tsc (build hygiene)
+
+The old dashboard pages live in `frontend/src/pages` and are the removed surface
+(unreachable, tree-shaken out of the bundle by Vite). `frontend/tsconfig.json`
+now excludes `src/pages` so those removed pages don't gate the new build. The
+four KEPT tool sources still sit there as dormant salvage and re-enter the typed
+build when ported into `src/rink` in Step 5. No source is deleted.
+
+## A8 — Notes pipeline decisions (Step 3, §5)
+
+- MDX via `@mdx-js/rollup` + `remark-frontmatter` + `remark-mdx-frontmatter`
+  (frontmatter exposed as a named export). Figures imported via the `@figures`
+  Vite alias.
+- Drafts render in **dev only**; the production list, RSS, and navigation never
+  treat a draft as published. Nothing publishes without an explicit
+  `status: published` flip.
+- `/rss.xml` generated at build (`scripts/gen-rss.mjs`, a `prebuild` step),
+  published-only, valid-but-empty until the first publish.
+- Figure data frozen inline per §5.3. The deserved-standings note cites the live
+  dormant `GET /rankings/deserved` but ships a frozen 2025-26 snapshot.
+- ShotMap/StripPlot relocated into `src/rink/figures/` (unmodified; ShotMap's one
+  cross-dir import path updated for the move; reservation comments intact).

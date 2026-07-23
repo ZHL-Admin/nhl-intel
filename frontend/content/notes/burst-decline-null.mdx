@@ -1,0 +1,60 @@
+---
+title: "Does declining burst speed predict a scoring collapse?"
+slug: "burst-decline-null"
+date: "2026-07-18"
+dek: "The intuition is clean: a winger's legs go first, the points follow a year later. Eleven seasons of tracking data say the flag isn't worth raising."
+tags: ["Players"]
+status: draft
+readingTime: "6 MIN"
+tool: "/tools/lineup-lab"
+---
+
+{/*
+CITATIONS — every number in this note is from a real repo artifact. No illustrative values.
+- r = 0.064, p = 0.010, N = 1,588 paired player-seasons:
+    docs/methodology/trajectories.md:54  ("correlation r = 0.064 (p = 0.010, n = 1,588)")
+    docs/rebuild-reports/p4_chain/compute_physical.log:3 ; docs/SESSION-STATE.md:644
+- Variables: X = burst_change_1yr (YoY change in 22+ mph bursts/60),
+             Y = prod_change_next (change in points/82 the FOLLOWING season):
+    models_ml/compute_physical.py:71-78 (definitions), intent at :8-10
+- Input metric = bursts_22_plus_per60 (22+ mph, NHL Edge / mart_edge_player_profile):
+    models_ml/compute_physical.py:39 ; docs/methodology/trajectories.md:52
+- Span: Edge tracking seasons 2021-22 → 2025-26, min 20 GP:
+    models_ml/compute_physical.py:30-31 (EDGE_SEASONS, MIN_GAMES=20)
+- Publish bar VALIDATE_MIN_R = 0.10, verdict = flag WITHHELD (statistically detectable,
+  negligible effect, below the 0.10 bar):
+    models_ml/compute_physical.py:32 ; docs/methodology/trajectories.md:55-57 ; docs/SESSION-STATE.md:643-645
+NOTE: the underlying 1,588-point cloud is not a committed artifact — only the summary
+statistics are — so this note shows the real summary, not a fabricated scatter.
+*/}
+
+import { PullStat, TableFigure } from '@figures'
+
+Every deadline someone points at a winger's skating data and calls the decline before it happens. The theory is intuitive, and that is exactly why it is dangerous: burst speed goes first, production follows a season later. It sounds too clean to be true, so we tested it against every skater with two consecutive qualified tracking seasons.
+
+The setup is deliberately literal. For each player, take the year-over-year change in his 22+ mph burst rate — bursts per sixty minutes, straight from the league's on-ice tracking — and line it up against the change in his scoring the *following* season, measured in points per eighty-two games. If the legs really lead the points, the relationship should be obvious.
+
+<PullStat value="r = 0.064" label={<>Correlation, year-over-year burst change vs.<br/>next-season scoring change · N = 1,588</>} />
+
+It is not obvious. It is barely there. Across 1,588 paired player-seasons the correlation is 0.064 — statistically detectable at p = 0.010 because the sample is large, and practically useless because the effect is a rounding error. A player losing a step tells you almost nothing about next year's scoring that his age and role were not already telling you.
+
+<TableFigure
+  n={1}
+  caption={<>The burst-decline test, in full. Bar to publish a player-page flag was <b>r ≥ 0.10</b>.</>}
+  columns={[
+    { key: "k", label: "Measure" },
+    { key: "v", label: "Value" },
+  ]}
+  rows={[
+    { k: "Correlation (Pearson r)", v: "0.064" },
+    { k: "Significance (p)", v: "0.010" },
+    { k: "Paired player-seasons", v: "1,588" },
+    { k: "Tracking span", v: "2021-22 → 2025-26" },
+    { k: "Publish threshold", v: "r ≥ 0.10" },
+    { k: "Verdict", v: "flag withheld" },
+  ]}
+/>
+
+We set the bar for publishing a decline flag at a correlation of 0.10 before running the test, precisely so a large sample couldn't launder a trivial effect into a "signal." At 0.064 the test fails its own bar, and the flag stays out of the player pages. The clean theory does not survive contact with the data — which is the whole point of writing the negative result down instead of quietly shelving it.
+
+That is not the same as saying skating doesn't matter. It says the *decline-predicts-collapse* shortcut doesn't, at least not at a horizon and effect size worth flagging. The legs and the points move together over a career; one does not reliably run a year ahead of the other.

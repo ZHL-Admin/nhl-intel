@@ -1,0 +1,65 @@
+---
+title: "The standings are lying to you"
+slug: "standings-are-lying"
+date: "2026-07-05"
+dek: "Re-simulate the season ten thousand times and the points table stops looking like a ranking and starts looking like a story about luck."
+tags: ["Teams"]
+status: draft
+readingTime: "5 MIN"
+tool: "/ratings"
+---
+
+{/*
+CITATIONS — every number below is from a real repo artifact. No illustrative values.
+
+Source: DuckDB serving table deserved_standings (data/serving/nhl_intel.duckdb), season 2025-26,
+32 rows, games=82 all teams. Columns: season, team_id, games, actual_points, deserved_points,
+deserved_p10, deserved_p90, luck_delta. luck_delta = actual_points - deserved_points
+(positive = outperformed its chances). Def: models_ml/simulate_deserved.py:14-15.
+Method: Monte-Carlo, 10,000 replays/game; each team's goals ~ Poisson(score-adjusted xG that game);
+NHL point rules incl. weighted OT/SO loser point; deserved = mean (simulate_deserved.py:2-21,
+DEFAULT_SIMS=10_000 at :32, SEED=13 at :34).
+
+Per-team luck_delta (2025-26), from query:
+  SELECT season,team_id,games,actual_points,deserved_points,luck_delta FROM deserved_standings ORDER BY luck_delta DESC
+  Luckiest:  BOS(6) 100 vs 77.2102 = +22.79 ; MTL(8) 106 vs 83.2886 = +22.71 ;
+             BUF(7) 109 vs 86.3082 = +22.69 ; DAL(25) 112 vs 91.9443 = +20.06
+  Unluckiest: VAN(23) 58 vs 74.2947 = -16.29 ; FLA(13) 84 vs 94.1481 = -10.15 ;
+              VGK(54) 95 vs 105.0893 = -10.09 ; OTT(9) 99 vs 105.2325 = -6.23
+  (abbrevs mapped via dim_current_roster)
+
+FROZEN snapshot per §5.3 (values shift as a season accrues). A live endpoint exists if we ever
+want it current: GET /rankings/deserved (backend/routers/rankings.py:78-97), read UNMODIFIED.
+Snapshot: 2025-26 full 82-game table as materialized in the serving file.
+*/}
+
+import { BarFigure } from '@figures'
+
+A standings table looks like a ranking, but it is really a single sample. The season happened once; the bounces fell the way they fell. Re-run it — same shot quality, same chances, different puck luck — and you get a different table. Do that ten thousand times, average the points, and you have what each team *deserved* as opposed to what it *banked*.
+
+The gap between the two is luck, and it is not small.
+
+<BarFigure
+  n={1}
+  data={[
+    { team: "BOS", luck: 22.79 },
+    { team: "MTL", luck: 22.71 },
+    { team: "BUF", luck: 22.69 },
+    { team: "DAL", luck: 20.06 },
+    { team: "OTT", luck: -6.23 },
+    { team: "VGK", luck: -10.09 },
+    { team: "FLA", luck: -10.15 },
+    { team: "VAN", luck: -16.29 },
+  ]}
+  x="team"
+  y="luck"
+  diverging
+  height={300}
+  caption={<>Luck = actual − deserved points, 2025-26 (10,000-replay simulation). <b>Orange</b> banked more than they earned; <b>blue</b>, less.</>}
+/>
+
+Boston banked a hundred points on the strength of a season worth about seventy-seven — nearly twenty-three points of pure overperformance against its own chances. Montreal and Buffalo sit almost exactly as far ahead. At the other end, Vancouver's 58 points understate a team that deserved closer to 74; the Canucks left roughly sixteen points on the ice that a fairer season would have handed back.
+
+None of this says Boston is secretly bad or Vancouver secretly good. It says the *points* are a noisy readout of the play, and the four clubs riding the biggest tailwinds are the ones whose next result you should trust least. When a team's record and its deserved record disagree by twenty points, the record is the thing that has to move.
+
+That gap — results minus deserved — is the luck column on the [Power Ratings](/ratings) table, kept in view precisely so a hot start can't masquerade as a good team.
