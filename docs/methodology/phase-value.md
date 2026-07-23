@@ -5,10 +5,11 @@ which it never modifies and against which it is validated. Filled in progressive
 sections are stubs until their stage completes. Spec + decisions: `docs/phase-value/` (schema-map,
 DECISIONS) and the build specification.*
 
-Status: **Stages 3–5 complete** (fits + accounting + pre-registered validation; tiers written to
-`phase_component_tiers`). Verdict: no Tier A; PV does not beat the `def_impact` baseline on reliability or
-team-OOS; `escape` (Tier B, orthogonal) is the genuinely new channel; `deny`/`deny_rush` Tier C (null,
-not arena-biased). Two sensitivity cells (gap, blocked-shot) pending a dev-schema rebuild. Stage 6 pending.
+Status: **Stages 3–6 complete** (fits + accounting + pre-registered validation + productionization).
+Verdict: no Tier A; PV does not beat the `def_impact` baseline on reliability or team-OOS; `escape` (Tier B,
+orthogonal) is the genuinely new channel; `deny`/`deny_rush` Tier C (null, not arena-biased; §1c does not
+establish a structure interpretation). Served component-first at `GET /players/{id}/phase-value` with Tier C
+gated out; the PV-A1 blocked-shot assumption is the leading v1.1 lever for `deny` (PV-D021).
 
 ## 1. Summary and motivation
 `def_impact` is structurally the weakest number on the platform (rare outcome, uniform 5-defender
@@ -281,8 +282,25 @@ The sprite audit is **success-conditioned (goals only)**; the inherited banner c
 `docs/phase-value/sprite-audit.md`.
 
 ## 9. Surfaces
-*(Tables `state_values` + `player_phase_value`, the `GET /players/{id}/phase-value` endpoint, and
-serving-manifest entries. Filled in Stage 6.)*
+**Tables (`nhl_models`).** `state_values` + `phase_league_constants` (Stage 2); `player_phase_value`
+(one row per player × season_window: components, `*_g60`, `pv_def_g60` + sds, `def_impact` baseline,
+exposures); `phase_component_tiers` (per-component tier A/B/C + `yoy_r`). All three are registered in
+`serving_tables.yml` as `source` tables (`[player_id, season_window]` / `[component]` indexes) and ride
+the nightly `make export-serving` → DuckDB parity path.
+
+**Endpoint.** `GET /players/{id}/phase-value?season_window=` (`backend/routers/players.py`) returns the
+composite `pv_def_g60` (+ sd), the `def_impact` baseline, and the **published component-first stack**.
+
+**Tier gating (§9.1, enforced at the serving layer).** The endpoint reads `phase_component_tiers` and
+**excludes every Tier C component (`deny`, `deny_rush`) from the player-level response** — they remain in
+`player_phase_value` for team/pair analysis only. Published components are the Tier B channels
+`suppress` and `escape`, each with its bootstrap `sd`; the response carries `excluded_components` and a
+fixed `comparison_note`.
+
+**The comparison, stated plainly (in the endpoint and here).** *`def_impact` (RAPM) remains the most
+reliable single defensive number; Phase Value adds the orthogonal `escape` axis and an instrumented
+`deny` null. `escape`/`suppress`/`pv_def_g60` are Tier B (year-over-year r ≈ 0.21–0.25); `deny`/`deny_rush`
+are Tier C, published at team/pair level only.*
 
 ---
 ### Appendix: Stage 0 reconnaissance (complete)

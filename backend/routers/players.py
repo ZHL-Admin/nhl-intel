@@ -27,6 +27,7 @@ from models.schemas import (
     PlayerContract, CapShareYear,
     ValueNeighbor, ValueNeighborhood,
     PlayerVerdict,
+    PhaseComponent, PlayerPhaseValue,
 )
 from services.bigquery import bq_service
 from services.cache import cache
@@ -394,6 +395,65 @@ def _player_deployment_sync(player_id: int):
 async def get_player_deployment(player_id: int) -> List[PlayerDeploymentEntry]:
     """A single player's full deployment profile across situations (the board-row expansion)."""
     return await run_in_threadpool(_player_deployment_sync, player_id)
+
+
+# Phase Value (phase_value_v1) — served component-first; Tier C is gated OUT via phase_component_tiers.
+# Each row: (component key, label, goals-scale value column, sd column). pv_def_g60 is the top-level composite.
+_PHASE_LABELS = [
+    ("suppress",  "Suppress — in-episode xG suppression (goals/60)", "suppress_g60", "suppress_sd"),
+    ("escape",    "Escape — favourable exit rate (per 60 in-zone)",  "escape_rate",  "escape_sd"),
+    ("deny",      "Deny — episode-frequency suppression (goals/60)", "deny_g60",     "deny_sd"),
+    ("deny_rush", "Deny on rush (event-space diagnostic)",           "deny_rush",    "deny_rush_sd"),
+]
+_PHASE_COMPARISON = (
+    "def_impact (RAPM) remains the most reliable single defensive number; Phase Value adds the orthogonal "
+    "escape axis and an instrumented deny null. escape / suppress / pv_def_g60 are Tier B (year-over-year "
+    "r ≈ 0.21–0.25); deny / deny_rush are Tier C and are excluded at player level (team/pair analysis only)."
+)
+
+
+def _phase_value_sync(player_id: int, season_window: Optional[str]) -> PlayerPhaseValue:
+    pv_t = bq_service.get_models_table_id("player_phase_value")
+    tier_t = bq_service.get_models_table_id("phase_component_tiers")
+    if not season_window:
+        r0 = bq_service.query(f"SELECT MAX(season_window) AS s FROM {pv_t} WHERE player_id = {player_id}")
+        season_window = r0[0]["s"] if r0 and r0[0].get("s") else None
+    if not season_window:
+        raise HTTPException(status_code=404, detail="No phase value for this player")
+    rows = bq_service.query(f"SELECT * FROM {pv_t} WHERE player_id = {player_id} "
+                            f"AND season_window = '{season_window}' LIMIT 1")
+    if not rows:
+        raise HTTPException(status_code=404, detail="No phase value for this player-season")
+    r = rows[0]
+    tiers = {t["component"]: t["tier"]
+             for t in (bq_service.query(f"SELECT component, tier FROM {tier_t}") or [])}
+    published, excluded = [], []
+    for key, label, val_col, sd_col in _PHASE_LABELS:
+        if tiers.get(key, "C") == "C":          # TIER GATING — Tier C withheld at player level (§9.1)
+            excluded.append(key)
+            continue
+        v = r.get(val_col)
+        if v is None:
+            continue
+        published.append(PhaseComponent(key=key, label=label, value=float(v),
+                                        sd=(float(r[sd_col]) if r.get(sd_col) is not None else None),
+                                        tier=tiers.get(key, "B")))
+    return PlayerPhaseValue(
+        player_id=player_id, season_window=season_window,
+        pv_def_g60=float(r.get("pv_def_g60") or 0.0),
+        pv_def_g60_sd=(float(r["pv_def_g60_sd"]) if r.get("pv_def_g60_sd") is not None else None),
+        def_impact=(float(r["def_impact"]) if r.get("def_impact") is not None else None),
+        toi_min=(float(r["toi_min"]) if r.get("toi_min") is not None else None),
+        components=published, excluded_components=excluded, comparison_note=_PHASE_COMPARISON)
+
+
+@router.get("/{player_id}/phase-value", response_model=PlayerPhaseValue)
+@cache(ttl=3600)
+async def get_player_phase_value(player_id: int,
+                                 season_window: Optional[str] = Query(None)) -> PlayerPhaseValue:
+    """Phase Value (phase_value_v1) — transition-based defensive value, component-first with Tier-B
+    uncertainty. Tier C components (deny, deny_rush) are excluded here per §9.1 (team/pair only)."""
+    return await run_in_threadpool(_phase_value_sync, player_id, season_window)
 
 
 # Registered before /{player_id} so "divergence-board" is not coerced to an int player id.

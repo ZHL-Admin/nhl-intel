@@ -485,6 +485,24 @@ export interface CompositeComponent {
   label: string
   value: number
 }
+export interface PhaseComponent {
+  key: string
+  label: string
+  value: number
+  sd?: number | null
+  tier: string
+}
+export interface PlayerPhaseValue {
+  player_id: number
+  season_window: string
+  pv_def_g60: number
+  pv_def_g60_sd?: number | null
+  def_impact?: number | null
+  toi_min?: number | null
+  components: PhaseComponent[]        // published (Tier A/B) only
+  excluded_components: string[]       // Tier C keys withheld at player level
+  comparison_note: string
+}
 export interface ArchetypeWeight {
   archetype: string
   weight: number

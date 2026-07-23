@@ -92,6 +92,8 @@ tables:
   - {name: player_overall,     dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
   - {name: goalie_overall,     dataset: models, kind: source, cap: full, indexes: [goalie_id, season_window]}
   - {name: player_impact,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: player_phase_value, dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
+  - {name: phase_component_tiers, dataset: models, kind: source, cap: full, indexes: [component]}
   - {name: player_assessment,  dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}
   - {name: player_prior_quality, dataset: models, kind: source, cap: full, indexes: [player_id, season]}
   - {name: player_clutch,      dataset: models, kind: source, cap: full, indexes: [player_id, season_window]}

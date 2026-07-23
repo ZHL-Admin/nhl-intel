@@ -169,6 +169,7 @@ many `nhl_models.*`: `aging_curves`, `deployment_efficiency`,
 |---|---|---|---|---|---|---|
 | GET | `/players/deployment-board` | 364-366 | `situation="all"`, `limit=15` | inline SQL (`nhl_models.deployment_efficiency`, `player_archetypes`) | `DeploymentBoard` | 1800 |
 | GET | `/players/{player_id}/deployment` | 389-391 | `player_id` | inline SQL | `List[PlayerDeploymentEntry]` | 1800 |
+| GET | `/players/{player_id}/phase-value` | ~460 | `player_id`, `season_window?` | inline SQL (`nhl_models.player_phase_value`, `phase_component_tiers`) — **Tier C (deny, deny_rush) gated OUT at player level (§9.1)**; serves `pv_def_g60` + Tier-B `suppress`/`escape` with sd, the `def_impact` baseline, and the comparison note (*def_impact remains the most reliable single defensive number; Phase Value adds the orthogonal escape axis and an instrumented deny null*) | `PlayerPhaseValue` | 3600 |
 | GET | `/players/divergence-board` | 397-399 | `season?` | inline SQL (`nhl_models.divergence_board`) | `List[DivergenceBoardRow]` | 1800 |
 | GET | `/players/search` | 446-448 | `q`(req), `limit=20`, `season?` | `services.tools.search_players` (`players.py:457`) | `List[PlayerSearchResult]` | 3600 |
 | GET | `/players/{player_id}/summary` | 462-464 | `player_id`, `season?` | inline + composite helpers (`nhl_models.player_composite`, `player_archetypes`); **+ impact-context block** from `mart_player_impact_context` (`_impact_context_for`) | `PlayerSummary` (+ optional `impact_context`) | 1800 |

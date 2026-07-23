@@ -491,6 +491,31 @@ class CompositeComponent(BaseModel):
     value: float
 
 
+class PhaseComponent(BaseModel):
+    """One Phase-Value component with its bootstrap uncertainty (Phase Value / phase_value_v1).
+    Only Tier A/B components are served at player level; Tier C is gated out upstream."""
+    key: str
+    label: str
+    value: float
+    sd: Optional[float] = None
+    tier: str
+
+
+class PlayerPhaseValue(BaseModel):
+    """Phase Value — transition-based defensive value, served component-first with Tier-B uncertainty.
+    Tier C components (deny, deny_rush) are EXCLUDED from this player-level response (§9.1 gating);
+    they are retained in nhl_models.player_phase_value for team/pair analysis only."""
+    player_id: int
+    season_window: str
+    pv_def_g60: float
+    pv_def_g60_sd: Optional[float] = None
+    def_impact: Optional[float] = None       # RAPM baseline, for the honest comparison
+    toi_min: Optional[float] = None
+    components: List[PhaseComponent]          # published (Tier A/B) components only
+    excluded_components: List[str]            # Tier C keys withheld at player level
+    comparison_note: str                      # the plain, pre-registered verdict sentence
+
+
 class ArchetypeWeight(BaseModel):
     """A player's soft membership in one archetype (Phase 4.2)."""
     archetype: str
