@@ -6,6 +6,7 @@ import Home from './rink/pages/Home'
 import NotesIndex from './rink/pages/NotesIndex'
 import Note from './rink/pages/Note'
 import Ratings from './rink/pages/Ratings'
+import RatingsPlayers from './rink/pages/RatingsPlayers'
 import Tools from './rink/pages/Tools'
 import TradeLedger from './rink/pages/tools/TradeLedger'
 import DraftValueTool from './rink/pages/tools/DraftValueTool'
@@ -21,6 +22,8 @@ export default function App() {
         <Route path="/notes" element={<NotesIndex />} />
         <Route path="/notes/:slug" element={<Note />} />
         <Route path="/ratings" element={<Ratings />} />
+        <Route path="/ratings/players" element={<RatingsPlayers />} />
+        {/* /tools stays reachable by URL as a plain index; the nav skips it (§2 amended). */}
         <Route path="/tools" element={<Tools />} />
 
         {/* Trade Ledger keeps its deep-link param routes (§2). */}
@@ -31,13 +34,9 @@ export default function App() {
         <Route path="/tools/lineup-lab" element={<LineupLabTool />} />
         <Route path="/tools/contract-grader" element={<ContractGraderTool />} />
 
-        {/* Legacy tool-home redirects (old Studio paths → new tool routes). */}
-        <Route path="/studio/trades/history" element={<Navigate replace to="/tools/trade-ledger" />} />
-        <Route path="/studio/lineups/lines" element={<Navigate replace to="/tools/lineup-lab" />} />
-        <Route path="/studio/contracts" element={<Navigate replace to="/tools/contract-grader" />} />
-        <Route path="/studio/draft" element={<Navigate replace to="/tools/draft-value" />} />
-
-        {/* Everything else (removed dashboard surface) → Home. */}
+        {/* Old-path redirects (Studio/tools deep links → new homes) are owned by
+            the tool-port step (Step 5), where they can be done comprehensively and
+            with param preservation. Until then the catch-all lands old URLs on Home. */}
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
     </BrowserRouter>
