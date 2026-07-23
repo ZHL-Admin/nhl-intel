@@ -1,6 +1,7 @@
 /* =============================================================================
-   RINK THEORY — Home right rail (§3.1): three white cards with mono headers.
-   POWER RATINGS (top 5) · LUCK WATCH (one sentence) · FROM THE TOOLKIT.
+   RINK THEORY — Home right rail (§3.1). Restyled to the approved rail design:
+   subtle gray cards with a thick colored top rule per card (orange / blue / ink),
+   no header underline, bold abbrevs with ink values, right-aligned muted arrows.
    ============================================================================= */
 
 .rt-home {
@@ -16,54 +17,86 @@
 
 .rt-rail { display: flex; flex-direction: column; gap: 20px; }
 
+/* Card: subtle warm-gray field, no border, rounded. */
 .rt-railcard {
-  background: var(--white);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  position: relative;
+  background: #F2F1EE;
+  border: 0;
+  border-radius: 4px;
+  padding: 20px 20px 18px;
 }
+/* Thick colored top rule — spans the content width, above the header. */
+.rt-railcard::before {
+  content: "";
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule, var(--ink));
+  margin-bottom: 16px;
+}
+.rt-railcard--orange { --rule: var(--orange); }
+.rt-railcard--blue   { --rule: var(--blue); }
+.rt-railcard--ink    { --rule: var(--ink); }
+
+/* Header: mono uppercase, ink, no underline. */
 .rt-railcard__hd {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 10px;
+  color: var(--ink);
+  margin-bottom: 12px;
 }
 
-/* Power Ratings mini-rows */
+/* Power Ratings / Projected mini-rows: rank · bold abbrev · ink value. */
 .rt-railrow {
   display: grid;
-  grid-template-columns: 1.4rem 1fr auto;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
 }
-.rt-railrow__rk { color: var(--muted); }
-.rt-railrow__tm { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
-.rt-railrow__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.rt-railrow__rt { color: var(--orange); font-weight: 500; text-align: right; }
+.rt-railrow__rk { font-family: var(--font-ui); font-size: 0.9rem; color: var(--muted); }
+.rt-railrow__tm {
+  font-family: var(--font-ui);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.rt-railrow__rt { font-family: var(--font-mono); font-size: 0.92rem; color: var(--ink); text-align: right; }
 
 .rt-raillink {
   display: inline-block;
-  margin-top: 10px;
+  margin-top: 12px;
   font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  color: var(--blue);
 }
+.rt-raillink:hover { text-decoration: none; }
 
-/* Luck watch — one editorial sentence (deterministic template). */
-.rt-luckwatch { font-family: var(--font-serif); font-size: 1rem; line-height: 1.5; color: var(--ink); }
-.rt-luckwatch .ahead { color: var(--orange); font-weight: 600; }
-.rt-luckwatch .behind { color: var(--blue); font-weight: 600; }
+/* Loading / unavailable note inside an API-backed card. */
+.rt-railnote { font-family: var(--font-serif); font-size: 1rem; color: var(--muted); margin: 0; }
 
-/* From the toolkit — four links. */
-.rt-toolkit { display: flex; flex-direction: column; gap: 8px; }
-.rt-toolkit a { font-family: var(--font-serif); font-size: 1rem; color: var(--ink); }
+/* Luck / Contract watch — serif sentence with orange/blue inline emphasis. */
+.rt-luckwatch { font-family: var(--font-serif); font-size: 1.05rem; line-height: 1.5; color: var(--ink); margin: 0 0 2px; }
+.rt-luckwatch .ahead { color: var(--orange); }
+.rt-luckwatch .behind { color: var(--blue); }
+
+/* From the toolkit — plain ink link, arrow pushed to the right, muted. */
+.rt-toolkit { display: flex; flex-direction: column; }
+.rt-toolkit a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--ink);
+  padding: 9px 0;
+}
 .rt-toolkit a:hover { color: var(--blue); text-decoration: none; }
-.rt-toolkit a span { color: var(--orange); }
+.rt-toolkit a .arw { color: var(--muted); font-size: 0.95rem; }
+.rt-toolkit a:hover .arw { color: var(--blue); }
