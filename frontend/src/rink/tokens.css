@@ -1,0 +1,114 @@
+/* =============================================================================
+   RINK THEORY — design tokens (rebuild §6)
+   The plan's approved spec: quiet editorial chrome; all color lives in the data
+   layer (figures, numbers, tags). Type roles are mapped onto the three families
+   already self-hosted in this repo (main.tsx): Newsreader (editorial serif —
+   owner override for all display/headings/body), Spline Sans Mono (labels/
+   numbers), Archivo (nav/UI). Playfair/Source-Serif/Plex/Inter from the plan's
+   §6 are satisfied by these role-equivalents.
+   ============================================================================= */
+
+:root {
+  /* --- Base surfaces --- */
+  --paper:    #FBFAF7;  /* page */
+  --white:    #FFFFFF;  /* cards, tables, top bars */
+  --ink:      #17181A;
+  --muted:    #6B6F76;
+  --hairline: #DFDDD5;
+
+  /* Wire the kept RinkTheoryLogo to the theme (it reads these two with fallbacks). */
+  --color-text-primary: var(--ink);
+  --color-bg-surface:   var(--white);
+
+  /* --- Data color system --- */
+  --orange: #F25D2B;  /* signature: emphasis, highlighted series, rating col, ahead/lucky */
+  --blue:   #0890D1;  /* links, and the behind/unlucky side of diverging values */
+
+  /* Tag colors (applied only to the tag word + its matching thumbnail) */
+  --tag-teams:       #0890D1;
+  --tag-players:     #F25D2B;
+  --tag-goaltending: #7A5FB0;
+  --tag-trades:      #3CA35C;
+  --tag-draft:       #E1A534;
+
+  /* --- Shade system (backgrounds only, subtle) --- */
+  --shade-lead:       #F9F2EB;  /* faint orange wash behind the Home hero */
+  --shade-pullstat:   #F7F5F2;  /* pull-stat blocks (3px orange left rule) */
+  --shade-tablehead:  #F4F3F1;  /* table header rows */
+  --shade-zebra:      #FAF9F7;  /* zebra rows */
+  --shade-luck-ahead: #FDEFE9;  /* luck cell — orange side (results ahead of play) */
+  --shade-luck-behind:#E8F2F8;  /* luck cell — blue side (results behind play) */
+
+  /* --- Figure treatment --- */
+  --fig-field:   #F0F0F0;  /* light gray plot field */
+  --fig-grid:    #FFFFFF;  /* white gridlines (2px) */
+  --fig-context: #CACACA;  /* context (non-highlighted) series */
+  --fig-axis:    var(--ink);
+
+  /* --- Type roles (families already installed via Fontsource) --- */
+  --font-serif: 'Newsreader Variable', Newsreader, Georgia, 'Times New Roman', serif;
+  --font-mono:  'Spline Sans Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-ui:    'Archivo Variable', Archivo, system-ui, -apple-system, sans-serif;
+
+  /* --- Layout --- */
+  --w-design:  1440px;
+  --w-content: 1120px;  /* 160 side padding at design width */
+  --w-reading: 680px;
+  --w-rail:    352px;
+  --pad-side:  clamp(20px, 6vw, 160px);
+  --radius:    3px;
+}
+
+/* =============================================================================
+   Base reset + globals
+   ============================================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;          /* Newsreader opsz: display cut large, text cut small */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Focus visibility — quiet but present. */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+/* --- Shared primitives --- */
+
+/* Mono micro-label: uppercase, letterspaced — used for dates, kickers, captions. */
+.rt-mono {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rt-hairline { border: 0; border-top: 1px solid var(--hairline); margin: 0; }
+
+/* Content container: content width, responsive side padding. */
+.rt-container {
+  width: 100%;
+  max-width: var(--w-content);
+  margin: 0 auto;
+  padding-inline: var(--pad-side);
+}
+
+/* White card with a 1px hairline border, radius 3, no shadow (§6). */
+.rt-card {
+  background: var(--white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.rt-accent { color: var(--orange); }

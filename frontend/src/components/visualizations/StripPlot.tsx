@@ -2,6 +2,11 @@
  * StripPlot (Phase 4.3): a 1-D distribution of values as jittered dots on a horizontal axis,
  * with a mean line and optional threshold markers. Used for a player's game-score spread;
  * reusable for any per-event distribution.
+ *
+ * FIGURE KIT (RINK THEORY rebuild §4.3/§5.3) — RESERVED, NO LIVE IMPORTER.
+ * Carried over unmodified from the removed dashboard surface (its old home,
+ * PlayerProfile, is gone). Kept as a candidate note figure for future MDX notes;
+ * nothing in the site currently imports it. Do not delete during teardown.
  */
 import './StripPlot.css'
 

@@ -1,3 +1,9 @@
+/**
+ * FIGURE KIT (RINK THEORY rebuild §4.3/§5.3) — RESERVED, NO LIVE IMPORTER.
+ * Carried over unmodified from the removed dashboard surface (its old home,
+ * GameDetail, is gone). Kept as a candidate note figure for future MDX notes;
+ * nothing in the site currently imports it. Do not delete during teardown.
+ */
 import { useEffect, useRef, useState, useMemo } from 'react'
 import * as d3 from 'd3'
 import { hexbin } from 'd3-hexbin'

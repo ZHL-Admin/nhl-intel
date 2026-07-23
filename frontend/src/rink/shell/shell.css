@@ -1,0 +1,115 @@
+/* =============================================================================
+   RINK THEORY — shell chrome (top bars, masthead, footer, page layout)
+   Quiet editorial chrome: white bars on the paper page, hairline rules, no
+   shadows. §3 (page specs) + §6 (design system).
+   ============================================================================= */
+
+/* ---- Nav (every page): NOTES · RATINGS · TOOLS ---- */
+.rt-nav { display: flex; align-items: center; gap: 1.6rem; }
+.rt-nav a {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+.rt-nav a:hover { color: var(--blue); text-decoration: none; }
+.rt-nav a.is-active { color: var(--blue); }
+
+/* ---- Compact top bar (all inner pages) ---- */
+.rt-topbar {
+  background: var(--white);
+  border-bottom: 1px solid var(--hairline);
+}
+.rt-topbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+/* Compact lockup: icon left of the wordmark. Wordmark rendered in the editorial
+   serif, uppercase + letterspaced, to match the mockup (override the kept logo
+   component's default wordmark styling without editing it). */
+.rt-lockup .rt-logo__wordmark {
+  font-family: var(--font-serif);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* ---- Home thin bar (date left, nav right) ---- */
+.rt-thinbar {
+  background: var(--white);
+  border-bottom: 1px solid var(--hairline);
+}
+.rt-thinbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+}
+.rt-thinbar__date { font-family: var(--font-mono); }
+
+/* ---- Home masthead ---- */
+.rt-masthead {
+  text-align: center;
+  padding: 40px 0 0;
+}
+.rt-masthead__mark { display: inline-flex; justify-content: center; }
+.rt-masthead__title {
+  font-family: var(--font-serif);
+  font-weight: 800;
+  font-size: clamp(38px, 6vw, 60px);
+  letter-spacing: 0.01em;
+  line-height: 1.02;
+  margin: 10px 0 8px;
+  color: var(--ink);
+  text-transform: uppercase;  /* mockup masthead: "RINK THEORY" caps */
+}
+.rt-masthead__subline {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+/* Double rule: 2px + 1px ink, under the masthead. */
+.rt-masthead__rule {
+  border: 0;
+  border-top: 2px solid var(--ink);
+  position: relative;
+  margin: 0;
+}
+.rt-masthead__rule::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  top: 3px;
+  border-top: 1px solid var(--ink);
+}
+
+/* ---- Page body wrapper ---- */
+.rt-main { min-height: 50vh; padding: 40px 0 72px; }
+
+/* ---- Footer ---- */
+.rt-footer {
+  border-top: 1px solid var(--hairline);
+  padding: 22px 0 40px;
+}
+.rt-footer__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rt-footer__inner span { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.rt-footer__inner a { color: var(--muted); }
+.rt-footer__inner a:hover { color: var(--blue); }
+
+@media (max-width: 640px) {
+  .rt-nav { gap: 1rem; }
+  .rt-thinbar__date { font-size: 0.62rem; }
+}

@@ -1,0 +1,79 @@
+/* =============================================================================
+   RINK THEORY — page bodies (Step 2 shell: real chrome, placeholder content)
+   ============================================================================= */
+
+/* Editorial page title (Notes index, Ratings, Tools). */
+.rt-pagetitle {
+  font-family: var(--font-serif);
+  font-weight: 800;
+  font-size: clamp(30px, 4.5vw, 44px);
+  line-height: 1.05;
+  margin: 8px 0 6px;
+  color: var(--ink);
+}
+.rt-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+.rt-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+.rt-intro {
+  font-family: var(--font-serif);
+  font-size: 1.12rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 46rem;
+  margin: 0 0 28px;
+}
+
+/* Placeholder scaffold — marks a route the shell wires but a later build step
+   fills in. Intentionally quiet; not shipped past the ship gate. */
+.rt-placeholder {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: var(--white);
+  padding: 40px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+.rt-placeholder strong { color: var(--ink); }
+.rt-placeholder code {
+  color: var(--orange);
+  background: var(--shade-pullstat);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+/* Reading column for a note (§3.2). */
+.rt-reading { max-width: var(--w-reading); margin: 0 auto; }
+
+/* Toolkit shelf (§3.5) — short list, one line each. */
+.rt-toolshelf { list-style: none; margin: 0; padding: 0; max-width: 46rem; }
+.rt-toolshelf li {
+  padding: 18px 0;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rt-toolshelf li:last-child { border-bottom: 1px solid var(--hairline); }
+.rt-toolshelf__name {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--ink);
+}
+.rt-toolshelf__name:hover { color: var(--blue); text-decoration: none; }
+.rt-toolshelf__name span { color: var(--orange); }
+.rt-toolshelf__line { color: var(--muted); font-size: 0.98rem; }
