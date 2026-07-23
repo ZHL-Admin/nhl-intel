@@ -345,7 +345,7 @@ export default function LineupLab() {
     <PageLayout>
       <div className="lab">
         <PageCard
-          eyebrow="Studio"
+          eyebrow="Tool"
           title="Lineup Lab"
           subtitle="Place five skaters on the sheet and project the line before it takes a shift."
           controls={!showResult && !loading ? (

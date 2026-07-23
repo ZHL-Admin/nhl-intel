@@ -1,11 +1,18 @@
+import { Suspense, lazy } from 'react'
 import Shell from '../../shell/Shell'
-import Placeholder from '../Placeholder'
+import { ShellContext } from '../../../components/common/PageLayout'
 
-/** Draft Value (§2). Ports DraftValue.tsx in Step 5. */
+// Salvaged tool (§4.3), ported unchanged into the new shell (chrome only).
+const DraftValue = lazy(() => import('../../../pages/DraftValue'))
+
 export default function DraftValueTool() {
   return (
     <Shell>
-      <Placeholder title="Draft Value" kicker="Tool" step="Step 5 (Tools)" note="Ports DraftValue.tsx." />
+      <ShellContext.Provider value={true}>
+        <Suspense fallback={<p className="rt-intro">Loading…</p>}>
+          <DraftValue />
+        </Suspense>
+      </ShellContext.Provider>
     </Shell>
   )
 }

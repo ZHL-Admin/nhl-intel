@@ -1,11 +1,18 @@
+import { Suspense, lazy } from 'react'
 import Shell from '../../shell/Shell'
-import Placeholder from '../Placeholder'
+import { ShellContext } from '../../../components/common/PageLayout'
 
-/** Contract Grader (§2). Ports ContractGrader.tsx in Step 5. */
+// Salvaged tool (§4.3), ported unchanged into the new shell (chrome only).
+const ContractGrader = lazy(() => import('../../../pages/ContractGrader'))
+
 export default function ContractGraderTool() {
   return (
     <Shell>
-      <Placeholder title="Contract Grader" kicker="Tool" step="Step 5 (Tools)" note="Ports ContractGrader.tsx." />
+      <ShellContext.Provider value={true}>
+        <Suspense fallback={<p className="rt-intro">Loading…</p>}>
+          <ContractGrader />
+        </Suspense>
+      </ShellContext.Provider>
     </Shell>
   )
 }

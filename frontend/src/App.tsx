@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 
 // RINK THEORY rebuild (§2 site map). The old dashboard routes are archived on the
 // `legacy-dashboard` branch/tag; this is the whole public surface now.
@@ -12,6 +12,13 @@ import TradeLedger from './rink/pages/tools/TradeLedger'
 import DraftValueTool from './rink/pages/tools/DraftValueTool'
 import LineupLabTool from './rink/pages/tools/LineupLabTool'
 import ContractGraderTool from './rink/pages/tools/ContractGraderTool'
+
+/** Redirect that substitutes route params into the target and preserves the query string. */
+function LegacyRedirect({ build }: { build: (p: Readonly<Record<string, string | undefined>>) => string }) {
+  const params = useParams()
+  const { search } = useLocation()
+  return <Navigate replace to={build(params) + search} />
+}
 
 export default function App() {
   return (
@@ -34,9 +41,23 @@ export default function App() {
         <Route path="/tools/lineup-lab" element={<LineupLabTool />} />
         <Route path="/tools/contract-grader" element={<ContractGraderTool />} />
 
-        {/* Old-path redirects (Studio/tools deep links → new homes) are owned by
-            the tool-port step (Step 5), where they can be done comprehensively and
-            with param preservation. Until then the catch-all lands old URLs on Home. */}
+        {/* Legacy Studio deep-link redirects (Step 5, A6) — param- and query-preserving.
+            React-router ranks by specificity, so the static-segment routes win over the
+            :kind/:id and splat patterns. Kept tools redirect to their new homes; removed
+            Studio tools (build/fit/roster/offseason/hub) fall to the Tools shelf. */}
+        <Route path="/studio/trades/history/trade/:tradeId"
+               element={<LegacyRedirect build={(p) => `/tools/trade-ledger/trade/${p.tradeId}`} />} />
+        <Route path="/studio/trades/history/:kind/:id"
+               element={<LegacyRedirect build={(p) => `/tools/trade-ledger/${p.kind}/${p.id}`} />} />
+        <Route path="/studio/trades/history" element={<Navigate replace to="/tools/trade-ledger" />} />
+        <Route path="/studio/lineups/lines" element={<Navigate replace to="/tools/lineup-lab" />} />
+        <Route path="/studio/contracts" element={<Navigate replace to="/tools/contract-grader" />} />
+        <Route path="/studio/draft" element={<Navigate replace to="/tools/draft-value" />} />
+        {/* Removed Studio surface (TradeBuilder/TradeFit/RosterBuilder/Offseason/hub) → Tools shelf. */}
+        <Route path="/studio/*" element={<Navigate replace to="/tools" />} />
+        <Route path="/studio" element={<Navigate replace to="/tools" />} />
+
+        {/* Everything else (removed dashboard surface) → Home. */}
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
     </BrowserRouter>

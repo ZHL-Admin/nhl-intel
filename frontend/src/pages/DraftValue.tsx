@@ -323,7 +323,9 @@ function Board({ curve }: { curve: PickValueCurveRow[] }) {
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
-    Promise.all([getDraftBoard('steals', undefined, 250), getDraftBoard('busts', undefined, 250)])
+    // limit 100 = the /draft/board cap (le=100); 250 returned 422. Backend is
+    // off-limits in the rebuild, so the board fetches the max the endpoint allows.
+    Promise.all([getDraftBoard('steals', undefined, 100), getDraftBoard('busts', undefined, 100)])
       .then(([s, b]) => { setSteals(s); setBusts(b) })
       .catch(() => { setSteals([]); setBusts([]) })
   }, [])
@@ -464,8 +466,8 @@ export default function DraftValue() {
     <PageLayout>
       <div className="dv">
         <PageCard
-          eyebrow="Studio"
-          title="Draft value"
+          eyebrow="Tool"
+          title="Draft Value"
           subtitle="What a pick is worth, and who beat their slot."
           controls={
             <div className="dv-toolbar">

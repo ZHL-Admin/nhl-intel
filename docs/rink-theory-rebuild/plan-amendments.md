@@ -127,6 +127,30 @@ Frontend-only; no endpoint modified. **§4.2 append (standing rule):** the rail 
 also consumes the dormant `GET /tools/offseason` (offseason mode) — read exactly
 as it responds today.
 
+## A10 — Tool port (Step 5)
+
+The four kept tools are ported into the new shell **chrome-only**, unchanged
+internally:
+- Each new route wrapper (`src/rink/pages/tools/*`) lazy-loads the salvaged tool
+  from `src/pages/*` and wraps it in the new `Shell` + `ShellContext.Provider
+  value={true}` — the tool's own `PageLayout` collapses to a pass-through, so it
+  renders inside the new TopBar/Footer instead of the old NavBar.
+- Legacy design tokens/classes are loaded additively via `src/rink/legacy-tools.css`
+  (the old `styles/*` layers) so the tool internals keep their look. Verified no
+  shell regression (body/paper, rail, ratings shade/luck all unchanged) — token
+  names don't collide and the layers are class-based.
+- Rename **Trade Outcomes → Trade Ledger** (title); stale `eyebrow="Studio"` →
+  `"Tool"` on all four; "Draft value"/"Contract grader" title-cased to match nav.
+- **Compat fix (frontend only):** `DraftValue` requested `/draft/board?limit=250`
+  but the endpoint caps at `le=100` → 422; changed to 100. Backend untouched.
+- **Legacy redirects (A6 fulfilled):** `/studio/*` deep links redirect to the new
+  tool homes, **param- and query-preserving** (e.g.
+  `/studio/trades/history/trade/:id?season=…` → `/tools/trade-ledger/trade/:id?season=…`);
+  removed Studio tools (build/fit/roster/offseason/hub) → the Tools shelf.
+- Known residual (out of scope, chrome-only rebuild): some tools' internal copy
+  links to removed tools (e.g. DraftValue → "Trade Builder"); those links resolve
+  to the Tools shelf via the `/studio/*` redirect rather than 404.
+
 ## Ship-gate checklist (Step 8) — additions
 
 Beyond the plan's §7 step-8 gate (≥3 published notes, /ratings reflects last run,

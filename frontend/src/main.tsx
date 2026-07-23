@@ -14,7 +14,10 @@ import '@fontsource-variable/archivo/wdth-italic.css'
 import '@fontsource/spline-sans-mono/400.css'
 import '@fontsource/spline-sans-mono/500.css'
 
-// Tokens + shell + page styles (single fixed paper theme; no dark-mode toggle in v1).
+// Legacy design-system layers first (for the salvaged tool pages), then the rink
+// tokens + shell (single fixed paper theme; no dark-mode toggle in v1). Rink is
+// imported last so it wins any shared declaration.
+import './rink/legacy-tools.css'
 import './rink/tokens.css'
 import './rink/shell/shell.css'
 import './rink/pages/pages.css'

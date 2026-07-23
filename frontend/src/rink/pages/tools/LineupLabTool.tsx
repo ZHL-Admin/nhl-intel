@@ -1,11 +1,18 @@
+import { Suspense, lazy } from 'react'
 import Shell from '../../shell/Shell'
-import Placeholder from '../Placeholder'
+import { ShellContext } from '../../../components/common/PageLayout'
 
-/** Lineup Lab (§2). Ports LineupLab.tsx in Step 5. */
+// Salvaged tool (§4.3), ported unchanged into the new shell (chrome only).
+const LineupLab = lazy(() => import('../../../pages/LineupLab'))
+
 export default function LineupLabTool() {
   return (
     <Shell>
-      <Placeholder title="Lineup Lab" kicker="Tool" step="Step 5 (Tools)" note="Ports LineupLab.tsx." />
+      <ShellContext.Provider value={true}>
+        <Suspense fallback={<p className="rt-intro">Loading…</p>}>
+          <LineupLab />
+        </Suspense>
+      </ShellContext.Provider>
     </Shell>
   )
 }

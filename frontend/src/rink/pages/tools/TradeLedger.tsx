@@ -1,23 +1,21 @@
-import { useParams } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
 import Shell from '../../shell/Shell'
-import Placeholder from '../Placeholder'
+import { ShellContext } from '../../../components/common/PageLayout'
 
-/**
- * Trade Ledger (§2) — renamed from Trade Outcomes. Keeps its deep-link param
- * routes (/tools/trade-ledger/trade/:tradeId and /:kind/:id). The real port of
- * TradeOutcomes + components/trades/* lands in Step 5.
- */
+// Salvaged tool (§4.3), ported unchanged into the new shell. ShellContext=true
+// collapses the tool's own PageLayout to a pass-through, so it renders inside the
+// new TopBar/Footer chrome instead of the old NavBar. Renamed Trade Outcomes →
+// Trade Ledger (§7 step 5); internal logic is unchanged.
+const TradeOutcomes = lazy(() => import('../../../pages/TradeOutcomes'))
+
 export default function TradeLedger() {
-  const { tradeId, kind, id } = useParams()
-  const deep = tradeId ? `trade/${tradeId}` : kind ? `${kind}/${id}` : '(index)'
   return (
     <Shell>
-      <Placeholder
-        title="Trade Ledger"
-        kicker="Tool"
-        step="Step 5 (Tools)"
-        note={`Ports TradeOutcomes + components/trades/*. Deep link: ${deep}.`}
-      />
+      <ShellContext.Provider value={true}>
+        <Suspense fallback={<p className="rt-intro">Loading…</p>}>
+          <TradeOutcomes />
+        </Suspense>
+      </ShellContext.Provider>
     </Shell>
   )
 }

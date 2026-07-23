@@ -1,0 +1,25 @@
+/* =============================================================================
+   Legacy design-system layers — loaded so the four SALVAGED tool pages (§4.3)
+   render with their original internal styling inside the new shell.
+
+   Safe to load globally: the token names here (--color-*, --space-*, --text-*)
+   don't collide with the rink tokens (--paper / --ink / --font-serif …), and the
+   layers are class-based (.tab / .btn / .skeleton / .eyebrow) — none of which the
+   rink shell uses. So this is purely additive; it does not restyle the new shell.
+   Imported before rink/tokens.css so rink wins any shared declaration.
+   ============================================================================= */
+@import '../styles/primitives.css';
+@import '../styles/semantic.css';
+@import '../styles/type.css';
+@import '../styles/controls.css';
+@import '../styles/states.css';
+@import '../styles/chart-grammar.css';
+@import '../styles/gamesheet.css';
+
+/* Position-group dot colors (from the old index.css :root) that some tool
+   components reference; the --color-data-* they build on live in the layers above. */
+:root {
+  --pos-forward: var(--color-data-1);
+  --pos-defense: var(--color-data-3);
+  --pos-goalie:  var(--color-data-5);
+}

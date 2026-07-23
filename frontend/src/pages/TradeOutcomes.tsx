@@ -86,8 +86,8 @@ export default function TradeOutcomes() {
     <PageLayout>
       <div className="to">
         <PageCard
-          eyebrow="Studio"
-          title="Trade outcomes"
+          eyebrow="Tool"
+          title="Trade Ledger"
           subtitle="Every trade since 2015-16, scored by what actually happened next."
           controls={controls}
         >
