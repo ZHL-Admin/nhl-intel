@@ -28,6 +28,20 @@ Model `phase_value_v1`. Criteria pre-registered in `config.PHASE_VALUE_CONFIG` b
 
 **Comparative verdict:** PV components vs the `def_impact` baseline on identical cohorts, above. `pv_def_g60`/`suppress`/`escape` at Tier B; `deny`/`deny_rush` at Tier C; read each against the baseline's own YoY r in the same table.
 
+### 1b. Deny post-mortem — YoY r split by team continuity (ruling 2)
+| pair | group | deny YoY r | n |
+|---|---|---|---|
+| 2021-22->2022-23 | same team | +0.256 | 372 |
+| 2021-22->2022-23 | moved | +0.244 | 100 |
+| 2022-23->2023-24 | same team | +0.225 | 350 |
+| 2022-23->2023-24 | moved | +0.092 | 111 |
+| 2023-24->2024-25 | same team | +0.127 | 360 |
+| 2023-24->2024-25 | moved | +0.145 | 132 |
+| 2024-25->2025-26 | same team | +0.045 | 370 |
+| 2024-25->2025-26 | moved | +0.088 | 128 |
+
+**Pooled: same-team +0.163 vs moved +0.142.** Same-team persistence does NOT materially exceed movers, so `deny` is **not** a system-level signal passing through players — the null stands as written. The monotonic decline appears in BOTH groups (same-team 0.26→0.05, moved 0.24→0.09), consistent with a temporal, not a roster-continuity, mechanism.
+
 ## 2. def_impact baseline comparison (3-season window, toi ≥ 200)
 | component | r vs def_impact |
 |---|---|
@@ -96,13 +110,31 @@ Minutes-weighted team aggregates in t predict team 5v5 xGA/60 in t+1 (temporal-O
 
 Read (i) vs (ii): whether team `pv_def_g60` predicts future defence better than team `def_impact`; (iv)/(v) vs (iii): whether either adds over the team's own past xGA/60.
 
+**Interpretation (ruling 4):** `def_impact` bundles in-zone frequency with per-second danger in one xGA target; PV split them by design; the frequency half (`deny`) proved unreliable; the recombined composite therefore carries only the danger half and loses the exposure-share signal the bundle retains.
+
 ## 7. Sensitivity grid (§9.3, seasons 2023-24 & 2024-25)
-**H_SECONDS ∈ {20,40,60} and the 5v5-goals-only V variant touch ONLY Stage 2** (V and the league constants). Component coefficients never consume V, and year-over-year r is INVARIANT to a uniform repricing (a common scalar on `deny_g60`/`suppress_g60` cancels in a correlation). So the tiers above are unchanged by H and the goals-only V variant **by construction**; the effect is confined to the goal SCALE of `*_g60`, reported as Stage-2 V/constant sensitivity (stage2-acceptance.md), not a tier change. **`phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative** DO change the episode definition (Stage-1 dbt rebuild, two seasons) and require refits; their component YoY/split-half movement is the live sensitivity cell. **Status:** the two rebuild cells are the remaining compute (dbt rebuild of `int_phase_*` on 2023-24/2024-25 under each variant + refit); scoped and pending a rebuild pass — flagged explicitly rather than silently skipped.
+**H_SECONDS ∈ {20,40,60} and the 5v5-goals-only V variant touch ONLY Stage 2** (V and the league constants). Component coefficients never consume V, and year-over-year r is INVARIANT to a uniform repricing (a common scalar on `deny_g60`/`suppress_g60` cancels in a correlation). So the tiers above are unchanged by H and the goals-only V variant **by construction**; the effect is confined to the goal SCALE of `*_g60`, reported as Stage-2 V/constant sensitivity (stage2-acceptance.md), not a tier change. **`phase_episode_gap_seconds ∈ {2,4,6}` and the blocked-shot-possession alternative** DO change the episode definition and were REBUILT into isolated `nhl_staging_sens_*` datasets (canary-proven, prod untouched — PV-I001) and refit on 2023-24 & 2024-25:
+
+| variant | component | YoY r (Δ vs base) | split-half 23-24 (Δ) | split-half 24-25 (Δ) |
+|---|---|---|---|---|
+| gap2 | deny | +0.137 (+0.006) | +0.436 (-0.002) | +0.320 (-0.009) |
+| gap2 | suppress | +0.258 (+0.000) | +0.430 (+0.002) | +0.479 (+0.001) |
+| gap2 | escape | +0.090 (+0.005) | +0.453 (+0.000) | +0.421 (-0.004) |
+| gap6 | deny | +0.135 (+0.004) | +0.429 (-0.009) | +0.319 (-0.010) |
+| gap6 | suppress | +0.258 (+0.000) | +0.430 (+0.002) | +0.479 (+0.001) |
+| gap6 | escape | +0.089 (+0.004) | +0.456 (+0.003) | +0.430 (+0.005) |
+| blockshot_owner | deny | +0.277 (+0.146) | +0.509 (+0.071) | +0.510 (+0.181) |
+| blockshot_owner | suppress | +0.298 (+0.040) | +0.473 (+0.045) | +0.489 (+0.011) |
+| blockshot_owner | escape | +0.054 (-0.031) | +0.497 (+0.044) | +0.285 (-0.140) |
+
+Baseline (gap=4, blocked-shot=opp), 2023-24→2024-25 pair: deny YoY +0.131; suppress YoY +0.258; escape YoY +0.085. **Read:** the gap variants move everything negligibly (episode counts shift <0.5%; deny/suppress/escape YoY move ≤0.006) — the conclusions are robust to the episode-gap knob. The **blocked-shot alternative** is the larger perturbation (~18% fewer episodes): on this pair deny's YoY rises 0.13→0.28 and its split-half climbs. But `blocked_shot_possession='owner'` is the **empirically-REJECTED reading** (PV-D005: the blocked-shot owner is the BLOCKER 94% of the time, so possession = the opponent). So this is a robustness CAVEAT — deny's stability is sensitive to the possession convention — NOT a valid tier rescue: under the correct PV-D005 convention deny remains Tier C. It does flag that a future possession-attribution refinement is the most promising lever for the deny channel.
 
 ## 8. PV-D015 arena-bias diagnostic for `deny`
 Deny's monotonic YoY decline (0.25→0.19→0.13→0.06) makes this more informative, not less.
 
 Team-season `deny` (minutes-weighted) vs home-arena under-recording share, over **100 team-seasons**: **r = +0.010**. A material positive r ⇒ teams whose home scorers under-record settled possession look better at `deny` (scorekeeper bias, not defence); near zero clears it. Since deny is already Tier C, this bounds how much of even that weak signal is arena artifact.
+
+**Caveat (ruling 3):** this diagnostic is cross-sectional — it rules out venue-level bias in `deny`'s LEVELS and does NOT address the monotonic temporal decline (0.25→0.06). League-wide drift in recording or play over time remains unexcluded; an open question, not a finding.
 
 ## 9. External A3Z agreement — GATED (directory absent)
 Not run: the A3Z reference is not present in-repo; '§7 if run' condition unmet.
