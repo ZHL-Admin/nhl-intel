@@ -14,10 +14,10 @@ import '@fontsource-variable/archivo/wdth-italic.css'
 import '@fontsource/spline-sans-mono/400.css'
 import '@fontsource/spline-sans-mono/500.css'
 
-// Legacy design-system layers first (for the salvaged tool pages), then the rink
-// tokens + shell (single fixed paper theme; no dark-mode toggle in v1). Rink is
-// imported last so it wins any shared declaration.
-import './rink/legacy-tools.css'
+// Rink tokens + shell + page styles (single fixed paper theme; no dark-mode
+// toggle in v1). The legacy design-system layers are NOT loaded here — they ship
+// only inside the lazy tool chunks (imported by src/rink/pages/tools/*), so Home,
+// Notes, and Ratings never pull them.
 import './rink/tokens.css'
 import './rink/shell/shell.css'
 import './rink/pages/pages.css'

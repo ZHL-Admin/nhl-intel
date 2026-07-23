@@ -1,17 +1,14 @@
-import { Suspense, lazy } from 'react'
 import Shell from '../../shell/Shell'
 import { ShellContext } from '../../../components/common/PageLayout'
+import '../../legacy-tools.css'  // legacy design tokens — bundled in this lazy chunk, never on Home/Notes/Ratings
+import DraftValue from '../../../pages/DraftValue'
 
-// Salvaged tool (§4.3), ported unchanged into the new shell (chrome only).
-const DraftValue = lazy(() => import('../../../pages/DraftValue'))
-
+// Salvaged tool (§4.3), ported chrome-only; lazy-loaded by App.tsx.
 export default function DraftValueTool() {
   return (
     <Shell>
       <ShellContext.Provider value={true}>
-        <Suspense fallback={<p className="rt-intro">Loading…</p>}>
-          <DraftValue />
-        </Suspense>
+        <DraftValue />
       </ShellContext.Provider>
     </Shell>
   )

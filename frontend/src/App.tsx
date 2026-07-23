@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 
 // RINK THEORY rebuild (§2 site map). The old dashboard routes are archived on the
@@ -8,10 +9,13 @@ import Note from './rink/pages/Note'
 import Ratings from './rink/pages/Ratings'
 import RatingsPlayers from './rink/pages/RatingsPlayers'
 import Tools from './rink/pages/Tools'
-import TradeLedger from './rink/pages/tools/TradeLedger'
-import DraftValueTool from './rink/pages/tools/DraftValueTool'
-import LineupLabTool from './rink/pages/tools/LineupLabTool'
-import ContractGraderTool from './rink/pages/tools/ContractGraderTool'
+
+// Tools are lazy-loaded so the salvaged tool code AND the legacy design-system CSS
+// they pull in ship only when a tool route is visited — never on Home/Notes/Ratings.
+const TradeLedger = lazy(() => import('./rink/pages/tools/TradeLedger'))
+const DraftValueTool = lazy(() => import('./rink/pages/tools/DraftValueTool'))
+const LineupLabTool = lazy(() => import('./rink/pages/tools/LineupLabTool'))
+const ContractGraderTool = lazy(() => import('./rink/pages/tools/ContractGraderTool'))
 
 /** Redirect that substitutes route params into the target and preserves the query string. */
 function LegacyRedirect({ build }: { build: (p: Readonly<Record<string, string | undefined>>) => string }) {
@@ -23,6 +27,7 @@ function LegacyRedirect({ build }: { build: (p: Readonly<Record<string, string |
 export default function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={null}>
       <Routes>
         {/* §2 site map */}
         <Route path="/" element={<Home />} />
@@ -60,6 +65,7 @@ export default function App() {
         {/* Everything else (removed dashboard surface) → Home. */}
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
