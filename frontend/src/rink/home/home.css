@@ -1,15 +1,9 @@
-/* =============================================================================
-   RINK THEORY — Home hero band + recent-notes feed (§3.1). Checked against
-   design/mockups/home-v2.png for proportion (masthead, hero shade, 2-col balance).
-   Thumbnails/cover figures are OMITTED in v1 (no thumbnail system yet) — the feed
-   is text-only; the hero is a single reading column.
-   ============================================================================= */
-
 /* Lead note in a full-bleed faint-orange wash band (§6 shade system). */
 .rt-hero {
-  background: var(--shade-lead);
+  background: #F2F1EE;
   border-bottom: 1px solid var(--hairline);
   padding: 40px 0 44px;
+  margin-top: 16px;
 }
 .rt-lead { max-width: 44rem; }
 .rt-lead__kicker {
