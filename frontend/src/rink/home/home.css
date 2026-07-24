@@ -1,0 +1,70 @@
+/* =============================================================================
+   RINK THEORY — Home hero band + recent-notes feed (§3.1). Checked against
+   design/mockups/home-v2.png for proportion (masthead, hero shade, 2-col balance).
+   Thumbnails/cover figures are OMITTED in v1 (no thumbnail system yet) — the feed
+   is text-only; the hero is a single reading column.
+   ============================================================================= */
+
+/* Lead note in a full-bleed faint-orange wash band (§6 shade system). */
+.rt-hero {
+  background: var(--shade-lead);
+  border-bottom: 1px solid var(--hairline);
+  padding: 40px 0 44px;
+}
+.rt-lead { max-width: 44rem; }
+.rt-lead__kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--orange);
+}
+.rt-lead__headline {
+  font-family: var(--font-serif);
+  font-weight: 800;
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.08;
+  color: var(--ink);
+  margin: 10px 0 12px;
+}
+.rt-lead__headline a { color: inherit; }
+.rt-lead__headline a:hover { color: var(--blue); text-decoration: none; }
+.rt-lead__dek {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.rt-lead__more { font-family: var(--font-ui); font-weight: 600; font-size: 0.9rem; }
+
+/* Recent-notes feed (left column). Rows reuse the .rt-noterow anatomy. */
+.rt-feedhead {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.rt-feedempty {
+  font-family: var(--font-serif);
+  color: var(--muted);
+  font-size: 1.05rem;
+  padding: 22px 0;
+}
+.rt-feed__all {
+  display: inline-block;
+  margin-top: 14px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* Zero-notes state: no hero; a quiet line where the feed would be. */
+.rt-home__nonotes {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  color: var(--muted);
+  padding: 8px 0 20px;
+}
