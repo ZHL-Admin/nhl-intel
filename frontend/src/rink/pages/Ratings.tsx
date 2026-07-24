@@ -33,6 +33,7 @@ export default function Ratings() {
       {error && <p className="rt-intro">Ratings are unavailable right now.</p>}
 
       {data && (
+        <div className="rt-tablewrap">
         <table className="rt-rttable">
           <thead>
             <tr>
@@ -72,6 +73,7 @@ export default function Ratings() {
             })}
           </tbody>
         </table>
+        </div>
       )}
       <p className="rt-tablenote">
         Luck in points vs the deserved record. Orange = results ahead of the play, blue = behind.

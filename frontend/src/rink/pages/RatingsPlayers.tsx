@@ -73,6 +73,7 @@ export default function RatingsPlayers() {
       {error && <p className="rt-intro">Player ratings are unavailable right now.</p>}
 
       {talent && (
+        <div className="rt-tablewrap">
         <table className="rt-rttable">
           <thead>
             <tr>
@@ -110,6 +111,7 @@ export default function RatingsPlayers() {
             })}
           </tbody>
         </table>
+        </div>
       )}
       <p className="rt-tablenote">
         Value = projected on-ice dollars. Surplus = value minus cap cost; orange positive, blue negative.

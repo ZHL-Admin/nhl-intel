@@ -4,6 +4,11 @@
    cells, team-color dots, mono right-aligned numbers.
    ============================================================================= */
 
+/* Mobile: let the wide table scroll horizontally within its own container
+   instead of pushing the whole page sideways. */
+.rt-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rt-tablewrap .rt-rttable { min-width: 640px; }
+
 .rt-rttable {
   width: 100%;
   border-collapse: collapse;
