@@ -50,11 +50,18 @@
 /* RK — muted. */
 .rt-rttable td.rk { color: var(--muted); text-align: left; width: 3rem; }
 
-/* TEAM — dot + full name in the editorial serif, left-aligned. */
+/* TEAM — logo + full name in the editorial serif, left-aligned. */
 .rt-rttable td.team { text-align: left; }
-.rt-team { display: inline-flex; align-items: center; gap: 9px; }
-.rt-team__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.rt-team { display: inline-flex; align-items: center; gap: 10px; }
+.rt-team__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }  /* still used by the players table */
+.rt-team__logo { width: 22px; height: 22px; object-fit: contain; flex: none; }
 .rt-team__name { font-family: var(--font-serif); font-size: 1.02rem; font-weight: 600; color: var(--ink); }
+
+/* Sortable headers: pointer + a sort arrow on the active column. */
+.rt-rttable thead th { cursor: pointer; user-select: none; }
+.rt-rttable thead th:hover { color: var(--ink); }
+.rt-rttable thead th[aria-sort] { color: var(--ink); }
+.rt-rt__arrow { margin-left: 5px; color: var(--orange); font-size: 0.85em; }
 
 /* RATING — the signature column, orange. */
 .rt-rttable td.rating { color: var(--orange); font-weight: 500; }
@@ -68,10 +75,6 @@
 .rt-rttable td.luck.behind { color: var(--blue);   background: var(--shade-luck-behind); }
 .rt-rttable tbody tr:nth-child(even) td.luck.ahead  { background: var(--shade-luck-ahead); }
 .rt-rttable tbody tr:nth-child(even) td.luck.behind { background: var(--shade-luck-behind); }
-
-/* A quiet trailing spacer column, as in the mockup. */
-.rt-rttable td.pad, .rt-rttable th.pad { width: 1.5rem; background: var(--white); }
-.rt-rttable tbody tr:nth-child(even) td.pad { background: var(--shade-zebra); }
 
 /* Position filter (players table) — small mono segmented control. */
 .rt-posfilter { display: inline-flex; gap: 4px; margin-top: 6px; }
